@@ -65,16 +65,14 @@
   <section id="mapScreen" class="overlay" hidden>
     <div class="panel map-panel">
       <div class="panel-head">
-        <h2>Карта забега</h2>
+        <h2 id="mapFloor"></h2>
         <div class="panel-btns">
           <button class="btn" id="newRun">Новый забег</button>
           <button class="btn" id="mapClose">Закрыть</button>
         </div>
       </div>
-      <div id="ftabs" class="ftabs"></div>
-      <div class="map-scroll"><svg id="map" viewBox="0 0 680 300" role="group" aria-label="Комнаты этажа"></svg></div>
-      <div id="mapStats" class="map-stats"></div>
-      <p id="mapInfo" class="map-info"></p>
+      <p id="mapInfo" class="map-info" hidden></p>
+      <svg id="map" viewBox="0 0 320 560" role="group" aria-label="Комнаты этажа"></svg>
     </div>
   </section>
 
