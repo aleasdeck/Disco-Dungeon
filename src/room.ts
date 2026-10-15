@@ -11,19 +11,23 @@ export interface RoomSpec {
   type: RoomType;
 }
 
-export interface Pad { x: number; y: number }
+/** A throw rune; `sec` 1 marks a rune in the room's locked wing, which a hero can only reach once its door is open. */
+export interface Pad { x: number; y: number; sec?: number }
 export interface Pit { x: number; y: number; r: number }
 /**
  * A one-tile obstacle. `ice` marks an icicle growing from the floor: it collides exactly like a stone block,
  * but discs chip `hp` off it and it shatters at 0. `big` icicles take several hits, small ones one or two.
  */
-export interface Block { x0: number; y0: number; x1: number; y1: number; v: number; ice?: boolean; big?: boolean; hp?: number; max?: number }
+export interface Block { x0: number; y0: number; x1: number; y1: number; v: number; ice?: boolean; big?: boolean; hp?: number; max?: number; door?: boolean; open?: boolean }
 
 /** Icicle toughness: a small one breaks to a fair hit, a big one needs two or three. */
 export const ICICLE_HP = { small: 3, big: 11 };
 
-/** Blocks discs still bounce off: everything but shattered icicles. */
-export const standing = (blocks: Block[]) => blocks.filter(b => !b.ice || b.hp! > 0);
+/**
+ * The door of a locked wing is a block too: discs bounce off it until one hits it, then it swings open
+ * and stops blocking anything.
+ */
+export const standing = (blocks: Block[]) => blocks.filter(b => (!b.ice || b.hp! > 0) && !b.open);
 export interface Decal { x: number; y: number; k: number; a: number }
 
 export interface ResNode {
@@ -123,6 +127,8 @@ export interface Layout {
   nodes: ResNode[];
   mobs: Mob[];
   haz: Set<string>;
+  /** Floor cells (row-major indices) of the locked wing behind the door; empty in rooms without one. */
+  wing: number[];
   /** 1 where the cell is iced over (slippery), row-major gw × gh; all zeros outside icy biomes. */
   ice: Uint8Array;
   hpMul: number;
@@ -259,6 +265,34 @@ function carve(gw: number, gh: number, R: ReturnType<typeof makeRng>, shapes: Sh
   return { shape, floor: keep };
 }
 
+/**
+ * A locked wing: a strip of floor added along a side of the room, behind a one-tile wall with a door in it.
+ * It sits on a flank (near-left past the left wall, or near-right past the far wall), so its runes throw across the room.
+ * The room grows by four cells on that side; the main part keeps its shape. Null when no door fits.
+ */
+function addWing(gw: number, gh: number, floor: Uint8Array, R: ReturnType<typeof makeRng>) {
+  const sides = R.next() < 0.5 ? ['left', 'top'] : ['top', 'left'];
+  for (const side of sides) {
+    const left = side === 'left', GW = left ? gw + 4 : gw, GH = left ? gh : gh + 4;
+    // (u, v): u across the strip (0..2 wing, 3 wall, 4.. the old room), v along it
+    const at = (u: number, v: number) => (left ? v * GW + u : u * GW + v);
+    const span = left ? gh : gw, len = R.int(5, 6), v0 = span - len;
+    const oldFloor = (v: number) => floor[left ? v * gw : v];
+    const doors: number[] = [];
+    for (let v = v0 + 1; v < span - 1; v++) if (oldFloor(v)) doors.push(v);
+    if (!doors.length) continue;
+    const out = new Uint8Array(GW * GH);
+    for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) out[(left ? j : j + 4) * GW + (left ? i + 4 : i)] = floor[j * gw + i];
+    const wing: number[] = [];
+    for (let v = v0; v < span; v++) for (let u = 0; u < 3; u++) { wing.push(at(u, v)); out[at(u, v)] = 1; }
+    const door = at(3, R.pick(doors));
+    out[door] = 1;
+    // runes in the middle of the strip, near each end
+    return { gw: GW, gh: GH, floor: out, wing, door, pads: [at(1, v0 + 1), at(1, span - 1)] };
+  }
+  return null;
+}
+
 function buildEdges(gw: number, gh: number, floor: Uint8Array) {
   const L = { gw, gh, floor };
   const edges: Edge[] = [];
@@ -344,11 +378,18 @@ export function generate(spec: RoomSpec): Layout {
   const type = spec.type, f = spec.floor;
   const { tier, t } = tierOf(spec);
   const roll = (r: Range) => ri(r[0], r[1]);
-  const gw = roll(tier.gw), gh = roll(tier.gh);
-  const { shape, floor } = carve(gw, gh, R, tier.shapes);
+  const cw = roll(tier.gw), ch = roll(tier.gh);
+  const carved = carve(cw, ch, R, tier.shapes), shape = carved.shape;
+  // its own stream, so rooms without a wing come out exactly as before
+  const WR = makeRng(spec.seed * 31 + spec.depth + 3571);
+  const wingAt = type !== 'boss' && t >= 1 && WR.next() < 0.6 ? addWing(cw, ch, carved.floor, WR) : null;
+  const { gw, gh, floor } = wingAt ?? { gw: cw, gh: ch, floor: carved.floor };
   const Wx = gw * TILE, Wy = gh * TILE;
   const { edges, rock } = buildEdges(gw, gh, floor);
-  const geo = { gw, gh, floor, rock, Wx, Wy };
+  // everything but the wing's own runes is placed in the main part of the room
+  const main = floor.slice();
+  if (wingAt) for (const k of [...wingAt.wing, wingAt.door]) main[k] = 0;
+  const geo = { gw, gh, floor: main, rock, Wx, Wy };
   const biome = BIOMES[Math.min(spec.floor, BIOMES.length - 1)];
   const objs: { x: number; y: number; r: number }[] = [];
   const free = (x: number, y: number, r: number, pad = 6) => objs.every(o => Math.hypot(o.x - x, o.y - y) > o.r + r + pad);
@@ -364,8 +405,17 @@ export function generate(spec: RoomSpec): Layout {
   const mid = (x: number, y: number) => { const s = x / Wx + y / Wy; return s > 0.55 && s < 1.45; };
   const any = () => true;
 
-  const pads = pickPads(gw, gh, floor, R);
+  const pads = pickPads(gw, gh, main, R);
   for (const p of pads) objs.push({ x: p.x, y: p.y, r: 22 });
+  const blocks: Block[] = [];
+  if (wingAt) {
+    const cell = (k: number) => ({ i: k % gw, j: Math.floor(k / gw) });
+    for (const k of wingAt.pads) { const { i, j } = cell(k); pads.push({ x: i * TILE + 8, y: j * TILE + 8, sec: 1 }); }
+    const { i, j } = cell(wingAt.door);
+    blocks.push({ x0: i * TILE, y0: j * TILE, x1: (i + 1) * TILE, y1: (j + 1) * TILE, v: 0, door: true });
+    // keep the doorway clear of blocks and resources on the room side
+    objs.push({ x: i * TILE + 8, y: j * TILE + 8, r: 18 });
+  }
 
   const pits: Pit[] = [];
   for (let i = 0, n = roll(tier.pits); i < n; i++) {
@@ -373,7 +423,6 @@ export function generate(spec: RoomSpec): Layout {
     if (q) { pits.push({ x: q[0], y: q[1], r }); objs.push({ x: q[0], y: q[1], r }); }
   }
 
-  const blocks: Block[] = [];
   const SHAPES = BLOCK_SHAPES.slice(0, tier.blockKinds);
   for (let i = 0, n = roll(tier.blocks); i < n; i++) {
     for (let tr = 0; tr < 40; tr++) {
@@ -469,5 +518,5 @@ export function generate(spec: RoomSpec): Layout {
   }
   // its own stream, so freezing the floor doesn't reshuffle anything above
   const ice = biome.iceMu !== undefined ? freeze(gw, gh, floor, makeRng(spec.seed * 31 + spec.depth + 7919)) : new Uint8Array(gw * gh);
-  return { gw, gh, shape, floor, edges, rock, Wx, Wy, biome, pads, pits, blocks, decals, nodes, mobs, haz, ice, hpMul, dmgAdd };
+  return { gw, gh, shape, floor, edges, rock, Wx, Wy, biome, pads, pits, blocks, decals, nodes, mobs, haz, wing: wingAt?.wing ?? [], ice, hpMul, dmgAdd };
 }
