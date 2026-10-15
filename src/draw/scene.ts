@@ -4,13 +4,12 @@
 import { HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE } from '../data';
 import type { Camera, Vec } from '../camera';
 import type { Disc, Game, HeroState } from '../game';
-import { hazKey, type Block, type Mob, type ResNode } from '../room';
+import { floorAt, hazKey, isFloor, type Block, type Edge, type Mob, type ResNode } from '../room';
 import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure } from './figures';
 import { circ, ell, fs, lg, mix, pth, rr, type Ctx, type Pt } from './util';
 
 export interface Aim { hero: HeroState; dx: number; dy: number }
 
-interface Edge { a: Vec; b: Vec; n: Vec }
 
 const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -38,7 +37,7 @@ export class SceneRenderer {
     c.setTransform(dpr * z, 0, 0, dpr * z, dpr * (cam.panX + sx), dpr * (cam.panY + sy));
     c.lineJoin = 'round';
 
-    this.drawWalls();
+    this.drawLips();
     this.drawFloor();
     this.drawTelegraph();
 
@@ -48,6 +47,7 @@ export class SceneRenderer {
     for (const m of S.mobs) if (m.dead <= 1) items.push([cam.depth(m.x, m.y), () => this.drawMob(m)]);
     for (const b of S.blocks) items.push([cam.depth(b.x0 + 8, b.y0 + 8), () => this.drawBlock(b)]);
     for (const n of S.nodes) items.push([cam.depth(n.x, n.y), () => this.drawNode(n)]);
+    this.wallItems(items);
     items.sort((a, b) => a[0] - b[0]).forEach(i => i[1]());
 
     this.drawAim(aim);
@@ -63,72 +63,86 @@ export class SceneRenderer {
 
   // ------------------------------------------------------------ room shell
 
-  private edges(): Edge[] {
-    const { Wx, Wy } = this.g.S;
-    return [
-      { a: [0, 0], b: [0, Wy], n: [-1, 0] },
-      { a: [0, 0], b: [Wx, 0], n: [0, -1] },
-      { a: [Wx, 0], b: [Wx, Wy], n: [1, 0] },
-      { a: [0, Wy], b: [Wx, Wy], n: [0, 1] },
-    ];
-  }
-
   /** Base colour of a vertical face whose outward normal is n; faces turned left catch the light. */
   private shade(n: Vec, cols: [string, string]) {
     const side = this.cam.sideways(n[0], n[1]);
     return mix(cols[0], cols[1], 0.5 - 0.5 * side);
   }
 
-  private drawWalls() {
+  /** Edges whose rock lies away from the viewer get a tall wall; the rest a low lip below the floor. */
+  private isBack(e: Edge) {
+    return this.cam.facing(e.nx, e.ny) < -1e-6;
+  }
+
+  private drawLips() {
     const { c, P, cam } = this;
-    const S = this.g.S, B = S.biome, H = WALL_H;
-    const mid = (e: Edge) => cam.depth((e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2);
-    const back = this.edges().filter(e => cam.facing(e.n[0], e.n[1]) < -1e-6).sort((a, b) => mid(a) - mid(b));
-    for (const e of back) {
-      const [ax, ay] = e.a, [bx, by] = e.b;
-      const inner: Vec = [-e.n[0], -e.n[1]];
-      const base = this.shade(inner, B.w);
-      const A = P(ax, ay), Bp = P(bx, by), At = P(ax, ay, H), Bt = P(bx, by, H);
-      pth(c, [A, Bp, Bt, At]);
-      c.fillStyle = lg(c, 0, Math.min(At[1], Bt[1]), 0, Math.max(A[1], Bp[1]), mix(base, '#ffffff', 0.08), mix(base, '#000000', 0.3));
+    const S = this.g.S, B = S.biome;
+    const key = (e: Edge) => cam.depth((e.a[0] + e.b[0]) / 2 + e.nx * 8, (e.a[1] + e.b[1]) / 2 + e.ny * 8);
+    for (const e of S.edges.filter(e => !this.isBack(e)).sort((a, b) => key(a) - key(b))) {
+      const A = P(...e.a), Bp = P(...e.b);
+      pth(c, [A, Bp, P(...e.b, -9), P(...e.a, -9)]);
+      c.fillStyle = lg(c, 0, Math.min(A[1], Bp[1]), 0, Math.max(A[1], Bp[1]) + 9, this.shade([e.nx, e.ny], B.w), '#1e1712');
       c.fill();
-      // brick courses
-      const len = Math.hypot(bx - ax, by - ay), ux = (bx - ax) / len, uy = (by - ay) / len;
-      c.strokeStyle = 'rgba(20,12,8,.35)';
-      c.lineWidth = 0.8;
-      c.beginPath();
-      for (let r = 1; r <= 4; r++) {
-        const hh = r * 8.5;
-        if (r < 4) { c.moveTo(...P(ax, ay, hh)); c.lineTo(...P(bx, by, hh)); }
-        for (let s = (r % 2) * 8; s < len; s += 16) {
-          c.moveTo(...P(ax + ux * s, ay + uy * s, hh - 8.5));
-          c.lineTo(...P(ax + ux * s, ay + uy * s, Math.min(hh, H)));
-        }
-      }
-      c.stroke();
-      pth(c, [At, Bt, P(bx, by, H + 4), P(ax, ay, H + 4)]);
-      fs(c, B.cap, 1.1);
       c.strokeStyle = INK;
       c.lineWidth = 1.2;
       c.beginPath();
-      c.moveTo(...A); c.lineTo(...At);
-      c.moveTo(...Bp); c.lineTo(...Bt);
+      c.moveTo(...P(...e.a, -9)); c.lineTo(...P(...e.b, -9));
+      if (!e.contA) { c.moveTo(...A); c.lineTo(...P(...e.a, -9)); }
+      if (!e.contB) { c.moveTo(...Bp); c.lineTo(...P(...e.b, -9)); }
       c.stroke();
-      // banner in the middle, torches along the wall
-      const [mx, my] = P(ax + ux * len * 0.5, ay + uy * len * 0.5, 30);
+    }
+  }
+
+  /** Depth-sorted wall pieces, one per floor-cell edge that faces away from the viewer. */
+  private wallItems(items: [number, () => void][]) {
+    const cam = this.cam;
+    for (const e of this.g.S.edges) {
+      if (!this.isBack(e)) continue;
+      items.push([cam.depth((e.a[0] + e.b[0]) / 2 + e.nx * 8, (e.a[1] + e.b[1]) / 2 + e.ny * 8), () => this.drawWall(e)]);
+    }
+  }
+
+  private drawWall(e: Edge) {
+    const { c, P } = this;
+    const B = this.g.S.biome, H = WALL_H;
+    const [ax, ay] = e.a, [bx, by] = e.b;
+    const base = this.shade([-e.nx, -e.ny], B.w);
+    const A = P(ax, ay), Bp = P(bx, by), At = P(ax, ay, H), Bt = P(bx, by, H);
+    pth(c, [A, Bp, Bt, At]);
+    c.fillStyle = lg(c, 0, Math.min(At[1], Bt[1]), 0, Math.max(A[1], Bp[1]), mix(base, '#ffffff', 0.08), mix(base, '#000000', 0.3));
+    c.fill();
+    // brick courses, joints placed by world coordinate so they line up across pieces
+    const along = e.nx !== 0, u0 = along ? ay : ax;
+    const at = (u: number, h: number) => (along ? P(ax, u, h) : P(u, ay, h));
+    c.strokeStyle = 'rgba(20,12,8,.35)';
+    c.lineWidth = 0.8;
+    c.beginPath();
+    for (let r = 1; r <= 4; r++) {
+      const hh = r * 8.5;
+      if (r < 4) { c.moveTo(...P(ax, ay, hh)); c.lineTo(...P(bx, by, hh)); }
+      for (let u = u0 + (r % 2) * 8; u < u0 + TILE; u += 16) { c.moveTo(...at(u, hh - 8.5)); c.lineTo(...at(u, Math.min(hh, H))); }
+    }
+    c.stroke();
+    pth(c, [At, Bt, P(bx, by, H + 4), P(ax, ay, H + 4)]);
+    c.fillStyle = B.cap;
+    c.fill();
+    c.strokeStyle = INK;
+    c.lineWidth = 1.1;
+    c.beginPath();
+    c.moveTo(...At); c.lineTo(...Bt);
+    c.moveTo(...P(ax, ay, H + 4)); c.lineTo(...P(bx, by, H + 4));
+    if (!e.contA) { c.moveTo(...A); c.lineTo(...P(ax, ay, H + 4)); }
+    if (!e.contB) { c.moveTo(...Bp); c.lineTo(...P(bx, by, H + 4)); }
+    c.stroke();
+    // a torch on every fourth piece of wall, a banner now and then
+    const k = along ? e.j : e.i;
+    const [mx, my] = P((ax + bx) / 2, (ay + by) / 2, 30);
+    if (k % 4 === 2) this.drawTorch(...P((ax + bx) / 2, (ay + by) / 2, 20), ax + ay);
+    else if (k % 4 === 0 && (e.i + e.j) % 3 === 0) {
       pth(c, [[mx - 5, my], [mx + 5, my], [mx + 5, my + 16], [mx, my + 12], [mx - 5, my + 16]]);
       fs(c, lg(c, 0, my, 0, my + 16, '#a8323f', '#5e1a24'), 1);
       circ(c, mx, my + 6, 2.2);
       fs(c, '#d9b24a', 0.8);
-      for (let s = 40; s < len; s += 70) {
-        if (Math.abs(s - len * 0.5) < 20) continue;
-        this.drawTorch(...P(ax + ux * s, ay + uy * s, 20), ax + ay + s);
-      }
-    }
-    for (const e of this.edges().filter(e => cam.facing(e.n[0], e.n[1]) >= -1e-6)) {
-      const A = P(...e.a), Bp = P(...e.b);
-      pth(c, [A, Bp, P(...e.b, -9), P(...e.a, -9)]);
-      fs(c, lg(c, 0, Math.min(A[1], Bp[1]), 0, Math.max(A[1], Bp[1]) + 9, this.shade(e.n, B.w), '#1e1712'), 1.2);
     }
   }
 
@@ -150,11 +164,11 @@ export class SceneRenderer {
   private drawFloor() {
     const { c, P, g } = this;
     const S = g.S, B = S.biome, gap = 0.9, t = this.t;
-    const corners: Pt[] = [P(0, 0), P(S.Wx, 0), P(S.Wx, S.Wy), P(0, S.Wy)];
-    pth(c, corners);
-    c.fillStyle = B.g;
-    c.fill();
     for (let i = 0; i < S.gw; i++) for (let j = 0; j < S.gh; j++) {
+      if (!isFloor(S, i, j)) continue;
+      pth(c, [P(i * TILE, j * TILE), P((i + 1) * TILE, j * TILE), P((i + 1) * TILE, (j + 1) * TILE), P(i * TILE, (j + 1) * TILE)]);
+      c.fillStyle = B.g;
+      c.fill();
       const x0 = i * TILE + gap, y0 = j * TILE + gap, x1 = (i + 1) * TILE - gap, y1 = (j + 1) * TILE - gap;
       const q: Pt[] = [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)];
       pth(c, q);
@@ -197,7 +211,8 @@ export class SceneRenderer {
     }
     c.strokeStyle = INK;
     c.lineWidth = 1.2;
-    pth(c, corners);
+    c.beginPath();
+    for (const e of S.edges) { c.moveTo(...P(...e.a)); c.lineTo(...P(...e.b)); }
     c.stroke();
     for (const p of S.pits) {
       const [sx, sy] = P(p.x, p.y);
@@ -208,7 +223,9 @@ export class SceneRenderer {
       c.strokeStyle = 'rgba(255,255,255,.5)';
       c.lineWidth = 0.8;
       for (let k = 0; k < 18; k++) {
-        const [sx, sy] = P(((k * 53) % (S.Wx - 10)) + 5, ((k * 31) % (S.Wy - 10)) + 5);
+        const wx = ((k * 53) % (S.Wx - 10)) + 5, wy = ((k * 31) % (S.Wy - 10)) + 5;
+        if (!floorAt(S, wx, wy)) continue;
+        const [sx, sy] = P(wx, wy);
         c.beginPath(); c.moveTo(sx, sy); c.lineTo(sx + 5, sy - 1.5); c.stroke();
       }
     }

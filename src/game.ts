@@ -2,7 +2,7 @@
 // Rendering and input live elsewhere; this module only changes state.
 
 import { AB_COST, HAND, HEROES, UPS, UP_COST, type HeroDef, type StatKey } from './data';
-import { generate, hazKey, newMob, type Layout, type Mob, type RoomSpec } from './room';
+import { generate, hazKey, newMob, spawnSpot, type Layout, type Mob, type RoomSpec } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
 
@@ -253,7 +253,8 @@ export class Game {
   }
 
   inBlock(x: number, y: number, r: number) {
-    return this.S.blocks.some(b => Math.hypot(x - Math.max(b.x0, Math.min(x, b.x1)), y - Math.max(b.y0, Math.min(y, b.y1))) < r);
+    const boxes = this.S.blocks.concat(this.S.rock);
+    return boxes.some(b => Math.hypot(x - Math.max(b.x0, Math.min(x, b.x1)), y - Math.max(b.y0, Math.min(y, b.y1))) < r);
   }
 
   step(dt: number) {
@@ -276,6 +277,7 @@ export class Game {
         continue;
       }
       for (const b of S.blocks) if (this.bounceBox(d, b) > 0) d.bounces++;
+      for (const b of S.rock) if (this.bounceBox(d, b) > 0) d.bounces++;
       for (const n of S.nodes) {
         if (n.left <= 0) continue;
         const vn = this.bounceStatic(d, n);
@@ -381,7 +383,8 @@ export class Game {
     S.waves.shift();
     const n = 1 + (S.spec.depth > 6 ? 1 : 0) + (S.turn > 4 ? 1 : 0);
     for (let i = 0; i < n; i++) {
-      const k = S.pool[Math.floor(Math.random() * S.pool.length)], x = 14 + Math.random() * 30, y = 14 + Math.random() * 30;
+      const k = S.pool[Math.floor(Math.random() * S.pool.length)];
+      const [x, y] = spawnSpot(S, 12, Math.random);
       S.mobs.push(newMob(k, x, y, S.hpMul, S.dmgAdd));
       this.float(x, y, 'из тьмы!', '#ff4d6a');
       this.burst(x, y, '#ff4d6a', 16);

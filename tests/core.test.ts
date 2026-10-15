@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Camera } from '../src/camera';
-import { generate } from '../src/room';
+import { clearOfRock, floorAt, generate, isFloor } from '../src/room';
 import { FLOORS, LAYERS, genFloor, newRun } from '../src/run';
 
 describe('room generator', () => {
@@ -15,11 +15,29 @@ describe('room generator', () => {
       const L = generate({ seed, depth: 1 + (seed % 15), floor: seed % 3, type: seed % 5 ? 'fight' : 'boss' });
       expect(L.pads).toHaveLength(5);
       expect(L.mobs.length).toBeGreaterThan(0);
-      for (const m of L.mobs) {
-        expect(m.x).toBeGreaterThan(0);
-        expect(m.x).toBeLessThan(L.Wx);
-      }
+      for (const m of L.mobs) expect(clearOfRock(L, m.x, m.y, m.r)).toBe(true);
+      for (const n of L.nodes) expect(clearOfRock(L, n.x, n.y, n.r)).toBe(true);
+      for (const p of L.pads) expect(floorAt(L, p.x, p.y)).toBe(true);
     }
+  });
+
+  it('makes rooms of different shapes, each one connected', () => {
+    const shapes = new Set<string>();
+    for (let seed = 1; seed < 200; seed++) {
+      const L = generate({ seed, depth: 3, floor: 0, type: 'fight' });
+      shapes.add(L.shape);
+      // flood fill from the first floor cell reaches every floor cell
+      const start = L.floor.indexOf(1), seen = new Set([start]), stack = [start];
+      while (stack.length) {
+        const k = stack.pop()!, i = k % L.gw, j = Math.floor(k / L.gw);
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const ni = i + di, nj = j + dj, nk = nj * L.gw + ni;
+          if (isFloor(L, ni, nj) && !seen.has(nk)) { seen.add(nk); stack.push(nk); }
+        }
+      }
+      expect(seen.size).toBe(L.floor.reduce((a, b) => a + b, 0));
+    }
+    expect(shapes.size).toBeGreaterThanOrEqual(4);
   });
 });
 
