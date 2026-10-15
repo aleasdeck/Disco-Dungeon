@@ -13,7 +13,8 @@ export interface RoomSpec {
 
 export interface Pad { x: number; y: number }
 export interface Pit { x: number; y: number; r: number }
-export interface Block { x0: number; y0: number; x1: number; y1: number; v: number }
+/** A one-tile obstacle; `ice` marks an icicle growing from the floor, which collides exactly like a stone block. */
+export interface Block { x0: number; y0: number; x1: number; y1: number; v: number; ice?: boolean }
 export interface Decal { x: number; y: number; k: number; a: number }
 
 export interface ResNode {
@@ -89,6 +90,8 @@ export interface Layout {
   nodes: ResNode[];
   mobs: Mob[];
   haz: Set<string>;
+  /** 1 where the cell is iced over (slippery), row-major gw × gh; all zeros outside icy biomes. */
+  ice: Uint8Array;
   hpMul: number;
   dmgAdd: number;
 }
@@ -112,6 +115,30 @@ export function isFloor(L: { gw: number; gh: number; floor: Uint8Array }, i: num
 /** Floor cell under a world point. */
 export const floorAt = (L: { gw: number; gh: number; floor: Uint8Array }, x: number, y: number) =>
   isFloor(L, Math.floor(x / TILE), Math.floor(y / TILE));
+
+/** Floor friction under a world point: ice patches are slippery, the rest of the floor is not. */
+export const muAt = (L: { gw: number; gh: number; ice: Uint8Array; biome: Biome }, x: number, y: number) => {
+  const i = Math.floor(x / TILE), j = Math.floor(y / TILE);
+  return L.biome.iceMu !== undefined && i >= 0 && j >= 0 && i < L.gw && j < L.gh && L.ice[j * L.gw + i] ? L.biome.iceMu : L.biome.mu;
+};
+
+/** Ice in patches: a few frozen blobs covering roughly a third of the floor. */
+function freeze(gw: number, gh: number, floor: Uint8Array, R: ReturnType<typeof makeRng>) {
+  const ice = new Uint8Array(gw * gh);
+  const cells = floor.reduce((n, v) => n + v, 0);
+  const goal = cells * (0.26 + R.next() * 0.12);
+  let n = 0;
+  for (let tr = 0; tr < 40 && n < goal; tr++) {
+    const ci = R.next() * gw, cj = R.next() * gh, rx = 1.4 + R.next() * 2, ry = 1.4 + R.next() * 2;
+    for (let j = Math.floor(cj - ry - 1); j <= cj + ry + 1; j++) for (let i = Math.floor(ci - rx - 1); i <= ci + rx + 1; i++) {
+      if (i < 0 || j < 0 || i >= gw || j >= gh || !floor[j * gw + i] || ice[j * gw + i]) continue;
+      const dx = (i + 0.5 - ci) / rx, dy = (j + 0.5 - cj) / ry;
+      // a ragged rim so patches don't come out as clean ellipses
+      if (dx * dx + dy * dy < 0.8 + R.next() * 0.5) { ice[j * gw + i] = 1; n++; }
+    }
+  }
+  return ice;
+}
 
 const boxDist = (x: number, y: number, b: Block) => Math.hypot(x - Math.max(b.x0, Math.min(x, b.x1)), y - Math.max(b.y0, Math.min(y, b.y1)));
 
@@ -317,6 +344,20 @@ export function generate(spec: RoomSpec): Layout {
     }
   }
 
+  // ice caves: icicles rise from the floor on top of the stone blocks; same one-tile footprint, same bounce
+  if (biome.iceMu !== undefined) {
+    for (let i = 0, n = roll(tier.blocks); i < n; i++) {
+      for (let tr = 0; tr < 40; tr++) {
+        const tx = ri(1, gw - 4), ty = ri(1, gh - 4), sh = pick(SHAPES);
+        const cells = sh.map(([a, b]) => ({ x0: (tx + a) * TILE, y0: (ty + b) * TILE, x1: (tx + a + 1) * TILE, y1: (ty + b + 1) * TILE, v: ri(0, 7), ice: true }));
+        if (cells.every(c => free(c.x0 + 8, c.y0 + 8, 11, 4) && clearOfRock(geo, c.x0 + 8, c.y0 + 8, 20))) {
+          for (const c of cells) { blocks.push(c); objs.push({ x: c.x0 + 8, y: c.y0 + 8, r: 11 }); }
+          break;
+        }
+      }
+    }
+  }
+
   const decals: Decal[] = [];
   for (let i = 0, n = ri(8, 14); i < n; i++) {
     const d0 = { x: 8 + R.next() * (Wx - 16), y: 8 + R.next() * (Wy - 16), k: ri(0, 2), a: R.next() * 3 };
@@ -377,5 +418,7 @@ export function generate(spec: RoomSpec): Layout {
     const tx = ri(1, gw - 2), ty = ri(1, gh - 2);
     if (hazOk(tx, ty)) haz.add(hazKey(tx, ty));
   }
-  return { gw, gh, shape, floor, edges, rock, Wx, Wy, biome, pads, pits, blocks, decals, nodes, mobs, haz, hpMul, dmgAdd };
+  // its own stream, so freezing the floor doesn't reshuffle anything above
+  const ice = biome.iceMu !== undefined ? freeze(gw, gh, floor, makeRng(spec.seed * 31 + spec.depth + 7919)) : new Uint8Array(gw * gh);
+  return { gw, gh, shape, floor, edges, rock, Wx, Wy, biome, pads, pits, blocks, decals, nodes, mobs, haz, ice, hpMul, dmgAdd };
 }
