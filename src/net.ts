@@ -5,10 +5,13 @@ import Peer, { type DataConnection, type PeerOptions } from 'peerjs';
 import type { Action } from './game';
 import type { Snapshot } from './sync';
 
-export interface Player { id: string; name: string; hero: number | null }
+/** `key` is the player's secret for rejoining after a drop; only the host keeps it. */
+export interface Player { id: string; name: string; hero: number | null; key?: string }
 
 export type Msg =
-  | { t: 'hello'; name: string }
+  | { t: 'hello'; name: string; key: string }
+  /** The host turns a player away (the room is full, or the game started without them). */
+  | { t: 'deny'; text: string }
   | { t: 'lobby'; players: Player[] }
   | { t: 'pick'; hero: number | null }
   | { t: 'start'; players: Player[] }
@@ -17,6 +20,8 @@ export type Msg =
   /** A screen everyone sees while the host chooses (the map, the end of a room); an empty title hides it. */
   | { t: 'screen'; title: string; text: string }
   | { t: 'lobbyBack' }
+  /** The host closed the room on purpose, so there is nothing to reconnect to. */
+  | { t: 'bye' }
   /** Heartbeat both ways: a closed tab does not always close its WebRTC channel. */
   | { t: 'ping' };
 
@@ -54,18 +59,25 @@ export class Net {
 
   get active() { return !!this.peer; }
 
-  hostRoom(): Promise<string> {
+  /** Open a room; with `again`, reopen that code after a crash (the broker may hold it for a while). */
+  hostRoom(again?: string): Promise<string> {
     this.close();
     return new Promise((resolve, reject) => {
       const tryCode = (left: number) => {
-        const code = newCode(), peer = new Peer(PREFIX + code, peerOptions());
+        const code = again ?? newCode(), peer = new Peer(PREFIX + code, peerOptions());
         peer.on('open', () => {
           this.peer = peer; this.isHost = true; this.code = code; this.id = 'host';
           this.startBeat();
+          keepBroker(peer);
           resolve(code);
         });
         peer.on('error', e => {
-          if (e.type === 'unavailable-id' && left > 0) { peer.destroy(); tryCode(left - 1); return; }
+          if (e.type === 'unavailable-id' && left > 0) {
+            peer.destroy();
+            if (again) setTimeout(() => tryCode(left - 1), 3000);
+            else tryCode(left - 1);
+            return;
+          }
           if (!this.peer) { peer.destroy(); reject(new Error(explain(e.type))); }
         });
         peer.on('connection', conn => {
@@ -75,7 +87,7 @@ export class Net {
           conn.on('error', () => this.drop(conn.peer));
         });
       };
-      tryCode(3);
+      tryCode(again ? 20 : 3);
     });
   }
 
@@ -95,6 +107,7 @@ export class Net {
           this.peer = peer; this.isHost = false; this.code = code.toUpperCase(); this.id = id; this.hostConn = conn;
           this.seen.set('host', Date.now());
           this.startBeat();
+          keepBroker(peer);
           resolve();
         });
         conn.on('data', d => { this.seen.set('host', Date.now()); if ((d as Msg).t !== 'ping') this.onMsg('host', d as Msg); });
@@ -171,6 +184,11 @@ export class Net {
     this.code = '';
     this.id = '';
   }
+}
+
+/** A dropped link to the broker doesn't break open games, but the host needs it for players to rejoin. */
+function keepBroker(peer: Peer) {
+  peer.on('disconnected', () => setTimeout(() => { if (!peer.destroyed && peer.disconnected) peer.reconnect(); }, 2000));
 }
 
 function explain(type: string) {

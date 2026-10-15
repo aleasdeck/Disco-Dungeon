@@ -554,7 +554,9 @@ export class Game {
     if (this.send) { this.updateRemote(dt); return; }
     this.acc += dt;
     while (this.acc >= STEP) { this.step(STEP); this.acc -= STEP; }
-    if (S.phase === 'throw' && this.allThrown() && !this.moving()) {
+    // the last enemy down ends the fight at once, whatever throws are left
+    if ((S.phase === 'throw' || S.phase === 'resolve' || S.phase === 'enemy') && !this.liveMobs().length) this.finish();
+    else if (S.phase === 'throw' && this.allThrown() && !this.moving()) {
       S.phase = 'resolve'; S.timer = 0.9; this.resolve(); this.onChange();
     } else if (S.phase === 'resolve' && (S.timer -= dt) <= 0) {
       S.phase = 'enemy'; S.timer = 1.5; this.mobsStart(); S.attacked = false; this.onChange();
