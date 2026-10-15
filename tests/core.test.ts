@@ -3,7 +3,7 @@ import { Camera } from '../src/camera';
 import { HAND_MAX, HAND_START, HEROES, MOBS, TILE } from '../src/data';
 import { Game, newParty, type Action } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { clearOfRock, floorAt, generate, isFloor } from '../src/room';
+import { clearOfRock, floorAt, generate, isFloor, tierOf } from '../src/room';
 import { FLOORS, LAYERS, genFloor, newRun } from '../src/run';
 
 describe('room generator', () => {
@@ -15,7 +15,7 @@ describe('room generator', () => {
 
   it('always has five throw runes and at least one mob', () => {
     for (let seed = 1; seed < 60; seed++) {
-      const L = generate({ seed, depth: 1 + (seed % 15), floor: seed % 3, type: seed % 5 ? 'fight' : 'boss' });
+      const f = seed % 3, L = generate({ seed, depth: f * LAYERS + 1 + (seed % 6), floor: f, type: seed % 5 ? 'fight' : 'boss' });
       expect(L.pads).toHaveLength(5);
       expect(L.mobs.length).toBeGreaterThan(0);
       for (const m of L.mobs) expect(clearOfRock(L, m.x, m.y, m.r)).toBe(true);
@@ -33,7 +33,7 @@ describe('room generator', () => {
   it('makes rooms of different shapes, each one connected', () => {
     const shapes = new Set<string>();
     for (let seed = 1; seed < 200; seed++) {
-      const L = generate({ seed, depth: 3, floor: 0, type: 'fight' });
+      const L = generate({ seed, depth: 1 + (seed % LAYERS), floor: 0, type: seed % LAYERS === LAYERS - 1 ? 'boss' : 'fight' });
       shapes.add(L.shape);
       // flood fill from the first floor cell reaches every floor cell
       const start = L.floor.indexOf(1), seen = new Set([start]), stack = [start];
@@ -47,6 +47,38 @@ describe('room generator', () => {
       expect(seen.size).toBe(L.floor.reduce((a, b) => a + b, 0));
     }
     expect(shapes.size).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe('difficulty along a floor', () => {
+  const room = (f: number, row: number, seed: number, type: 'fight' | 'elite' = 'fight') => generate({ seed, depth: f * LAYERS + row + 1, floor: f, type });
+
+  it('opens every floor with a small plain room and ends it with a big tangled one', () => {
+    for (let f = 0; f < FLOORS; f++) for (let seed = 1; seed < 40; seed++) {
+      const a = room(f, 0, seed), z = room(f, LAYERS - 2, seed);
+      expect(a.shape).toBe('rect');
+      expect(a.pits).toHaveLength(0);
+      expect(a.gw * a.gh).toBeLessThan(z.gw * z.gh);
+      expect(a.mobs.length).toBeLessThan(z.mobs.length);
+      expect(a.haz.size).toBeLessThan(z.haz.size);
+      expect(z.pits.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('places every enemy it asks for, in every row of every floor', () => {
+    for (let f = 0; f < FLOORS; f++) for (let row = 0; row < LAYERS - 1; row++) for (const type of ['fight', 'elite'] as const) {
+      for (let seed = 1; seed < 60; seed++) {
+        const spec = { seed, depth: f * LAYERS + row + 1, floor: f, type }, L = generate(spec);
+        expect(L.mobs.length).toBeGreaterThanOrEqual(Math.min(tierOf(spec).tier.mobs[0] + f, 7));
+        expect(L.pads).toHaveLength(5);
+      }
+    }
+  });
+
+  it('hits harder on later floors and in the last rooms before the boss', () => {
+    expect(room(0, 0, 3).dmgAdd).toBe(0);
+    expect(room(0, LAYERS - 2, 3).dmgAdd).toBe(1);
+    expect(room(2, 0, 3).dmgAdd).toBe(2);
   });
 });
 
@@ -77,12 +109,15 @@ describe('camera', () => {
 });
 
 describe('run map', () => {
-  it('has at most 9 rooms before the boss and every room is reachable', () => {
+  it('has 7 rows, 12 to 16 rooms before the boss, rest rows in the middle and every room reachable', () => {
     for (let seed = 10000; seed < 10040; seed++) {
       for (let f = 0; f < FLOORS; f++) {
         const layers = genFloor(seed, f);
         expect(layers).toHaveLength(LAYERS);
-        expect(layers.slice(0, -1).flat().length).toBeLessThanOrEqual(9);
+        const n = layers.slice(0, -1).flat().length;
+        expect(n).toBeGreaterThanOrEqual(12);
+        expect(n).toBeLessThanOrEqual(16);
+        for (const r of [3, 5]) expect(layers[r].some(m => m.type === 'camp' || m.type === 'forge')).toBe(true);
         expect(layers[LAYERS - 1][0].type).toBe('boss');
         for (let l = 1; l < LAYERS; l++) {
           for (const n of layers[l]) expect(layers[l - 1].some(p => p.next.includes(n.id))).toBe(true);
