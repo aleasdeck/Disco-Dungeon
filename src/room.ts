@@ -88,10 +88,8 @@ export interface Layout {
   nodes: ResNode[];
   mobs: Mob[];
   haz: Set<string>;
-  waves: number[];
   hpMul: number;
   dmgAdd: number;
-  pool: MobKind[];
 }
 
 export function newMob(k: MobKind, x: number, y: number, hpMul = 1, dmgAdd = 0): Mob {
@@ -209,17 +207,6 @@ function pickPads(gw: number, gh: number, floor: Uint8Array, R: ReturnType<typeo
   return chosen.map(([i, j]) => ({ x: i * TILE + 8 + (R.next() - 0.5) * 3, y: j * TILE + 8 + (R.next() - 0.5) * 3 }));
 }
 
-/** A free spot for reinforcements in the far part of the room. */
-export function spawnSpot(L: Layout, r: number, rnd: () => number): [number, number] {
-  for (let k = 0; k < 300; k++) {
-    const far = k < 200;
-    const x = r + rnd() * (L.Wx - 2 * r), y = r + rnd() * (L.Wy - 2 * r);
-    if (far && x / L.Wx + y / L.Wy > 0.8) continue;
-    if (clearOfRock(L, x, y, r + 1) && L.mobs.every(m => m.hp <= 0 || Math.hypot(m.x - x, m.y - y) > m.r + r + 4)) return [x, y];
-  }
-  return [L.Wx / 2, L.Wy / 2];
-}
-
 export function generate(spec: RoomSpec): Layout {
   const R = makeRng(spec.seed * 31 + spec.depth);
   const { int: ri, pick } = R;
@@ -281,7 +268,8 @@ export function generate(spec: RoomSpec): Layout {
     if (q) { nodes.push({ k, ...NODES[k], x: q[0], y: q[1], left: NODES[k].ch, hit: 0 }); objs.push({ x: q[0], y: q[1], r: NODES[k].r }); }
   }
 
-  const hpMul = 1 + 0.09 * (d - 1), dmgAdd = Math.floor((d - 1) / 5);
+  // every enemy is in the room from the start (no reinforcements), so they are tougher to make up for it
+  const hpMul = 1.6 * (1 + 0.09 * (d - 1)), dmgAdd = Math.floor((d - 1) / 5);
   const pool: MobKind[] = spec.floor === 0 ? ['skel', 'skel', 'archer', 'slime'] : spec.floor === 1 ? ['skel', 'archer', 'slime', 'slime', 'archer'] : ['skel', 'archer', 'slime', 'golem'];
   let mk: MobKind[];
   if (type === 'treasure') mk = ['skel', 'archer'];
@@ -299,6 +287,5 @@ export function generate(spec: RoomSpec): Layout {
     const tx = ri(1, gw - 2), ty = ri(1, gh - 2), cx = tx * TILE + 8, cy = ty * TILE + 8;
     if (isFloor(geo, tx, ty) && mid(cx, cy) && pads.every(p => Math.hypot(p.x - cx, p.y - cy) > 26) && objs.every(o => Math.hypot(o.x - cx, o.y - cy) > o.r + 4)) haz.add(hazKey(tx, ty));
   }
-  const waves = type === 'boss' ? [2, 4, 6] : type === 'treasure' ? [2, 4] : d >= 6 ? [2, 4, 6] : [3, 6];
-  return { gw, gh, shape, floor, edges, rock, Wx, Wy, biome, pads, pits, blocks, decals, nodes, mobs, haz, waves, hpMul, dmgAdd, pool };
+  return { gw, gh, shape, floor, edges, rock, Wx, Wy, biome, pads, pits, blocks, decals, nodes, mobs, haz, hpMul, dmgAdd };
 }
