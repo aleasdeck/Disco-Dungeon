@@ -351,7 +351,19 @@ async function join(code: string, key = newKey()) {
   mode = 'client';
   myKey = key;
   saveSeat({ code: net.code, key, host: false });
-  net.send({ t: 'hello', name: playerName(), key });
+  greet();
+}
+
+/** Client: say hello, and again every few seconds until the host answers (a hello can arrive before the host is ready). */
+let answered = false;
+function greet() {
+  answered = false;
+  const say = (left: number) => {
+    if (answered || mode !== 'client' || !net.active || left <= 0) return;
+    net.send({ t: 'hello', name: playerName(), key: myKey });
+    setTimeout(() => say(left - 1), 3000);
+  };
+  say(10);
 }
 
 /** Client: the host is gone; keep trying the same room for a while, since the host may be coming back too. */
@@ -363,7 +375,7 @@ async function reconnect(code: string) {
     try {
       await net.joinRoom(code);
       if (my !== reconnecting) { net.close(); return; }
-      net.send({ t: 'hello', name: playerName(), key: myKey });
+      greet();
       if (!started) lobbyStatus('');
       return;
     } catch {
@@ -440,6 +452,7 @@ net.onMsg = (from, m) => {
     else if (m.t === 'act' && started && ownerOf(m.a.h) === from) game.perform(m.a);
     return;
   }
+  answered = true;
   if (m.t === 'lobby') { players = m.players; lobbyView(); }
   else if (m.t === 'deny') lost(m.text);
   else if (m.t === 'bye') lost('Хозяин комнаты закрыл игру.');
@@ -486,33 +499,36 @@ async function reopen(code: string) {
   const s = loadHost();
   if (!s || s.code !== code) { clearSeat(); openMenu(); return; }
   show(null);
+  // the game comes back first, so players who reconnect the moment the room opens find their seats
+  // (everyone else is away until they rejoin; the host plays their heroes meanwhile)
+  players = s.players;
+  started = s.started;
+  setOnline('host');
+  if (started && s.snap) {
+    run = s.run;
+    choosing = s.choosing;
+    mapView.info = s.mapInfo;
+    applySnapshot(game, s.snap);
+    setOnline('host');
+    game.pickActiveParty();
+    hud.buildAllies();
+    hud.refresh();
+    controls.fit();
+    lastScreen = s.screen;
+  }
   wait('Возвращаюсь в игру', 'Открываю комнату заново, игроки подключатся сами.');
   try {
     await net.hostRoom(code);
   } catch (e) {
     wait('');
-    clearSeat();
+    leaveOnline();
     openMenu();
     alert(`Не удалось вернуть комнату. ${(e as Error).message}`);
     return;
   }
   wait('');
-  // everyone else is away until they rejoin; the host plays their heroes meanwhile
-  players = s.players;
-  started = s.started;
-  setOnline('host');
-  if (!started || !s.snap) { lobbyView(); show('lobby'); return; }
-  run = s.run;
-  choosing = s.choosing;
-  mapView.info = s.mapInfo;
-  applySnapshot(game, s.snap);
-  setOnline('host');
-  game.pickActiveParty();
-  hud.buildAllies();
-  hud.refresh();
-  controls.fit();
-  lastScreen = s.screen;
   dirty = true;
+  if (!started || !s.snap) { lobbyView(); show('lobby'); return; }
   if (s.ending) showEnd(s.ending);
   else if (choosing) showMap(true);
   else if (!game.liveMobs().length || !game.alive().length) game.onRoomEnd(game.alive().length > 0);
