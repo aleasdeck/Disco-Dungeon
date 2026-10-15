@@ -9,6 +9,8 @@ import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure } from '
 import { circ, ell, fs, lg, mix, pth, rr, type Ctx, type Pt } from './util';
 
 export interface Aim { hero: HeroState; dx: number; dy: number }
+/** A hero dragged to another rune: pointer position in screen pixels and the rune under it. */
+export interface Carry { hero: HeroState; x: number; y: number; pad: number | null; moved: boolean }
 
 
 const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -18,10 +20,12 @@ export class SceneRenderer {
   private cam!: Camera;
   private g!: Game;
   private t = 0;
+  private carry: Carry | null = null;
 
   private P = (x: number, y: number, h = 0): Pt => this.cam.iso(x, y, h);
 
-  draw(c: Ctx, cam: Camera, g: Game, t: number, view: { w: number; h: number; dpr: number }, aim: Aim | null) {
+  draw(c: Ctx, cam: Camera, g: Game, t: number, view: { w: number; h: number; dpr: number }, aim: Aim | null, carry: Carry | null = null) {
+    this.carry = carry?.moved ? carry : null;
     this.c = c; this.cam = cam; this.g = g; this.t = t;
     const S = g.S, { w, h, dpr } = view;
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -44,6 +48,11 @@ export class SceneRenderer {
     const items: [number, () => void][] = [];
     for (const d of S.discs) if (!d.gone) items.push([cam.depth(d.x, d.y), () => this.drawDisc(d)]);
     for (const hs of S.heroes) if (hs.pad !== null) { const p = S.pads[hs.pad]; items.push([cam.depth(p.x, p.y) + 2, () => this.drawHero(hs)]); }
+    const cr = this.carry;
+    if (cr) {
+      const [wx, wy] = cam.screenToWorld(cr.x, cr.y);
+      items.push([cam.depth(wx, wy) + 2, () => this.drawHero(cr.hero, { x: wx, y: wy })]);
+    }
     for (const m of S.mobs) if (m.dead <= 1) items.push([cam.depth(m.x, m.y), () => this.drawMob(m)]);
     for (const b of S.blocks) items.push([cam.depth(b.x0 + 8, b.y0 + 8), () => this.drawBlock(b)]);
     for (const n of S.nodes) items.push([cam.depth(n.x, n.y), () => this.drawNode(n)]);
@@ -230,10 +239,18 @@ export class SceneRenderer {
       }
     }
     // throw runes
-    const h = g.hero, canMove = g.canPlace(h);
+    const h = g.hero, canMove = g.canPlace(h), cr = this.carry;
     S.pads.forEach((p, k) => {
       const occ = S.heroes.find(o => o.pad === k && o.hp > 0), [sx, sy] = P(p.x, p.y);
       const on = !occ && canMove, pulse = reduce ? 0.8 : 0.6 + Math.sin(t * 5) * 0.3;
+      if (cr && cr.pad === k && cr.hero.pad !== k) {
+        ell(c, sx, sy, 17, 8.5);
+        c.fillStyle = cr.hero.def.col + '66';
+        c.fill();
+        c.lineWidth = 2;
+        c.strokeStyle = '#ffd65a';
+        c.stroke();
+      }
       ell(c, sx, sy, 13, 6.5);
       c.fillStyle = occ ? occ.def.col + '55' : on ? `rgba(255,214,90,${0.35 * pulse})` : 'rgba(255,214,90,.12)';
       c.fill();
@@ -249,7 +266,7 @@ export class SceneRenderer {
   private drawTelegraph() {
     const { c, P, g } = this;
     const S = g.S;
-    if (S.phase !== 'throw') return;
+    if (S.phase !== 'throw' && S.phase !== 'place') return;
     c.save();
     c.setLineDash([3, 3]);
     c.lineDashOffset = reduce ? 0 : -this.t * 12;
@@ -377,16 +394,20 @@ export class SceneRenderer {
     return this.P(toX, toY)[0] >= this.P(fromX, fromY)[0];
   }
 
-  private drawHero(h: HeroState) {
+  /** Draw a hero on its rune, or lifted at `at` while it is being carried to another rune. */
+  private drawHero(h: HeroState, at?: { x: number; y: number }) {
     const { c, P, g } = this;
-    const S = g.S, p = S.pads[h.pad!], [sx, sy] = P(p.x, p.y), dead = h.hp <= 0;
+    const lifted = !!at, carried = !at && this.carry?.hero === h;
+    const S = g.S, p = at ?? S.pads[h.pad!], [sx, sy0] = P(p.x, p.y), sy = sy0 - (lifted ? 8 : 0), dead = h.hp <= 0;
     const target = g.liveMobs()[0] ?? { x: S.Wx / 2, y: S.Wy / 2 };
+    if (lifted) { ell(c, sx, sy0, 9, 4.5); c.fillStyle = 'rgba(0,0,0,.35)'; c.fill(); }
     drawMiniature(c, {
       key: h.def.key, x: sx, y: sy, baseR: 9, baseCol: h.def.col, fig: HERO_FIG,
-      faceRight: this.faceRight(p.x, p.y, target.x, target.y), flash: h.flash > 0, hop: 0, alpha: dead ? 0.45 : 1,
+      faceRight: this.faceRight(p.x, p.y, target.x, target.y), flash: h.flash > 0, hop: 0,
+      alpha: dead ? 0.45 : carried ? 0.3 : lifted ? 0.85 : 1,
       placeholder: (cc, x, y, fl) => drawHeroFigure(cc, h.i, x, y, 0.8, fl, this.t),
     });
-    if (dead) return;
+    if (dead || carried) return;
     const top = sy - BASE_TH - HERO_FIG - 6;
     rr(c, sx - 9, top - 3, 18, 4, 2); fs(c, '#2a1f18', 0.8);
     rr(c, sx - 8.3, top - 2.3, (16.6 * Math.max(0, h.hp)) / h.max, 2.6, 1.3); c.fillStyle = '#d9434f'; c.fill();
@@ -425,7 +446,7 @@ export class SceneRenderer {
     rr(c, x - w / 2, top, w, 3.6, 1.2); fs(c, '#2a1f18', 0.7);
     rr(c, x - w / 2 + 0.6, top + 0.6, ((w - 1.2) * Math.max(0, m.hp)) / m.max, 2.4, 0.8); c.fillStyle = '#d9434f'; c.fill();
     if (m.armor) { c.font = '600 6px Oswald, sans-serif'; c.textAlign = 'right'; c.fillStyle = '#d6cfbd'; c.fillText('бр ' + m.armor, x - w / 2 - 1.5, top + 3.8); }
-    if (it && S.phase === 'throw') {
+    if (it && (S.phase === 'throw' || S.phase === 'place')) {
       const bx = x + w / 2 + 2, by = top - 3;
       if (it.t === 'hit') {
         pth(c, [[bx, by], [bx + 11, by], [bx + 11, by + 6], [bx + 5.5, by + 11], [bx, by + 6]]); fs(c, '#b8323f', 0.9);

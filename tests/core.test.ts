@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Camera } from '../src/camera';
+import { HAND_MAX, HAND_START } from '../src/data';
+import { Game } from '../src/game';
 import { clearOfRock, floorAt, generate, isFloor } from '../src/room';
 import { FLOORS, LAYERS, genFloor, newRun } from '../src/run';
 
@@ -86,5 +88,33 @@ describe('run map', () => {
     const run = newRun(12345);
     expect(run.floor).toBe(0);
     expect(run.path.every(p => p.length === 0)).toBe(true);
+  });
+});
+
+describe('placement and discs', () => {
+  const fresh = () => { const g = new Game(); g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' }); return g; };
+
+  it('puts every hero on its own rune with one disc', () => {
+    const g = fresh(), pads = g.party.map(h => h.pad);
+    expect(g.S.phase).toBe('place');
+    expect(new Set(pads).size).toBe(g.party.length);
+    for (const h of g.party) { expect(h.pad).not.toBeNull(); expect(h.discs).toBe(HAND_START); expect(h.hand).toBe(1); }
+  });
+
+  it('swaps heroes when one is dragged onto an occupied rune', () => {
+    const g = fresh(), [a, b] = g.party, pa = a.pad!, pb = b.pad!;
+    expect(g.movePad(a, pb)).toBe(true);
+    expect([a.pad, b.pad]).toEqual([pb, pa]);
+    g.startFight();
+    expect(g.S.phase).toBe('throw');
+  });
+
+  it('sells extra discs for ore up to the limit', () => {
+    const g = fresh(), h = g.hero;
+    h.ore = 100;
+    while (g.discCost(h)) g.buyDisc();
+    expect(h.discs).toBe(HAND_MAX);
+    expect(h.hand).toBe(HAND_MAX);
+    expect(h.ore).toBe(100 - 4 - 6);
   });
 });

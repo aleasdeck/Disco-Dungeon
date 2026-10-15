@@ -1,7 +1,7 @@
 // Combat rules: turn flow, disc physics, damage, abilities.
 // Rendering and input live elsewhere; this module only changes state.
 
-import { AB_COST, HAND, HEROES, UPS, UP_COST, type HeroDef, type StatKey } from './data';
+import { AB_COST, HAND_COST, HAND_MAX, HAND_START, HEROES, UPS, UP_COST, type HeroDef, type StatKey } from './data';
 import { generate, hazKey, newMob, spawnSpot, type Layout, type Mob, type RoomSpec } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
@@ -15,6 +15,8 @@ export interface HeroState {
   ore: number;
   sparks: number;
   up: Record<StatKey, number>;
+  /** Discs per turn; starts at 1 and grows through upgrades. */
+  discs: number;
   pad: number | null;
   hand: number;
   thrown: boolean;
@@ -58,8 +60,8 @@ const STEP = 1 / 120;
 
 export function newParty(): HeroState[] {
   return HEROES.map((def, i) => ({
-    i, def, hp: 14, max: 14, shield: 0, ore: 1, sparks: 1, up: { m: 0, pw: 0, e: 0 },
-    pad: null, hand: HAND, thrown: false, flash: 0,
+    i, def, hp: 14, max: 14, shield: 0, ore: 1, sparks: 1, up: { m: 0, pw: 0, e: 0 }, discs: HAND_START,
+    pad: null, hand: HAND_START, thrown: false, flash: 0,
   }));
 }
 
@@ -73,9 +75,13 @@ export class Game {
 
   loadRoom(spec: RoomSpec) {
     const L = generate(spec);
-    for (const h of this.party) Object.assign(h, { pad: null, hand: h.hp > 0 ? HAND : 0, thrown: false, shield: 0, flash: 0 });
+    for (const h of this.party) Object.assign(h, { pad: null, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0 });
     this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0 };
+    // everyone starts on a rune, spread along the near edge; players may rearrange before the fight
+    const living = this.party.filter(h => h.hp > 0), n = L.pads.length;
+    living.forEach((h, k) => { h.pad = living.length === 1 ? Math.floor(n / 2) : Math.round((k * (n - 1)) / (living.length - 1)); });
     this.act = Math.max(0, this.party.findIndex(h => h.hp > 0));
+    this.pickIntents();
     this.acc = 0;
     this.onChange();
   }
@@ -98,16 +104,25 @@ export class Game {
     return !this.S.heroes.some(h => h.pad === pi && h.hp > 0);
   }
 
-  placeOnPad(pi: number) {
-    const S = this.S, h = this.hero;
-    if (!this.canPlace(h) || !this.padFree(pi)) return;
+  /** Move a hero to rune pi; if another hero who hasn't thrown stands there, they swap places. */
+  movePad(h: HeroState, pi: number) {
+    const S = this.S;
+    if (!this.canPlace(h) || h.pad === pi) return false;
+    const other = S.heroes.find(o => o.pad === pi && o.hp > 0);
+    if (other && !this.canPlace(other)) return false;
+    if (other) other.pad = h.pad;
     h.pad = pi;
     this.burst(S.pads[pi].x, S.pads[pi].y, h.def.col, 10);
-    if (S.phase === 'place') {
-      const nx = S.heroes.findIndex(o => o.pad === null && o.hp > 0);
-      if (nx >= 0) this.act = nx;
-      else { S.phase = 'throw'; this.pickIntents(); this.act = Math.max(0, S.heroes.findIndex(o => o.hp > 0)); }
-    } else this.pickIntents();
+    this.pickIntents();
+    this.onChange();
+    return true;
+  }
+
+  /** End the placement phase and start the first turn. */
+  startFight() {
+    if (this.S.phase !== 'place') return;
+    this.S.phase = 'throw';
+    this.pickIntents();
     this.onChange();
   }
 
@@ -125,6 +140,26 @@ export class Game {
     });
     h.hand--;
     h.thrown = true;
+    this.onChange();
+  }
+
+  /** Cost of the next extra disc, or 0 when the hero already has the most. */
+  discCost(h: HeroState) {
+    return h.discs < HAND_MAX ? HAND_COST[h.discs - HAND_START] : 0;
+  }
+
+  buyDisc() {
+    const S = this.S, h = this.hero, c = this.discCost(h);
+    if (!c || h.ore < c || h.hp <= 0 || S.phase === 'over') return;
+    h.ore -= c;
+    h.discs++;
+    // the new disc can be thrown this very turn
+    if (S.phase === 'throw' || S.phase === 'place') h.hand++;
+    if (h.pad !== null) {
+      const p = S.pads[h.pad];
+      this.float(p.x, p.y, '+1 диск', h.def.col);
+      this.burst(p.x, p.y, h.def.col, 10);
+    }
     this.onChange();
   }
 
@@ -398,7 +433,7 @@ export class Game {
     if (!this.liveMobs().length && S.waves.length) this.spawnWave();
     S.turn++;
     S.discs = [];
-    for (const h of S.heroes) { h.shield = 0; h.thrown = false; h.hand = h.hp > 0 ? HAND : 0; }
+    for (const h of S.heroes) { h.shield = 0; h.thrown = false; h.hand = h.hp > 0 ? h.discs : 0; }
     S.phase = 'throw';
     if (this.hero.hp <= 0) this.act = Math.max(0, S.heroes.findIndex(h => h.hp > 0));
     this.pickIntents();

@@ -1,6 +1,6 @@
 // DOM HUD: top bar, phase pill, ally cards and the hero frame at the bottom.
 
-import { AB_COST, HAND, ROOM_TYPES, UPS, UP_COST } from './data';
+import { AB_COST, HAND_MAX, HAND_START, ROOM_TYPES, UPS, UP_COST } from './data';
 import { sprites } from './assets';
 import type { Game, HeroState } from './game';
 import { drawHeroFigure } from './draw/figures';
@@ -40,8 +40,10 @@ export class Hud {
     });
     $('ups').addEventListener('click', e => {
       const b = (e.target as HTMLElement).closest('button');
-      if (b?.dataset.k) g.upgrade(b.dataset.k as 'm' | 'pw' | 'e');
+      if (b?.dataset.k === 'n') g.buyDisc();
+      else if (b?.dataset.k) g.upgrade(b.dataset.k as 'm' | 'pw' | 'e');
     });
+    $('fightBtn').addEventListener('click', () => g.startFight());
   }
 
   buildAllies() {
@@ -74,7 +76,7 @@ export class Hud {
     const phase = $('phase');
     phase.className = 'phase ' + S.phase;
     phase.textContent = {
-      place: `Выбери руну: ${h.def.name}`,
+      place: 'Расстановка: перетащи фигурки на руны',
       throw: left ? `Броски · ждём ${left}` : 'Диски катятся',
       resolve: 'Подсчёт',
       enemy: 'Ход мобов',
@@ -87,7 +89,7 @@ export class Hud {
       t.hidden = o === h;
       t.classList.toggle('dead', o.hp <= 0);
       (t.querySelector('.a-hp i') as HTMLElement).style.width = (Math.max(0, o.hp) / o.max) * 100 + '%';
-      t.querySelector('.a-res')!.textContent = o.hp <= 0 ? 'пал' : o.pad === null ? 'ждёт' : o.hand ? `${o.hand} в руке` : 'бросил';
+      t.querySelector('.a-res')!.textContent = o.hp <= 0 ? 'пал' : o.pad === null ? 'ждёт' : S.phase === 'place' ? 'готов' : o.hand ? `${o.hand} в руке` : 'бросил';
     }
 
     const pk = h.def.key + (sprites.has(h.def.key) ? '+img' : '');
@@ -99,19 +101,22 @@ export class Hud {
     $('fShield').textContent = String(h.shield);
     $('fOre').textContent = String(h.ore);
     $('fSpk').textContent = String(h.sparks);
-    $('fHand').innerHTML = Array.from({ length: HAND }, (_, k) => `<i class="${k < h.hand ? 'on' : ''}" style="--c:${h.def.col}"></i>`).join('');
+    $('fHand').innerHTML = Array.from({ length: h.discs }, (_, k) => `<i class="${k < h.hand ? 'on' : ''}" style="--c:${h.def.col}"></i>`).join('');
     $('fState').textContent = h.hp <= 0 ? 'Пал'
-      : h.pad === null ? 'Выбери руну у края комнаты'
+      : S.phase === 'place' ? 'Перетащи фигурку на руну, потом «В бой!»'
       : S.phase !== 'throw' ? (S.phase === 'over' ? 'Комната закрыта' : 'Ждём конца хода')
       : h.hand === 0 ? 'Бросил, ждём остальных'
-      : h.thrown ? 'Бросай второй диск'
+      : h.thrown ? 'Бросай следующий диск'
       : 'Тяни фигурку назад и отпускай';
     $('abName').textContent = h.def.ab;
     $('abTxt').textContent = h.def.abTxt;
     $('abCost').innerHTML = Array.from({ length: AB_COST }, (_, k) => `<i class="${k < h.sparks ? 'on' : ''}"></i>`).join('');
     $<HTMLButtonElement>('abBtn').disabled = !g.canUseAbility();
     $('abBtn').title = `${h.def.ab}: ${h.def.abTxt} Стоит ${AB_COST} искры.`;
-    $('ups').innerHTML = UPS.map(u => {
+    $<HTMLButtonElement>('fightBtn').hidden = S.phase !== 'place';
+    const dc = g.discCost(h), dOk = dc && h.ore >= dc && h.hp > 0 && S.phase !== 'over';
+    const discRow = `<div class="up"><span>Диски</span><span class="lvl">${Array.from({ length: HAND_MAX - HAND_START }, (_, k) => `<i class="${k < h.discs - HAND_START ? 'on' : ''}"></i>`).join('')}</span><b>${h.discs}</b><button class="btn sm" data-k="n" ${dOk ? '' : 'disabled'}>${dc ? '+ ' + dc + ' руды' : 'макс'}</button></div>`;
+    $('ups').innerHTML = discRow + UPS.map(u => {
       const lv = h.up[u.k], cost = UP_COST[lv], ok = cost && h.ore >= cost && h.hp > 0 && S.phase !== 'over';
       return `<div class="up"><span>${u.name}</span><span class="lvl">${[0, 1, 2].map(k => `<i class="${k < lv ? 'on' : ''}"></i>`).join('')}</span><b>${u.fmt(g.stat(h, u.k))}</b><button class="btn sm" data-k="${u.k}" ${ok ? '' : 'disabled'}>${cost ? '+ ' + cost + ' руды' : 'макс'}</button></div>`;
     }).join('');

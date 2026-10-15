@@ -4,7 +4,10 @@ export const INK = '#1a1210';
 export const ENEMY_BASE = '#b8323f';
 export const TILE = 16;
 export const WALL_H = 34;
-export const HAND = 2;
+/** Discs each hero throws per turn at the start of a run, the most they can upgrade to, and what each extra disc costs in ore. */
+export const HAND_START = 1;
+export const HAND_MAX = 3;
+export const HAND_COST = [4, 6];
 export const AB_COST = 3;
 export const UP_COST = [2, 3, 4];
 

@@ -161,7 +161,7 @@ function frame(now: number) {
     if (anim.t >= 1) anim = null;
   }
   game.update(dt);
-  scene.draw(ctx, cam, game, T, view, input.aim);
+  scene.draw(ctx, cam, game, T, view, input.aim, input.carry);
   requestAnimationFrame(frame);
 }
 

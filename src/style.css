@@ -111,6 +111,19 @@ button { font: inherit; color: inherit; }
 .phase.enemy { background: var(--red); }
 .phase.over { background: #a67812; }
 .phase.resolve, .phase.place { background: #5a4a7a; }
+.fight {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--frame-h) + 26px + var(--safe-b));
+  transform: translateX(-50%);
+  z-index: 5;
+  padding: 10px 34px;
+  font-size: 20px;
+  background: #c2364f;
+  color: #fff;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.5), 0 0 24px rgba(194, 54, 79, 0.45);
+}
+.fight[hidden] { display: none; }
 
 /* ---------- allies */
 .allies {
@@ -339,6 +352,7 @@ button { font: inherit; color: inherit; }
   .camctl { right: 8px; bottom: calc(var(--frame-h) + 16px + var(--safe-b)); gap: 6px; }
   .btn.round { width: 36px; height: 36px; font-size: 16px; }
   .phase { top: max(58px, calc(env(safe-area-inset-top) + 50px)); font-size: 13px; }
+  .fight { bottom: calc(var(--frame-h) + 18px + var(--safe-b)); padding: 8px 26px; font-size: 18px; }
 }
 @media (max-width: 560px) {
   .stats .wave { display: none; }
@@ -347,6 +361,7 @@ button { font: inherit; color: inherit; }
 }
 @media (max-height: 520px) and (orientation: landscape) {
   .camctl { flex-direction: row; bottom: calc(var(--frame-h) + 14px); }
+  .fight { left: auto; right: 8px; transform: none; bottom: calc(var(--frame-h) + 62px); }
   .allies { top: 58px; }
   .ally { width: 42px; }
 }

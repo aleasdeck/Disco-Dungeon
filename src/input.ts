@@ -1,12 +1,13 @@
 // Pointer, wheel and keyboard input on the playfield.
 //
-// One finger or the left mouse button: drag a hero to aim (pull back like a slingshot),
-// tap a glowing rune to stand there, drag empty floor to pan.
+// One finger or the left mouse button: before the fight, drag a hero onto another rune
+// (or tap a rune to move the selected hero there); during the fight, drag a hero to aim
+// (pull back like a slingshot); drag empty floor to pan.
 // Two fingers: pinch to zoom, twist to rotate. Mouse: wheel zooms, right-drag or Shift+wheel rotates.
 
 import type { Camera } from './camera';
 import type { Game, HeroState } from './game';
-import type { Aim } from './draw/scene';
+import type { Aim, Carry } from './draw/scene';
 
 export interface ViewControls {
   rotateBy: (delta: number) => void;
@@ -16,7 +17,7 @@ export interface ViewControls {
   changed: () => void;
 }
 
-type Mode = 'none' | 'aim' | 'pan' | 'rotate' | 'gesture';
+type Mode = 'none' | 'aim' | 'carry' | 'pan' | 'rotate' | 'gesture';
 
 interface Gesture { wx: number; wy: number; d0: number; a0: number; z0: number; r0: number }
 
@@ -24,6 +25,8 @@ const MAX_PULL = 60;
 
 export class Input {
   aim: Aim | null = null;
+  /** Hero being dragged to another rune during placement. */
+  carry: Carry | null = null;
   private pts = new Map<number, [number, number]>();
   private mode: Mode = 'none';
   private start = { x: 0, y: 0, panX: 0, panY: 0, rot: 0 };
@@ -85,6 +88,7 @@ export class Input {
     };
     this.mode = 'gesture';
     this.aim = null;
+    this.carry = null;
   }
 
   private down(e: PointerEvent) {
@@ -105,11 +109,12 @@ export class Input {
       if (h) {
         g.select(h.i);
         if (S.phase === 'throw' && h.hand > 0) { this.mode = 'aim'; this.aim = { hero: h, dx: 0, dy: 0 }; return; }
+        if (S.phase === 'place') { this.mode = 'carry'; this.carry = { hero: h, x, y, pad: h.pad, moved: false }; return; }
         this.mode = 'none';
         return;
       }
       const pi = this.padAt(x, y);
-      if (pi >= 0 && g.padFree(pi) && g.canPlace(g.hero)) { g.placeOnPad(pi); this.mode = 'none'; return; }
+      if (pi >= 0 && g.movePad(g.hero, pi)) { this.mode = 'none'; return; }
     }
     this.beginPan(x, y);
   }
@@ -129,6 +134,13 @@ export class Input {
       if (L > MAX_PULL) { dx *= MAX_PULL / L; dy *= MAX_PULL / L; }
       this.aim.dx = dx;
       this.aim.dy = dy;
+    } else if (this.mode === 'carry' && this.carry) {
+      const C = this.carry;
+      if (Math.hypot(x - C.x, y - C.y) > 6) C.moved = true;
+      C.x = x;
+      C.y = y;
+      const pi = this.padAt(x, y);
+      C.pad = pi >= 0 ? pi : null;
     } else if (this.mode === 'pan') {
       cam.panX = this.start.panX + x - this.start.x;
       cam.panY = this.start.panY + y - this.start.y;
@@ -156,6 +168,11 @@ export class Input {
     if (this.mode === 'aim' && this.aim) {
       if (!cancel) this.g.throwDisc(this.aim.hero, this.aim.dx, this.aim.dy);
       this.aim = null;
+    }
+    if (this.mode === 'carry' && this.carry) {
+      const C = this.carry;
+      if (!cancel && C.moved && C.pad !== null) this.g.movePad(C.hero, C.pad);
+      this.carry = null;
     }
     if (this.mode === 'gesture' && this.pts.size === 1) {
       const [p] = [...this.pts.values()];
