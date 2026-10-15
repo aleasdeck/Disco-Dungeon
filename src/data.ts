@@ -96,11 +96,11 @@ export type RoomType = 'fight' | 'elite' | 'treasure' | 'camp' | 'forge' | 'even
 export const ROOM_TYPES: Record<RoomType, { name: string; col: string; min: number; txt: string }> = {
   fight: { name: 'Бой', col: '#c2364f', min: 2, txt: 'Обычные мобы, пара жил и кристаллов.' },
   elite: { name: 'Элитный бой', col: '#7a1d33', min: 3, txt: 'Голем с бронёй и свита. Больше награда.' },
-  treasure: { name: 'Рудная пещера', col: '#d39612', min: 1.5, txt: 'Девять ресурсных точек и всего два моба, но подкрепления приходят быстро.' },
+  treasure: { name: 'Рудная пещера', col: '#d39612', min: 1.5, txt: 'Девять ресурсных точек и всего два моба.' },
   camp: { name: 'Костёр', col: '#e8642c', min: 0.5, txt: 'Отряд лечится на 6 HP. Павшие встают с половиной здоровья.' },
   forge: { name: 'Кузнец', col: '#5d6488', min: 0.75, txt: 'Отряд получает 6 руды на прокачку дисков.' },
   event: { name: 'Событие', col: '#6b4fa8', min: 0.75, txt: 'Сцена с неожиданным исходом: алтарь, торговец, ловушка.' },
-  boss: { name: 'Босс этажа', col: '#2a1a3a', min: 3.5, txt: 'Король-в-короне со свитой, подкрепления каждые два хода.' },
+  boss: { name: 'Босс этажа', col: '#2a1a3a', min: 3.5, txt: 'Король-в-короне со свитой.' },
 };
 
 export const COMBAT_ROOMS: RoomType[] = ['fight', 'elite', 'treasure', 'boss'];

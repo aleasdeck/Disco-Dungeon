@@ -2,7 +2,7 @@
 // Rendering and input live elsewhere; this module only changes state.
 
 import { AB_COST, HAND_COST, HAND_MAX, HAND_START, HEROES, UPS, UP_COST, type HeroDef, type StatKey } from './data';
-import { generate, hazKey, newMob, spawnSpot, type Layout, type Mob, type RoomSpec } from './room';
+import { generate, hazKey, type Layout, type Mob, type RoomSpec } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
 
@@ -460,24 +460,9 @@ export class Game {
     }
   }
 
-  private spawnWave() {
-    const S = this.S;
-    S.waves.shift();
-    const n = 1 + (S.spec.depth > 6 ? 1 : 0) + (S.turn > 4 ? 1 : 0);
-    for (let i = 0; i < n; i++) {
-      const k = S.pool[Math.floor(Math.random() * S.pool.length)];
-      const [x, y] = spawnSpot(S, 12, Math.random);
-      S.mobs.push(newMob(k, x, y, S.hpMul, S.dmgAdd));
-      this.float(x, y, 'из тьмы!', '#ff4d6a');
-      this.burst(x, y, '#ff4d6a', 16);
-    }
-  }
-
   private nextTurn() {
     const S = this.S;
-    if (!this.alive().length || (!this.liveMobs().length && !S.waves.length)) { this.finish(); return; }
-    if (S.waves[0] && S.waves[0] <= S.turn) this.spawnWave();
-    if (!this.liveMobs().length && S.waves.length) this.spawnWave();
+    if (!this.alive().length || !this.liveMobs().length) { this.finish(); return; }
     S.turn++;
     S.discs = [];
     for (const h of S.heroes) { h.shield = 0; h.thrown = false; h.hand = h.hp > 0 ? h.discs : 0; }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Camera } from '../src/camera';
-import { HAND_MAX, HAND_START, HEROES, TILE } from '../src/data';
+import { HAND_MAX, HAND_START, HEROES, MOBS, TILE } from '../src/data';
 import { Game } from '../src/game';
 import { clearOfRock, floorAt, generate, isFloor } from '../src/room';
 import { FLOORS, LAYERS, genFloor, newRun } from '../src/run';
@@ -21,6 +21,12 @@ describe('room generator', () => {
       for (const n of L.nodes) expect(clearOfRock(L, n.x, n.y, n.r)).toBe(true);
       for (const p of L.pads) expect(floorAt(L, p.x, p.y)).toBe(true);
     }
+  });
+
+  it('puts every enemy in the room from the start, tougher than the base stats', () => {
+    const L = generate({ seed: 5, depth: 1, floor: 0, type: 'fight' });
+    expect('waves' in L).toBe(false);
+    for (const m of L.mobs) expect(m.max).toBe(Math.round(MOBS[m.k].hp * 1.6));
   });
 
   it('makes rooms of different shapes, each one connected', () => {

@@ -397,7 +397,6 @@ button { font: inherit; color: inherit; }
   .fight { bottom: calc(var(--frame-h) + 18px + var(--safe-b)); padding: 8px 26px; font-size: 18px; }
 }
 @media (max-width: 560px) {
-  .stats .wave { display: none; }
   .loc span { max-width: 40vw; }
   .top-btns .btn:not(.round) { padding: 6px 9px; }
 }

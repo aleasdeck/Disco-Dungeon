@@ -89,8 +89,6 @@ export class Hud {
     $('locSub').textContent = `${S.biome.name} · сложность ${S.spec.depth}`;
     $('hTurn').textContent = String(S.turn);
     $('hMobs').textContent = String(g.liveMobs().length);
-    const nw = S.waves[0];
-    $('hWave').textContent = nw ? (nw - S.turn <= 0 ? 'в конце хода' : `через ${nw - S.turn}`) : 'нет';
 
     const left = g.alive().filter(o => o.hand > 0).length;
     const phase = $('phase');
