@@ -159,6 +159,37 @@ button { font: inherit; color: inherit; }
 .ally .a-res { display: block; font-size: 10px; text-align: center; padding: 1px 0 2px; background: rgba(0, 0, 0, 0.55); color: var(--text); }
 .ally.dead { filter: grayscale(1) brightness(0.6); }
 
+/* ---------- enemies and their intents */
+.mobs {
+  position: fixed;
+  right: 12px;
+  top: 76px;
+  z-index: 4;
+  max-height: calc(100dvh - var(--frame-h) - 330px);
+  overflow-y: auto;
+  padding: 6px;
+  background: rgba(27, 22, 18, 0.82);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
+}
+.mobs[hidden] { display: none; }
+.mobs ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.mobs li { display: grid; grid-template-columns: 30px 82px 44px 40px; align-items: center; gap: 6px; font-size: 12px; }
+.mobs img { width: 30px; height: 30px; display: block; }
+.m-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-hp { position: relative; height: 12px; background: #2a1f18; border-radius: 4px; overflow: hidden; }
+.m-hp i { display: block; height: 100%; background: #d9434f; }
+.m-hp b { position: absolute; inset: 0; font: 600 10px/12px Oswald, sans-serif; text-align: center; color: #fff; }
+.m-act { display: flex; align-items: center; gap: 4px; }
+.m-hit {
+  min-width: 18px; height: 18px; padding: 0 3px;
+  font: 600 12px/18px Oswald, sans-serif; text-align: center; color: #fff;
+  background: #b8323f; border: 1.5px solid var(--ink); border-radius: 4px 4px 9px 9px;
+}
+.m-go { min-width: 18px; text-align: center; font-weight: 700; color: #d6cfbd; }
+.m-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--c); border: 1.5px solid var(--ink); flex: none; }
+
 /* ---------- camera controls */
 .camctl {
   position: fixed;
@@ -357,6 +388,10 @@ button { font: inherit; color: inherit; }
   .ally .a-hp { bottom: 14px; height: 4px; }
   .ally .a-res { font-size: 9px; }
   .camctl { right: 8px; bottom: calc(var(--frame-h) + 16px + var(--safe-b)); gap: 6px; }
+  .mobs { right: 8px; top: 66px; padding: 4px; }
+  .mobs li { grid-template-columns: 24px 34px 38px; gap: 4px; }
+  .mobs img { width: 24px; height: 24px; }
+  .m-name { display: none; }
   .btn.round { width: 36px; height: 36px; font-size: 16px; }
   .phase { top: max(58px, calc(env(safe-area-inset-top) + 50px)); font-size: 13px; }
   .fight { bottom: calc(var(--frame-h) + 18px + var(--safe-b)); padding: 8px 26px; font-size: 18px; }
@@ -371,4 +406,5 @@ button { font: inherit; color: inherit; }
   .fight { left: auto; right: 8px; transform: none; bottom: calc(var(--frame-h) + 62px); }
   .allies { top: 58px; }
   .ally { width: 42px; }
+  .mobs { top: 58px; max-height: calc(100dvh - var(--frame-h) - 140px); }
 }

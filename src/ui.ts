@@ -1,12 +1,32 @@
-// DOM HUD: top bar, phase pill, ally cards and the hero frame at the bottom.
+// DOM HUD: top bar, phase pill, ally cards, the enemy list and the hero frame at the bottom.
 
-import { AB_COST, HAND_MAX, HAND_START, ROOM_TYPES, UPS, UP_COST } from './data';
+import { AB_COST, ENEMY_BASE, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, type MobKind } from './data';
 import { sprites } from './assets';
 import type { Game, HeroState } from './game';
-import { drawHeroFigure } from './draw/figures';
+import { BASE_TH, drawHeroFigure, drawMiniature, drawMobFigure } from './draw/figures';
 import { lg } from './draw/util';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+
+/** Small picture of a mob's miniature for the enemy list, drawn once per kind (and again once its art loads). */
+const mobIcons = new Map<string, string>();
+function mobIcon(k: MobKind) {
+  const key = k + (sprites.has(k) ? '+img' : '');
+  let url = mobIcons.get(key);
+  if (!url) {
+    const cv = document.createElement('canvas'), n = 64, c = cv.getContext('2d')!, d = MOBS[k];
+    cv.width = cv.height = n;
+    const s = (n - 6) / (d.fig + BASE_TH + d.r * 0.64 + 4);
+    c.setTransform(s, 0, 0, s, n / 2, n - 3 - (d.r * 0.64 + 2) * s);
+    drawMiniature(c, {
+      key: k, x: 0, y: 0, baseR: d.r, baseCol: ENEMY_BASE, fig: d.fig, faceRight: true, flash: false, hop: 0, alpha: 1,
+      placeholder: (cc, x, y, fl) => drawMobFigure(cc, k, x, y, fl),
+    });
+    url = cv.toDataURL();
+    mobIcons.set(key, url);
+  }
+  return url;
+}
 
 /** Draw a hero's bust into a square canvas: the artist's picture when loaded, else the placeholder. */
 export function drawPortrait(cv: HTMLCanvasElement, h: HeroState) {
@@ -92,6 +112,18 @@ export class Hud {
       t.querySelector('.a-res')!.textContent = o.hp <= 0 ? 'пал' : o.pad === null ? 'ждёт' : S.phase === 'place' ? 'готов' : o.hand ? `${o.hand} в руке` : 'бросил';
     }
 
+    // enemies in the room and what each will do this turn: a dot in the colour of the hero it goes for
+    $('mobs').hidden = S.phase === 'over' || !g.liveMobs().length;
+    $('mobList').innerHTML = g.liveMobs().map(m => {
+      const it = m.intent, tgt = it ? S.heroes[it.hero] : null;
+      const act = !it ? '' : it.t === 'hit'
+        ? `<span class="m-hit" title="Ударит ${tgt!.def.name} на ${it.dmg}">${it.dmg}</span><i class="m-dot" style="--c:${tgt!.def.col}" title="${tgt!.def.name}"></i>`
+        : `<span class="m-go" title="Идёт к ${tgt!.def.name}">→</span><i class="m-dot" style="--c:${tgt!.def.col}" title="${tgt!.def.name}"></i>`;
+      return `<li><img src="${mobIcon(m.k)}" alt=""><span class="m-name">${m.name}</span>`
+        + `<span class="m-hp" title="${m.hp}/${m.max} HP"><i style="width:${(Math.max(0, m.hp) / m.max) * 100}%"></i><b>${m.hp}</b></span>`
+        + `<span class="m-act">${act}</span></li>`;
+    }).join('');
+
     const pk = h.def.key + (sprites.has(h.def.key) ? '+img' : '');
     if (this.lastPortrait !== pk) { drawPortrait($<HTMLCanvasElement>('pf'), h); this.lastPortrait = pk; }
     $('fName').textContent = h.def.name;
@@ -99,8 +131,8 @@ export class Hud {
     $('fHp').textContent = `${Math.max(0, h.hp)}/${h.max}`;
     $('fHpBar').style.width = (Math.max(0, h.hp) / h.max) * 100 + '%';
     $('fShield').textContent = String(h.shield);
-    $('fOre').textContent = String(h.ore);
-    $('fSpk').textContent = String(h.sparks);
+    $('fOre').textContent = String(g.bank.ore);
+    $('fSpk').textContent = String(g.bank.sparks);
     $('fHand').innerHTML = Array.from({ length: h.discs }, (_, k) => `<i class="${k < h.hand ? 'on' : ''}" style="--c:${h.def.col}"></i>`).join('');
     $('fState').textContent = h.hp <= 0 ? 'Пал'
       : S.phase === 'place' ? 'Перетащи фигурку на руну, потом «В бой!»'
@@ -110,14 +142,14 @@ export class Hud {
       : 'Тяни фигурку назад и отпускай';
     $('abName').textContent = h.def.ab;
     $('abTxt').textContent = h.def.abTxt;
-    $('abCost').innerHTML = Array.from({ length: AB_COST }, (_, k) => `<i class="${k < h.sparks ? 'on' : ''}"></i>`).join('');
+    $('abCost').innerHTML = Array.from({ length: AB_COST }, (_, k) => `<i class="${k < g.bank.sparks ? 'on' : ''}"></i>`).join('');
     $<HTMLButtonElement>('abBtn').disabled = !g.canUseAbility();
-    $('abBtn').title = `${h.def.ab}: ${h.def.abTxt} Стоит ${AB_COST} искры.`;
+    $('abBtn').title = `${h.def.ab}: ${h.def.abTxt} Стоит ${AB_COST} искры из общего запаса.`;
     $<HTMLButtonElement>('fightBtn').hidden = S.phase !== 'place';
-    const dc = g.discCost(h), dOk = dc && h.ore >= dc && h.hp > 0 && S.phase !== 'over';
+    const dc = g.discCost(h), dOk = dc && g.bank.ore >= dc && h.hp > 0 && S.phase !== 'over';
     const discRow = `<div class="up"><span>Диски</span><span class="lvl">${Array.from({ length: HAND_MAX - HAND_START }, (_, k) => `<i class="${k < h.discs - HAND_START ? 'on' : ''}"></i>`).join('')}</span><b>${h.discs}</b><button class="btn sm" data-k="n" ${dOk ? '' : 'disabled'}>${dc ? '+ ' + dc + ' руды' : 'макс'}</button></div>`;
     $('ups').innerHTML = discRow + UPS.map(u => {
-      const lv = h.up[u.k], cost = UP_COST[lv], ok = cost && h.ore >= cost && h.hp > 0 && S.phase !== 'over';
+      const lv = h.up[u.k], cost = UP_COST[lv], ok = cost && g.bank.ore >= cost && h.hp > 0 && S.phase !== 'over';
       return `<div class="up"><span>${u.name}</span><span class="lvl">${[0, 1, 2].map(k => `<i class="${k < lv ? 'on' : ''}"></i>`).join('')}</span><b>${u.fmt(g.stat(h, u.k))}</b><button class="btn sm" data-k="${u.k}" ${ok ? '' : 'disabled'}>${cost ? '+ ' + cost + ' руды' : 'макс'}</button></div>`;
     }).join('');
   }

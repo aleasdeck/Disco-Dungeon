@@ -109,13 +109,25 @@ describe('placement and discs', () => {
     expect(g.S.phase).toBe('throw');
   });
 
+  it('spends ore from one pool shared by the party', () => {
+    const g = fresh();
+    g.bank.ore = 4;
+    g.select(1);
+    g.buyDisc();
+    expect(g.party[1].discs).toBe(HAND_START + 1);
+    expect(g.bank.ore).toBe(0);
+    g.select(0);
+    g.buyDisc();
+    expect(g.party[0].discs).toBe(HAND_START);
+  });
+
   it('sells extra discs for ore up to the limit', () => {
     const g = fresh(), h = g.hero;
-    h.ore = 100;
+    g.bank.ore = 100;
     while (g.discCost(h)) g.buyDisc();
     expect(h.discs).toBe(HAND_MAX);
     expect(h.hand).toBe(HAND_MAX);
-    expect(h.ore).toBe(100 - 4 - 6);
+    expect(g.bank.ore).toBe(100 - 4 - 6);
   });
 });
 

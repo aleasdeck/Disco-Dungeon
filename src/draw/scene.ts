@@ -513,13 +513,6 @@ export class SceneRenderer {
     c.lineWidth = lw;
     c.stroke();
     c.setLineDash([]);
-    const a = Math.atan2(y1 - y0, x1 - x0), k = lw * 2.4;
-    pth(c, [[x1 + Math.cos(a) * k, y1 + Math.sin(a) * k], [x1 + Math.cos(a + 2.4) * k, y1 + Math.sin(a + 2.4) * k], [x1 + Math.cos(a - 2.4) * k, y1 + Math.sin(a - 2.4) * k]]);
-    c.fillStyle = h.def.col;
-    c.fill();
-    c.strokeStyle = INK;
-    c.lineWidth = 1.2;
-    c.stroke();
     c.restore();
     const [px, py] = P(p.x, p.y), pw = Math.round((len / 60) * 5);
     for (let k = 0; k < 5; k++) { rr(c, px - 11 + k * 4.6, py + 7, 3.6, 2.6, 1); fs(c, k < pw ? h.def.col : '#2a1f18', 0.6); }

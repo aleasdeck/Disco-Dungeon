@@ -33,6 +33,7 @@
   <div id="phase" class="phase"></div>
   <button id="fightBtn" class="btn big fight" hidden>В бой!</button>
   <aside id="allies" class="allies" aria-label="Отряд"></aside>
+  <aside id="mobs" class="mobs" aria-label="Враги и их намерения"><ul id="mobList"></ul></aside>
 
   <div class="camctl" id="camctl">
     <button class="btn round" id="zoomIn" aria-label="Приблизить">+</button>
@@ -49,8 +50,8 @@
       <div class="hpbar"><i id="fHpBar"></i><span id="fHp"></span></div>
       <div class="res">
         <span class="r shield" title="Щит"><svg viewBox="0 0 16 16"><path d="M8 1l6 2v4c0 4-3 6.5-6 8-3-1.5-6-4-6-8V3z"/></svg><b id="fShield">0</b></span>
-        <span class="r ore" title="Руда"><svg viewBox="0 0 16 16"><path d="M8 1l6 6-6 8-6-8z"/></svg><b id="fOre">0</b></span>
-        <span class="r spk" title="Искры"><svg viewBox="0 0 16 16"><path d="M8 0l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></svg><b id="fSpk">0</b></span>
+        <span class="r ore" title="Руда, общая на отряд"><svg viewBox="0 0 16 16"><path d="M8 1l6 6-6 8-6-8z"/></svg><b id="fOre">0</b></span>
+        <span class="r spk" title="Искры, общие на отряд"><svg viewBox="0 0 16 16"><path d="M8 0l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></svg><b id="fSpk">0</b></span>
         <span class="r hand" title="Диски в руке" id="fHand"></span>
       </div>
     </div>
@@ -91,6 +92,8 @@
       <h2>Управление</h2>
       <ul>
         <li><b>Расстановка.</b> В начале комнаты герои уже стоят на рунах у ближних стен. Перетащи фигурку на другую руну (на занятой герои поменяются местами) и нажми «В бой!». Пока герой не бросил, его можно переставить и во время боя: выбери героя и тапни руну.</li>
+        <li><b>Ресурсы.</b> Руда и искры общие на весь отряд: кто бы ни добыл, тратить может любой герой.</li>
+        <li><b>Враги.</b> Справа список мобов в комнате. Число в красном щитке значит удар на столько, стрелка значит моб идёт, а точка показывает цвет героя, на которого он нацелился.</li>
         <li><b>Диски.</b> На старте у каждого героя один диск за ход. Второй и третий покупаются за руду в прокачке.</li>
         <li><b>Бросок.</b> Потяни свою фигурку назад, как рогатку, и отпусти. Чем длиннее натяжка, тем сильнее.</li>
         <li><b>Камера.</b> Перетаскивай пустой пол, чтобы двигать комнату. Колесо или щипок двумя пальцами приближает.</li>

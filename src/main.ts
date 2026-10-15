@@ -1,7 +1,7 @@
 import './style.css';
 import { COMBAT_ROOMS, ROOM_TYPES, WALL_H } from './data';
 import { Camera } from './camera';
-import { Game, newParty } from './game';
+import { Game, newBank, newParty } from './game';
 import { Input } from './input';
 import { Hud } from './ui';
 import { MapView } from './mapview';
@@ -95,6 +95,7 @@ function showMap(open: boolean) {
 function startRun() {
   run = newRun();
   game.party = newParty();
+  game.bank = newBank();
   hud.buildAllies();
   choosing = true;
   mapView.info = '';
@@ -115,7 +116,7 @@ mapView.onChoose = id => {
     controls.fit();
     showMap(false);
   } else {
-    mapView.info = `<b>${ROOM_TYPES[n.type].name}.</b> ${restRoom(n.type, game.party, run.seed + depth * 131)}`;
+    mapView.info = `<b>${ROOM_TYPES[n.type].name}.</b> ${restRoom(n.type, game.party, game.bank, run.seed + depth * 131)}`;
     hud.buildAllies();
     hud.refresh();
     showMap(true);
