@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Camera } from '../src/camera';
 import { HAND_MAX, HAND_START, HEROES, MOBS, TILE } from '../src/data';
-import { Game, newParty, type Action } from '../src/game';
+import { Game, newParty, pointAt, wayLen, type Action } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { clearOfRock, floorAt, generate, isFloor, muAt, newMob, tierOf } from '../src/room';
 import { FLOORS, LAYERS, genFloor, newRun } from '../src/run';
@@ -385,5 +385,31 @@ describe('every floor plays out', () => {
       }
       if (type === 'boss') expect([...seen].some(t => ['slam', 'summon', 'heat'].includes(t))).toBe(true);
     }
+  });
+});
+
+describe('enemy walking', () => {
+  it('routes walkers around blocks to the rune they go for and says when they strike', () => {
+    let detours = 0;
+    for (let seed = 1; seed < 80; seed++) {
+      const g = new Game();
+      g.loadRoom({ seed, depth: 1 + (seed % 12), floor: seed % 3, type: 'fight' });
+      g.startFight();
+      for (const m of g.liveMobs()) {
+        const it = m.intent;
+        if (!it?.way || (it.t !== 'hit' && it.t !== 'move')) continue;
+        const pad = g.S.pads[g.heroOf(it.hero).pad!], end = it.way[it.way.length - 1];
+        expect(end).toEqual({ x: pad.x, y: pad.y });
+        const L = wayLen(it.way);
+        if (L > Math.hypot(pad.x - m.x, pad.y - m.y) + 1) detours++;
+        for (let d = 10; d < L - 10; d += 2) {
+          const p = pointAt(it.way, d);
+          expect(g.inBlock(p.x, p.y, 1)).toBe(false);
+        }
+        expect(it.eta).toBe(it.t === 'hit' ? 1 : Math.ceil((L - m.reach) / m.speed));
+        if (it.t === 'move') expect(it.eta).toBeGreaterThan(1);
+      }
+    }
+    expect(detours).toBeGreaterThan(0);
   });
 });

@@ -71,6 +71,32 @@ export type Action =
 
 const STEP = 1 / 120;
 
+type Pt = { x: number; y: number };
+
+export const wayLen = (w: Pt[]) => w.reduce((n, p, k) => (k ? n + Math.hypot(p.x - w[k - 1].x, p.y - w[k - 1].y) : 0), 0);
+
+/** The point at distance d along a route. */
+export function pointAt(w: Pt[], d: number): Pt {
+  for (let k = 1; k < w.length; k++) {
+    const a = w[k - 1], b = w[k], L = Math.hypot(b.x - a.x, b.y - a.y);
+    if (d <= L) return L ? { x: a.x + ((b.x - a.x) * d) / L, y: a.y + ((b.y - a.y) * d) / L } : { ...b };
+    d -= L;
+  }
+  return { ...w[w.length - 1] };
+}
+
+/** The first d units of a route. */
+export function cutWay(w: Pt[], d: number): Pt[] {
+  const out = [w[0]];
+  for (let k = 1; k < w.length; k++) {
+    const a = w[k - 1], b = w[k], L = Math.hypot(b.x - a.x, b.y - a.y);
+    if (d <= L) { out.push(pointAt([a, b], d)); return out; }
+    out.push(b);
+    d -= L;
+  }
+  return out;
+}
+
 /** Ore and sparks belong to the whole party: any hero's hit fills the pool, any hero spends from it. */
 export interface Bank { ore: number; sparks: number }
 
@@ -344,12 +370,13 @@ export class Game {
       if (d.charge && S.turn % 2 === 1) { m.intent = { t: 'charge', hero: hs[(S.turn + i) % hs.length].i, dmg: 0 }; return; }
       const dmg = d.charge ? m.dmg * 2 : m.dmg;
       if (isRanged(m.k)) { m.intent = { t: 'hit', hero: hs[(S.turn + i) % hs.length].i, dmg }; return; }
-      let best = hs[0], bd = Infinity;
+      let best = hs[0], way: Pt[] = [], bd = Infinity;
       for (const h of hs) {
-        const p = S.pads[h.pad!], dd = Math.hypot(p.x - m.x, p.y - m.y);
-        if (dd < bd) { bd = dd; best = h; }
+        const w = this.route(m, S.pads[h.pad!]), dd = wayLen(w);
+        if (dd < bd) { bd = dd; best = h; way = w; }
       }
-      m.intent = bd - m.speed <= m.reach ? { t: 'hit', hero: best.i, dmg } : { t: 'move', hero: best.i, dmg: 0 };
+      const go = this.walkLen(m, bd), eta = Math.max(1, Math.ceil((bd - m.reach) / Math.max(1, m.speed)));
+      m.intent = bd - m.speed <= m.reach ? { t: 'hit', hero: best.i, dmg, way, go, eta: 1 } : { t: 'move', hero: best.i, dmg: 0, way, go, eta };
     });
   }
 
@@ -600,16 +627,77 @@ export class Game {
       if (m.burn > 0) { this.hurtMob(m, 4, '#ff7a3d', true); m.burn--; }
       m.fx = m.tx = m.x;
       m.fy = m.ty = m.y;
+      m.walk = undefined;
       if (m.hp <= 0 || !m.intent || m.intent.hero < 0 || m.speed === 0) continue;
       const h = this.heroOf(m.intent.hero);
       if (h.hp <= 0 || h.pad === null) continue;
-      const p = S.pads[h.pad], dx = p.x - m.x, dy = p.y - m.y, L = Math.hypot(dx, dy);
-      const go = Math.max(0, Math.min(m.speed, L - m.reach + 8));
-      let g2 = 0;
-      while (g2 + 2 <= go && !this.inBlock(m.x + (dx / L) * (g2 + 2), m.y + (dy / L) * (g2 + 2), m.r)) g2 += 2;
-      m.tx = m.x + (dx / L) * g2;
-      m.ty = m.y + (dy / L) * g2;
+      // the rune or the room may have changed since the intent was picked (a hero moved, an icicle broke)
+      const way = this.route(m, S.pads[h.pad]);
+      m.walk = cutWay(way, this.walkLen(m, wayLen(way)));
+      const end = m.walk[m.walk.length - 1];
+      m.tx = end.x;
+      m.ty = end.y;
     }
+  }
+
+  /** How far a walker goes this turn along a route of length L: its speed, but no closer than striking range. */
+  private walkLen(m: Mob, L: number) {
+    return Math.max(0, Math.min(m.speed, L - m.reach + 8));
+  }
+
+  /** Whether a walker of clearance r fits at (x, y): on the floor, off blocks, rock and pits. */
+  private walkable(x: number, y: number, r: number) {
+    const S = this.S;
+    return isFloor(S, Math.floor(x / TILE), Math.floor(y / TILE)) && !this.inBlock(x, y, r) && !S.pits.some(p => Math.hypot(p.x - x, p.y - y) < p.r + r - 4);
+  }
+
+  private clearLine(a: Pt, b: Pt, r: number) {
+    const L = Math.hypot(b.x - a.x, b.y - a.y), n = Math.ceil(L / 2);
+    for (let k = 1; k <= n; k++) if (!this.walkable(a.x + ((b.x - a.x) * k) / n, a.y + ((b.y - a.y) * k) / n, r)) return false;
+    return true;
+  }
+
+  /**
+   * A walker's route to a point: shortest path over floor tiles around blocks and pits (8 directions, no corner cutting),
+   * pulled tight into straight runs. Falls back to a straight line when nothing connects.
+   */
+  route(m: Mob, to: Pt): Pt[] {
+    const S = this.S, gw = S.gw, gh = S.gh, r = Math.min(m.r, 7);
+    const si = Math.floor(m.x / TILE), sj = Math.floor(m.y / TILE), ti = Math.floor(to.x / TILE), tj = Math.floor(to.y / TILE);
+    const open = (i: number, j: number) => (i === ti && j === tj) || (i === si && j === sj) || this.walkable(i * TILE + 8, j * TILE + 8, r);
+    const dist = new Float64Array(gw * gh).fill(Infinity), from = new Int32Array(gw * gh).fill(-1), done = new Uint8Array(gw * gh);
+    const goal = tj * gw + ti, start = sj * gw + si;
+    if (si < 0 || sj < 0 || si >= gw || sj >= gh || ti < 0 || tj < 0 || ti >= gw || tj >= gh) return [{ x: m.x, y: m.y }, to];
+    dist[start] = 0;
+    // rooms are a couple of hundred tiles: a plain scan for the nearest open tile is plenty
+    for (;;) {
+      let c = -1, cd = Infinity;
+      for (let k = 0; k < dist.length; k++) if (!done[k] && dist[k] < cd) { cd = dist[k]; c = k; }
+      if (c < 0 || c === goal) break;
+      done[c] = 1;
+      const ci = c % gw, cj = (c - ci) / gw;
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        const i = ci + di, j = cj + dj;
+        if ((!di && !dj) || i < 0 || j < 0 || i >= gw || j >= gh || !open(i, j)) continue;
+        if (di && dj && (!open(ci + di, cj) || !open(ci, cj + dj))) continue;
+        const k = j * gw + i, nd = cd + (di && dj ? Math.SQRT2 : 1);
+        if (nd < dist[k]) { dist[k] = nd; from[k] = c; }
+      }
+    }
+    if (dist[goal] === Infinity) return [{ x: m.x, y: m.y }, to];
+    const pts: Pt[] = [to];
+    for (let k = from[goal]; k >= 0 && k !== start; k = from[k]) pts.push({ x: (k % gw) * TILE + 8, y: Math.floor(k / gw) * TILE + 8 });
+    pts.push({ x: m.x, y: m.y });
+    pts.reverse();
+    // pull the tile path tight: from each corner, jump to the farthest point still in plain sight
+    const way: Pt[] = [pts[0]];
+    for (let a = 0; a < pts.length - 1;) {
+      let b = a + 1;
+      for (let k = pts.length - 1; k > a + 1; k--) if (this.clearLine(pts[a], pts[k], r)) { b = k; break; }
+      way.push(pts[b]);
+      a = b;
+    }
+    return way;
   }
 
   private mobsAttack() {
@@ -705,8 +793,10 @@ export class Game {
   private walkMobs() {
     const u = Math.min(1, (1.5 - this.S.timer) / 0.6), e = u * u * (3 - 2 * u);
     for (const m of this.liveMobs()) {
-      m.x = m.fx + (m.tx - m.fx) * e;
-      m.y = m.fy + (m.ty - m.fy) * e;
+      const w = m.walk && m.walk.length > 1 ? m.walk : [{ x: m.fx, y: m.fy }, { x: m.tx, y: m.ty }];
+      const p = pointAt(w, wayLen(w) * e);
+      m.x = p.x;
+      m.y = p.y;
       // a miniature is lifted and put down when it moves
       m.hop = Math.hypot(m.tx - m.fx, m.ty - m.fy) > 1 ? Math.sin(Math.PI * u) * 7 : 0;
     }

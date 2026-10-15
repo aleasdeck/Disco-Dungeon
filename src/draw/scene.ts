@@ -3,7 +3,7 @@
 
 import { HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, isRanged } from '../data';
 import type { Camera, Vec } from '../camera';
-import type { Disc, Game, HeroState } from '../game';
+import { cutWay, type Disc, type Game, type HeroState } from '../game';
 import { floorAt, hazKey, isFloor, type Block, type Edge, type Mob, type ResNode } from '../room';
 import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure } from './figures';
 import { circ, ell, fs, lg, mix, pth, rr, type Ctx, type Pt } from './util';
@@ -355,6 +355,7 @@ export class SceneRenderer {
     for (const m of g.liveMobs()) {
       const it = m.intent;
       if (!it) continue;
+      if (it.way && (it.t === 'hit' || it.t === 'move')) continue;
       if (it.t === 'hit') {
         const hero = g.heroOf(it.hero);
         if (hero.pad !== null) lines.push({ m, to: S.pads[hero.pad], col: isRanged(m.k) ? 'rgba(150,235,120,.9)' : 'rgba(255,90,115,.9)' });
@@ -377,7 +378,51 @@ export class SceneRenderer {
       c.lineWidth = lw;
       c.stroke();
     }
+    this.drawRoutes(lw);
     c.restore();
+  }
+
+  /**
+   * Walkers' routes to the rune they go for: the stretch they walk this turn is bright, the rest faint,
+   * with a ring where they stop. A walker that strikes this turn lights the rune it will hit.
+   */
+  private drawRoutes(lw: number) {
+    const { c, P, g } = this;
+    const S = g.S, pulse = reduce ? 0.8 : 0.6 + 0.3 * Math.sin(this.t * 5);
+    const line = (w: { x: number; y: number }[], col: string, width: number, dash: number[]) => {
+      if (w.length < 2) return;
+      c.beginPath();
+      w.forEach((p, k) => { const [x, y] = P(p.x, p.y, 1); if (k) c.lineTo(x, y); else c.moveTo(x, y); });
+      c.setLineDash(dash);
+      c.strokeStyle = col;
+      c.lineWidth = width;
+      c.stroke();
+    };
+    for (const m of g.liveMobs()) {
+      const it = m.intent;
+      if (!it?.way || (it.t !== 'hit' && it.t !== 'move')) continue;
+      const hero = g.heroOf(it.hero);
+      if (hero.pad === null) continue;
+      const now = cutWay(it.way, it.go ?? 0), stop = now[now.length - 1];
+      line(it.way, 'rgba(18,13,10,.35)', lw + 1.2, []);
+      line(it.way, 'rgba(255,90,115,.35)', lw, [lw * 1.5, lw * 2.5]);
+      line(now, 'rgba(18,13,10,.5)', lw + 1.6, []);
+      c.lineDashOffset = reduce ? 0 : -this.t * 12;
+      line(now, 'rgba(255,90,115,.95)', lw, [lw * 2.5, lw * 2]);
+      c.lineDashOffset = 0;
+      c.setLineDash([]);
+      if (it.go && it.go > 2) {
+        const [x, y] = P(stop.x, stop.y);
+        ell(c, x, y, m.r * 1.1, m.r * 0.55);
+        c.strokeStyle = 'rgba(255,90,115,.8)'; c.lineWidth = 1; c.stroke();
+      }
+      if (it.t === 'hit') {
+        const p = S.pads[hero.pad], [x, y] = P(p.x, p.y);
+        ell(c, x, y, 13, 6.5);
+        c.fillStyle = `rgba(217,67,79,${0.25 * pulse})`; c.fill();
+        c.strokeStyle = `rgba(255,90,115,${pulse})`; c.lineWidth = 1.8; c.stroke();
+      }
+    }
   }
 
   // ------------------------------------------------------------ props
@@ -603,8 +648,11 @@ export class SceneRenderer {
         c.font = '600 7.5px Oswald, sans-serif'; c.textAlign = 'center'; c.fillStyle = '#fff'; c.fillText(String(it.dmg), bx + 5.5, by + 7);
         circ(c, bx + 12, by + 1, 2); fs(c, g.heroOf(it.hero).def.col, 0.6);
       } else if (it.t === 'move') {
-        rr(c, bx, by + 1, 11, 7, 2); fs(c, '#d6cfbd', 0.8);
-        c.font = '600 6.5px Oswald, sans-serif'; c.textAlign = 'center'; c.fillStyle = INK; c.fillText('→', bx + 5.5, by + 6.7);
+        const txt = it.eta ? '→ через ' + it.eta : '→';
+        c.font = '600 6.5px Oswald, sans-serif';
+        const tw = c.measureText(txt).width + 6;
+        rr(c, bx, by + 1, tw, 8, 2); fs(c, '#d6cfbd', 0.85);
+        c.textAlign = 'center'; c.fillStyle = INK; c.fillText(txt, bx + tw / 2, by + 7.2);
       } else {
         const [txt, col] = INTENT_PILL[it.t](it.dmg, !!it.chill);
         c.font = '600 6.5px Oswald, sans-serif';

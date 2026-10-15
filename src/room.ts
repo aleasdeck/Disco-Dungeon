@@ -49,6 +49,11 @@ export interface Intent {
   chill?: boolean;
   mob?: number;
   spots?: { x: number; y: number }[];
+  /** A walker's route to the hero's rune, around blocks and pits; the first `go` units of it are walked this turn. */
+  way?: { x: number; y: number }[];
+  go?: number;
+  /** Enemy turns until this walker strikes, counting this one. */
+  eta?: number;
 }
 
 export interface Mob {
@@ -72,6 +77,8 @@ export interface Mob {
   tx: number;
   ty: number;
   hop: number;
+  /** The stretch of route walked this enemy turn, from (fx, fy) to (tx, ty). */
+  walk?: { x: number; y: number }[];
   /** Index in the room's mob list of the mob that summoned this one, or -1. */
   owner: number;
   /** Counts down from 1 while a summoned mob rises out of its circle. */
