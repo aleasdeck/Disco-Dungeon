@@ -648,11 +648,8 @@ export class SceneRenderer {
         c.font = '600 7.5px Oswald, sans-serif'; c.textAlign = 'center'; c.fillStyle = '#fff'; c.fillText(String(it.dmg), bx + 5.5, by + 7);
         circ(c, bx + 12, by + 1, 2); fs(c, g.heroOf(it.hero).def.col, 0.6);
       } else if (it.t === 'move') {
-        const txt = it.eta ? '→ через ' + it.eta : '→';
-        c.font = '600 6.5px Oswald, sans-serif';
-        const tw = c.measureText(txt).width + 6;
-        rr(c, bx, by + 1, tw, 8, 2); fs(c, '#d6cfbd', 0.85);
-        c.textAlign = 'center'; c.fillStyle = INK; c.fillText(txt, bx + tw / 2, by + 7.2);
+        rr(c, bx, by + 1, 11, 7, 2); fs(c, '#d6cfbd', 0.8);
+        c.font = '600 6.5px Oswald, sans-serif'; c.textAlign = 'center'; c.fillStyle = INK; c.fillText('→', bx + 5.5, by + 6.7);
       } else {
         const [txt, col] = INTENT_PILL[it.t](it.dmg, !!it.chill);
         c.font = '600 6.5px Oswald, sans-serif';
