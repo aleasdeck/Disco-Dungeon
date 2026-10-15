@@ -2,7 +2,7 @@
 // Rendering and input live elsewhere; this module only changes state.
 
 import { AB_COST, HAND_COST, HAND_MAX, HAND_START, HEROES, UPS, UP_COST, type HeroDef, type StatKey } from './data';
-import { generate, hazKey, muAt, type Layout, type Mob, type RoomSpec } from './room';
+import { generate, hazKey, muAt, standing, type Layout, type Mob, type RoomSpec } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
 
@@ -215,7 +215,7 @@ export class Game {
     if (h.pad === null || L < 4) return { path, bounces, hit: null as Mob | null };
     const p = S.pads[h.pad], s = (270 * this.stat(h, 'pw')) / 60, dt = 1 / 60;
     const d = { x: p.x + (dx / L) * 6, y: p.y + (dy / L) * 6, vx: dx * s, vy: dy * s, r: h.def.r, e: Math.min(0.99, this.stat(h, 'e')) } as Disc;
-    const boxes = S.blocks.concat(S.rock);
+    const boxes = standing(S.blocks).concat(S.rock);
     path.push([d.x, d.y]);
     for (let k = 0; k < 600; k++) {
       const v = Math.hypot(d.vx, d.vy);
@@ -406,7 +406,7 @@ export class Game {
   }
 
   inBlock(x: number, y: number, r: number) {
-    const boxes = this.S.blocks.concat(this.S.rock);
+    const boxes = standing(this.S.blocks).concat(this.S.rock);
     return boxes.some(b => Math.hypot(x - Math.max(b.x0, Math.min(x, b.x1)), y - Math.max(b.y0, Math.min(y, b.y1))) < r);
   }
 
@@ -429,7 +429,19 @@ export class Game {
         changed = true;
         continue;
       }
-      for (const b of S.blocks) if (this.bounceBox(d, b) > 0) d.bounces++;
+      for (const b of S.blocks) {
+        if (b.ice && b.hp! <= 0) continue;
+        const vn = this.bounceBox(d, b);
+        if (vn <= 0) continue;
+        d.bounces++;
+        if (!b.ice || vn <= 30) continue;
+        // icicles chip like mobs take damage, and shatter at zero
+        const x = (b.x0 + b.x1) / 2, y = (b.y0 + b.y1) / 2;
+        b.hp = Math.max(0, b.hp! - Math.ceil((d.m * vn) / 120));
+        if (b.hp > 0) this.burst(d.x, d.y, '#d8f2ff', 5);
+        else { this.float(x, y, 'дзынь!', '#bfe9ff'); this.burst(x, y, '#d8f2ff', b.big ? 22 : 12); this.S.shake = Math.max(this.S.shake, 0.12); }
+        changed = true;
+      }
       for (const b of S.rock) if (this.bounceBox(d, b) > 0) d.bounces++;
       for (const n of S.nodes) {
         if (n.left <= 0) continue;
