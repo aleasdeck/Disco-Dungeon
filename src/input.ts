@@ -107,11 +107,13 @@ export class Input {
     if (S.phase === 'throw' || S.phase === 'place') {
       const h = this.heroAt(x, y);
       if (h) {
-        g.select(h.i);
-        if (S.phase === 'throw' && h.hand > 0) { this.mode = 'aim'; this.aim = { hero: h, dx: 0, dy: 0 }; return; }
-        if (S.phase === 'place') { this.mode = 'carry'; this.carry = { hero: h, x, y, pad: h.pad, moved: false }; return; }
-        this.mode = 'none';
-        return;
+        if (g.canControl(h)) {
+          g.select(h.i);
+          if (S.phase === 'throw' && h.hand > 0) { this.mode = 'aim'; this.aim = { hero: h, dx: 0, dy: 0 }; return; }
+          if (S.phase === 'place') { this.mode = 'carry'; this.carry = { hero: h, x, y, pad: h.pad, moved: false }; return; }
+          this.mode = 'none';
+          return;
+        }
       }
       const pi = this.padAt(x, y);
       if (pi >= 0 && g.movePad(g.hero, pi)) { this.mode = 'none'; return; }

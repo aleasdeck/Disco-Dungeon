@@ -52,7 +52,18 @@ export interface State extends Layout {
   sparks: Spark[];
   heroes: HeroState[];
   shake: number;
+  /** Heroes (by `i`) whose players pressed "ready" during placement in an online game. */
+  ready: number[];
 }
+
+/** What a player can do to the shared game; online clients send these to the host instead of applying them. */
+export type Action =
+  | { k: 'throw'; h: number; dx: number; dy: number }
+  | { k: 'move'; h: number; pad: number }
+  | { k: 'disc'; h: number }
+  | { k: 'up'; h: number; stat: StatKey }
+  | { k: 'ability'; h: number }
+  | { k: 'ready'; h: number };
 
 const STEP = 1 / 120;
 
@@ -63,11 +74,16 @@ export function newBank(): Bank {
   return { ore: 2, sparks: 1 };
 }
 
-export function newParty(): HeroState[] {
-  return HEROES.map((def, i) => ({
-    i, def, hp: 14, max: 14, shield: 0, up: { m: 0, pw: 0, e: 0 }, discs: HAND_START,
-    pad: null, hand: HAND_START, thrown: false, flash: 0,
-  }));
+/** A fresh party; `picks` lists which heroes (by index into HEROES) take part, all of them by default. */
+export function newParty(picks: number[] = HEROES.map((_, i) => i)): HeroState[] {
+  return picks.map(i => ({ i, def: HEROES[i], ...heroStart() }));
+}
+
+function heroStart() {
+  return {
+    hp: 14, max: 14, shield: 0, up: { m: 0, pw: 0, e: 0 }, discs: HAND_START,
+    pad: null as number | null, hand: HAND_START, thrown: false, flash: 0,
+  };
 }
 
 export class Game {
@@ -77,27 +93,59 @@ export class Game {
   bank: Bank = newBank();
   onChange: () => void = () => {};
   onRoomEnd: (win: boolean) => void = () => {};
+  /** Which heroes this screen may move, aim and select (online: only the player's own). */
+  canControl: (h: HeroState) => boolean = () => true;
+  /** Online: placement ends when every hero's player is ready, and heroes cannot swap runes. */
+  online = false;
+  /** Online client: actions go to the host through this instead of changing local state. */
+  send: ((a: Action) => void) | null = null;
   private acc = 0;
 
   loadRoom(spec: RoomSpec) {
     const L = generate(spec);
     for (const h of this.party) Object.assign(h, { pad: null, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0 });
-    this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0 };
+    this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [] };
     // everyone starts on a rune, spread along the near edge; players may rearrange before the fight
     const living = this.party.filter(h => h.hp > 0), n = L.pads.length;
     living.forEach((h, k) => { h.pad = living.length === 1 ? Math.floor(n / 2) : Math.round((k * (n - 1)) / (living.length - 1)); });
-    this.act = Math.max(0, this.party.findIndex(h => h.hp > 0));
+    this.pickActive();
     this.pickIntents();
     this.acc = 0;
     this.onChange();
   }
 
+  /** Online client: rebuild a room from its spec (rooms are generated from the seed), state comes from the host. */
+  showRoom(spec: RoomSpec) {
+    this.S = { ...generate(spec), spec, turn: 1, phase: 'place', timer: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [] };
+    this.pickActive();
+  }
+
+  /** After the party changes: select the first hero this screen controls. */
+  pickActiveParty() {
+    const h = this.party.find(o => this.canControl(o)) ?? this.party[0];
+    if (h) this.act = h.i;
+  }
+
+  /** Keep the selected hero if it can still act, else switch to the first living hero this screen controls. */
+  pickActive() {
+    const cur = this.party.find(h => h.i === this.act);
+    if (cur && cur.hp > 0 && this.canControl(cur)) return;
+    const h = this.party.find(o => o.hp > 0 && this.canControl(o)) ?? this.party.find(o => this.canControl(o)) ?? this.party[0];
+    if (h) this.act = h.i;
+  }
+
+  heroOf(i: number) {
+    return this.S.heroes.find(h => h.i === i) ?? this.S.heroes[0];
+  }
+
   alive = () => this.S.heroes.filter(h => h.hp > 0);
   liveMobs = () => this.S.mobs.filter(m => m.hp > 0);
   stat = (h: HeroState, k: StatKey) => h.def[k] + h.up[k] * UPS.find(u => u.k === k)!.step;
-  get hero() { return this.S.heroes[this.act]; }
+  get hero() { return this.heroOf(this.act); }
 
   select(i: number) {
+    const h = this.party.find(o => o.i === i);
+    if (!h || !this.canControl(h)) return;
     this.act = i;
     this.onChange();
   }
@@ -115,7 +163,9 @@ export class Game {
     const S = this.S;
     if (!this.canPlace(h) || h.pad === pi) return false;
     const other = S.heroes.find(o => o.pad === pi && o.hp > 0);
-    if (other && !this.canPlace(other)) return false;
+    // online, a rune taken by someone else's hero stays theirs
+    if (other && (!this.canPlace(other) || this.online)) return false;
+    if (this.send) { this.send({ k: 'move', h: h.i, pad: pi }); return true; }
     if (other) other.pad = h.pad;
     h.pad = pi;
     this.burst(S.pads[pi].x, S.pads[pi].y, h.def.col, 10);
@@ -124,10 +174,16 @@ export class Game {
     return true;
   }
 
-  /** End the placement phase and start the first turn. */
-  startFight() {
-    if (this.S.phase !== 'place') return;
-    this.S.phase = 'throw';
+  /** End the placement phase and start the first turn; online, only once every player is ready. */
+  startFight(h = this.hero) {
+    const S = this.S;
+    if (S.phase !== 'place') return;
+    if (this.send) { this.send({ k: 'ready', h: h.i }); return; }
+    if (this.online) {
+      if (!S.ready.includes(h.i)) S.ready.push(h.i);
+      if (!this.alive().every(o => S.ready.includes(o.i))) { this.onChange(); return; }
+    }
+    S.phase = 'throw';
     this.pickIntents();
     this.onChange();
   }
@@ -138,6 +194,7 @@ export class Game {
     if (S.phase !== 'throw' || h.hand <= 0 || h.pad === null || h.hp <= 0) return;
     const L = Math.hypot(dx, dy);
     if (L < 4) return;
+    if (this.send) { this.send({ k: 'throw', h: h.i, dx, dy }); return; }
     const p = S.pads[h.pad], s = (270 * this.stat(h, 'pw')) / 60;
     S.discs.push({
       hero: h, x: p.x + (dx / L) * 6, y: p.y + (dy / L) * 6, vx: dx * s, vy: dy * s,
@@ -195,9 +252,10 @@ export class Game {
     return h.discs < HAND_MAX ? HAND_COST[h.discs - HAND_START] : 0;
   }
 
-  buyDisc() {
-    const S = this.S, h = this.hero, c = this.discCost(h);
+  buyDisc(h = this.hero) {
+    const S = this.S, c = this.discCost(h);
     if (!c || this.bank.ore < c || h.hp <= 0 || S.phase === 'over') return;
+    if (this.send) { this.send({ k: 'disc', h: h.i }); return; }
     this.bank.ore -= c;
     h.discs++;
     // the new disc can be thrown this very turn
@@ -210,9 +268,10 @@ export class Game {
     this.onChange();
   }
 
-  upgrade(k: StatKey) {
-    const S = this.S, h = this.hero, lv = h.up[k], c = UP_COST[lv];
+  upgrade(k: StatKey, h = this.hero) {
+    const S = this.S, lv = h.up[k], c = UP_COST[lv];
     if (!c || this.bank.ore < c || h.hp <= 0 || S.phase === 'over') return;
+    if (this.send) { this.send({ k: 'up', h: h.i, stat: k }); return; }
     this.bank.ore -= c;
     h.up[k]++;
     if (h.pad !== null) {
@@ -223,14 +282,14 @@ export class Game {
     this.onChange();
   }
 
-  canUseAbility() {
-    const h = this.hero;
+  canUseAbility(h = this.hero) {
     return this.S.phase === 'throw' && h.hp > 0 && this.bank.sparks >= AB_COST && this.liveMobs().length > 0;
   }
 
-  useAbility() {
-    const S = this.S, h = this.hero;
-    if (!this.canUseAbility()) return;
+  useAbility(h = this.hero) {
+    const S = this.S;
+    if (!this.canUseAbility(h)) return;
+    if (this.send) { this.send({ k: 'ability', h: h.i }); return; }
     this.bank.sparks -= AB_COST;
     if (h.i === 0) {
       for (const o of this.alive()) { o.shield += 3; if (o.pad !== null) this.float(S.pads[o.pad].x, S.pads[o.pad].y, '+3 щит', '#3fc4b6'); }
@@ -241,6 +300,18 @@ export class Game {
       if (m) { m.burn = 3; this.float(m.x, m.y, 'горит!', '#ff7a3d'); this.burst(m.x, m.y, '#ff7a3d', 16); }
     }
     this.onChange();
+  }
+
+  /** Host: apply an action a player sent, as long as it names a hero in the party. */
+  perform(a: Action) {
+    const h = this.S.heroes.find(o => o.i === a.h);
+    if (!h) return;
+    if (a.k === 'throw') this.throwDisc(h, a.dx, a.dy);
+    else if (a.k === 'move') this.movePad(h, a.pad);
+    else if (a.k === 'disc') this.buyDisc(h);
+    else if (a.k === 'up') this.upgrade(a.stat, h);
+    else if (a.k === 'ability') this.useAbility(h);
+    else if (a.k === 'ready') this.startFight(h);
   }
 
   // ------------------------------------------------------------ intents
@@ -436,7 +507,7 @@ export class Game {
       m.fx = m.tx = m.x;
       m.fy = m.ty = m.y;
       if (m.hp <= 0 || !m.intent || m.speed === 0) continue;
-      const h = S.heroes[m.intent.hero];
+      const h = this.heroOf(m.intent.hero);
       if (h.hp <= 0 || h.pad === null) continue;
       const p = S.pads[h.pad], dx = p.x - m.x, dy = p.y - m.y, L = Math.hypot(dx, dy);
       const go = Math.max(0, Math.min(m.speed, L - m.reach + 8));
@@ -452,7 +523,7 @@ export class Game {
     for (const m of this.liveMobs()) {
       const it = m.intent;
       if (!it || it.t !== 'hit') continue;
-      const h = S.heroes[it.hero];
+      const h = this.heroOf(it.hero);
       if (h.hp <= 0 || h.pad === null) continue;
       const p = S.pads[h.pad];
       if (m.k === 'archer' || Math.hypot(p.x - m.x, p.y - m.y) <= m.reach + 2) { this.hurtHero(h, it.dmg); m.flash = 0.12; }
@@ -467,7 +538,7 @@ export class Game {
     S.discs = [];
     for (const h of S.heroes) { h.shield = 0; h.thrown = false; h.hand = h.hp > 0 ? h.discs : 0; }
     S.phase = 'throw';
-    if (this.hero.hp <= 0) this.act = Math.max(0, S.heroes.findIndex(h => h.hp > 0));
+    this.pickActive();
     this.pickIntents();
     this.onChange();
   }
@@ -480,6 +551,7 @@ export class Game {
 
   update(dt: number) {
     const S = this.S;
+    if (this.send) { this.updateRemote(dt); return; }
     this.acc += dt;
     while (this.acc >= STEP) { this.step(STEP); this.acc -= STEP; }
     if (S.phase === 'throw' && this.allThrown() && !this.moving()) {
@@ -488,16 +560,43 @@ export class Game {
       S.phase = 'enemy'; S.timer = 1.5; this.mobsStart(); S.attacked = false; this.onChange();
     } else if (S.phase === 'enemy') {
       S.timer -= dt;
-      const u = Math.min(1, (1.5 - S.timer) / 0.6), e = u * u * (3 - 2 * u);
-      for (const m of this.liveMobs()) {
-        m.x = m.fx + (m.tx - m.fx) * e;
-        m.y = m.fy + (m.ty - m.fy) * e;
-        // a miniature is lifted and put down when it moves
-        m.hop = Math.hypot(m.tx - m.fx, m.ty - m.fy) > 1 ? Math.sin(Math.PI * u) * 7 : 0;
-      }
+      this.walkMobs();
       if (!S.attacked && S.timer < 0.8) { S.attacked = true; this.mobsAttack(); this.onChange(); }
       if (S.timer <= 0) this.nextTurn();
     }
+    this.fade(dt);
+  }
+
+  /** Mobs walk from (fx, fy) to (tx, ty) during the first part of the enemy phase. */
+  private walkMobs() {
+    const u = Math.min(1, (1.5 - this.S.timer) / 0.6), e = u * u * (3 - 2 * u);
+    for (const m of this.liveMobs()) {
+      m.x = m.fx + (m.tx - m.fx) * e;
+      m.y = m.fy + (m.ty - m.fy) * e;
+      // a miniature is lifted and put down when it moves
+      m.hop = Math.hypot(m.tx - m.fx, m.ty - m.fy) > 1 ? Math.sin(Math.PI * u) * 7 : 0;
+    }
+  }
+
+  /**
+   * Online client: the host owns the rules; between its snapshots, discs keep rolling and mobs keep walking
+   * locally so motion stays smooth.
+   */
+  private updateRemote(dt: number) {
+    const S = this.S, mu = S.biome.mu;
+    for (const d of this.bodies()) {
+      const v = Math.hypot(d.vx, d.vy);
+      if (v > 0) { const nv = Math.max(0, v - mu * d.fr * dt); d.vx *= nv / v; d.vy *= nv / v; d.spin += nv * dt * 0.08; }
+      d.x = Math.max(d.r, Math.min(S.Wx - d.r, d.x + d.vx * dt));
+      d.y = Math.max(d.r, Math.min(S.Wy - d.r, d.y + d.vy * dt));
+    }
+    if (S.phase === 'enemy') { S.timer -= dt; this.walkMobs(); }
+    this.fade(dt);
+  }
+
+  /** Timers of flashes, falling discs, particles and floating numbers. */
+  private fade(dt: number) {
+    const S = this.S;
     for (const d of S.discs) if (d.fall && !d.gone) { d.fall += dt; if (d.fall > 0.5) d.gone = true; }
     for (const m of S.mobs) { if (m.flash > 0) m.flash -= dt; if (m.dead) m.dead += dt; }
     for (const h of S.heroes) if (h.flash > 0) h.flash -= dt;

@@ -25,7 +25,7 @@
     </div>
     <div class="top-btns">
       <button class="btn" id="btnMap">Карта</button>
-      <button class="btn round" id="btnHelp" aria-label="Управление">?</button>
+      <button class="btn round" id="btnMenu" aria-label="Меню">☰</button>
     </div>
   </header>
 
@@ -86,6 +86,94 @@
     </div>
   </section>
 
+  <section id="menu" class="overlay solid" hidden>
+    <div class="menu-panel">
+      <h1 class="logo">Disco<span>Dungeon</span></h1>
+      <p class="tagline">Кооперативный рогалик, где вместо кубиков диски</p>
+      <nav class="menu-btns">
+        <button class="btn big" id="mContinue" hidden>Продолжить</button>
+        <button class="btn big" id="mCampaign">Кампания</button>
+        <button class="btn big" id="mOnline">Сетевая игра</button>
+        <button class="btn big" id="mCollection">Коллекция</button>
+        <button class="btn big" id="mSettings">Настройки</button>
+      </nav>
+    </div>
+  </section>
+
+  <section id="lobby" class="overlay solid" hidden>
+    <div class="panel lobby-panel">
+      <div class="panel-head"><h2>Сетевая игра</h2><button class="btn" id="lobbyBack">Назад</button></div>
+      <div id="lobbyStart" class="lobby-start">
+        <label class="field">Твоё имя <input id="lobbyName" maxlength="16" autocomplete="nickname" placeholder="Игрок" /></label>
+        <div class="lobby-ways">
+          <div class="way">
+            <h3>Собрать отряд</h3>
+            <p>Создай комнату и отправь друзьям код или ссылку.</p>
+            <button class="btn big" id="lobbyHost">Создать комнату</button>
+          </div>
+          <div class="way">
+            <h3>Присоединиться</h3>
+            <p>Введи код, который прислал хозяин комнаты.</p>
+            <div class="join-row"><input id="lobbyCode" maxlength="5" placeholder="КОД" autocapitalize="characters" autocomplete="off" /><button class="btn big" id="lobbyJoin">Войти</button></div>
+          </div>
+        </div>
+      </div>
+      <div id="lobbyRoom" class="lobby-room" hidden>
+        <div class="room-code">Код комнаты <b id="lobbyRoomCode"></b> <button class="btn sm" id="lobbyCopy">Скопировать ссылку</button></div>
+        <h3>Выбери героя</h3>
+        <div id="lobbyHeroes" class="pick-heroes"></div>
+        <h3>Игроки</h3>
+        <ul id="lobbyPlayers" class="players"></ul>
+        <div class="lobby-foot"><span id="lobbyHint"></span><button class="btn big" id="lobbyStartBtn" hidden>Начать</button></div>
+      </div>
+      <p id="lobbyStatus" class="lobby-status" role="status"></p>
+    </div>
+  </section>
+
+  <section id="collection" class="overlay solid" hidden>
+    <div class="panel collection-panel">
+      <div class="panel-head">
+        <h2>Коллекция</h2>
+        <div class="panel-btns"><button class="btn tab on" data-tab="heroes">Герои</button><button class="btn tab" data-tab="mobs">Враги</button><button class="btn" id="colBack">Назад</button></div>
+      </div>
+      <div id="colGrid" class="col-grid"></div>
+    </div>
+  </section>
+
+  <section id="settingsScreen" class="overlay solid" hidden>
+    <div class="panel settings-panel">
+      <div class="panel-head"><h2>Настройки</h2><button class="btn" id="setBack">Назад</button></div>
+      <label class="field">Имя в сетевой игре <input id="setName" maxlength="16" placeholder="Игрок" /></label>
+      <fieldset class="field">
+        <legend>Качество графики</legend>
+        <label><input type="radio" name="quality" value="auto" /> Авто: снижать на слабом устройстве</label>
+        <label><input type="radio" name="quality" value="high" /> Высокое</label>
+        <label><input type="radio" name="quality" value="low" /> Экономное: плавнее на старых телефонах</label>
+      </fieldset>
+      <label class="check"><input type="checkbox" id="setAim" /> Линия прицела</label>
+      <label class="check"><input type="checkbox" id="setLines" /> Линии атак мобов</label>
+    </div>
+  </section>
+
+  <section id="pause" class="overlay dim" hidden>
+    <div class="panel end-panel">
+      <h2>Пауза</h2>
+      <div class="menu-btns">
+        <button class="btn big" id="pResume">Продолжить</button>
+        <button class="btn big" id="pHelp">Как играть</button>
+        <button class="btn big" id="pMenu">Главное меню</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="waitScreen" class="overlay dim" hidden>
+    <div class="panel end-panel">
+      <h2 id="waitTitle"></h2>
+      <p id="waitText"></p>
+      <p class="muted">Хозяин комнаты выбирает, куда идти дальше.</p>
+    </div>
+  </section>
+
   <section id="help" class="overlay dim" hidden>
     <div class="panel help-panel">
       <h2>Управление</h2>
@@ -97,7 +185,7 @@
         <li><b>Бросок.</b> Потяни свою фигурку назад, как рогатку, и отпусти. Чем длиннее натяжка, тем сильнее.</li>
         <li><b>Камера.</b> Перетаскивай пустой пол, чтобы двигать комнату. Колесо или щипок двумя пальцами приближает.</li>
         <li><b>Поворот.</b> Поверни двумя пальцами, правой кнопкой мыши, Shift+колесо или клавишами Q и E. Кнопка ⌂ возвращает вид.</li>
-        <li><b>Отряд.</b> Пока игра локальная: переключайся между героями карточками слева или тапом по фигурке.</li>
+        <li><b>Отряд.</b> В кампании ты ведёшь всех героев: переключайся карточками слева или тапом по фигурке. В сетевой игре у каждого свой герой, а бой начинается, когда все нажали «Готов».</li>
       </ul>
       <button class="btn big" id="helpClose">Понятно</button>
     </div>

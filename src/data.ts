@@ -44,6 +44,9 @@ export interface MobDef {
   fig: number;
 }
 
+/** Every enemy is in the room from the start (no reinforcements), so all of them get this much more HP. */
+export const MOB_HP_MUL = 1.6;
+
 export const MOBS: Record<MobKind, MobDef> = {
   skel: { name: 'Скелет', hp: 9, r: 7, speed: 34, reach: 30, dmg: 3, fig: 31 },
   archer: { name: 'Гоблин-лучник', hp: 6, r: 6, speed: 0, reach: 999, dmg: 2, fig: 26 },
