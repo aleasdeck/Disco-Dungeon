@@ -1,4 +1,4 @@
-// Run structure: 3 floors, each a layered branching map of rooms; a path takes 5 rooms ending at the boss.
+// Run structure: 3 floors, each a layered branching map of rooms; a path takes 7 rooms ending at the boss.
 
 import { ROOM_TYPES, type RoomType } from './data';
 import type { Bank, HeroState } from './game';
@@ -14,13 +14,13 @@ export interface Run {
 }
 
 export const FLOORS = 3;
-export const LAYERS = 5;
+export const LAYERS = 7;
+/** Rows where a floor lets the party catch its breath: camp, forge or event. */
+export const REST_ROWS = [3, 5];
 
 export function genFloor(seed: number, f: number): MapNode[][] {
   const R = makeRng(seed + f * 1013);
-  let sizes: number[];
-  do sizes = [R.int(2, 3), R.int(2, 3), R.int(1, 3), 2]; while (sizes.reduce((a, b) => a + b) > 9);
-  sizes.push(1);
+  const sizes = [R.int(2, 3), R.int(2, 3), R.int(2, 3), 2, R.int(2, 3), 2, 1];
   const wpick = (w: Partial<Record<RoomType, number>>): RoomType => {
     const ks = Object.keys(w) as RoomType[];
     let s = R.next() * ks.reduce((a, k) => a + w[k]!, 0);
@@ -30,12 +30,14 @@ export function genFloor(seed: number, f: number): MapNode[][] {
   const W: Partial<Record<RoomType, number>>[] = [
     { fight: 1 },
     { fight: 3, treasure: 2, event: 1 },
-    { fight: 2, elite: 2, forge: 1, event: 1 },
+    { fight: 3, elite: 2, event: 1 },
+    { camp: 2, forge: 2, event: 1 },
+    { fight: 2, elite: 2, treasure: 1 },
     { camp: 2, forge: 2, fight: 1, elite: 1 },
     { boss: 1 },
   ];
   const layers = sizes.map((n, l) => Array.from({ length: n }, (_, i): MapNode => ({ id: `${f}-${l}-${i}`, l, i, type: wpick(W[l]), next: [] })));
-  if (!layers[3].some(n => n.type === 'camp' || n.type === 'forge')) layers[3][0].type = 'camp';
+  for (const r of REST_ROWS) if (!layers[r].some(n => n.type === 'camp' || n.type === 'forge')) layers[r][0].type = 'camp';
   if (f > 0 && !layers[1].some(n => n.type === 'treasure')) layers[1][layers[1].length - 1].type = 'treasure';
   for (let l = 0; l < layers.length - 1; l++) {
     const A = layers[l], B = layers[l + 1];
@@ -77,7 +79,7 @@ export function minutes(run: Run) {
   for (let f = 0; f < FLOORS; f++) {
     const p = run.path[f].map(id => nodeById(run, f, id));
     for (const n of p) done += ROOM_TYPES[n.type].min;
-    for (let l = p.length; l < LAYERS; l++) est += l === 4 ? ROOM_TYPES.boss.min : l === 3 ? 0.75 : 2;
+    for (let l = p.length; l < LAYERS; l++) est += l === LAYERS - 1 ? ROOM_TYPES.boss.min : REST_ROWS.includes(l) ? 0.75 : l < 3 ? 1.5 : 2.5;
   }
   return { done, total: done + est };
 }

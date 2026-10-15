@@ -2,6 +2,7 @@
 
 import { BIOMES, MOB_HP_MUL, MOBS, NODES, TILE, type Biome, type MobKind, type NodeKind, type RoomType } from './data';
 import { makeRng } from './rng';
+import { LAYERS } from './run';
 
 export interface RoomSpec {
   seed: number;
@@ -119,13 +120,44 @@ export function clearOfRock(L: Pick<Layout, 'gw' | 'gh' | 'floor' | 'rock' | 'Wx
   return x > r && y > r && x < L.Wx - r && y < L.Wy - r && floorAt(L, x, y) && L.rock.every(b => boxDist(x, y, b) >= r);
 }
 
-function carve(gw: number, gh: number, R: ReturnType<typeof makeRng>, type: RoomType): { shape: Shape; floor: Uint8Array } {
+type Range = [number, number];
+
+/** How a room is built at one step of a floor: rooms near the entrance are small and plain, the ones before the boss big and tangled. */
+export interface Tier {
+  gw: Range;
+  gh: Range;
+  shapes: Shape[];
+  /** How many block clusters, and which of BLOCK_SHAPES they may use (the first n). */
+  blocks: Range;
+  blockKinds: number;
+  pits: Range;
+  haz: Range;
+  mobs: Range;
+}
+
+export const TIERS: Tier[] = [
+  { gw: [10, 11], gh: [8, 9], shapes: ['rect'], blocks: [1, 2], blockKinds: 1, pits: [0, 0], haz: [0, 0], mobs: [2, 3] },
+  { gw: [11, 12], gh: [9, 9], shapes: ['rect', 'corner'], blocks: [2, 2], blockKinds: 3, pits: [0, 0], haz: [2, 2], mobs: [3, 3] },
+  { gw: [12, 13], gh: [10, 10], shapes: ['corner', 'alcove'], blocks: [2, 3], blockKinds: 4, pits: [0, 0], haz: [3, 4], mobs: [3, 4] },
+  { gw: [13, 14], gh: [10, 11], shapes: ['alcove', 'funnel', 'corner'], blocks: [3, 4], blockKinds: 4, pits: [0, 1], haz: [5, 6], mobs: [4, 5] },
+  { gw: [14, 15], gh: [11, 12], shapes: ['funnel', 'cross', 'alcove'], blocks: [4, 5], blockKinds: 5, pits: [1, 2], haz: [6, 8], mobs: [5, 6] },
+];
+export const BOSS_TIER: Tier = { gw: [14, 15], gh: [12, 12], shapes: ['rect', 'cross'], blocks: [2, 3], blockKinds: 3, pits: [0, 0], haz: [4, 6], mobs: [3, 3] };
+
+/** Map row (0 = entrance) to its tier; the rest rows in the middle borrow the tier of the row before. */
+export function tierOf(spec: RoomSpec): { tier: Tier; t: number } {
+  if (spec.type === 'boss') return { tier: BOSS_TIER, t: TIERS.length };
+  const row = Math.max(0, Math.min(LAYERS - 2, spec.depth - 1 - spec.floor * LAYERS));
+  const t = [0, 1, 2, 2, 3, 4][row] ?? TIERS.length - 1;
+  return { tier: TIERS[t], t };
+}
+
+function carve(gw: number, gh: number, R: ReturnType<typeof makeRng>, shapes: Shape[]): { shape: Shape; floor: Uint8Array } {
   const floor = new Uint8Array(gw * gh).fill(1);
   const cut = (i0: number, j0: number, i1: number, j1: number) => {
     for (let j = Math.max(0, j0); j < Math.min(gh, j1); j++) for (let i = Math.max(0, i0); i < Math.min(gw, i1); i++) floor[j * gw + i] = 0;
   };
   // the near corner (large x and y) always stays: the throw runes live along the near edges
-  const shapes: Shape[] = type === 'boss' ? ['rect', 'cross', 'funnel'] : ['rect', 'corner', 'corner', 'funnel', 'alcove', 'cross'];
   const shape = R.pick(shapes);
   if (shape === 'corner') {
     const cw = R.int(4, Math.floor(gw / 2)), ch = R.int(3, Math.floor(gh / 2));
@@ -152,7 +184,19 @@ function carve(gw: number, gh: number, R: ReturnType<typeof makeRng>, type: Room
       else { const j = R.int(1, gh - 3); cut(0, j, 1, j + R.int(1, 2)); }
     }
   }
-  return { shape, floor };
+  // bites can wall off a corner cell: keep only floor connected to the near corner, where the runes are
+  let near = 0;
+  for (let k = 0; k < gw * gh; k++) if (floor[k] && (k % gw) + Math.floor(k / gw) > (near % gw) + Math.floor(near / gw)) near = k;
+  const keep = new Uint8Array(gw * gh), stack = [near];
+  keep[near] = 1;
+  while (stack.length) {
+    const k = stack.pop()!, i = k % gw, j = (k - i) / gw;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const ni = i + di, nj = j + dj, nk = nj * gw + ni;
+      if (ni >= 0 && nj >= 0 && ni < gw && nj < gh && floor[nk] && !keep[nk]) { keep[nk] = 1; stack.push(nk); }
+    }
+  }
+  return { shape, floor: keep };
 }
 
 function buildEdges(gw: number, gh: number, floor: Uint8Array) {
@@ -207,13 +251,31 @@ function pickPads(gw: number, gh: number, floor: Uint8Array, R: ReturnType<typeo
   return chosen.map(([i, j]) => ({ x: i * TILE + 8 + (R.next() - 0.5) * 3, y: j * TILE + 8 + (R.next() - 0.5) * 3 }));
 }
 
+/** Block clusters from plain to awkward: single, pairs, an L, a diagonal pair. */
+const BLOCK_SHAPES = [[[0, 0]], [[0, 0], [1, 0]], [[0, 0], [0, 1]], [[0, 0], [1, 0], [0, 1]], [[0, 0], [1, 1]]];
+
+/** Enemies a regular fight draws from: the floor sets the cast, late rows of a floor add tougher ones. */
+function mobPool(f: number, t: number): MobKind[] {
+  if (f === 0) return t === 0 ? ['skel', 'skel', 'skel', 'archer'] : t < 3 ? ['skel', 'skel', 'archer'] : ['skel', 'archer', 'slime'];
+  if (f === 1) return t < 3 ? ['skel', 'archer', 'slime'] : ['skel', 'archer', 'archer', 'slime'];
+  return t < 3 ? ['skel', 'archer', 'slime', 'slime'] : ['skel', 'archer', 'slime', 'golem'];
+}
+
+/** How much every enemy's HP grows per room of the run (on top of MOB_HP_MUL). */
+export const HP_STEP = 0.065;
+
+/** Extra damage per hit: one more on every floor, and one more in the last rooms before the boss. */
+export const dmgBonus = (f: number, t: number) => f + (t >= 3 ? 1 : 0);
+
 export function generate(spec: RoomSpec): Layout {
   const R = makeRng(spec.seed * 31 + spec.depth);
   const { int: ri, pick } = R;
   const d = spec.depth;
-  const type = spec.type;
-  const gw = ri(12, 15), gh = ri(10, 12);
-  const { shape, floor } = carve(gw, gh, R, type);
+  const type = spec.type, f = spec.floor;
+  const { tier, t } = tierOf(spec);
+  const roll = (r: Range) => ri(r[0], r[1]);
+  const gw = roll(tier.gw), gh = roll(tier.gh);
+  const { shape, floor } = carve(gw, gh, R, tier.shapes);
   const Wx = gw * TILE, Wy = gh * TILE;
   const { edges, rock } = buildEdges(gw, gh, floor);
   const geo = { gw, gh, floor, rock, Wx, Wy };
@@ -236,14 +298,14 @@ export function generate(spec: RoomSpec): Layout {
   for (const p of pads) objs.push({ x: p.x, y: p.y, r: 22 });
 
   const pits: Pit[] = [];
-  for (let i = 0, n = ri(0, d > 5 ? 3 : 1); i < n; i++) {
+  for (let i = 0, n = roll(tier.pits); i < n; i++) {
     const r = ri(10, 13), q = place(r, mid);
     if (q) { pits.push({ x: q[0], y: q[1], r }); objs.push({ x: q[0], y: q[1], r }); }
   }
 
   const blocks: Block[] = [];
-  const SHAPES = [[[0, 0]], [[0, 0], [1, 0]], [[0, 0], [0, 1]], [[0, 0], [1, 0], [0, 1]], [[0, 0], [1, 1]]];
-  for (let i = 0, n = ri(2, 4); i < n; i++) {
+  const SHAPES = BLOCK_SHAPES.slice(0, tier.blockKinds);
+  for (let i = 0, n = roll(tier.blocks); i < n; i++) {
     for (let tr = 0; tr < 40; tr++) {
       const tx = ri(1, gw - 4), ty = ri(1, gh - 4), sh = pick(SHAPES);
       const cells = sh.map(([a, b]) => ({ x0: (tx + a) * TILE, y0: (ty + b) * TILE, x1: (tx + a + 1) * TILE, y1: (ty + b + 1) * TILE, v: ri(0, 7) }));
@@ -261,30 +323,59 @@ export function generate(spec: RoomSpec): Layout {
     if (clearOfRock(geo, d0.x, d0.y, 5)) decals.push(d0);
   }
 
-  const nodes: ResNode[] = [];
-  const kinds: NodeKind[] = type === 'treasure' ? ['ore', 'ore', 'ore', 'ore', 'spk', 'spk', 'spk', 'herb', 'herb'] : ['ore', 'ore', 'spk', 'spk', 'herb'];
-  for (const k of kinds) {
-    const q = place(NODES[k].r, type === 'treasure' ? any : mid);
-    if (q) { nodes.push({ k, ...NODES[k], x: q[0], y: q[1], left: NODES[k].ch, hit: 0 }); objs.push({ x: q[0], y: q[1], r: NODES[k].r }); }
-  }
-
-  const hpMul = MOB_HP_MUL * (1 + 0.09 * (d - 1)), dmgAdd = Math.floor((d - 1) / 5);
-  const pool: MobKind[] = spec.floor === 0 ? ['skel', 'skel', 'archer', 'slime'] : spec.floor === 1 ? ['skel', 'archer', 'slime', 'slime', 'archer'] : ['skel', 'archer', 'slime', 'golem'];
+  const hpMul = MOB_HP_MUL * (1 + HP_STEP * (d - 1)), dmgAdd = dmgBonus(f, t);
+  const pool = mobPool(f, t);
+  const draw = (n: number) => {
+    const out: MobKind[] = [];
+    for (let i = 0; i < n; i++) {
+      let k = pick(pool);
+      // one archer at most in the first room, one golem at most anywhere: they set the pace of a fight
+      for (let tr = 0; tr < 8 && ((k === 'archer' && t === 0) || k === 'golem') && out.includes(k); tr++) k = pick(pool);
+      if (((k === 'archer' && t === 0) || k === 'golem') && out.includes(k)) k = 'skel';
+      out.push(k);
+    }
+    return out;
+  };
+  const count = Math.min(roll(tier.mobs) + f, 7);
   let mk: MobKind[];
   if (type === 'treasure') mk = ['skel', 'archer'];
-  else if (type === 'boss') mk = ['king', 'skel', 'archer'];
-  else if (type === 'elite') mk = ['golem', pick(pool), pick(pool), pick(pool)];
-  else { mk = []; for (let i = 0, n = Math.min(3 + Math.floor(d / 3), 7); i < n; i++) mk.push(pick(pool)); }
+  else if (type === 'boss') mk = ['king', ...draw(2 + f).map(k => (k === 'golem' ? 'skel' : k))];
+  else if (type === 'elite') mk = ['golem', ...draw(count - 1).map(k => (k === 'golem' ? 'skel' : k))];
+  else mk = draw(count);
   const mobs: Mob[] = [];
   for (const k of mk) {
-    const q = place(MOBS[k].r, far);
+    // a cut corner can eat the far half, so a mob that finds no room there stands anywhere short of the runes
+    const q = place(MOBS[k].r, far) ?? place(MOBS[k].r, (x, y) => x / Wx + y / Wy < 1.25) ?? place(MOBS[k].r, any);
     if (q) { mobs.push(newMob(k, q[0], q[1], hpMul, dmgAdd)); objs.push({ x: q[0], y: q[1], r: MOBS[k].r }); }
   }
 
+  const nodes: ResNode[] = [];
+  const kinds: NodeKind[] = type === 'treasure' ? ['ore', 'ore', 'ore', 'ore', 'spk', 'spk', 'spk', 'herb', 'herb'] : ['ore', 'ore', 'spk', 'spk', 'herb'];
+  for (const k of kinds) {
+    const q = place(NODES[k].r, type === 'treasure' ? any : mid) ?? place(NODES[k].r, any);
+    if (q) { nodes.push({ k, ...NODES[k], x: q[0], y: q[1], left: NODES[k].ch, hit: 0 }); objs.push({ x: q[0], y: q[1], r: NODES[k].r }); }
+  }
+
   const haz = new Set<string>();
-  for (let i = 0, n = 4 + Math.floor(d / 2); i < n; i++) {
-    const tx = ri(1, gw - 2), ty = ri(1, gh - 2), cx = tx * TILE + 8, cy = ty * TILE + 8;
-    if (isFloor(geo, tx, ty) && mid(cx, cy) && pads.every(p => Math.hypot(p.x - cx, p.y - cy) > 26) && objs.every(o => Math.hypot(o.x - cx, o.y - cy) > o.r + 4)) haz.add(hazKey(tx, ty));
+  // the boss fights in the open: its hazards hug the walls instead of the middle
+  const hazZone = type === 'boss' ? (x: number, y: number) => { const s = x / Wx + y / Wy; return mid(x, y) && (s < 0.8 || s > 1.2 || x < 40 || y < 40); } : mid;
+  const hazOk = (tx: number, ty: number) => {
+    const cx = tx * TILE + 8, cy = ty * TILE + 8;
+    return isFloor(geo, tx, ty) && !haz.has(hazKey(tx, ty)) && hazZone(cx, cy) && pads.every(p => Math.hypot(p.x - cx, p.y - cy) > 26) && objs.every(o => Math.hypot(o.x - cx, o.y - cy) > o.r + 4);
+  };
+  const nHaz = roll(tier.haz) + (t === 0 ? 2 * Math.min(f, 1) : Math.round(f * 1.5));
+  // before the boss a strip of three tiles cuts the room
+  if (t === TIERS.length - 1 && type !== 'treasure') {
+    for (let tr = 0; tr < 60; tr++) {
+      const tx = ri(2, gw - 4), ty = ri(2, gh - 4), hor = R.next() < 0.5;
+      const cells = [0, 1, 2].map(k => (hor ? [tx + k, ty] : [tx, ty + k]));
+      if (cells.every(([a, b]) => hazOk(a, b))) { for (const [a, b] of cells) haz.add(hazKey(a, b)); break; }
+    }
+  }
+  const hazGoal = type === 'treasure' ? Math.ceil(nHaz / 2) : nHaz;
+  for (let tr = 0; tr < 200 && haz.size < hazGoal; tr++) {
+    const tx = ri(1, gw - 2), ty = ri(1, gh - 2);
+    if (hazOk(tx, ty)) haz.add(hazKey(tx, ty));
   }
   return { gw, gh, shape, floor, edges, rock, Wx, Wy, biome, pads, pits, blocks, decals, nodes, mobs, haz, hpMul, dmgAdd };
 }
