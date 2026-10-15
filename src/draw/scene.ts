@@ -21,6 +21,8 @@ export class SceneRenderer {
   private g!: Game;
   private t = 0;
   private carry: Carry | null = null;
+  private bgCss = '';
+  private glow: { key: string; img: HTMLCanvasElement } | null = null;
 
   private P = (x: number, y: number, h = 0): Pt => this.cam.iso(x, y, h);
 
@@ -29,11 +31,10 @@ export class SceneRenderer {
     this.c = c; this.cam = cam; this.g = g; this.t = t;
     const S = g.S, { w, h, dpr } = view;
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const bg = c.createRadialGradient(w / 2, h * 0.5, 40, w / 2, h * 0.5, Math.max(w, h) * 0.75);
-    bg.addColorStop(0, S.biome.bg[0]);
-    bg.addColorStop(1, S.biome.bg[1]);
-    c.fillStyle = bg;
-    c.fillRect(0, 0, w, h);
+    // the backdrop gradient and the vignette live in CSS: full-screen gradients every frame are what made phones crawl
+    c.clearRect(0, 0, w, h);
+    const bgCss = `radial-gradient(ellipse at 50% 50%, ${S.biome.bg[0]}, ${S.biome.bg[1]} 75%)`;
+    if (this.bgCss !== bgCss) { c.canvas.style.background = bgCss; this.bgCss = bgCss; }
 
     let sx = 0, sy = 0;
     if (S.shake > 0 && !reduce) { sx = (Math.random() - 0.5) * 6; sy = (Math.random() - 0.5) * 4; }
@@ -43,7 +44,6 @@ export class SceneRenderer {
 
     this.drawLips();
     this.drawFloor();
-    this.drawTelegraph();
 
     const items: [number, () => void][] = [];
     for (const d of S.discs) if (!d.gone) items.push([cam.depth(d.x, d.y), () => this.drawDisc(d)]);
@@ -59,15 +59,10 @@ export class SceneRenderer {
     this.wallItems(items);
     items.sort((a, b) => a[0] - b[0]).forEach(i => i[1]());
 
+    this.drawTelegraph();
     this.drawAim(aim);
     this.drawFx();
 
-    c.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const v = c.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.75);
-    v.addColorStop(0, 'rgba(0,0,0,0)');
-    v.addColorStop(1, 'rgba(10,5,2,.5)');
-    c.fillStyle = v;
-    c.fillRect(0, 0, w, h);
   }
 
   // ------------------------------------------------------------ room shell
@@ -159,39 +154,64 @@ export class SceneRenderer {
     const c = this.c, B = this.g.S.biome, fl = reduce ? 1 : 0.9 + Math.sin(this.t * 11 + seed) * 0.08;
     c.save();
     c.globalCompositeOperation = 'lighter';
-    const g = c.createRadialGradient(sx, sy, 0, sx, sy, 50 * fl);
-    g.addColorStop(0, `rgba(${B.torch},.4)`);
-    g.addColorStop(1, `rgba(${B.torch},0)`);
-    c.fillStyle = g;
-    c.fillRect(sx - 55, sy - 55, 110, 110);
+    c.drawImage(this.glowSprite(B.torch), sx - 50 * fl, sy - 50 * fl, 100 * fl, 100 * fl);
     c.restore();
     rr(c, sx - 1.5, sy - 1, 3, 7, 1); fs(c, '#6b4a2e', 0.8);
     c.beginPath(); c.moveTo(sx, sy - 8 * fl); c.quadraticCurveTo(sx + 4, sy - 2, sx, sy); c.quadraticCurveTo(sx - 4, sy - 2, sx, sy - 8 * fl); fs(c, '#ff9a3d', 0.8);
     c.beginPath(); c.moveTo(sx, sy - 5 * fl); c.quadraticCurveTo(sx + 2, sy - 1.5, sx, sy - 0.5); c.quadraticCurveTo(sx - 2, sy - 1.5, sx, sy - 5 * fl); c.fillStyle = '#ffe680'; c.fill();
   }
 
+  /** Torch light pre-rendered once per biome; stamping an image is far cheaper than a fresh gradient per torch per frame. */
+  private glowSprite(rgb: string) {
+    if (this.glow?.key === rgb) return this.glow.img;
+    const img = document.createElement('canvas'), n = 64;
+    img.width = img.height = n;
+    const gc = img.getContext('2d')!, g = gc.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+    g.addColorStop(0, `rgba(${rgb},.4)`);
+    g.addColorStop(1, `rgba(${rgb},0)`);
+    gc.fillStyle = g;
+    gc.fillRect(0, 0, n, n);
+    this.glow = { key: rgb, img };
+    return img;
+  }
+
   private drawFloor() {
     const { c, P, g } = this;
     const S = g.S, B = S.biome, gap = 0.9, t = this.t;
+    // plain tiles go into a handful of batched paths: one fill per colour instead of several per tile
+    const quad = (x0: number, y0: number, x1: number, y1: number) => {
+      const a = P(x0, y0), b = P(x1, y0), d = P(x1, y1), e = P(x0, y1);
+      c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.lineTo(d[0], d[1]); c.lineTo(e[0], e[1]); c.closePath();
+    };
+    const cells: [number, number][] = [], hazard: [number, number][] = [];
     for (let i = 0; i < S.gw; i++) for (let j = 0; j < S.gh; j++) {
       if (!isFloor(S, i, j)) continue;
-      pth(c, [P(i * TILE, j * TILE), P((i + 1) * TILE, j * TILE), P((i + 1) * TILE, (j + 1) * TILE), P(i * TILE, (j + 1) * TILE)]);
-      c.fillStyle = B.g;
+      if (S.haz.has(hazKey(i, j))) hazard.push([i, j]); else cells.push([i, j]);
+    }
+    c.beginPath();
+    for (const [i, j] of [...cells, ...hazard]) quad(i * TILE, j * TILE, (i + 1) * TILE, (j + 1) * TILE);
+    c.fillStyle = B.g;
+    c.fill();
+    const inner = (i: number, j: number) => quad(i * TILE + gap, j * TILE + gap, (i + 1) * TILE - gap, (j + 1) * TILE - gap);
+    for (const alt of [0, 1]) {
+      c.beginPath();
+      for (const [i, j] of cells) if (((i * 7 + j * 3) % 5 === 0 ? 1 : 0) === alt) inner(i, j);
+      c.fillStyle = B.f[alt];
       c.fill();
+    }
+    c.beginPath();
+    for (const [i, j] of cells) inner(i, j);
+    c.strokeStyle = 'rgba(255,255,255,.14)';
+    c.lineWidth = 0.7;
+    c.stroke();
+    for (const [i, j] of hazard) {
       const x0 = i * TILE + gap, y0 = j * TILE + gap, x1 = (i + 1) * TILE - gap, y1 = (j + 1) * TILE - gap;
       const q: Pt[] = [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)];
       pth(c, q);
-      const hz = S.haz.has(hazKey(i, j));
       const ys = q.map(p => p[1]);
-      c.fillStyle = hz
-        ? (B.haz === 'lava' ? lg(c, 0, Math.min(...ys), 0, Math.max(...ys), '#ffb347', '#e0461f') : '#55473e')
-        : ((i * 7 + j * 3) % 5 === 0 ? B.f[1] : B.f[0]);
+      c.fillStyle = B.haz === 'lava' ? lg(c, 0, Math.min(...ys), 0, Math.max(...ys), '#ffb347', '#e0461f') : '#55473e';
       c.fill();
-      if (!hz) {
-        c.strokeStyle = 'rgba(255,255,255,.14)';
-        c.lineWidth = 0.7;
-        c.stroke();
-      } else if (B.haz === 'lava') {
+      if (B.haz === 'lava') {
         for (let k = 0; k < 2; k++) {
           const ph = (t * 0.8 + i * 0.37 + j * 0.51 + k * 0.5) % 1;
           const [bx, by] = P(i * TILE + 5 + k * 6, j * TILE + 6 + k * 4);
@@ -267,20 +287,27 @@ export class SceneRenderer {
     const { c, P, g } = this;
     const S = g.S;
     if (S.phase !== 'throw' && S.phase !== 'place') return;
+    // drawn over the figures, faint, so it never hides them but is never hidden by them either
     c.save();
-    c.setLineDash([3, 3]);
-    c.lineDashOffset = reduce ? 0 : -this.t * 12;
-    c.lineWidth = 1.2;
+    c.lineCap = 'round';
+    const lw = Math.max(1.4, 2.4 / this.cam.zoom);
     for (const m of g.liveMobs()) {
       const it = m.intent;
       if (!it || it.t !== 'hit') continue;
       const hero = S.heroes[it.hero];
       if (hero.pad === null) continue;
       const p = S.pads[hero.pad], [ax, ay] = P(m.x, m.y, 8), [bx, by] = P(p.x, p.y, 8);
-      c.strokeStyle = m.k === 'archer' ? 'rgba(140,230,110,.85)' : 'rgba(255,77,106,.85)';
       c.beginPath();
       c.moveTo(ax, ay);
       c.quadraticCurveTo((ax + bx) / 2, Math.min(ay, by) - 18, bx, by);
+      c.setLineDash([]);
+      c.strokeStyle = 'rgba(18,13,10,.5)';
+      c.lineWidth = lw + 1.6;
+      c.stroke();
+      c.setLineDash([lw * 2.5, lw * 2]);
+      c.lineDashOffset = reduce ? 0 : -this.t * 12;
+      c.strokeStyle = m.k === 'archer' ? 'rgba(150,235,120,.9)' : 'rgba(255,90,115,.9)';
+      c.lineWidth = lw;
       c.stroke();
     }
     c.restore();
@@ -463,18 +490,57 @@ export class SceneRenderer {
 
   private drawAim(aim: Aim | null) {
     if (!aim) return;
-    const { c, P } = this;
-    const h = aim.hero, p = this.g.S.pads[h.pad!], len = Math.hypot(aim.dx, aim.dy);
+    const { c, P, g } = this;
+    const h = aim.hero, p = g.S.pads[h.pad!], len = Math.hypot(aim.dx, aim.dy);
     if (len < 4) return;
-    const ux = aim.dx / len, uy = aim.dy / len, L = len * 2.4;
-    const [x0, y0] = P(p.x + ux * 10, p.y + uy * 10, 2), [x1, y1] = P(p.x + ux * L, p.y + uy * L, 2);
+    const pr = g.predict(h, aim.dx, aim.dy);
+    if (pr.path.length < 2) return;
+    // thick enough to read on a phone at any zoom: at least ~4 screen pixels
+    const lw = Math.max(2.4, 4 / this.cam.zoom);
+    const pts = pr.path.map(([x, y]) => P(x, y, 2));
     c.save();
     c.lineCap = 'round';
-    c.strokeStyle = INK; c.lineWidth = 3.4; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
-    c.strokeStyle = h.def.col; c.lineWidth = 2; c.stroke();
-    const a = Math.atan2(y1 - y0, x1 - x0);
-    pth(c, [[x1 + Math.cos(a) * 5, y1 + Math.sin(a) * 5], [x1 + Math.cos(a + 2.4) * 5, y1 + Math.sin(a + 2.4) * 5], [x1 + Math.cos(a - 2.4) * 5, y1 + Math.sin(a - 2.4) * 5]]);
-    fs(c, h.def.col, 1);
+    c.lineJoin = 'round';
+    c.beginPath();
+    pts.forEach(([x, y], k) => (k ? c.lineTo(x, y) : c.moveTo(x, y)));
+    c.strokeStyle = INK;
+    c.lineWidth = lw + 2.2;
+    c.stroke();
+    c.setLineDash([lw * 2.2, lw * 1.4]);
+    c.lineDashOffset = reduce ? 0 : -this.t * 20;
+    c.strokeStyle = h.def.col;
+    c.lineWidth = lw;
+    c.stroke();
+    c.setLineDash([]);
+    for (const [bx, by] of pr.bounces) {
+      const [sx, sy] = P(bx, by, 2);
+      circ(c, sx, sy, lw * 1.1);
+      c.fillStyle = '#fff';
+      c.fill();
+      c.strokeStyle = INK;
+      c.lineWidth = 1.2;
+      c.stroke();
+    }
+    // where it ends: a ghost of the disc, or a target ring on the mob it would hit
+    const [ex, ey] = pr.path[pr.path.length - 1];
+    if (pr.hit) {
+      const [mx, my] = P(pr.hit.x, pr.hit.y);
+      const pulse = reduce ? 1 : 1 + Math.sin(this.t * 8) * 0.08;
+      ell(c, mx, my, (pr.hit.r * 1.27 + 4) * pulse, (pr.hit.r * 0.64 + 2) * pulse);
+      c.strokeStyle = '#fff';
+      c.lineWidth = lw * 0.7;
+      c.stroke();
+    } else {
+      const [sx, sy] = P(ex, ey, 1);
+      ell(c, sx, sy, h.def.r * 1.27, h.def.r * 0.64);
+      c.globalAlpha = 0.55;
+      c.fillStyle = h.def.col;
+      c.fill();
+      c.globalAlpha = 1;
+      c.strokeStyle = INK;
+      c.lineWidth = 1.2;
+      c.stroke();
+    }
     c.restore();
     const [px, py] = P(p.x, p.y), pw = Math.round((len / 60) * 5);
     for (let k = 0; k < 5; k++) { rr(c, px - 11 + k * 4.6, py + 7, 3.6, 2.6, 1); fs(c, k < pw ? h.def.col : '#2a1f18', 0.6); }

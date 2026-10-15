@@ -143,6 +143,47 @@ export class Game {
     this.onChange();
   }
 
+  /**
+   * Where a throw with pull-back (dx, dy) would roll, ignoring other discs: path points, the bounce points along it,
+   * and the mob it would hit first. Stops after `maxBounces` bounces so the preview helps aim without solving the shot.
+   */
+  predict(h: HeroState, dx: number, dy: number, maxBounces = 2) {
+    const S = this.S, L = Math.hypot(dx, dy), path: [number, number][] = [], bounces: [number, number][] = [];
+    if (h.pad === null || L < 4) return { path, bounces, hit: null as Mob | null };
+    const p = S.pads[h.pad], s = (270 * this.stat(h, 'pw')) / 60, mu = S.biome.mu, dt = 1 / 60;
+    const d = { x: p.x + (dx / L) * 6, y: p.y + (dy / L) * 6, vx: dx * s, vy: dy * s, r: h.def.r, e: Math.min(0.99, this.stat(h, 'e')) } as Disc;
+    const boxes = S.blocks.concat(S.rock);
+    path.push([d.x, d.y]);
+    for (let k = 0; k < 600; k++) {
+      const v = Math.hypot(d.vx, d.vy);
+      if (v < 8) break;
+      const nv = Math.max(0, v - mu * h.def.fr * dt);
+      d.vx *= nv / v; d.vy *= nv / v;
+      // sub-steps keep fast discs from tunnelling through a one-tile block
+      for (let sub = 0; sub < 4; sub++) {
+        d.x += (d.vx * dt) / 4; d.y += (d.vy * dt) / 4;
+        let hitWall = false;
+        if (d.x < d.r) { d.x = d.r; d.vx = -d.vx * d.e; hitWall = true; }
+        if (d.y < d.r) { d.y = d.r; d.vy = -d.vy * d.e; hitWall = true; }
+        if (d.x > S.Wx - d.r) { d.x = S.Wx - d.r; d.vx = -d.vx * d.e; hitWall = true; }
+        if (d.y > S.Wy - d.r) { d.y = S.Wy - d.r; d.vy = -d.vy * d.e; hitWall = true; }
+        for (const b of boxes) if (this.bounceBox(d, b) > 0) hitWall = true;
+        for (const n of S.nodes) if (n.left > 0 && this.bounceStatic(d, n) > 0) hitWall = true;
+        const m = S.mobs.find(o => o.hp > 0 && Math.hypot(d.x - o.x, d.y - o.y) < d.r + o.r);
+        if (m) { path.push([d.x, d.y]); return { path, bounces, hit: m }; }
+        if (S.pits.some(o => Math.hypot(d.x - o.x, d.y - o.y) < o.r - 2)) { path.push([d.x, d.y]); return { path, bounces, hit: null }; }
+        if (hitWall) {
+          bounces.push([d.x, d.y]);
+          path.push([d.x, d.y]);
+          if (bounces.length > maxBounces) return { path, bounces, hit: null };
+        }
+      }
+      if (k % 3 === 0) path.push([d.x, d.y]);
+    }
+    path.push([d.x, d.y]);
+    return { path, bounces, hit: null as Mob | null };
+  }
+
   /** Cost of the next extra disc, or 0 when the hero already has the most. */
   discCost(h: HeroState) {
     return h.discs < HAND_MAX ? HAND_COST[h.discs - HAND_START] : 0;

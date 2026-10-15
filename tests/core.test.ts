@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Camera } from '../src/camera';
-import { HAND_MAX, HAND_START } from '../src/data';
+import { HAND_MAX, HAND_START, HEROES, TILE } from '../src/data';
 import { Game } from '../src/game';
 import { clearOfRock, floorAt, generate, isFloor } from '../src/room';
 import { FLOORS, LAYERS, genFloor, newRun } from '../src/run';
@@ -116,5 +116,23 @@ describe('placement and discs', () => {
     expect(h.discs).toBe(HAND_MAX);
     expect(h.hand).toBe(HAND_MAX);
     expect(h.ore).toBe(100 - 4 - 6);
+  });
+});
+
+describe('discs and aiming', () => {
+  it('every disc fits through a one-tile gap between blocks', () => {
+    for (const d of HEROES) expect(d.r * 2).toBeLessThan(TILE - 2);
+  });
+
+  it('predicts a path that starts at the rune and heads where the throw points', () => {
+    const g = new Game();
+    g.loadRoom({ seed: 11, depth: 2, floor: 0, type: 'fight' });
+    g.startFight();
+    const h = g.hero, p = g.S.pads[h.pad!];
+    const cx = g.S.Wx / 2 - p.x, cy = g.S.Wy / 2 - p.y, L = Math.hypot(cx, cy);
+    const pr = g.predict(h, (cx / L) * 60, (cy / L) * 60);
+    expect(pr.path.length).toBeGreaterThan(2);
+    const [x1, y1] = pr.path[1];
+    expect((x1 - p.x) * cx + (y1 - p.y) * cy).toBeGreaterThan(0);
   });
 });
