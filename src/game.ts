@@ -2,7 +2,7 @@
 // Rendering and input live elsewhere; this module only changes state.
 
 import { AB_COST, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, TILE, UPS, UP_COST, isRanged, type HeroDef, type MobAct, type StatKey } from './data';
-import { clearOfRock, generate, hazKey, isFloor, newMob, type Intent, type Layout, type Mob, type RoomSpec } from './room';
+import { clearOfRock, generate, hazKey, isFloor, muAt, newMob, type Intent, type Layout, type Mob, type RoomSpec } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
 
@@ -227,14 +227,14 @@ export class Game {
   predict(h: HeroState, dx: number, dy: number, maxBounces = 2) {
     const S = this.S, L = Math.hypot(dx, dy), path: [number, number][] = [], bounces: [number, number][] = [];
     if (h.pad === null || L < 4) return { path, bounces, hit: null as Mob | null };
-    const p = S.pads[h.pad], s = this.power(h), mu = S.biome.mu, dt = 1 / 60;
+    const p = S.pads[h.pad], s = this.power(h), dt = 1 / 60;
     const d = { x: p.x + (dx / L) * 6, y: p.y + (dy / L) * 6, vx: dx * s, vy: dy * s, r: h.def.r, e: Math.min(0.99, this.stat(h, 'e')) } as Disc;
     const boxes = S.blocks.concat(S.rock);
     path.push([d.x, d.y]);
     for (let k = 0; k < 600; k++) {
       const v = Math.hypot(d.vx, d.vy);
       if (v < 8) break;
-      const nv = Math.max(0, v - mu * h.def.fr * dt);
+      const nv = Math.max(0, v - muAt(S, d.x, d.y) * h.def.fr * dt);
       d.vx *= nv / v; d.vy *= nv / v;
       // sub-steps keep fast discs from tunnelling through a one-tile block
       for (let sub = 0; sub < 4; sub++) {
@@ -492,11 +492,11 @@ export class Game {
   }
 
   step(dt: number) {
-    const S = this.S, mu = S.biome.mu;
+    const S = this.S;
     let changed = false;
     for (const d of this.bodies()) {
       const v = Math.hypot(d.vx, d.vy);
-      if (v > 0) { const nv = Math.max(0, v - mu * d.fr * dt); d.vx *= nv / v; d.vy *= nv / v; d.spin += nv * dt * 0.08; }
+      if (v > 0) { const nv = Math.max(0, v - muAt(S, d.x, d.y) * d.fr * dt); d.vx *= nv / v; d.vy *= nv / v; d.spin += nv * dt * 0.08; }
       d.x += d.vx * dt;
       d.y += d.vy * dt;
       if (d.x < d.r) { d.x = d.r; d.vx = -d.vx * d.e; d.bounces++; }
@@ -705,10 +705,10 @@ export class Game {
    * locally so motion stays smooth.
    */
   private updateRemote(dt: number) {
-    const S = this.S, mu = S.biome.mu;
+    const S = this.S;
     for (const d of this.bodies()) {
       const v = Math.hypot(d.vx, d.vy);
-      if (v > 0) { const nv = Math.max(0, v - mu * d.fr * dt); d.vx *= nv / v; d.vy *= nv / v; d.spin += nv * dt * 0.08; }
+      if (v > 0) { const nv = Math.max(0, v - muAt(S, d.x, d.y) * d.fr * dt); d.vx *= nv / v; d.vy *= nv / v; d.spin += nv * dt * 0.08; }
       d.x = Math.max(d.r, Math.min(S.Wx - d.r, d.x + d.vx * dt));
       d.y = Math.max(d.r, Math.min(S.Wy - d.r, d.y + d.vy * dt));
     }

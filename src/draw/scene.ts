@@ -215,6 +215,28 @@ export class SceneRenderer {
     c.strokeStyle = 'rgba(255,255,255,.14)';
     c.lineWidth = 0.7;
     c.stroke();
+    // ice patches: whole tiles glazed over, joints hidden under the ice, a glint that drifts across
+    const iced = cells.filter(([i, j]) => S.ice[j * S.gw + i]);
+    if (iced.length) {
+      c.beginPath();
+      for (const [i, j] of iced) quad(i * TILE - 0.2, j * TILE - 0.2, (i + 1) * TILE + 0.2, (j + 1) * TILE + 0.2);
+      c.fillStyle = '#b9dbe6';
+      c.fill();
+      c.beginPath();
+      for (const [i, j] of iced) if ((i * 5 + j * 3) % 4 === 0) quad(i * TILE + 2, j * TILE + 2, (i + 1) * TILE - 2, (j + 1) * TILE - 2);
+      c.fillStyle = '#cde8f0';
+      c.fill();
+      c.strokeStyle = 'rgba(255,255,255,.75)';
+      c.lineWidth = 0.8;
+      c.beginPath();
+      for (const [i, j] of iced) {
+        const ph = reduce ? 0.5 : (t * 0.15 + (i + j) * 0.09) % 1;
+        if ((i * 3 + j * 7) % 3) continue;
+        const u = 3 + ph * 8;
+        c.moveTo(...P(i * TILE + u, j * TILE + 4)); c.lineTo(...P(i * TILE + u + 4, j * TILE + 8));
+      }
+      c.stroke();
+    }
     for (const [i, j] of hazard) {
       const x0 = i * TILE + gap, y0 = j * TILE + gap, x1 = (i + 1) * TILE - gap, y1 = (j + 1) * TILE - gap;
       const q: Pt[] = [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)];
@@ -360,7 +382,36 @@ export class SceneRenderer {
 
   // ------------------------------------------------------------ props
 
+  /** An icicle growing out of the floor: a frozen mound filling its tile with a few spikes on top. */
+  private drawIcicle(b: Block) {
+    const { c, P } = this;
+    const fp: Pt[] = [P(b.x0, b.y0), P(b.x1, b.y0), P(b.x1, b.y1), P(b.x0, b.y1)];
+    pth(c, fp.map(([x, y]) => [x + 4, y + 2.5] as Pt));
+    c.fillStyle = 'rgba(15,30,40,.35)';
+    c.fill();
+    const mound: Pt[] = [P(b.x0 + 0.5, b.y0 + 0.5, 3), P(b.x1 - 0.5, b.y0 + 0.5, 3), P(b.x1 - 0.5, b.y1 - 0.5, 3), P(b.x0 + 0.5, b.y1 - 0.5, 3)];
+    pth(c, fp);
+    fs(c, '#8fc3d6', 1);
+    pth(c, mound);
+    fs(c, '#cfeaf3', 0.8);
+    // spikes back to front so the near ones overlap the far ones
+    const tall = 26 + (b.v % 3) * 4;
+    const spikes: [number, number, number, number][] = [
+      [5, 5, tall * 0.62, 3.2], [11.5, 4.5, tall * 0.5, 2.6], [4, 11.5, tall * 0.45, 2.6], [8.5, 8.5, tall, 4.4], [12, 11.5, tall * 0.7, 3.2],
+    ];
+    spikes.sort((a, z) => this.cam.depth(b.x0 + a[0], b.y0 + a[1]) - this.cam.depth(b.x0 + z[0], b.y0 + z[1]));
+    for (const [ox, oy, h, r] of spikes) {
+      const [x, y] = P(b.x0 + ox, b.y0 + oy, 2), [tx, ty] = P(b.x0 + ox, b.y0 + oy, h);
+      pth(c, [[x - r, y], [tx, ty], [x + r, y]]);
+      fs(c, lg(c, x - r, 0, x + r, 0, '#eefaff', '#6fa9c2'), 0.9);
+      c.strokeStyle = 'rgba(255,255,255,.8)';
+      c.lineWidth = 0.6;
+      c.beginPath(); c.moveTo(x - r * 0.4, y - 1); c.lineTo(tx - 0.3, ty + 2); c.stroke();
+    }
+  }
+
   private drawBlock(b: Block) {
+    if (b.ice) return this.drawIcicle(b);
     const { c, P, cam } = this;
     const B = this.g.S.biome, H = 24;
     const fp: Pt[] = [P(b.x0, b.y0), P(b.x1, b.y0), P(b.x1, b.y1), P(b.x0, b.y1)];

@@ -3,7 +3,7 @@ import { Camera } from '../src/camera';
 import { HAND_MAX, HAND_START, HEROES, MOBS, TILE } from '../src/data';
 import { Game, newParty, type Action } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { clearOfRock, floorAt, generate, isFloor, newMob, tierOf } from '../src/room';
+import { clearOfRock, floorAt, generate, isFloor, muAt, newMob, tierOf } from '../src/room';
 import { FLOORS, LAYERS, genFloor, newRun } from '../src/run';
 
 describe('room generator', () => {
@@ -256,6 +256,26 @@ describe('online play', () => {
   });
 });
 
+describe('ice caves', () => {
+  it('freeze the floor in patches and grow icicles that block like stone', () => {
+    let iced = 0, total = 0, icicles = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const L = generate({ seed, depth: 10, floor: 1, type: 'fight' });
+      L.floor.forEach((v, k) => { total += v; iced += v && L.ice[k]; });
+      icicles += L.blocks.filter(b => b.ice).length;
+      for (const b of L.blocks) expect(b.x1 - b.x0).toBe(TILE);
+      const k = L.ice.indexOf(1), x = (k % L.gw) * TILE + 8, y = Math.floor(k / L.gw) * TILE + 8;
+      expect(muAt(L, x, y)).toBeLessThan(L.biome.mu);
+    }
+    expect(iced / total).toBeGreaterThan(0.2);
+    expect(iced / total).toBeLessThan(0.6);
+    expect(icicles).toBeGreaterThan(20);
+    const stone = generate({ seed: 3, depth: 2, floor: 0, type: 'fight' });
+    expect(stone.ice.every(v => v === 0)).toBe(true);
+    expect(stone.blocks.some(b => b.ice)).toBe(false);
+  });
+});
+
 describe('floor casts and enemy abilities', () => {
   it('fills each floor with its own enemies and its own boss', () => {
     const seen = [new Set<string>(), new Set<string>(), new Set<string>()];
@@ -332,11 +352,12 @@ describe('every floor plays out', () => {
       for (const h of g.party) h.hp = h.max = 999;
       g.startFight();
       const seen = new Set<string>();
-      for (let turn = 0; turn < 7 && g.S.phase !== 'over'; turn++) {
+      const over = () => g.S.phase === 'over';
+      for (let turn = 0; turn < 7 && !over(); turn++) {
         for (const m of g.liveMobs()) if (m.intent) seen.add(m.intent.t);
         const t = g.S.turn;
         for (const h of g.party) g.throwDisc(h, -30, -40);
-        for (let k = 0; k < 2000 && g.S.turn === t && g.S.phase !== 'over'; k++) g.update(1 / 60);
+        for (let k = 0; k < 2000 && g.S.turn === t && !over(); k++) g.update(1 / 60);
       }
       if (type === 'boss') expect([...seen].some(t => ['slam', 'summon', 'heat'].includes(t))).toBe(true);
     }
