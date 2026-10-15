@@ -1,6 +1,6 @@
 // Procedural room generator. Pure: the same RoomSpec always yields the same layout.
 
-import { BIOMES, MOBS, NODES, TILE, type Biome, type MobKind, type NodeKind, type RoomType } from './data';
+import { BIOMES, MOB_HP_MUL, MOBS, NODES, TILE, type Biome, type MobKind, type NodeKind, type RoomType } from './data';
 import { makeRng } from './rng';
 
 export interface RoomSpec {
@@ -268,8 +268,7 @@ export function generate(spec: RoomSpec): Layout {
     if (q) { nodes.push({ k, ...NODES[k], x: q[0], y: q[1], left: NODES[k].ch, hit: 0 }); objs.push({ x: q[0], y: q[1], r: NODES[k].r }); }
   }
 
-  // every enemy is in the room from the start (no reinforcements), so they are tougher to make up for it
-  const hpMul = 1.6 * (1 + 0.09 * (d - 1)), dmgAdd = Math.floor((d - 1) / 5);
+  const hpMul = MOB_HP_MUL * (1 + 0.09 * (d - 1)), dmgAdd = Math.floor((d - 1) / 5);
   const pool: MobKind[] = spec.floor === 0 ? ['skel', 'skel', 'archer', 'slime'] : spec.floor === 1 ? ['skel', 'archer', 'slime', 'slime', 'archer'] : ['skel', 'archer', 'slime', 'golem'];
   let mk: MobKind[];
   if (type === 'treasure') mk = ['skel', 'archer'];

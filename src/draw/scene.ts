@@ -7,6 +7,7 @@ import type { Disc, Game, HeroState } from '../game';
 import { floorAt, hazKey, isFloor, type Block, type Edge, type Mob, type ResNode } from '../room';
 import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure } from './figures';
 import { circ, ell, fs, lg, mix, pth, rr, type Ctx, type Pt } from './util';
+import { settings } from '../settings';
 
 export interface Aim { hero: HeroState; dx: number; dy: number }
 /** A hero dragged to another rune: pointer position in screen pixels and the rune under it. */
@@ -286,7 +287,7 @@ export class SceneRenderer {
   private drawTelegraph() {
     const { c, P, g } = this;
     const S = g.S;
-    if (S.phase !== 'throw' && S.phase !== 'place') return;
+    if ((S.phase !== 'throw' && S.phase !== 'place') || !settings.attackLines) return;
     // drawn over the figures, faint, so it never hides them but is never hidden by them either
     c.save();
     c.lineCap = 'round';
@@ -294,7 +295,7 @@ export class SceneRenderer {
     for (const m of g.liveMobs()) {
       const it = m.intent;
       if (!it || it.t !== 'hit') continue;
-      const hero = S.heroes[it.hero];
+      const hero = g.heroOf(it.hero);
       if (hero.pad === null) continue;
       const p = S.pads[hero.pad], [ax, ay] = P(m.x, m.y, 8), [bx, by] = P(p.x, p.y, 8);
       c.beginPath();
@@ -454,7 +455,7 @@ export class SceneRenderer {
   private drawMob(m: Mob) {
     const { c, P, g } = this;
     const S = g.S, [x, y] = P(m.x, m.y);
-    const it = m.intent, tgt = it && S.heroes[it.hero].pad !== null ? S.pads[S.heroes[it.hero].pad!] : { x: S.Wx, y: S.Wy };
+    const it = m.intent, th = it ? g.heroOf(it.hero) : null, tgt = th && th.pad !== null ? S.pads[th.pad] : { x: S.Wx, y: S.Wy };
     drawMiniature(c, {
       key: m.k, x, y, baseR: m.r, baseCol: ENEMY_BASE, fig: MOBS[m.k].fig,
       faceRight: this.faceRight(m.x, m.y, tgt.x, tgt.y), flash: m.flash > 0, hop: m.hop, alpha: m.dead ? Math.max(0, 1 - m.dead) : 1,
@@ -478,7 +479,7 @@ export class SceneRenderer {
       if (it.t === 'hit') {
         pth(c, [[bx, by], [bx + 11, by], [bx + 11, by + 6], [bx + 5.5, by + 11], [bx, by + 6]]); fs(c, '#b8323f', 0.9);
         c.font = '600 7.5px Oswald, sans-serif'; c.textAlign = 'center'; c.fillStyle = '#fff'; c.fillText(String(it.dmg), bx + 5.5, by + 7);
-        circ(c, bx + 12, by + 1, 2); fs(c, S.heroes[it.hero].def.col, 0.6);
+        circ(c, bx + 12, by + 1, 2); fs(c, g.heroOf(it.hero).def.col, 0.6);
       } else {
         rr(c, bx, by + 1, 11, 7, 2); fs(c, '#d6cfbd', 0.8);
         c.font = '600 6.5px Oswald, sans-serif'; c.textAlign = 'center'; c.fillStyle = INK; c.fillText('→', bx + 5.5, by + 6.7);
@@ -495,7 +496,7 @@ export class SceneRenderer {
     if (len < 4) return;
     // one straight line up to the first wall, block or mob; ricochets are left for the player to judge
     const pr = g.predict(h, aim.dx, aim.dy, 0);
-    if (pr.path.length < 2) return;
+    if (pr.path.length < 2 || !settings.aimLine) return;
     // thick enough to read on a phone at any zoom: at least ~4 screen pixels
     const lw = Math.max(2.4, 4 / this.cam.zoom);
     const [x0, y0] = P(...pr.path[0], 2), [x1, y1] = P(...pr.path[pr.path.length - 1], 2);

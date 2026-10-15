@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Camera } from '../src/camera';
 import { HAND_MAX, HAND_START, HEROES, MOBS, TILE } from '../src/data';
-import { Game } from '../src/game';
+import { Game, newParty, type Action } from '../src/game';
+import { applySnapshot, snapshot } from '../src/sync';
 import { clearOfRock, floorAt, generate, isFloor } from '../src/room';
 import { FLOORS, LAYERS, genFloor, newRun } from '../src/run';
 
@@ -152,5 +153,45 @@ describe('discs and aiming', () => {
     expect(pr.path.length).toBeGreaterThan(2);
     const [x1, y1] = pr.path[1];
     expect((x1 - p.x) * cx + (y1 - p.y) * cy).toBeGreaterThan(0);
+  });
+});
+
+describe('online play', () => {
+  const pair = () => {
+    const host = new Game(), cli = new Game();
+    host.party = newParty([0, 2]);
+    host.online = true;
+    host.loadRoom({ seed: 21, depth: 2, floor: 0, type: 'fight' });
+    const sent: Action[] = [];
+    cli.online = true;
+    cli.send = a => sent.push(a);
+    cli.canControl = h => h.i === 2;
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    return { host, cli, sent };
+  };
+
+  it('mirrors the host room and party on a client', () => {
+    const { host, cli } = pair();
+    expect(cli.party.map(h => h.i)).toEqual([0, 2]);
+    expect(cli.S.spec).toEqual(host.S.spec);
+    expect(cli.S.mobs.map(m => m.hp)).toEqual(host.S.mobs.map(m => m.hp));
+    expect(cli.act).toBe(2);
+  });
+
+  it('sends client actions to the host instead of applying them', () => {
+    const { host, cli, sent } = pair();
+    cli.startFight();
+    expect(cli.S.phase).toBe('place');
+    expect(sent).toEqual([{ k: 'ready', h: 2 }]);
+    host.perform(sent[0]);
+    expect(host.S.phase).toBe('place');
+    host.startFight(host.heroOf(0));
+    expect(host.S.phase).toBe('throw');
+  });
+
+  it('lets a client control only its own hero', () => {
+    const { cli } = pair();
+    cli.select(0);
+    expect(cli.act).toBe(2);
   });
 });
