@@ -382,31 +382,52 @@ export class SceneRenderer {
 
   // ------------------------------------------------------------ props
 
-  /** An icicle growing out of the floor: a frozen mound filling its tile with a few spikes on top. */
+  /** An icicle growing straight out of the floor: a tall cluster or a couple of stubs, cracking as it is hit, shards once broken. */
   private drawIcicle(b: Block) {
     const { c, P } = this;
-    const fp: Pt[] = [P(b.x0, b.y0), P(b.x1, b.y0), P(b.x1, b.y1), P(b.x0, b.y1)];
-    pth(c, fp.map(([x, y]) => [x + 4, y + 2.5] as Pt));
-    c.fillStyle = 'rgba(15,30,40,.35)';
+    const hp = b.hp!, max = b.max!;
+    if (hp <= 0) {
+      for (const [ox, oy, r] of [[4, 6, 2.2], [10, 4, 1.6], [7, 11, 2.6], [12, 12, 1.8], [3, 13, 1.4]]) {
+        const [x, y] = P(b.x0 + ox, b.y0 + oy);
+        pth(c, [[x - r, y], [x, y - r * 0.9], [x + r, y], [x, y + r * 0.5]]);
+        fs(c, '#cfeaf3', 0.6);
+      }
+      return;
+    }
+    const [cx, cy] = P(b.x0 + 8, b.y0 + 8);
+    ell(c, cx + 3, cy + 2, 10, 4.5);
+    c.fillStyle = 'rgba(15,30,40,.3)';
     c.fill();
-    const mound: Pt[] = [P(b.x0 + 0.5, b.y0 + 0.5, 3), P(b.x1 - 0.5, b.y0 + 0.5, 3), P(b.x1 - 0.5, b.y1 - 0.5, 3), P(b.x0 + 0.5, b.y1 - 0.5, 3)];
-    pth(c, fp);
-    fs(c, '#8fc3d6', 1);
-    pth(c, mound);
-    fs(c, '#cfeaf3', 0.8);
-    // spikes back to front so the near ones overlap the far ones
-    const tall = 26 + (b.v % 3) * 4;
-    const spikes: [number, number, number, number][] = [
-      [5, 5, tall * 0.62, 3.2], [11.5, 4.5, tall * 0.5, 2.6], [4, 11.5, tall * 0.45, 2.6], [8.5, 8.5, tall, 4.4], [12, 11.5, tall * 0.7, 3.2],
-    ];
-    spikes.sort((a, z) => this.cam.depth(b.x0 + a[0], b.y0 + a[1]) - this.cam.depth(b.x0 + z[0], b.y0 + z[1]));
-    for (const [ox, oy, h, r] of spikes) {
-      const [x, y] = P(b.x0 + ox, b.y0 + oy, 2), [tx, ty] = P(b.x0 + ox, b.y0 + oy, h);
+    const tall = (b.big ? 30 : 14) + (b.v % 3) * 3;
+    const spikes: [number, number, number, number][] = b.big
+      ? [[4.5, 4.5, 0.6, 3.2], [11.5, 4, 0.48, 2.7], [3.5, 11.5, 0.44, 2.7], [8.5, 8.5, 1, 4.6], [12, 11.5, 0.7, 3.4], [7, 13, 0.35, 2.2]]
+      : [[6, 7, 1, 3.4], [10.5, 10, 0.65, 2.6], [5, 11.5, 0.4, 2]];
+    spikes.sort((p, q) => this.cam.depth(b.x0 + p[0], b.y0 + p[1]) - this.cam.depth(b.x0 + q[0], b.y0 + q[1]));
+    // frost where the ice meets the floor
+    for (const [ox, oy, , r] of spikes) {
+      const [x, y] = P(b.x0 + ox, b.y0 + oy);
+      ell(c, x, y, r * 1.5, r * 0.65);
+      c.fillStyle = 'rgba(214,240,250,.75)';
+      c.fill();
+    }
+    const dmg = 1 - hp / max;
+    for (const [ox, oy, k, r] of spikes) {
+      const [x, y] = P(b.x0 + ox, b.y0 + oy), [tx, ty] = P(b.x0 + ox, b.y0 + oy, tall * k);
       pth(c, [[x - r, y], [tx, ty], [x + r, y]]);
       fs(c, lg(c, x - r, 0, x + r, 0, '#eefaff', '#6fa9c2'), 0.9);
       c.strokeStyle = 'rgba(255,255,255,.8)';
       c.lineWidth = 0.6;
       c.beginPath(); c.moveTo(x - r * 0.4, y - 1); c.lineTo(tx - 0.3, ty + 2); c.stroke();
+      if (dmg > 0 && k > 0.6) {
+        // cracks spread up the big spikes as they take hits
+        const ys = (u: number) => y + (ty - y) * u;
+        c.strokeStyle = 'rgba(30,60,80,.75)';
+        c.lineWidth = 0.7;
+        c.beginPath();
+        c.moveTo(x - r * 0.5, ys(0.15)); c.lineTo(x + r * 0.2, ys(0.3)); c.lineTo(x - r * 0.1, ys(0.15 + dmg * 0.5));
+        if (dmg > 0.5) { c.moveTo(x + r * 0.6, ys(0.1)); c.lineTo(x + r * 0.1, ys(0.25)); c.lineTo(x + r * 0.3, ys(0.45)); }
+        c.stroke();
+      }
     }
   }
 

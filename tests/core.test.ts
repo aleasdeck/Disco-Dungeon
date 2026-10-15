@@ -274,6 +274,30 @@ describe('ice caves', () => {
     expect(stone.ice.every(v => v === 0)).toBe(true);
     expect(stone.blocks.some(b => b.ice)).toBe(false);
   });
+
+  it('icicles come big and small, chip under hits, shatter and stop blocking', () => {
+    const all = Array.from({ length: 20 }, (_, k) => generate({ seed: k + 1, depth: 10, floor: 1, type: 'fight' }).blocks.filter(b => b.ice)).flat();
+    expect(all.some(b => b.big)).toBe(true);
+    expect(all.some(b => !b.big)).toBe(true);
+    const g = new Game();
+    let seed = 1;
+    while (!generate({ seed, depth: 10, floor: 1, type: 'fight' }).blocks.some(o => o.ice && o.big)) seed++;
+    g.loadRoom({ seed, depth: 10, floor: 1, type: 'fight' });
+    g.startFight();
+    const b = g.S.blocks.find(o => o.ice && o.big)!;
+    let hits = 0;
+    while (b.hp! > 0 && hits < 10) {
+      g.S.discs = [{ hero: g.hero, x: b.x0 - 6, y: (b.y0 + b.y1) / 2, vx: 260, vy: 0, r: 5, m: 4, e: 0.6, fr: 1, fall: 0, gone: false, charged: false, bounces: 0, spin: 0 }];
+      g.step(1 / 60);
+      hits++;
+    }
+    expect(hits).toBeGreaterThan(1);
+    expect(b.hp).toBe(0);
+    expect(g.inBlock((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, 2)).toBe(false);
+    const cli = new Game();
+    applySnapshot(cli, snapshot(g));
+    expect(cli.S.blocks.find(o => o.x0 === b.x0 && o.y0 === b.y0 && o.ice)!.hp).toBe(0);
+  });
 });
 
 describe('floor casts and enemy abilities', () => {
