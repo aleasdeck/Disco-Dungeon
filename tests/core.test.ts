@@ -136,6 +136,18 @@ describe('placement and discs', () => {
     expect(h.hand).toBe(HAND_MAX);
     expect(g.bank.ore).toBe(100 - 4 - 6);
   });
+  it('ends the fight the moment the last enemy falls, with throws still left', () => {
+    const g = fresh();
+    let won: boolean | null = null;
+    g.onRoomEnd = w => { won = w; };
+    g.startFight();
+    g.throwDisc(g.party[0], 1, 0);
+    for (const m of g.S.mobs) m.hp = 0;
+    g.update(1 / 60);
+    expect(g.S.phase).toBe('over');
+    expect(won).toBe(true);
+    expect(g.party.some(h => h.hand > 0)).toBe(true);
+  });
 });
 
 describe('discs and aiming', () => {
@@ -187,6 +199,19 @@ describe('online play', () => {
     expect(host.S.phase).toBe('place');
     host.startFight(host.heroOf(0));
     expect(host.S.phase).toBe('throw');
+  });
+
+  it('lets a host reopen a saved game and play on exactly as before', () => {
+    const { host } = pair();
+    host.startFight(host.heroOf(0));
+    host.startFight(host.heroOf(2));
+    host.throwDisc(host.heroOf(0), 0.3, -1);
+    for (let k = 0; k < 30; k++) host.update(1 / 60);
+    const back = new Game();
+    applySnapshot(back, JSON.parse(JSON.stringify(snapshot(host))));
+    for (const g of [host, back]) { g.throwDisc(g.heroOf(2), -0.4, -1); for (let k = 0; k < 600; k++) g.update(1 / 60); }
+    const plain = (g: Game) => { const s = snapshot(g); return JSON.stringify({ ...s, floats: [], sparks: [] }); };
+    expect(plain(back)).toBe(plain(host));
   });
 
   it('lets a client control only its own hero', () => {
