@@ -11,6 +11,7 @@ import { Hud } from './ui';
 import { MapView } from './mapview';
 import { SceneRenderer } from './draw/scene';
 import { loadSprites } from './assets';
+import { clearSeat, loadHost, loadSeat, newKey, saveHost, saveSeat, type HostSave } from './resume';
 import { FLOORS, LAYERS, depthOf, newRun, nodeById, restRoom, type Run } from './run';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -104,15 +105,34 @@ const net = new Net();
 let players: Player[] = [];
 let started = false;
 /** Host: something changed since the last snapshot. */
-let dirty = false, lastSnap = 0;
+let dirty = false, lastSnap = 0, lastSave = 0;
+/** This browser's secret for taking its seat back after a drop. */
+let myKey = '';
+/** Host: what the clients' waiting screen shows now, for players who rejoin. */
+let lastScreen = { title: '', text: '' };
+/** The room's result screen while it shows, so a reopened room can show it again. */
+let ending: HostSave['ending'] = null;
+/** Client: bumped to cancel a reconnect in progress. */
+let reconnecting = 0;
 
 const playerName = () => settings.name || 'Игрок';
 const ownerOf = (i: number) => players.find(p => p.hero === i)?.id ?? 'host';
+/** The players as the clients see them: without anyone's rejoin key. */
+const pub = () => players.map(({ key: _key, ...p }) => p);
 
 /** The waiting screen online clients see while the host is on the map or reading a room's result. */
 function screen(title: string, text = '') {
-  if (mode === 'host') net.broadcast({ t: 'screen', title, text });
-  if (mode === 'client') { $('waitScreen').hidden = !title; $('waitTitle').textContent = title; $('waitText').innerHTML = text; }
+  if (mode === 'host') { lastScreen = { title, text }; net.broadcast({ t: 'screen', title, text }); }
+  if (mode === 'client') wait(title, text);
+}
+
+/** Show or hide the waiting screen on this browser; `away` is for a lost connection, which the player may give up on. */
+function wait(title: string, text = '', away = false) {
+  $('waitScreen').hidden = !title;
+  $('waitTitle').textContent = title;
+  $('waitText').innerHTML = text;
+  $('waitNote').hidden = away || mode !== 'client';
+  $('waitLeave').hidden = !away;
 }
 
 function setOnline(m: Mode) {
@@ -140,7 +160,7 @@ function startRun(picks?: number[]) {
   // a quiet room behind the map so the screen is never empty
   game.loadRoom({ seed: run.seed, depth: 1, floor: 0, type: 'fight' });
   controls.fit();
-  $('roomEnd').hidden = true;
+  hideEnd();
   showMap(true);
   screen('Выбор комнаты', 'Хозяин комнаты смотрит на карту забега.');
 }
@@ -175,26 +195,33 @@ game.onChange = () => { hud.refresh(); dirty = true; };
 game.onRoomEnd = win => {
   const S = game.S, boss = S.spec.type === 'boss';
   const last = boss && run.floor === FLOORS - 1;
-  const done = (title: string, text: string, btn: string, go: () => void) => {
-    $('roomEnd').hidden = false;
-    $('endTitle').textContent = title;
-    $('endText').textContent = text;
-    $('endBtn').textContent = btn;
-    $('endBtn').onclick = go;
-    screen(title, text);
-  };
-  // online, a finished run sends everyone back to the lobby to pick heroes again
-  const again: [string, () => void] = mode === 'host' ? ['В лобби', backToLobby] : ['Новый забег', () => startRun()];
   setTimeout(() => {
-    if (!win) return done('Отряд пал', `Забег окончен на этаже ${run.floor + 1}, сложность ${S.spec.depth}.`, ...again);
-    if (last) return done('Забег пройден!', 'Король-в-короне повержен на последнем этаже.', ...again);
+    if (!win) return showEnd({ title: 'Отряд пал', text: `Забег окончен на этаже ${run.floor + 1}, сложность ${S.spec.depth}.`, kind: 'again' });
+    if (last) return showEnd({ title: 'Забег пройден!', text: 'Король-в-короне повержен на последнем этаже.', kind: 'again' });
     if (boss) run.floor++;
     choosing = true;
-    done(boss ? `Этаж ${run.floor} пройден` : 'Комната зачищена',
-      `Ходов: ${S.turn}. Пройдено комнат: ${run.path.reduce((a, p) => a + p.length, 0)} из ${FLOORS * LAYERS}.`,
-      'К карте', () => { $('roomEnd').hidden = true; showMap(true); screen('Выбор комнаты', 'Хозяин комнаты смотрит на карту забега.'); });
+    showEnd({ title: boss ? `Этаж ${run.floor} пройден` : 'Комната зачищена',
+      text: `Ходов: ${S.turn}. Пройдено комнат: ${run.path.reduce((a, p) => a + p.length, 0)} из ${FLOORS * LAYERS}.`, kind: 'map' });
   }, 900);
 };
+
+/** The result of a room: on to the map, or (the run is over) a new run; online that means back to the lobby. */
+function showEnd(e: NonNullable<HostSave['ending']>) {
+  ending = e;
+  $('roomEnd').hidden = false;
+  $('endTitle').textContent = e.title;
+  $('endText').textContent = e.text;
+  $('endBtn').textContent = e.kind === 'map' ? 'К карте' : mode === 'host' ? 'В лобби' : 'Новый забег';
+  $('endBtn').onclick = e.kind === 'map'
+    ? () => { hideEnd(); showMap(true); screen('Выбор комнаты', 'Хозяин комнаты смотрит на карту забега.'); }
+    : mode === 'host' ? backToLobby : () => startRun();
+  screen(e.title, e.text);
+}
+
+function hideEnd() {
+  ending = null;
+  $('roomEnd').hidden = true;
+}
 
 $('btnMap').addEventListener('click', () => showMap(true));
 $('mapClose').addEventListener('click', () => showMap(false));
@@ -225,17 +252,20 @@ $('pMenu').addEventListener('click', () => {
   if (game.online && !confirm('Выйти из сетевой игры?')) return;
   leaveOnline();
   showMap(false);
-  $('roomEnd').hidden = true;
+  hideEnd();
   openMenu();
 });
 
 // ------------------------------------------------------------ online
 
 function leaveOnline() {
+  reconnecting++;
+  if (mode === 'host') net.broadcast({ t: 'bye' });
   if (net.active) net.close();
+  clearSeat();
   players = [];
   started = false;
-  $('waitScreen').hidden = true;
+  wait('');
   if (mode !== 'solo') setOnline('menu');
 }
 
@@ -255,16 +285,16 @@ function pick(id: string, hero: number | null) {
   if (!p || started) return;
   if (hero !== null && players.some(o => o.hero === hero && o.id !== id)) return;
   p.hero = hero;
-  net.broadcast({ t: 'lobby', players });
+  net.broadcast({ t: 'lobby', players: pub() });
   lobbyView();
 }
 
 function backToLobby() {
   started = false;
-  $('roomEnd').hidden = true;
+  hideEnd();
   showMap(false);
   net.broadcast({ t: 'lobbyBack' });
-  net.broadcast({ t: 'lobby', players });
+  net.broadcast({ t: 'lobby', players: pub() });
   lobbyView();
   show('lobby');
 }
@@ -283,6 +313,8 @@ $('lobbyHost').addEventListener('click', async () => {
   players = [{ id: 'host', name: playerName(), hero: null }];
   started = false;
   setOnline('host');
+  myKey = newKey();
+  saveSeat({ code: net.code, key: myKey, host: true });
   lobbyView();
 });
 $('lobbyJoin').addEventListener('click', () => join($<HTMLInputElement>('lobbyCode').value.trim()));
@@ -294,70 +326,119 @@ $('lobbyCopy').addEventListener('click', () => {
 $('lobbyStartBtn').addEventListener('click', () => {
   if (!players.every(p => p.hero !== null)) return;
   started = true;
-  net.broadcast({ t: 'start', players });
+  net.broadcast({ t: 'start', players: pub() });
   setOnline('host');
   show(null);
   startRun(players.map(p => p.hero!).sort((a, b) => a - b));
 });
 
-async function join(code: string) {
+/** Join a room; `key` takes back a seat this browser had before a crash or reload. */
+async function join(code: string, key = newKey()) {
   if (code.length < 4) { lobbyStatus('Введи код комнаты.'); return; }
-  lobbyStatus('Подключаюсь…');
+  lobbyStatus(key === myKey ? 'Возвращаюсь в игру…' : 'Подключаюсь…');
   try {
     await net.joinRoom(code);
   } catch (e) {
     lobbyStatus((e as Error).message);
+    if (key === myKey) clearSeat();
     return;
   }
   lobbyStatus('');
   mode = 'client';
-  net.send({ t: 'hello', name: playerName() });
+  myKey = key;
+  saveSeat({ code: net.code, key, host: false });
+  net.send({ t: 'hello', name: playerName(), key });
 }
 
-net.onJoin = id => {
-  // three heroes, three seats; a game already under way takes no one new
-  if (started || players.length >= HEROES.length) { net.kick(id); return; }
-  players.push({ id, name: 'Игрок', hero: null });
-  net.broadcast({ t: 'lobby', players });
+/** Client: the host is gone; keep trying the same room for a while, since the host may be coming back too. */
+async function reconnect(code: string) {
+  const my = ++reconnecting, until = Date.now() + 120_000;
+  if (started) wait('Связь потеряна', 'Переподключаюсь к игре…', true);
+  else lobbyStatus('Связь потеряна. Переподключаюсь…');
+  while (Date.now() < until) {
+    try {
+      await net.joinRoom(code);
+      if (my !== reconnecting) { net.close(); return; }
+      net.send({ t: 'hello', name: playerName(), key: myKey });
+      if (!started) lobbyStatus('');
+      return;
+    } catch {
+      if (my !== reconnecting) return;
+      await new Promise(r => setTimeout(r, 2000));
+      if (my !== reconnecting) return;
+    }
+  }
+  lost('Не удалось вернуться в игру: хозяин комнаты не отвечает.');
+}
+
+/** Client: give up on the room. */
+function lost(text: string) {
+  leaveOnline();
+  showMap(false);
+  hideEnd();
+  resetLobby();
+  show('lobby');
+  lobbyStatus(text);
+}
+
+// a player is listed once they say hello; one who never does is let go
+net.onJoin = id => setTimeout(() => { if (!players.some(p => p.id === id)) net.kick(id); }, 10_000);
+
+/** Host: someone said hello. Their key either gives them their old seat back or they take a free one. */
+function welcome(id: string, name: string, key: string) {
+  name = name.slice(0, 16) || 'Игрок';
+  const back = key ? players.find(p => p.key === key && p.id !== 'host') : undefined;
+  if (back) {
+    const old = back.id;
+    Object.assign(back, { id, name });
+    if (old !== id) net.kick(old);
+    if (started) {
+      net.sendTo(id, { t: 'start', players: pub() });
+      net.sendTo(id, { t: 'screen', ...lastScreen });
+      game.float(game.S.Wx / 2, 20, `${name} вернулся`, '#c7cbe0');
+      setOnline('host');
+      hud.buildAllies();
+      hud.refresh();
+      dirty = true;
+    }
+  } else if (started || players.length >= HEROES.length) {
+    // three heroes, three seats; a game already under way takes no one new
+    net.sendTo(id, { t: 'deny', text: started ? 'В этой комнате игра уже идёт.' : 'Комната заполнена.' });
+    setTimeout(() => net.kick(id), 300);
+    return;
+  } else players.push({ id, name, hero: null, key });
+  net.broadcast({ t: 'lobby', players: pub() });
   lobbyView();
-};
+}
 
 net.onLeave = id => {
   if (!started) {
     players = players.filter(p => p.id !== id);
-    net.broadcast({ t: 'lobby', players });
+    net.broadcast({ t: 'lobby', players: pub() });
     lobbyView();
     return;
   }
-  // mid-game the hero stays; the host plays it from now on
+  // mid-game the hero stays; the host plays it until its player comes back
   const p = players.find(o => o.id === id);
-  if (p) game.float(game.S.Wx / 2, 20, `${p.name} вышел`, '#c7cbe0');
+  if (!p) return;
+  game.float(game.S.Wx / 2, 20, `${p.name} отключился`, '#c7cbe0');
   setOnline('host');
   hud.buildAllies();
   hud.refresh();
 };
 
-net.onLost = () => {
-  leaveOnline();
-  showMap(false);
-  $('roomEnd').hidden = true;
-  resetLobby();
-  show('lobby');
-  lobbyStatus('Связь с хозяином комнаты потеряна.');
-};
+net.onLost = () => { if (mode === 'client') reconnect(net.code); };
 
 net.onMsg = (from, m) => {
   if (mode === 'host') {
-    if (m.t === 'hello') {
-      const p = players.find(o => o.id === from);
-      if (p) p.name = m.name.slice(0, 16) || 'Игрок';
-      net.broadcast({ t: 'lobby', players });
-      lobbyView();
-    } else if (m.t === 'pick') pick(from, m.hero);
+    if (m.t === 'hello') welcome(from, m.name, m.key);
+    else if (m.t === 'pick') pick(from, m.hero);
     else if (m.t === 'act' && started && ownerOf(m.a.h) === from) game.perform(m.a);
     return;
   }
   if (m.t === 'lobby') { players = m.players; lobbyView(); }
+  else if (m.t === 'deny') lost(m.text);
+  else if (m.t === 'bye') lost('Хозяин комнаты закрыл игру.');
   else if (m.t === 'start') {
     players = m.players;
     started = true;
@@ -370,7 +451,7 @@ net.onMsg = (from, m) => {
     if (ch.room) controls.fit();
     hud.refresh();
   } else if (m.t === 'screen') screen(m.title, m.text);
-  else if (m.t === 'lobbyBack') { started = false; $('waitScreen').hidden = true; lobbyView(); show('lobby'); }
+  else if (m.t === 'lobbyBack') { started = false; wait(''); lobbyView(); show('lobby'); }
 };
 
 /** Host: send the game state to everyone, often while things move, and whenever something changed. */
@@ -381,6 +462,56 @@ function shareState(now: number) {
   net.broadcast({ t: 'snap', s: snapshot(game) });
   dirty = false;
   lastSnap = now;
+}
+
+/** Remember the room in this browser every second or so, so a crash or reload can bring it back. */
+function keepSeat(now: number) {
+  if (!net.active || now - lastSave < 1000) return;
+  lastSave = now;
+  if (mode === 'client') { saveSeat({ code: net.code, key: myKey, host: false }); return; }
+  if (mode !== 'host') return;
+  saveSeat({ code: net.code, key: myKey, host: true });
+  saveHost({
+    code: net.code, players, started, run, choosing, mapInfo: mapView.info, ending, screen: lastScreen,
+    snap: started && game.S ? snapshot(game) : null,
+  });
+}
+
+/** Host after a crash or reload: open the same room again and carry on where the game was. */
+async function reopen(code: string) {
+  const s = loadHost();
+  if (!s || s.code !== code) { clearSeat(); openMenu(); return; }
+  show(null);
+  wait('Возвращаюсь в игру', 'Открываю комнату заново, игроки подключатся сами.');
+  try {
+    await net.hostRoom(code);
+  } catch (e) {
+    wait('');
+    clearSeat();
+    openMenu();
+    alert(`Не удалось вернуть комнату. ${(e as Error).message}`);
+    return;
+  }
+  wait('');
+  // everyone else is away until they rejoin; the host plays their heroes meanwhile
+  players = s.players;
+  started = s.started;
+  setOnline('host');
+  if (!started || !s.snap) { lobbyView(); show('lobby'); return; }
+  run = s.run;
+  choosing = s.choosing;
+  mapView.info = s.mapInfo;
+  applySnapshot(game, s.snap);
+  setOnline('host');
+  game.pickActiveParty();
+  hud.buildAllies();
+  hud.refresh();
+  controls.fit();
+  lastScreen = s.screen;
+  dirty = true;
+  if (s.ending) showEnd(s.ending);
+  else if (choosing) showMap(true);
+  else if (!game.liveMobs().length || !game.alive().length) game.onRoomEnd(game.alive().length > 0);
 }
 
 function applyQuality() {
@@ -409,6 +540,7 @@ function frame(now: number) {
   }
   game.update(dt);
   shareState(now);
+  keepSeat(now);
   scene.draw(ctx, cam, game, T, view, input.aim, input.carry);
   requestAnimationFrame(frame);
 }
@@ -422,15 +554,25 @@ window.addEventListener('resize', resize);
 // closing the tab tells the others right away instead of after the heartbeat timeout
 window.addEventListener('pagehide', () => { if (net.active) net.close(); });
 loadSprites(() => { hud.buildAllies(); hud.refresh(); });
-// a shared link (…#CODE) opens straight into that room's lobby
-const linkCode = location.hash.slice(1).toUpperCase();
-if (/^[A-Z0-9]{4,6}$/.test(linkCode)) {
-  history.replaceState(null, '', location.pathname + location.search);
+// a shared link (…#CODE) opens straight into that room's lobby; a room this browser dropped out of is rejoined
+const linkCode = location.hash.slice(1).toUpperCase(), seat = loadSeat();
+if (linkCode) history.replaceState(null, '', location.pathname + location.search);
+if (seat && (!linkCode || linkCode === seat.code)) {
+  myKey = seat.key;
+  if (seat.host) reopen(seat.code);
+  else {
+    $<HTMLInputElement>('lobbyCode').value = seat.code;
+    resetLobby();
+    show('lobby');
+    join(seat.code, seat.key);
+  }
+} else if (/^[A-Z0-9]{4,6}$/.test(linkCode)) {
   $<HTMLInputElement>('lobbyCode').value = linkCode;
   resetLobby();
   show('lobby');
   join(linkCode);
 } else openMenu();
+$('waitLeave').addEventListener('click', () => { leaveOnline(); hideEnd(); showMap(false); openMenu(); });
 requestAnimationFrame(frame);
 
 // handle for automated checks
