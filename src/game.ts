@@ -72,6 +72,7 @@ export type Action =
 const STEP = 1 / 120;
 
 type Pt = { x: number; y: number };
+type Circle = Pt & { r: number };
 
 export const wayLen = (w: Pt[]) => w.reduce((n, p, k) => (k ? n + Math.hypot(p.x - w[k - 1].x, p.y - w[k - 1].y) : 0), 0);
 
@@ -628,6 +629,9 @@ export class Game {
       m.fx = m.tx = m.x;
       m.fy = m.ty = m.y;
       m.walk = undefined;
+    }
+    // one after another, each walker steps around where the ones before it will stand
+    for (const m of this.liveMobs()) {
       if (m.hp <= 0 || !m.intent || m.intent.hero < 0 || m.speed === 0) continue;
       const h = this.heroOf(m.intent.hero);
       if (h.hp <= 0 || h.pad === null) continue;
@@ -645,26 +649,35 @@ export class Game {
     return Math.max(0, Math.min(m.speed, L - m.reach + 8));
   }
 
-  /** Whether a walker of clearance r fits at (x, y): on the floor, off blocks, rock and pits. */
-  private walkable(x: number, y: number, r: number) {
-    const S = this.S;
-    return isFloor(S, Math.floor(x / TILE), Math.floor(y / TILE)) && !this.inBlock(x, y, r) && !S.pits.some(p => Math.hypot(p.x - x, p.y - y) < p.r + r - 4);
+  /** Whether a walker of clearance r fits at (x, y): on the floor, off blocks and rock, clear of round things in its way. */
+  private walkable(x: number, y: number, r: number, obs: Circle[]) {
+    return isFloor(this.S, Math.floor(x / TILE), Math.floor(y / TILE)) && !this.inBlock(x, y, r) && !obs.some(o => Math.hypot(o.x - x, o.y - y) < o.r + r - 3);
   }
 
-  private clearLine(a: Pt, b: Pt, r: number) {
+  private clearLine(a: Pt, b: Pt, r: number, obs: Circle[]) {
     const L = Math.hypot(b.x - a.x, b.y - a.y), n = Math.ceil(L / 2);
-    for (let k = 1; k <= n; k++) if (!this.walkable(a.x + ((b.x - a.x) * k) / n, a.y + ((b.y - a.y) * k) / n, r)) return false;
+    for (let k = 1; k <= n; k++) if (!this.walkable(a.x + ((b.x - a.x) * k) / n, a.y + ((b.y - a.y) * k) / n, r, obs)) return false;
     return true;
+  }
+
+  /** Round things a walker goes around: pits, resource nodes and the other enemies (where they will stand this turn). */
+  private obstacles(m: Mob, mobs: boolean): Circle[] {
+    const S = this.S;
+    return [
+      ...S.pits,
+      ...S.nodes.filter(n => n.left > 0),
+      ...(mobs ? this.liveMobs().filter(o => o !== m && this.solid(o)).map(o => ({ x: o.tx, y: o.ty, r: o.r })) : []),
+    ];
   }
 
   /**
    * A walker's route to a point: shortest path over floor tiles around blocks and pits (8 directions, no corner cutting),
    * pulled tight into straight runs. Falls back to a straight line when nothing connects.
    */
-  route(m: Mob, to: Pt): Pt[] {
-    const S = this.S, gw = S.gw, gh = S.gh, r = Math.min(m.r, 7);
+  route(m: Mob, to: Pt, mobs = true): Pt[] {
+    const S = this.S, gw = S.gw, gh = S.gh, r = Math.min(m.r, 7), obs = this.obstacles(m, mobs);
     const si = Math.floor(m.x / TILE), sj = Math.floor(m.y / TILE), ti = Math.floor(to.x / TILE), tj = Math.floor(to.y / TILE);
-    const open = (i: number, j: number) => (i === ti && j === tj) || (i === si && j === sj) || this.walkable(i * TILE + 8, j * TILE + 8, r);
+    const open = (i: number, j: number) => (i === ti && j === tj) || (i === si && j === sj) || this.walkable(i * TILE + 8, j * TILE + 8, r, obs);
     const dist = new Float64Array(gw * gh).fill(Infinity), from = new Int32Array(gw * gh).fill(-1), done = new Uint8Array(gw * gh);
     const goal = tj * gw + ti, start = sj * gw + si;
     if (si < 0 || sj < 0 || si >= gw || sj >= gh || ti < 0 || tj < 0 || ti >= gw || tj >= gh) return [{ x: m.x, y: m.y }, to];
@@ -679,12 +692,13 @@ export class Game {
       for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
         const i = ci + di, j = cj + dj;
         if ((!di && !dj) || i < 0 || j < 0 || i >= gw || j >= gh || !open(i, j)) continue;
-        if (di && dj && (!open(ci + di, cj) || !open(ci, cj + dj))) continue;
+        if (di && dj && (!open(ci + di, cj) || !open(ci, cj + dj) || !this.clearLine({ x: ci * TILE + 8, y: cj * TILE + 8 }, { x: i * TILE + 8, y: j * TILE + 8 }, r, obs))) continue;
         const k = j * gw + i, nd = cd + (di && dj ? Math.SQRT2 : 1);
         if (nd < dist[k]) { dist[k] = nd; from[k] = c; }
       }
     }
-    if (dist[goal] === Infinity) return [{ x: m.x, y: m.y }, to];
+    // other enemies crowding the rune don't stop a walker from heading there
+    if (dist[goal] === Infinity) return mobs ? this.route(m, to, false) : [{ x: m.x, y: m.y }, to];
     const pts: Pt[] = [to];
     for (let k = from[goal]; k >= 0 && k !== start; k = from[k]) pts.push({ x: (k % gw) * TILE + 8, y: Math.floor(k / gw) * TILE + 8 });
     pts.push({ x: m.x, y: m.y });
@@ -693,7 +707,7 @@ export class Game {
     const way: Pt[] = [pts[0]];
     for (let a = 0; a < pts.length - 1;) {
       let b = a + 1;
-      for (let k = pts.length - 1; k > a + 1; k--) if (this.clearLine(pts[a], pts[k], r)) { b = k; break; }
+      for (let k = pts.length - 1; k > a + 1; k--) if (this.clearLine(pts[a], pts[k], r, obs)) { b = k; break; }
       way.push(pts[b]);
       a = b;
     }
