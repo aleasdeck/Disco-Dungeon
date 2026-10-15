@@ -368,14 +368,18 @@ button { font: inherit; color: inherit; }
 .help-panel li { margin: 6px 0; }
 .help-panel b { color: var(--text); }
 
-.ftabs { display: flex; gap: 8px; margin: 14px 0 6px; flex-wrap: wrap; }
-.ftab { background: var(--panel-2); border: 1.5px solid var(--edge); border-radius: 9px; padding: 5px 12px; cursor: pointer; text-align: left; }
-.ftab b { display: block; font: 600 14px Oswald, sans-serif; }
-.ftab span { font-size: 11px; color: var(--muted); }
-.ftab.on { border-color: var(--gold); }
-.ftab.done b::after { content: ' ✓'; color: var(--teal); }
-.map-scroll { overflow-x: auto; margin: 4px -6px; }
-#map { width: 100%; min-width: 560px; height: auto; display: block; }
+.map-panel { width: min(440px, 100%); padding: 12px 14px; display: flex; flex-direction: column; max-height: calc(100dvh - 32px); }
+.map-panel .panel-head { flex-wrap: nowrap; }
+.map-panel h2 { font-size: 20px; white-space: nowrap; }
+.map-panel h2 span { font: 500 13px Rubik, sans-serif; color: var(--muted); margin-left: 6px; }
+.map-panel .btn { padding: 6px 10px; font-size: 13px; }
+#map { width: 100%; flex: 1 1 auto; min-height: 0; height: auto; display: block; margin-top: 4px; }
+/* a phone on its side: the floor stays readable and scrolls instead of shrinking to dots */
+@media (max-height: 520px) {
+  #mapScreen { align-items: start; }
+  .map-panel { max-height: none; }
+  #map { flex: none; height: 520px; }
+}
 #map .edge { fill: none; stroke: #5c4a39; stroke-width: 3; stroke-dasharray: 2 6; stroke-linecap: round; }
 #map .edge.walked { stroke: var(--gold); stroke-dasharray: none; }
 #map .mnode .disc { stroke: var(--ink); stroke-width: 2.5; }
@@ -386,12 +390,10 @@ button { font: inherit; color: inherit; }
 #map .mnode.cur .halo { stroke: var(--teal); }
 #map .mnode:not(.reach):not(.visited) { opacity: 0.8; }
 #map .mnode.reach:hover .disc, #map .mnode.reach:focus .disc { stroke: var(--gold); }
-#map .mlabel { fill: var(--muted); font: 500 12px Rubik, sans-serif; text-anchor: middle; }
-#map .mdepth { fill: var(--text); font: 600 11px Oswald, sans-serif; }
+#map .mlabel { fill: var(--muted); font: 500 12px Rubik, sans-serif; text-anchor: middle; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
 @keyframes pulse { 50% { stroke-opacity: 0.3; } }
-.map-stats { display: flex; gap: 18px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
-.map-stats b { color: var(--text); }
-.map-info { margin: 10px 0 0; min-height: 2.6em; }
+.map-info { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+.map-info b { color: var(--text); }
 
 /* ---------- small screens: compact frame, upgrades in a pull-up sheet */
 @media (max-width: 820px), (max-height: 520px) {

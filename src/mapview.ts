@@ -1,7 +1,7 @@
-// Run map overlay: floor tabs and an SVG of the branching rooms.
+// Run map overlay: the current floor's branching rooms as an SVG, climbing from the entrance at the bottom to the boss on top.
 
 import { BIOMES, ROOM_TYPES, type RoomType } from './data';
-import { FLOORS, LAYERS, depthOf, minutes, reachable, type Run } from './run';
+import { reachable, type Run } from './run';
 
 const NS = 'http://www.w3.org/2000/svg';
 const $ = (id: string) => document.getElementById(id)!;
@@ -40,26 +40,22 @@ function icon(g: SVGGElement, type: RoomType, x: number, y: number) {
   if (type === 'boss') el('path', { d: `M${x - 9} ${y + 6}L${x - 10} ${y - 6}L${x - 4} ${y - 1}L${x} ${y - 9}L${x + 4} ${y - 1}L${x + 10} ${y - 6}L${x + 9} ${y + 6}Z`, fill: '#ffd34d', ...st });
 }
 
+/** Map size in SVG units: tall, so a phone shows the whole floor without scrolling. */
+const W = 320, H = 560;
+
 export class MapView {
-  view = 0;
   info = '';
   onChoose: (id: string) => void = () => {};
 
   render(run: Run, canChoose: boolean) {
-    const tabs = $('ftabs');
-    tabs.innerHTML = '';
-    for (let f = 0; f < FLOORS; f++) {
-      const b = document.createElement('button');
-      b.className = 'ftab' + (f === this.view ? ' on' : '') + (f < run.floor ? ' done' : '');
-      b.innerHTML = `<b>Этаж ${f + 1}</b><span>${BIOMES[f].name}</span>`;
-      b.addEventListener('click', () => { this.view = f; this.render(run, canChoose); });
-      tabs.appendChild(b);
-    }
+    const f = run.floor, layers = run.floors[f];
+    $('mapFloor').innerHTML = `Этаж ${f + 1} <span>${BIOMES[f].name}</span>`;
     const svg = $('map');
     svg.innerHTML = '';
-    const f = this.view, layers = run.floors[f], Hd = 300, pos: Record<string, [number, number]> = {};
+    // layer 0 at the bottom; rooms of a layer spread across, zigzagging a little so the paths read
+    const pos: Record<string, [number, number]> = {};
     layers.forEach((L, l) => L.forEach((n, i) => {
-      pos[n.id] = [60 + l * 140, Hd / 2 + (i - (L.length - 1) / 2) * 92 + (l % 2 ? 10 : -10) * (L.length > 1 ? 1 : 0)];
+      pos[n.id] = [W / 2 + (i - (L.length - 1) / 2) * 104 + (l % 2 ? 8 : -8) * (L.length > 1 ? 1 : 0), H - 46 - l * ((H - 104) / (layers.length - 1))];
     }));
     const path = run.path[f], reach = canChoose ? reachable(run, f) : [];
     const gl = document.createElementNS(NS, 'g');
@@ -68,7 +64,7 @@ export class MapView {
       const [x1, y1] = pos[n.id], [x2, y2] = pos[id];
       const walked = path.includes(n.id) && path.indexOf(id) === path.indexOf(n.id) + 1;
       const ln = document.createElementNS(NS, 'path');
-      ln.setAttribute('d', `M${x1} ${y1}C${(x1 + x2) / 2} ${y1} ${(x1 + x2) / 2} ${y2} ${x2} ${y2}`);
+      ln.setAttribute('d', `M${x1} ${y1}C${x1} ${(y1 + y2) / 2} ${x2} ${(y1 + y2) / 2} ${x2} ${y2}`);
       ln.setAttribute('class', walked ? 'edge walked' : 'edge');
       gl.appendChild(ln);
     }
@@ -85,24 +81,20 @@ export class MapView {
       g.appendChild(c);
       icon(g, n.type, x, y);
       const lb = document.createElementNS(NS, 'text');
-      lb.setAttribute('x', String(x)); lb.setAttribute('y', String(y + (boss ? 40 : 35))); lb.setAttribute('class', 'mlabel');
+      lb.setAttribute('x', String(x)); lb.setAttribute('y', String(y + (boss ? 38 : 33))); lb.setAttribute('class', 'mlabel');
       lb.textContent = t.name;
       g.appendChild(lb);
-      const dv = document.createElementNS(NS, 'text');
-      dv.setAttribute('x', String(x + 16)); dv.setAttribute('y', String(y - 14)); dv.setAttribute('class', 'mdepth');
-      dv.textContent = String(depthOf(f, n));
-      g.appendChild(dv);
       if (isR) {
         g.setAttribute('tabindex', '0');
         g.setAttribute('role', 'button');
-        g.setAttribute('aria-label', `${t.name}, сложность ${depthOf(f, n)}`);
+        g.setAttribute('aria-label', t.name);
         g.addEventListener('click', () => this.onChoose(n.id));
         g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.onChoose(n.id); } });
       }
       svg.appendChild(g);
     }
-    const m = minutes(run);
-    $('mapStats').innerHTML = `<span>Комнат на этаже <b>${layers.flat().length}</b>, по пути <b>${LAYERS}</b></span><span>Пройдено <b>${run.path.reduce((a, p) => a + p.length, 0)}</b> из ${FLOORS * LAYERS}</span><span>Наиграно <b>~${Math.round(m.done)} мин</b></span><span>Прогноз забега <b>~${Math.round(m.total)} мин</b></span>`;
-    $('mapInfo').innerHTML = this.info || (canChoose ? 'Выбери подсвеченную комнату. Каждая следующая сложнее предыдущей.' : 'Сначала закончи бой в текущей комнате.');
+    // only the result of a rest room shows here; the map itself needs no explaining
+    $('mapInfo').innerHTML = this.info;
+    $('mapInfo').hidden = !this.info;
   }
 }

@@ -94,7 +94,11 @@ $('camFit').addEventListener('click', () => controls.fit());
 function showMap(open: boolean) {
   $('mapScreen').hidden = !open;
   $('mapClose').hidden = choosing;
-  if (open) { mapView.view = run.floor; mapView.render(run, choosing); }
+  if (open) {
+    mapView.render(run, choosing);
+    // on a short screen the map scrolls; bring the rooms to choose from into view
+    document.querySelector('#map .mnode.reach, #map .mnode.cur')?.scrollIntoView({ block: 'center' });
+  }
 }
 
 type Mode = 'menu' | 'solo' | 'host' | 'client';
