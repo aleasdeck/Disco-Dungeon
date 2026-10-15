@@ -1,8 +1,8 @@
 // Combat rules: turn flow, disc physics, damage, abilities.
 // Rendering and input live elsewhere; this module only changes state.
 
-import { AB_COST, HAND_COST, HAND_MAX, HAND_START, HEROES, UPS, UP_COST, type HeroDef, type StatKey } from './data';
-import { generate, hazKey, type Layout, type Mob, type RoomSpec } from './room';
+import { AB_COST, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, TILE, UPS, UP_COST, isRanged, type HeroDef, type MobAct, type StatKey } from './data';
+import { clearOfRock, generate, hazKey, isFloor, newMob, type Intent, type Layout, type Mob, type RoomSpec } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
 
@@ -19,6 +19,10 @@ export interface HeroState {
   hand: number;
   thrown: boolean;
   flash: number;
+  /** Turns left with weaker throws, from a chilling hit. */
+  chill: number;
+  /** Burning: takes 2 damage at the start of the next enemy turn. */
+  fire: number;
 }
 
 export interface Disc {
@@ -82,7 +86,7 @@ export function newParty(picks: number[] = HEROES.map((_, i) => i)): HeroState[]
 function heroStart() {
   return {
     hp: 14, max: 14, shield: 0, up: { m: 0, pw: 0, e: 0 }, discs: HAND_START,
-    pad: null as number | null, hand: HAND_START, thrown: false, flash: 0,
+    pad: null as number | null, hand: HAND_START, thrown: false, flash: 0, chill: 0, fire: 0,
   };
 }
 
@@ -103,7 +107,7 @@ export class Game {
 
   loadRoom(spec: RoomSpec) {
     const L = generate(spec);
-    for (const h of this.party) Object.assign(h, { pad: null, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0 });
+    for (const h of this.party) Object.assign(h, { pad: null, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0, chill: 0, fire: 0 });
     this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [] };
     // everyone starts on a rune, spread along the near edge; players may rearrange before the fight
     const living = this.party.filter(h => h.hp > 0), n = L.pads.length;
@@ -195,7 +199,7 @@ export class Game {
     const L = Math.hypot(dx, dy);
     if (L < 4) return;
     if (this.send) { this.send({ k: 'throw', h: h.i, dx, dy }); return; }
-    const p = S.pads[h.pad], s = (270 * this.stat(h, 'pw')) / 60;
+    const p = S.pads[h.pad], s = this.power(h);
     S.discs.push({
       hero: h, x: p.x + (dx / L) * 6, y: p.y + (dy / L) * 6, vx: dx * s, vy: dy * s,
       r: h.def.r, m: this.stat(h, 'm'), e: Math.min(0.99, this.stat(h, 'e')), fr: h.def.fr,
@@ -206,6 +210,16 @@ export class Game {
     this.onChange();
   }
 
+  /** Launch speed per unit of pull-back; a chilled hero throws softer. */
+  power(h: HeroState) {
+    return ((270 * this.stat(h, 'pw')) / 60) * (h.chill > 0 ? 0.7 : 1);
+  }
+
+  /** A ghost is bodiless on even turns: discs pass through it. */
+  solid(m: Mob) {
+    return m.hp > 0 && !(MOBS[m.k].ghost && this.S.turn % 2 === 0);
+  }
+
   /**
    * Where a throw with pull-back (dx, dy) would roll, ignoring other discs: path points, the bounce points along it,
    * and the mob it would hit first. Stops after `maxBounces` bounces (the aim line uses 0: it ends at the first obstacle).
@@ -213,7 +227,7 @@ export class Game {
   predict(h: HeroState, dx: number, dy: number, maxBounces = 2) {
     const S = this.S, L = Math.hypot(dx, dy), path: [number, number][] = [], bounces: [number, number][] = [];
     if (h.pad === null || L < 4) return { path, bounces, hit: null as Mob | null };
-    const p = S.pads[h.pad], s = (270 * this.stat(h, 'pw')) / 60, mu = S.biome.mu, dt = 1 / 60;
+    const p = S.pads[h.pad], s = this.power(h), mu = S.biome.mu, dt = 1 / 60;
     const d = { x: p.x + (dx / L) * 6, y: p.y + (dy / L) * 6, vx: dx * s, vy: dy * s, r: h.def.r, e: Math.min(0.99, this.stat(h, 'e')) } as Disc;
     const boxes = S.blocks.concat(S.rock);
     path.push([d.x, d.y]);
@@ -232,7 +246,7 @@ export class Game {
         if (d.y > S.Wy - d.r) { d.y = S.Wy - d.r; d.vy = -d.vy * d.e; hitWall = true; }
         for (const b of boxes) if (this.bounceBox(d, b) > 0) hitWall = true;
         for (const n of S.nodes) if (n.left > 0 && this.bounceStatic(d, n) > 0) hitWall = true;
-        const m = S.mobs.find(o => o.hp > 0 && Math.hypot(d.x - o.x, d.y - o.y) < d.r + o.r);
+        const m = S.mobs.find(o => this.solid(o) && Math.hypot(d.x - o.x, d.y - o.y) < d.r + o.r);
         if (m) { path.push([d.x, d.y]); return { path, bounces, hit: m }; }
         if (S.pits.some(o => Math.hypot(d.x - o.x, d.y - o.y) < o.r - 2)) { path.push([d.x, d.y]); return { path, bounces, hit: null }; }
         if (hitWall) {
@@ -319,15 +333,74 @@ export class Game {
   pickIntents() {
     const S = this.S, hs = this.alive().filter(h => h.pad !== null);
     if (!hs.length) return;
+    const taken: { x: number; y: number }[] = [];
     this.liveMobs().forEach((m, i) => {
-      if (m.k === 'archer') { m.intent = { t: 'hit', hero: hs[(S.turn + i) % hs.length].i, dmg: m.dmg }; return; }
+      const d = MOBS[m.k];
+      for (const a of d.acts ?? []) {
+        if (S.turn % a.every !== a.at) continue;
+        const it = this.special(m, a, hs, taken);
+        if (it) { m.intent = it; return; }
+      }
+      if (d.charge && S.turn % 2 === 1) { m.intent = { t: 'charge', hero: hs[(S.turn + i) % hs.length].i, dmg: 0 }; return; }
+      const dmg = d.charge ? m.dmg * 2 : m.dmg;
+      if (isRanged(m.k)) { m.intent = { t: 'hit', hero: hs[(S.turn + i) % hs.length].i, dmg }; return; }
       let best = hs[0], bd = Infinity;
       for (const h of hs) {
         const p = S.pads[h.pad!], dd = Math.hypot(p.x - m.x, p.y - m.y);
         if (dd < bd) { bd = dd; best = h; }
       }
-      m.intent = bd - m.speed <= m.reach ? { t: 'hit', hero: best.i, dmg: m.dmg } : { t: 'move', hero: best.i, dmg: 0 };
+      m.intent = bd - m.speed <= m.reach ? { t: 'hit', hero: best.i, dmg } : { t: 'move', hero: best.i, dmg: 0 };
     });
+  }
+
+  /** The intent for a mob's special act this turn, or null when it can't do it (nobody to heal, no room to summon). */
+  private special(m: Mob, a: MobAct, hs: HeroState[], taken: { x: number; y: number }[]): Intent | null {
+    const S = this.S, mi = S.mobs.indexOf(m);
+    if (a.k === 'slam') return { t: 'slam', hero: -1, dmg: Math.ceil(m.dmg * (a.chill ? 0.5 : 0.6)), chill: a.chill };
+    if (a.k === 'heal') {
+      const hurt = this.liveMobs().filter(o => o !== m && o.hp < o.max).sort((p, q) => p.hp / p.max - q.hp / q.max)[0];
+      return hurt ? { t: 'heal', hero: -1, dmg: a.amt ?? 6, mob: S.mobs.indexOf(hurt) } : null;
+    }
+    if (a.k === 'summon') {
+      const mine = S.mobs.filter(o => o.hp > 0 && o.owner === mi).length;
+      const n = Math.min(a.n ?? 1, (a.cap ?? 3) - mine, 9 - this.liveMobs().length);
+      if (n <= 0) return null;
+      const r = MOBS[a.kind!].r, spots: { x: number; y: number }[] = [];
+      // circles right next to the summoner on the side facing the runes, so the risen mob plainly comes from it
+      const face = Math.atan2(S.Wy - m.y, S.Wx - m.x);
+      for (let ring = 0; ring < 3 && spots.length < n; ring++) {
+        const dist = m.r + r + 6 + ring * 12;
+        for (let k = 0; k < 12 && spots.length < n; k++) {
+          const ang = face + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (Math.PI / 6);
+          const x = m.x + Math.cos(ang) * dist, y = m.y + Math.sin(ang) * dist;
+          if (this.spotFree(x, y, r, taken)) { spots.push({ x, y }); taken.push({ x, y }); }
+        }
+      }
+      return spots.length ? { t: 'summon', hero: -1, dmg: 0, spots } : null;
+    }
+    // heat: tiles a little in front of each hero's rune turn to lava
+    const spots: { x: number; y: number }[] = [];
+    for (const h of hs) {
+      const p = S.pads[h.pad!], dx = S.Wx / 2 - p.x, dy = S.Wy / 2 - p.y, L = Math.hypot(dx, dy) || 1;
+      let got = 0;
+      for (let k = 0; k < 10 && got < (a.n ?? 2); k++) {
+        const dist = 26 + (k >> 1) * 8, side = k % 2 ? 1 : -1;
+        const x = p.x + (dx / L) * dist - (dy / L) * side * 9 * (got ? 1 : 0.4), y = p.y + (dy / L) * dist + (dx / L) * side * 9 * (got ? 1 : 0.4);
+        const i = Math.floor(x / TILE), j = Math.floor(y / TILE), cx = i * TILE + 8, cy = j * TILE + 8;
+        if (!isFloor(S, i, j) || S.haz.has(hazKey(i, j)) || spots.some(o => o.x === cx && o.y === cy)) continue;
+        if (S.pads.some(q => Math.hypot(q.x - cx, q.y - cy) < 20) || S.blocks.some(b => cx > b.x0 && cx < b.x1 && cy > b.y0 && cy < b.y1)) continue;
+        spots.push({ x: cx, y: cy });
+        got++;
+      }
+    }
+    return spots.length ? { t: 'heat', hero: -1, dmg: 0, spots } : null;
+  }
+
+  /** Room for a summoned mob of radius r at (x, y): on open floor, clear of everything else in the room. */
+  private spotFree(x: number, y: number, r: number, taken: { x: number; y: number }[]) {
+    const S = this.S;
+    const objs = [...this.liveMobs(), ...S.nodes.filter(n => n.left > 0), ...S.pits, ...S.pads.map(p => ({ ...p, r: 14 })), ...taken.map(p => ({ ...p, r: 8 }))];
+    return clearOfRock(S, x, y, r + 2) && objs.every(o => Math.hypot(o.x - x, o.y - y) > o.r + r + 3) && !this.inBlock(x, y, r + 2);
   }
 
   // ------------------------------------------------------------ damage & fx
@@ -349,10 +422,18 @@ export class Game {
     m.hp -= n;
     m.flash = 0.15;
     this.float(m.x, m.y, '-' + n, col);
-    if (m.hp <= 0) { m.dead = 0.001; this.burst(m.x, m.y, '#ffd34d', 22); this.float(m.x, m.y - 6, 'повержен', '#ffd34d'); }
+    const d = MOBS[m.k];
+    if (d.rage && !m.rage && m.hp > 0 && m.hp <= m.max / 2) { m.rage = true; m.dmg += 3; this.float(m.x, m.y - 12, 'ЯРОСТЬ +3', '#ff7a3d'); this.burst(m.x, m.y, '#ff7a3d', 18); }
+    if (m.hp <= 0) {
+      m.dead = 0.001; this.burst(m.x, m.y, '#ffd34d', 22); this.float(m.x, m.y - 6, 'повержен', '#ffd34d');
+      if (d.lava) {
+        const S = this.S, i = Math.floor(m.x / TILE), j = Math.floor(m.y / TILE);
+        if (isFloor(S, i, j) && S.pads.every(p => Math.hypot(p.x - (i * TILE + 8), p.y - (j * TILE + 8)) > 20)) { S.haz.add(hazKey(i, j)); this.float(m.x, m.y + 4, 'лава!', '#ff7a3d'); }
+      }
+    }
   }
 
-  hurtHero(h: HeroState, n: number) {
+  hurtHero(h: HeroState, n: number, why = '') {
     const S = this.S;
     if (h.hp <= 0) return;
     const p = h.pad !== null ? S.pads[h.pad] : { x: S.Wx - 20, y: S.Wy - 20 };
@@ -361,7 +442,7 @@ export class Game {
     const dmg = n - blk;
     h.hp -= dmg;
     h.flash = 0.2;
-    this.float(p.x, p.y, dmg ? `-${dmg}` : 'блок', dmg ? '#ff4d6a' : '#3fc4b6');
+    this.float(p.x, p.y, dmg ? `-${dmg}${why ? ' ' + why : ''}` : 'блок', dmg ? '#ff4d6a' : '#3fc4b6');
     if (dmg) { this.burst(p.x, p.y, '#ff4d6a', 10); S.shake = 0.2; }
     if (h.hp <= 0) { this.float(p.x, p.y - 6, 'пал', '#ff4d6a'); h.hand = 0; }
   }
@@ -445,7 +526,7 @@ export class Game {
         changed = true;
       }
       for (const m of S.mobs) {
-        if (m.hp <= 0) continue;
+        if (!this.solid(m)) continue;
         const vn = this.bounceStatic(d, m);
         if (vn <= 5) continue;
         let dmg = Math.ceil((d.m * vn) / 120);
@@ -502,11 +583,12 @@ export class Game {
 
   private mobsStart() {
     const S = this.S;
+    for (const h of this.alive()) if (h.fire > 0) { h.fire--; this.hurtHero(h, 2, 'горит'); }
     for (const m of this.liveMobs()) {
       if (m.burn > 0) { this.hurtMob(m, 4, '#ff7a3d', true); m.burn--; }
       m.fx = m.tx = m.x;
       m.fy = m.ty = m.y;
-      if (m.hp <= 0 || !m.intent || m.speed === 0) continue;
+      if (m.hp <= 0 || !m.intent || m.intent.hero < 0 || m.speed === 0) continue;
       const h = this.heroOf(m.intent.hero);
       if (h.hp <= 0 || h.pad === null) continue;
       const p = S.pads[h.pad], dx = p.x - m.x, dy = p.y - m.y, L = Math.hypot(dx, dy);
@@ -521,14 +603,52 @@ export class Game {
   private mobsAttack() {
     const S = this.S;
     for (const m of this.liveMobs()) {
-      const it = m.intent;
-      if (!it || it.t !== 'hit') continue;
-      const h = this.heroOf(it.hero);
-      if (h.hp <= 0 || h.pad === null) continue;
-      const p = S.pads[h.pad];
-      if (m.k === 'archer' || Math.hypot(p.x - m.x, p.y - m.y) <= m.reach + 2) { this.hurtHero(h, it.dmg); m.flash = 0.12; }
-      else this.float(m.x, m.y, 'не достал', '#c7cbe0');
+      const it = m.intent, d = MOBS[m.k];
+      if (!it) continue;
+      if (it.t === 'slam') {
+        m.flash = 0.12; S.shake = 0.3;
+        this.float(m.x, m.y - 10, it.chill ? 'МЕТЕЛЬ' : 'УДАР ОБ ПОЛ', it.chill ? '#bfe6ff' : '#ffd34d');
+        for (const h of this.alive()) { this.hurtHero(h, it.dmg); if (it.chill) this.chillHero(h); }
+      } else if (it.t === 'heal') {
+        const o = S.mobs[it.mob!];
+        if (!o || o.hp <= 0) continue;
+        const hl = Math.min(o.max - o.hp, it.dmg);
+        o.hp += hl;
+        this.float(o.x, o.y, `+${hl}`, '#7be39a'); this.burst(o.x, o.y, '#9fe3ff', 12);
+      } else if (it.t === 'summon') {
+        const kind = d.acts!.find(a => a.k === 'summon')!.kind!, mi = S.mobs.indexOf(m);
+        this.float(m.x, m.y - 10, 'призыв!', '#c9a8ff');
+        for (const p of it.spots ?? []) {
+          // a disc may have come to rest on the circle; the mob still rises, the disc is long gone by then
+          const o = newMob(kind, p.x, p.y, S.hpMul, S.dmgAdd);
+          o.owner = mi; o.born = 1;
+          S.mobs.push(o);
+          this.burst(p.x, p.y, '#b893ff', 16);
+        }
+      } else if (it.t === 'heat') {
+        this.float(m.x, m.y - 10, 'РАСКАЛЯЕТ ПОЛ', '#ff7a3d');
+        for (const p of it.spots ?? []) { S.haz.add(hazKey(Math.floor(p.x / TILE), Math.floor(p.y / TILE))); this.burst(p.x, p.y, '#ff7a3d', 10); }
+      } else if (it.t === 'charge') {
+        this.float(m.x, m.y - 10, 'фитиль горит', '#ffb070');
+      } else if (it.t === 'hit') {
+        const h = this.heroOf(it.hero);
+        if (h.hp <= 0 || h.pad === null) continue;
+        const p = S.pads[h.pad];
+        if (isRanged(m.k) || Math.hypot(p.x - m.x, p.y - m.y) <= m.reach + 2) {
+          this.hurtHero(h, it.dmg); m.flash = 0.12;
+          if (d.chill && h.hp > 0) this.chillHero(h);
+          if (d.fire && h.hp > 0) { h.fire = 1; this.float(p.x, p.y - 8, 'горит!', '#ff7a3d'); }
+        } else this.float(m.x, m.y, 'не достал', '#c7cbe0');
+      }
     }
+  }
+
+  /** Chill lasts through the hero's next throws: two turn ends, the first one comes right after this enemy turn. */
+  private chillHero(h: HeroState) {
+    if (h.hp <= 0) return;
+    h.chill = 2;
+    const p = h.pad !== null ? this.S.pads[h.pad] : null;
+    if (p) this.float(p.x, p.y - 8, 'озноб', '#bfe6ff');
   }
 
   private nextTurn() {
@@ -536,7 +656,7 @@ export class Game {
     if (!this.alive().length || !this.liveMobs().length) { this.finish(); return; }
     S.turn++;
     S.discs = [];
-    for (const h of S.heroes) { h.shield = 0; h.thrown = false; h.hand = h.hp > 0 ? h.discs : 0; }
+    for (const h of S.heroes) { h.shield = 0; h.thrown = false; h.hand = h.hp > 0 ? h.discs : 0; if (h.chill > 0) h.chill--; }
     S.phase = 'throw';
     this.pickActive();
     this.pickIntents();
@@ -600,7 +720,7 @@ export class Game {
   private fade(dt: number) {
     const S = this.S;
     for (const d of S.discs) if (d.fall && !d.gone) { d.fall += dt; if (d.fall > 0.5) d.gone = true; }
-    for (const m of S.mobs) { if (m.flash > 0) m.flash -= dt; if (m.dead) m.dead += dt; }
+    for (const m of S.mobs) { if (m.flash > 0) m.flash -= dt; if (m.dead) m.dead += dt; if (m.born > 0) m.born = Math.max(0, m.born - dt * 1.5); }
     for (const h of S.heroes) if (h.flash > 0) h.flash -= dt;
     for (const n of S.nodes) if (n.hit > 0) n.hit -= dt;
     if (S.shake > 0) S.shake -= dt;

@@ -114,10 +114,12 @@ export class Hud {
     // enemies in the room and what each will do this turn: a dot in the colour of the hero it goes for
     $('mobs').hidden = S.phase === 'over' || !g.liveMobs().length;
     $('mobList').innerHTML = g.liveMobs().map(m => {
-      const it = m.intent, tgt = it ? g.heroOf(it.hero) : null;
+      const it = m.intent, tgt = it && it.hero >= 0 ? g.heroOf(it.hero) : null;
       const act = !it ? '' : it.t === 'hit'
         ? `<span class="m-hit" title="Ударит ${tgt!.def.name} на ${it.dmg}">${it.dmg}</span><i class="m-dot" style="--c:${tgt!.def.col}" title="${tgt!.def.name}"></i>`
-        : `<span class="m-go" title="Идёт к ${tgt!.def.name}">→</span><i class="m-dot" style="--c:${tgt!.def.col}" title="${tgt!.def.name}"></i>`;
+        : it.t === 'move'
+          ? `<span class="m-go" title="Идёт к ${tgt!.def.name}">→</span><i class="m-dot" style="--c:${tgt!.def.col}" title="${tgt!.def.name}"></i>`
+          : `<span class="m-sp">${{ charge: 'фитиль', slam: (it.chill ? 'метель ' : 'всем ') + it.dmg, heal: 'лечит ' + it.dmg, summon: 'призыв', heat: 'жар' }[it.t]}</span>`;
       return `<li><img src="${mobIcon(m.k)}" alt=""><span class="m-name">${m.name}</span>`
         + `<span class="m-hp" title="${m.hp}/${m.max} HP"><i style="width:${(Math.max(0, m.hp) / m.max) * 100}%"></i><b>${m.hp}</b></span>`
         + `<span class="m-act">${act}</span></li>`;

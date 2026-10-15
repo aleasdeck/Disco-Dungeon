@@ -30,30 +30,101 @@ export const BIOMES: Biome[] = [
   { name: 'Кузня', f: ['#7a5947', '#84624f'], g: '#3f2c24', w: ['#4c3128', '#5a3b30'], cap: '#8a634f', mu: 85, haz: 'lava', hazDmg: 4, bg: ['#30180f', '#0e0705'], torch: '255,130,50' },
 ];
 
-export type MobKind = 'skel' | 'archer' | 'slime' | 'golem' | 'king';
+export type MobKind =
+  | 'skel' | 'archer' | 'rat' | 'necro' | 'king'
+  | 'ghoul' | 'ghost' | 'yeti' | 'witch' | 'lich'
+  | 'imp' | 'slime' | 'bomber' | 'golem' | 'forgelord';
+
+/**
+ * Something a mob does instead of its usual attack on turns where `turn % every === at`.
+ * summon: raises `n` mobs of `kind` on circles marked a turn ahead; heal: mends the most hurt ally by `amt`;
+ * slam: hits every hero at once (`chill` also chills them); heat: turns tiles in front of the heroes' runes into lava.
+ */
+export interface MobAct {
+  k: 'summon' | 'heal' | 'slam' | 'heat';
+  every: number;
+  at: number;
+  n?: number;
+  kind?: MobKind;
+  amt?: number;
+  chill?: boolean;
+  /** Most of this mob's summons alive at once. */
+  cap?: number;
+}
 
 export interface MobDef {
   name: string;
+  /** Floor the mob lives on, 0..2. */
+  floor: number;
   hp: number;
   r: number;
   speed: number;
+  /** 999 means it shoots across the whole room. */
   reach: number;
   dmg: number;
   armor?: number;
   /** Height of the figure above its base, in world units; used to scale sprites. */
   fig: number;
+  boss?: boolean;
+  acts?: MobAct[];
+  /** Its hits chill: the hero's throws are weaker next turn. */
+  chill?: boolean;
+  /** Its hits set the hero on fire: 2 more damage at the start of the next enemy turn. */
+  fire?: boolean;
+  /** Bodiless on even turns: discs pass through it. */
+  ghost?: boolean;
+  /** Leaves a pool of lava where it dies. */
+  lava?: boolean;
+  /** Hits harder (+3) once below half HP. */
+  rage?: boolean;
+  /** Spends odd turns lighting a bomb and throws it for double damage on even turns. */
+  charge?: boolean;
+  txt: string;
 }
 
 /** Every enemy is in the room from the start (no reinforcements), so all of them get this much more HP. */
 export const MOB_HP_MUL = 1.6;
 
 export const MOBS: Record<MobKind, MobDef> = {
-  skel: { name: 'Скелет', hp: 9, r: 7, speed: 34, reach: 30, dmg: 4, fig: 31 },
-  archer: { name: 'Гоблин-лучник', hp: 6, r: 6, speed: 0, reach: 999, dmg: 3, fig: 26 },
-  slime: { name: 'Слизень', hp: 14, r: 9, speed: 20, reach: 30, dmg: 5, fig: 24 },
-  golem: { name: 'Голем', hp: 26, r: 12, speed: 14, reach: 34, dmg: 7, armor: 3, fig: 38 },
-  king: { name: 'Король-в-короне', hp: 60, r: 15, speed: 10, reach: 40, dmg: 9, armor: 3, fig: 50 },
+  skel: { name: 'Скелет', floor: 0, hp: 9, r: 7, speed: 34, reach: 30, dmg: 4, fig: 31, txt: 'Идёт к ближайшему герою и бьёт вблизи.' },
+  archer: { name: 'Гоблин-лучник', floor: 0, hp: 6, r: 6, speed: 0, reach: 999, dmg: 3, fig: 26, txt: 'Стоит на месте и стреляет через всю комнату.' },
+  rat: { name: 'Тюремная крыса', floor: 0, hp: 5, r: 6, speed: 64, reach: 26, dmg: 3, fig: 18, txt: 'Хилая, но очень быстрая: добегает до рун за ход-два.' },
+  necro: {
+    name: 'Некромант', floor: 0, hp: 12, r: 8, speed: 0, reach: 999, dmg: 2, fig: 36,
+    acts: [{ k: 'summon', every: 2, at: 0, n: 1, kind: 'skel', cap: 3 }],
+    txt: 'Каждый второй ход поднимает скелета из светящегося круга. Круг видно заранее: убей некроманта, пока не поздно.',
+  },
+  king: {
+    name: 'Король-в-короне', floor: 0, boss: true, hp: 60, r: 15, speed: 10, reach: 40, dmg: 9, armor: 3, fig: 50,
+    acts: [{ k: 'slam', every: 3, at: 0 }],
+    txt: 'Босс казематов. Каждый третий ход бьёт скипетром об пол и задевает весь отряд.',
+  },
+  ghoul: { name: 'Ледяной упырь', floor: 1, hp: 10, r: 7, speed: 36, reach: 30, dmg: 4, fig: 30, chill: true, txt: 'Бьёт вблизи и морозит: следующий бросок героя слабее.' },
+  ghost: { name: 'Призрак', floor: 1, hp: 7, r: 7, speed: 0, reach: 999, dmg: 3, fig: 30, ghost: true, txt: 'Стреляет издалека. Каждый второй ход бесплотен: диски пролетают насквозь.' },
+  yeti: { name: 'Йети', floor: 1, hp: 22, r: 11, speed: 18, reach: 34, dmg: 6, armor: 2, fig: 38, txt: 'Толстая шкура, броня 2. Медленный, но бьёт больно.' },
+  witch: {
+    name: 'Ледяная ведьма', floor: 1, hp: 14, r: 8, speed: 0, reach: 999, dmg: 2, fig: 36,
+    acts: [{ k: 'heal', every: 2, at: 0, amt: 8 }],
+    txt: 'Каждый второй ход лечит самого раненого моба на 8.',
+  },
+  lich: {
+    name: 'Ледяной лич', floor: 1, boss: true, hp: 64, r: 14, speed: 0, reach: 999, dmg: 6, armor: 2, fig: 52,
+    acts: [{ k: 'summon', every: 3, at: 2, n: 2, kind: 'ghoul', cap: 4 }, { k: 'slam', every: 3, at: 0, chill: true }],
+    txt: 'Босс склепа. Призывает упырей из ледяных кругов, а следом насылает метель на весь отряд.',
+  },
+  imp: { name: 'Бес-кочегар', floor: 2, hp: 7, r: 6, speed: 52, reach: 28, dmg: 3, fig: 24, fire: true, txt: 'Шустрый, поджигает: герой горит и в следующий ход теряет ещё 2.' },
+  slime: { name: 'Лавовый слизень', floor: 2, hp: 14, r: 9, speed: 20, reach: 30, dmg: 5, fig: 24, lava: true, txt: 'Толстый и медленный. Где лопнет, там остаётся лужа лавы.' },
+  bomber: { name: 'Гном-подрывник', floor: 2, hp: 8, r: 7, speed: 0, reach: 999, dmg: 4, fig: 28, charge: true, txt: 'Ход поджигает фитиль, следующий ход кидает бомбу на двойной урон.' },
+  golem: { name: 'Голем', floor: 2, hp: 26, r: 12, speed: 14, reach: 34, dmg: 7, armor: 3, fig: 38, txt: 'Броня 3: удары слабее не проходят.' },
+  forgelord: {
+    name: 'Владыка кузни', floor: 2, boss: true, hp: 70, r: 15, speed: 12, reach: 44, dmg: 9, armor: 4, fig: 54, rage: true,
+    acts: [{ k: 'heat', every: 3, at: 0, n: 2 }],
+    txt: 'Босс кузни, броня 4. Каждый третий ход раскаляет пол перед рунами, а раненый впадает в ярость (+3 к удару).',
+  },
 };
+
+/** Shoots across the room instead of walking up. */
+export const isRanged = (k: MobKind) => MOBS[k].reach >= 999;
 
 export type NodeKind = 'ore' | 'spk' | 'herb';
 
@@ -98,12 +169,12 @@ export type RoomType = 'fight' | 'elite' | 'treasure' | 'camp' | 'forge' | 'even
 
 export const ROOM_TYPES: Record<RoomType, { name: string; col: string; min: number; txt: string }> = {
   fight: { name: 'Бой', col: '#c2364f', min: 2, txt: 'Обычные мобы, пара жил и кристаллов.' },
-  elite: { name: 'Элитный бой', col: '#7a1d33', min: 3, txt: 'Голем с бронёй и свита. Больше награда.' },
+  elite: { name: 'Элитный бой', col: '#7a1d33', min: 3, txt: 'Сильный враг этажа и свита. Больше награда.' },
   treasure: { name: 'Рудная пещера', col: '#d39612', min: 1.5, txt: 'Девять ресурсных точек и всего два моба.' },
   camp: { name: 'Костёр', col: '#e8642c', min: 0.5, txt: 'Отряд лечится на 6 HP. Павшие встают с половиной здоровья.' },
   forge: { name: 'Кузнец', col: '#5d6488', min: 0.75, txt: 'Отряд получает 6 руды на прокачку дисков.' },
   event: { name: 'Событие', col: '#6b4fa8', min: 0.75, txt: 'Сцена с неожиданным исходом: алтарь, торговец, ловушка.' },
-  boss: { name: 'Босс этажа', col: '#2a1a3a', min: 3.5, txt: 'Король-в-короне со свитой.' },
+  boss: { name: 'Босс этажа', col: '#2a1a3a', min: 3.5, txt: 'Свой босс на каждом этаже, со свитой.' },
 };
 
 export const COMBAT_ROOMS: RoomType[] = ['fight', 'elite', 'treasure', 'boss'];

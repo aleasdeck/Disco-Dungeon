@@ -1,6 +1,6 @@
 // Main menu and its screens: collection, settings and the online lobby.
 
-import { HEROES, MOB_HP_MUL, MOBS, UPS, type MobKind } from './data';
+import { BIOMES, HEROES, MOB_HP_MUL, MOBS, UPS, type MobKind } from './data';
 import { drawPortrait, mobIcon } from './ui';
 import { saveSettings, settings } from './settings';
 import type { Player } from './net';
@@ -15,13 +15,7 @@ export function show(screen: Screen | null) {
   for (const id of SCREENS) $(id).hidden = id !== screen;
 }
 
-const MOB_NOTES: Record<MobKind, string> = {
-  skel: 'Идёт к ближайшему герою и бьёт вблизи.',
-  archer: 'Стоит на месте и стреляет через всю комнату.',
-  slime: 'Медленный и толстый, держит много ударов.',
-  golem: 'Броня 3: удары слабее не проходят.',
-  king: 'Босс этажа, ходит со свитой.',
-};
+const FLOOR_NAMES = BIOMES.map(b => b.name);
 
 const HERO_ROLES = ['Танк', 'Урон', 'Зона'];
 
@@ -47,7 +41,7 @@ export function renderCollection(tab: 'heroes' | 'mobs') {
     (Object.keys(MOBS) as MobKind[]).forEach(k => {
       const d = MOBS[k], card = document.createElement('article');
       card.className = 'card';
-      card.innerHTML = `<img src="${mobIcon(k)}" alt=""><div><h3>${d.name}</h3><p>${MOB_NOTES[k]}</p>`
+      card.innerHTML = `<img src="${mobIcon(k)}" alt=""><div><h3>${d.name}</h3><p><b>${FLOOR_NAMES[d.floor]}${d.boss ? ', босс' : ''}.</b> ${d.txt}</p>`
         + `<dl><dt>HP</dt><dd>${Math.round(d.hp * MOB_HP_MUL)}</dd><dt>Удар</dt><dd>${d.dmg}</dd>${d.armor ? `<dt>Броня</dt><dd>${d.armor}</dd>` : ''}</dl></div>`;
       grid.appendChild(card);
     });

@@ -201,7 +201,7 @@ game.onRoomEnd = win => {
   const last = boss && run.floor === FLOORS - 1;
   setTimeout(() => {
     if (!win) return showEnd({ title: 'Отряд пал', text: `Забег окончен на этаже ${run.floor + 1}, сложность ${S.spec.depth}.`, kind: 'again' });
-    if (last) return showEnd({ title: 'Забег пройден!', text: 'Король-в-короне повержен на последнем этаже.', kind: 'again' });
+    if (last) return showEnd({ title: 'Забег пройден!', text: 'Владыка кузни повержен на последнем этаже.', kind: 'again' });
     if (boss) run.floor++;
     choosing = true;
     showEnd({ title: boss ? `Этаж ${run.floor} пройден` : 'Комната зачищена',

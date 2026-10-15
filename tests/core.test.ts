@@ -3,7 +3,7 @@ import { Camera } from '../src/camera';
 import { HAND_MAX, HAND_START, HEROES, MOBS, TILE } from '../src/data';
 import { Game, newParty, type Action } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { clearOfRock, floorAt, generate, isFloor, tierOf } from '../src/room';
+import { clearOfRock, floorAt, generate, isFloor, newMob, tierOf } from '../src/room';
 import { FLOORS, LAYERS, genFloor, newRun } from '../src/run';
 
 describe('room generator', () => {
@@ -253,5 +253,92 @@ describe('online play', () => {
     const { cli } = pair();
     cli.select(0);
     expect(cli.act).toBe(2);
+  });
+});
+
+describe('floor casts and enemy abilities', () => {
+  it('fills each floor with its own enemies and its own boss', () => {
+    const seen = [new Set<string>(), new Set<string>(), new Set<string>()];
+    for (let f = 0; f < FLOORS; f++) for (let seed = 1; seed < 80; seed++) for (const type of ['fight', 'elite', 'boss'] as const) {
+      const row = type === 'boss' ? LAYERS - 1 : seed % (LAYERS - 1);
+      const L = generate({ seed, depth: f * LAYERS + row + 1, floor: f, type });
+      for (const m of L.mobs) { expect(MOBS[m.k].floor).toBe(f); seen[f].add(m.k); }
+      if (type === 'boss') expect(L.mobs.filter(m => MOBS[m.k].boss)).toHaveLength(1);
+    }
+    expect(seen.map(s => [...s].filter(k => MOBS[k as keyof typeof MOBS].boss))).toEqual([['king'], ['lich'], ['forgelord']]);
+    for (const s of seen) expect(s.size).toBeGreaterThanOrEqual(5);
+  });
+
+  const fight = (floor: number, kinds: (keyof typeof MOBS)[]) => {
+    const g = new Game();
+    g.loadRoom({ seed: 7, depth: floor * LAYERS + 2, floor, type: 'fight' });
+    g.S.mobs = kinds.map((k, i) => newMob(k, 40 + i * 30, 30, 1, 0));
+    g.startFight();
+    return g;
+  };
+  const enemyTurn = (g: Game) => {
+    const t = g.S.turn;
+    for (const h of g.party) h.hand = 0;
+    for (let k = 0; k < 600 && g.S.turn === t; k++) g.update(1 / 60);
+  };
+
+  it('a necromancer marks a circle a turn ahead and raises a skeleton there', () => {
+    const g = fight(0, ['necro']);
+    expect(g.S.mobs[0].intent!.t).not.toBe('summon');
+    enemyTurn(g);
+    expect(g.S.turn).toBe(2);
+    const it = g.S.mobs[0].intent!;
+    expect(it.t).toBe('summon');
+    expect(it.spots).toHaveLength(1);
+    const before = g.S.mobs.length;
+    enemyTurn(g);
+    expect(g.S.mobs.length).toBe(before + 1);
+    const risen = g.S.mobs[before];
+    expect(risen.k).toBe('skel');
+    expect(risen.owner).toBe(0);
+    expect(Math.hypot(risen.x - it.spots![0].x, risen.y - it.spots![0].y)).toBeLessThan(40);
+  });
+
+  it('a ghost lets discs through on even turns', () => {
+    const g = fight(1, ['ghost']);
+    expect(g.solid(g.S.mobs[0])).toBe(true);
+    g.S.turn = 2;
+    expect(g.solid(g.S.mobs[0])).toBe(false);
+  });
+
+  it('a lava slime leaves lava where it dies, and the boss of the forge rages below half HP', () => {
+    const g = fight(2, ['slime', 'forgelord']);
+    const [s, b] = g.S.mobs;
+    const n = g.S.haz.size;
+    g.hurtMob(s, 999, '#fff', true);
+    expect(g.S.haz.size).toBe(n + 1);
+    const dmg = b.dmg;
+    g.hurtMob(b, Math.ceil(b.max / 2) + 1, '#fff', true);
+    expect(b.dmg).toBe(dmg + 3);
+  });
+
+  it('a chilled hero throws softer', () => {
+    const g = fight(1, ['ghoul']), h = g.hero, p = g.power(h);
+    h.chill = 1;
+    expect(g.power(h)).toBeCloseTo(p * 0.7);
+  });
+});
+
+describe('every floor plays out', () => {
+  it('boss and elite fights run turn after turn with their abilities', () => {
+    for (let f = 0; f < FLOORS; f++) for (const type of ['boss', 'elite'] as const) {
+      const g = new Game();
+      g.loadRoom({ seed: 99 + f, depth: f * LAYERS + (type === 'boss' ? LAYERS : 4), floor: f, type });
+      for (const h of g.party) h.hp = h.max = 999;
+      g.startFight();
+      const seen = new Set<string>();
+      for (let turn = 0; turn < 7 && g.S.phase !== 'over'; turn++) {
+        for (const m of g.liveMobs()) if (m.intent) seen.add(m.intent.t);
+        const t = g.S.turn;
+        for (const h of g.party) g.throwDisc(h, -30, -40);
+        for (let k = 0; k < 2000 && g.S.turn === t && g.S.phase !== 'over'; k++) g.update(1 / 60);
+      }
+      if (type === 'boss') expect([...seen].some(t => ['slam', 'summon', 'heat'].includes(t))).toBe(true);
+    }
   });
 });
