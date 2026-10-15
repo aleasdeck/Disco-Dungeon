@@ -3,7 +3,7 @@
 
 import { HEROES, INK, type MobKind } from '../data';
 import { sprites } from '../assets';
-import { brow, circ, ell, eye, fs, lg, mix, pth, rg, rr, type Ctx } from './util';
+import { brow, circ, ell, eye, fs, lg, mix, pth, rg, rr, type Ctx, type Pt } from './util';
 
 export const BASE_TH = 3.2;
 
@@ -195,18 +195,20 @@ export function drawMobFigure(c: Ctx, k: MobKind, x: number, y: number, flash: b
     c.strokeStyle = '#d8d0bc'; c.lineWidth = 0.5; c.beginPath(); c.moveTo(x + 9.2, y - 20.5); c.lineTo(x + 9.2, y - 1.5); c.stroke();
   } else if (k === 'slime') {
     c.beginPath(); c.moveTo(x - 11, y); c.bezierCurveTo(x - 12, y - 9, x - 6, y - 14, x, y - 13); c.bezierCurveTo(x + 7, y - 14, x + 12, y - 8, x + 11, y); c.closePath();
-    c.fillStyle = W || 'rgba(140,180,80,.88)'; c.fill(); c.lineWidth = 1.2; c.strokeStyle = INK; c.stroke();
+    c.fillStyle = W || lg(c, 0, y - 14, 0, y, 'rgba(255,170,70,.92)', 'rgba(200,60,25,.92)'); c.fill(); c.lineWidth = 1.2; c.strokeStyle = INK; c.stroke();
     if (!W) {
       c.save(); c.globalAlpha *= 0.55; rr(c, x - 7, y - 6, 4, 4, 1); fs(c, '#4a3324', 0.6); rr(c, x - 7, y - 3, 6, 2, 0.8); fs(c, '#4a3324', 0.6);
       c.strokeStyle = '#efe6cf'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x + 2, y - 3); c.lineTo(x + 7, y - 6); c.stroke(); c.restore();
       c.fillStyle = 'rgba(255,255,255,.35)'; ell(c, x - 5, y - 10, 2.2, 1); c.fill();
     }
-    c.strokeStyle = INK; c.lineWidth = 2.2; c.beginPath(); c.moveTo(x + 1, y - 12); c.quadraticCurveTo(x + 3, y - 16, x + 1.5, y - 19); c.stroke(); c.strokeStyle = W || '#8cb450'; c.lineWidth = 1; c.stroke();
+    c.strokeStyle = INK; c.lineWidth = 2.2; c.beginPath(); c.moveTo(x + 1, y - 12); c.quadraticCurveTo(x + 3, y - 16, x + 1.5, y - 19); c.stroke(); c.strokeStyle = W || '#f08a3a'; c.lineWidth = 1; c.stroke();
     circ(c, x + 1.5, y - 21, 3.6); fs(c, W || '#f4ead2', 1);
     if (!W) {
       c.strokeStyle = '#d9434f'; c.lineWidth = 0.4; c.beginPath(); c.moveTo(x - 1.5, y - 21.5); c.lineTo(x, y - 21); c.moveTo(x + 4.5, y - 20); c.lineTo(x + 3, y - 20.6); c.stroke();
       circ(c, x + 2.2, y - 20.6, 1.4); c.fillStyle = INK; c.fill();
     }
+  } else if (k !== 'golem' && k !== 'king') {
+    drawMobFigure2(c, k, x, y, W);
   } else {
     const king = k === 'king', z = king ? 1.2 : 1;
     rr(c, x - 8 * z, y - 5 * z, 5 * z, 5 * z, 1.5); fs(c, W || '#4e4a45', 0.9); rr(c, x + 3 * z, y - 5 * z, 5 * z, 5 * z, 1.5); fs(c, W || '#4e4a45', 0.9);
@@ -230,5 +232,152 @@ export function drawMobFigure(c: Ctx, k: MobKind, x: number, y: number, flash: b
   }
 }
 
+/** The enemies of the ice crypt and the forge, plus the newer dungeon ones. */
+function drawMobFigure2(c: Ctx, k: MobKind, x: number, y: number, W: string | null) {
+  const stick = (pts: Pt[], col: string, w = 2.4) => {
+    c.beginPath(); pts.forEach(([px, py], i) => (i ? c.lineTo(px, py) : c.moveTo(px, py)));
+    c.strokeStyle = INK; c.lineWidth = w; c.stroke(); c.strokeStyle = W || col; c.lineWidth = w * 0.5; c.stroke();
+  };
+  if (k === 'rat') {
+    // a fat prison rat on its hind legs, all snout and teeth
+    c.beginPath(); c.moveTo(x - 5, y - 3); c.bezierCurveTo(x - 12, y - 3, x - 14, y - 9, x - 10, y - 12); c.strokeStyle = INK; c.lineWidth = 1.8; c.stroke(); c.strokeStyle = W || '#d9a0a0'; c.lineWidth = 0.8; c.stroke();
+    ell(c, x - 1, y - 6, 6, 6); fs(c, W || lg(c, x - 7, 0, x + 5, 0, '#8a7f74', '#5a5048'), 1);
+    ell(c, x + 1, y - 4, 3, 3.5); fs(c, W || '#b8aa98', 0.7);
+    ell(c, x - 2, y - 15, 3, 3.4); fs(c, W || '#d9a0a0', 0.8); ell(c, x + 3.5, y - 15.5, 2.6, 3); fs(c, W || '#d9a0a0', 0.8);
+    pth(c, [[x - 4, y - 11], [x + 1, y - 15], [x + 9, y - 10], [x + 10.5, y - 8.5], [x + 2, y - 7.5]]); fs(c, W || '#7d7268', 1);
+    circ(c, x + 10.5, y - 9.4, 1.4); fs(c, W || '#d9677a', 0.6);
+    if (!W) { eye(c, x + 1.5, y - 11.6, 1.1, 0.4, 1, 1, '#7d7268'); rr(c, x + 7, y - 8.6, 1, 1.6, 0.2); fs(c, '#f4ead2', 0.4); }
+  } else if (k === 'necro') {
+    // hunched in a ragged hood, a long nose poking out, a skull on a stick
+    stick([[x + 7, y], [x + 8, y - 30]], '#6b4423', 2.6);
+    circ(c, x + 8, y - 32, 3.4); fs(c, W || '#e3d8bc', 0.9);
+    if (!W) { circ(c, x + 6.8, y - 32.4, 0.9); c.fillStyle = '#7dff9a'; c.fill(); circ(c, x + 9.2, y - 32.4, 0.9); c.fill(); }
+    pth(c, [[x - 8, y], [x - 6, y - 18], [x - 3, y - 26], [x + 4, y - 27], [x + 6, y - 18], [x + 7, y], [x + 3, y - 2], [x, y], [x - 3, y - 2]]); fs(c, W || lg(c, 0, y - 27, 0, y, '#4d3a5c', '#211827'), 1.1);
+    c.beginPath(); c.moveTo(x - 5, y - 21); c.bezierCurveTo(x - 6, y - 31, x - 1, y - 37, x + 5, y - 33); c.bezierCurveTo(x + 7, y - 29, x + 6, y - 24, x + 4, y - 21); c.closePath(); fs(c, W || '#3a2b45', 1.1);
+    ell(c, x + 1, y - 26, 3.4, 3.6); c.fillStyle = W || '#120c10'; c.fill();
+    if (!W) { circ(c, x, y - 27, 0.9); c.fillStyle = '#7dff9a'; c.fill(); circ(c, x + 2.4, y - 27, 0.7); c.fill(); }
+    pth(c, [[x + 2, y - 26], [x + 8, y - 22], [x + 3, y - 23.5]]); fs(c, W || '#9fb59a', 0.8);
+    circ(c, x + 6.5, y - 20, 1.8); fs(c, W || '#9fb59a', 0.7);
+  } else if (k === 'ghoul') {
+    // hunched blue-grey ghoul with icicles growing out of its back and long arms
+    rr(c, x - 4.5, y - 5, 2.2, 5, 1); fs(c, W || '#5d7480', 0.8); rr(c, x + 2, y - 5, 2.2, 5, 1); fs(c, W || '#5d7480', 0.8);
+    ell(c, x - 1, y - 12, 7, 8); fs(c, W || lg(c, x - 8, 0, x + 6, 0, '#a6c2cc', '#5d7480'), 1.1);
+    for (const [ix, iy, h] of [[-6, -17, 7], [-3, -19.5, 9], [0.5, -19, 6]]) { pth(c, [[x + ix - 1.5, y + iy + 1], [x + ix + 0.5, y + iy - h], [x + ix + 2, y + iy + 1.5]]); fs(c, W || '#d9f2ff', 0.7); }
+    stick([[x + 4, y - 14], [x + 9, y - 8], [x + 9, y - 2]], '#8fb0bb', 2.6);
+    ell(c, x + 4, y - 20, 4.6, 4); fs(c, W || '#9dbcc6', 1);
+    pth(c, [[x + 2, y - 18], [x + 10, y - 17], [x + 9, y - 14.5], [x + 3, y - 15.5]]); fs(c, W || '#7d9aa5', 0.9);
+    if (!W) {
+      eye(c, x + 3.5, y - 21.4, 1.2, 0.2, 1, 1, '#7d9aa5'); eye(c, x + 6.5, y - 21, 0.9, 0.2, 1, 1, '#7d9aa5');
+      for (const dx of [4.5, 6.5, 8.5]) { pth(c, [[x + dx, y - 17.3], [x + dx + 0.6, y - 15.7], [x + dx + 1.2, y - 17.3]]); fs(c, '#f4ead2', 0.3); }
+    }
+  } else if (k === 'ghost') {
+    // a tattered sheet with sad eyes; see-through by nature
+    c.save(); c.globalAlpha *= W ? 1 : 0.82;
+    c.beginPath(); c.moveTo(x - 8, y - 2); c.bezierCurveTo(x - 10, y - 18, x - 7, y - 30, x, y - 30); c.bezierCurveTo(x + 7, y - 30, x + 10, y - 18, x + 8, y - 2);
+    for (let q = 0; q < 4; q++) c.quadraticCurveTo(x + 6 - q * 4, y + (q % 2 ? -4 : 2), x + 4 - q * 4, y - 2);
+    c.closePath(); fs(c, W || lg(c, 0, y - 30, 0, y, '#eef8ff', '#9fc4d6'), 1.1);
+    if (!W) {
+      ell(c, x - 3, y - 21, 1.8, 2.6); c.fillStyle = INK; c.fill(); ell(c, x + 3, y - 21, 1.6, 2.4); c.fill();
+      brow(c, x - 5, y - 23.4, x - 1.6, y - 25, 1, 0.8); brow(c, x + 1.6, y - 25, x + 5, y - 23.4, 1, 0.8);
+      ell(c, x, y - 15, 2.2, 3); c.fillStyle = '#2a3a44'; c.fill();
+    }
+    c.restore();
+  } else if (k === 'yeti') {
+    // a heap of shaggy white fur with a tiny squashed face
+    rr(c, x - 8, y - 5, 5, 5, 1.6); fs(c, W || '#c9d3d6', 0.9); rr(c, x + 3, y - 5, 5, 5, 1.6); fs(c, W || '#c9d3d6', 0.9);
+    c.beginPath(); c.moveTo(x - 11, y - 4);
+    for (let q = 0; q <= 10; q++) { const a = Math.PI + (q / 10) * Math.PI, r0 = q % 2 ? 13 : 11.5; c.lineTo(x + Math.cos(a) * r0, y - 16 + Math.sin(a) * r0 * 1.05); }
+    c.lineTo(x + 11, y - 4); c.closePath(); fs(c, W || lg(c, x - 12, 0, x + 12, 0, '#f4f8fa', '#a8b8be'), 1.2);
+    circ(c, x - 12, y - 10, 4.5); fs(c, W || '#dfe8eb', 1); circ(c, x + 12, y - 10, 4.5); fs(c, W || '#dfe8eb', 1);
+    ell(c, x + 1, y - 20, 5.5, 4.4); fs(c, W || '#7f9aa6', 1);
+    if (!W) {
+      eye(c, x - 1, y - 21.4, 1, 0.5, 0.5, 1, '#7f9aa6'); eye(c, x + 3, y - 21.4, 1, 0.5, 0.5, 1, '#7f9aa6');
+      rr(c, x - 2, y - 18.6, 6, 1.8, 0.8); c.fillStyle = INK; c.fill(); rr(c, x - 1.2, y - 18.6, 1.2, 1.4, 0.2); fs(c, '#f4ead2', 0.3); rr(c, x + 2.2, y - 18.6, 1.2, 1.4, 0.2); fs(c, '#f4ead2', 0.3);
+    }
+    pth(c, [[x - 4, y - 25], [x - 6, y - 31], [x - 1.5, y - 26]]); fs(c, W || '#e8dcc0', 0.8);
+    pth(c, [[x + 5, y - 25], [x + 7.5, y - 31], [x + 3, y - 26]]); fs(c, W || '#e8dcc0', 0.8);
+  } else if (k === 'witch') {
+    // ice witch: a long frosty nose under a tall crooked hat, a crystal on a staff
+    stick([[x - 8, y], [x - 9, y - 28]], '#8a9fb0', 2.4);
+    pth(c, [[x - 9, y - 27], [x - 11, y - 32], [x - 9, y - 37], [x - 7, y - 32]]); fs(c, W || '#bfe6ff', 0.8);
+    pth(c, [[x - 6, y], [x - 4.5, y - 18], [x + 4.5, y - 18], [x + 7, y], [x + 3, y - 1.5], [x, y], [x - 3, y - 1.5]]); fs(c, W || lg(c, 0, y - 18, 0, y, '#4f7a95', '#24394a'), 1);
+    stick([[x - 4, y - 14], [x - 8, y - 16]], '#4f7a95', 2.4);
+    ell(c, x + 0.5, y - 22, 4.4, 4.4); fs(c, W || '#c8dbe2', 0.9);
+    if (!W) { eye(c, x - 1, y - 23, 1, 0.4, 1, 1, '#a8bfc8'); eye(c, x + 2, y - 23, 0.8, 0.4, 1, 1, '#a8bfc8'); }
+    c.beginPath(); c.moveTo(x + 2, y - 23); c.bezierCurveTo(x + 7, y - 22, x + 9, y - 19, x + 8, y - 17.5); c.bezierCurveTo(x + 6, y - 19, x + 4, y - 20, x + 2.5, y - 20.5); c.closePath(); fs(c, W || '#a8c4cf', 0.8);
+    ell(c, x + 0.5, y - 26, 9, 2); fs(c, W || '#2f4a5c', 1);
+    c.beginPath(); c.moveTo(x - 4, y - 26.5); c.lineTo(x - 1, y - 36); c.quadraticCurveTo(x + 3, y - 41, x + 7, y - 38); c.lineTo(x + 3, y - 36); c.lineTo(x + 4.5, y - 26.5); c.closePath(); fs(c, W || '#3c5c70', 1);
+    if (!W) { pth(c, [[x + 6.5, y - 38], [x + 7.5, y - 40.5], [x + 8.5, y - 38]]); fs(c, '#bfe6ff', 0.5); }
+  } else if (k === 'lich') {
+    // a tall crowned skull in frost-blue robes, ice orb on a staff
+    stick([[x + 11, y], [x + 12, y - 44]], '#7f9aa6', 2.8);
+    circ(c, x + 12, y - 47, 4); fs(c, W || rg(c, x + 12, y - 47, 4, '#ffffff', '#6fc6ff'), 1);
+    pth(c, [[x - 12, y], [x - 9, y - 26], [x - 4, y - 34], [x + 5, y - 34], [x + 9, y - 26], [x + 12, y], [x + 6, y - 2], [x, y], [x - 6, y - 2]]); fs(c, W || lg(c, 0, y - 34, 0, y, '#4f7a95', '#1d2e3b'), 1.2);
+    pth(c, [[x - 10, y - 24], [x - 3, y - 18], [x, y - 22], [x + 3, y - 18], [x + 10, y - 24], [x + 6, y - 32], [x - 6, y - 32]]); fs(c, W || '#9fd4ee', 0.9);
+    stick([[x + 6, y - 26], [x + 11, y - 22]], '#4f7a95', 3);
+    ell(c, x, y - 39, 6, 6.2); fs(c, W || '#e7eef0', 1.1);
+    rr(c, x - 3.4, y - 35.4, 6.8, 3.4, 1.2); fs(c, W || '#e7eef0', 0.9);
+    if (!W) {
+      ell(c, x - 2.4, y - 39.5, 1.8, 2.1); c.fillStyle = INK; c.fill(); ell(c, x + 2.4, y - 39.5, 1.6, 1.9); c.fill();
+      circ(c, x - 2.4, y - 39.3, 0.7); c.fillStyle = '#6fe0ff'; c.fill(); circ(c, x + 2.4, y - 39.3, 0.6); c.fill();
+      c.fillStyle = INK; for (const dx of [-2, -0.6, 0.8, 2.2]) c.fillRect(x + dx - 0.3, y - 34.8, 0.6, 2.2);
+    }
+    pth(c, [[x - 6, y - 43], [x - 6.5, y - 49], [x - 3, y - 46], [x, y - 51], [x + 3, y - 46], [x + 6.5, y - 49], [x + 6, y - 43]]); fs(c, W || '#bfe6ff', 0.9);
+  } else if (k === 'imp') {
+    // a pot-bellied little stoker with a coal shovel
+    stick([[x - 4, y], [x - 3, y - 6]], '#a8382a', 2.4); stick([[x + 3, y], [x + 2.5, y - 6]], '#a8382a', 2.4);
+    c.beginPath(); c.moveTo(x - 4, y - 5); c.bezierCurveTo(x - 12, y - 3, x - 13, y - 10, x - 9, y - 12); c.strokeStyle = INK; c.lineWidth = 1.6; c.stroke(); c.strokeStyle = W || '#c2442f'; c.lineWidth = 0.7; c.stroke();
+    pth(c, [[x - 10, y - 12.5], [x - 8.4, y - 13.6], [x - 8.2, y - 11.4]]); fs(c, W || '#c2442f', 0.5);
+    ell(c, x, y - 10, 5.6, 5.6); fs(c, W || rg(c, x, y - 10, 6, '#ff8a5c', '#a8382a'), 1);
+    stick([[x + 4, y - 11], [x + 9, y - 7], [x + 11, y - 18]], '#6b4423', 2);
+    pth(c, [[x + 9.6, y - 18], [x + 13, y - 19], [x + 12.5, y - 23], [x + 9.5, y - 22]]); fs(c, W || '#55504a', 0.7);
+    ell(c, x + 0.5, y - 18, 4.8, 4.4); fs(c, W || '#d9563c', 1);
+    pth(c, [[x - 3, y - 20], [x - 9, y - 22], [x - 3.5, y - 17.5]]); fs(c, W || '#d9563c', 0.8);
+    pth(c, [[x + 4, y - 20], [x + 10, y - 22], [x + 4.5, y - 17.5]]); fs(c, W || '#d9563c', 0.8);
+    pth(c, [[x - 2.5, y - 21.5], [x - 3, y - 25], [x - 0.8, y - 22.2]]); fs(c, W || '#3a2a20', 0.6);
+    pth(c, [[x + 2, y - 22.2], [x + 3.5, y - 25], [x + 3.6, y - 21.4]]); fs(c, W || '#3a2a20', 0.6);
+    if (!W) {
+      eye(c, x - 1, y - 19, 1, 0, 1, 1, '#d9563c'); eye(c, x + 2.2, y - 19, 1, 0, 1, 1, '#d9563c');
+      c.beginPath(); c.moveTo(x - 1.5, y - 16.4); c.quadraticCurveTo(x + 1, y - 14.4, x + 3.5, y - 16.6); c.strokeStyle = INK; c.lineWidth = 0.7; c.stroke();
+    }
+    ell(c, x + 1, y - 17.6, 1.6, 1.3); fs(c, W || '#e86a4c', 0.6);
+  } else if (k === 'bomber') {
+    // stout gnome in a dented helmet, beard to the knees, a lit bomb under the arm
+    rr(c, x - 5, y - 4, 3.6, 4, 1.2); fs(c, W || '#3b2c22', 0.8); rr(c, x + 1.4, y - 4, 3.6, 4, 1.2); fs(c, W || '#3b2c22', 0.8);
+    ell(c, x, y - 10, 7, 7); fs(c, W || lg(c, x - 7, 0, x + 7, 0, '#8a6a3d', '#4f3a22'), 1);
+    circ(c, x + 8, y - 11, 4.4); fs(c, W || rg(c, x + 8, y - 11, 4.4, '#6a6a6a', '#1a1a1a'), 1);
+    stick([[x + 9.5, y - 15], [x + 11, y - 18], [x + 10, y - 20]], '#d9b24a', 1.6);
+    if (!W) { circ(c, x + 10, y - 20.6, 1.3); c.fillStyle = '#ffd34d'; c.fill(); circ(c, x + 10, y - 20.6, 0.6); c.fillStyle = '#fff'; c.fill(); }
+    c.beginPath(); c.moveTo(x - 4.5, y - 17); c.bezierCurveTo(x - 6, y - 8, x - 2, y - 4, x + 0.5, y - 3); c.bezierCurveTo(x + 2, y - 6, x + 5, y - 10, x + 4.5, y - 17); c.closePath(); fs(c, W || '#d9d2c2', 1);
+    ell(c, x, y - 20, 4.6, 4.2); fs(c, W || '#e3a882', 0.9);
+    if (!W) { eye(c, x - 1.6, y - 21, 0.9, 0.5, 0.5, 1); eye(c, x + 1.8, y - 21, 0.9, 0.5, 0.5, 1); }
+    ell(c, x + 0.6, y - 18.6, 2.2, 2); fs(c, W || '#d98a6a', 0.8);
+    c.beginPath(); c.arc(x, y - 21.5, 5.6, Math.PI, 0); c.closePath(); fs(c, W || lg(c, x - 6, 0, x + 6, 0, '#a8a296', '#5d5852'), 1);
+    rr(c, x - 6.5, y - 22.4, 13, 1.6, 0.6); fs(c, W || '#6b665f', 0.7);
+  } else if (k === 'forgelord') {
+    // a giant smith: anvil-broad shoulders, horned helm, a beard of fire and a hammer the size of a hero
+    const z = 1.15;
+    rr(c, x - 9 * z, y - 6 * z, 6 * z, 6 * z, 1.6); fs(c, W || '#3b2c22', 1); rr(c, x + 3 * z, y - 6 * z, 6 * z, 6 * z, 1.6); fs(c, W || '#3b2c22', 1);
+    pth(c, [[x - 12 * z, y - 5 * z], [x - 15 * z, y - 26 * z], [x + 15 * z, y - 26 * z], [x + 12 * z, y - 5 * z]]); fs(c, W || lg(c, x - 15, 0, x + 15, 0, '#7a4a32', '#3f2418'), 1.2);
+    rr(c, x - 10 * z, y - 18 * z, 20 * z, 12 * z, 2); fs(c, W || '#5a3b2a', 1);
+    stick([[x + 13 * z, y - 22 * z], [x + 17 * z, y - 12 * z], [x + 18 * z, y - 36 * z]], '#6b4423', 3);
+    rr(c, x + 12 * z, y - 42 * z, 12 * z, 7 * z, 1.4); fs(c, W || lg(c, 0, y - 42 * z, 0, y - 35 * z, '#9a948a', '#4e4a45'), 1.2);
+    circ(c, x - 15 * z, y - 22 * z, 5 * z); fs(c, W || '#4e4a45', 1.1);
+    const hy = y - 31 * z;
+    ell(c, x, hy, 6.5 * z, 6 * z); fs(c, W || '#d99a74', 1.1);
+    c.beginPath(); c.moveTo(x - 6 * z, hy + 1); c.bezierCurveTo(x - 8 * z, hy + 10 * z, x - 4 * z, hy + 16 * z, x, hy + 18 * z); c.bezierCurveTo(x + 4 * z, hy + 16 * z, x + 8 * z, hy + 10 * z, x + 6 * z, hy + 1); c.closePath();
+    fs(c, W || lg(c, 0, hy, 0, hy + 18 * z, '#ffd34d', '#e0461f'), 1);
+    if (!W) { eye(c, x - 2.4 * z, hy - 1.4 * z, 1.2, 0.6, 0, 1, '#b07c55'); eye(c, x + 2.4 * z, hy - 1.4 * z, 1.2, 0.6, 0, 1, '#b07c55'); brow(c, x - 5 * z, hy - 4 * z, x - 0.8 * z, hy - 2.6 * z, 1, 1.4); brow(c, x + 0.8 * z, hy - 2.6 * z, x + 5 * z, hy - 4 * z, 1, 1.4); }
+    ell(c, x, hy + 1.6 * z, 2.4 * z, 2 * z); fs(c, W || '#c97a5a', 0.8);
+    c.beginPath(); c.arc(x, hy - 2 * z, 7 * z, Math.PI, 0); c.closePath(); fs(c, W || lg(c, x - 7, 0, x + 7, 0, '#8a847a', '#45413c'), 1.1);
+    pth(c, [[x - 6 * z, hy - 4 * z], [x - 12 * z, hy - 12 * z], [x - 5 * z, hy - 7 * z]]); fs(c, W || '#e8dcc0', 0.9);
+    pth(c, [[x + 6 * z, hy - 4 * z], [x + 12 * z, hy - 12 * z], [x + 5 * z, hy - 7 * z]]); fs(c, W || '#e8dcc0', 0.9);
+  }
+}
+
 /** Head-room above the feet for HP bars and intent badges. */
-export const MOB_TOP: Record<MobKind, number> = { skel: 33, archer: 27, slime: 30, golem: 37, king: 52 };
+export const MOB_TOP: Record<MobKind, number> = {
+  skel: 33, archer: 27, rat: 21, necro: 40, king: 52,
+  ghoul: 30, ghost: 33, yeti: 38, witch: 43, lich: 56,
+  imp: 27, slime: 30, bomber: 27, golem: 37, forgelord: 56,
+};

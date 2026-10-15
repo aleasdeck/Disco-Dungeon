@@ -1,6 +1,6 @@
 // Procedural room generator. Pure: the same RoomSpec always yields the same layout.
 
-import { BIOMES, MOB_HP_MUL, MOBS, NODES, TILE, type Biome, type MobKind, type NodeKind, type RoomType } from './data';
+import { BIOMES, MOB_HP_MUL, MOBS, NODES, TILE, isRanged, type Biome, type MobKind, type NodeKind, type RoomType } from './data';
 import { makeRng } from './rng';
 import { LAYERS } from './run';
 
@@ -37,7 +37,19 @@ export interface ResNode {
   hit: number;
 }
 
-export interface Intent { t: 'hit' | 'move'; hero: number; dmg: number }
+/**
+ * What a mob will do in the coming enemy turn, shown to the players beforehand.
+ * hit/move/charge aim at one hero; slam hits every hero (hero = -1); heal names the mob it mends;
+ * summon and heat carry the spots that light up on the floor a turn ahead.
+ */
+export interface Intent {
+  t: 'hit' | 'move' | 'charge' | 'slam' | 'heal' | 'summon' | 'heat';
+  hero: number;
+  dmg: number;
+  chill?: boolean;
+  mob?: number;
+  spots?: { x: number; y: number }[];
+}
 
 export interface Mob {
   k: MobKind;
@@ -60,6 +72,11 @@ export interface Mob {
   tx: number;
   ty: number;
   hop: number;
+  /** Index in the room's mob list of the mob that summoned this one, or -1. */
+  owner: number;
+  /** Counts down from 1 while a summoned mob rises out of its circle. */
+  born: number;
+  rage?: boolean;
 }
 
 export type Shape = 'rect' | 'corner' | 'funnel' | 'alcove' | 'cross';
@@ -111,7 +128,7 @@ export function newMob(k: MobKind, x: number, y: number, hpMul = 1, dmgAdd = 0):
   return {
     k, name: d.name, r: d.r, speed: d.speed, reach: d.reach, armor: d.armor,
     hp, max: hp, dmg: d.dmg + dmgAdd, x, y, flash: 0, dead: 0, burn: 0, intent: null,
-    fx: x, fy: y, tx: x, ty: y, hop: 0,
+    fx: x, fy: y, tx: x, ty: y, hop: 0, owner: -1, born: 0,
   };
 }
 
@@ -290,12 +307,22 @@ function pickPads(gw: number, gh: number, floor: Uint8Array, R: ReturnType<typeo
 /** Block clusters from plain to awkward: single, pairs, an L, a diagonal pair. */
 const BLOCK_SHAPES = [[[0, 0]], [[0, 0], [1, 0]], [[0, 0], [0, 1]], [[0, 0], [1, 0], [0, 1]], [[0, 0], [1, 1]]];
 
+/** Each floor has its own cast: who fills regular fights, who leads an elite fight, and its boss. */
+export const CASTS: { early: MobKind[]; late: MobKind[]; elite: MobKind; boss: MobKind }[] = [
+  { early: ['skel', 'skel', 'archer', 'rat'], late: ['skel', 'archer', 'rat', 'rat', 'necro'], elite: 'necro', boss: 'king' },
+  { early: ['ghoul', 'ghoul', 'ghost'], late: ['ghoul', 'ghost', 'yeti', 'witch'], elite: 'witch', boss: 'lich' },
+  { early: ['imp', 'imp', 'slime', 'bomber'], late: ['imp', 'slime', 'bomber', 'golem'], elite: 'golem', boss: 'forgelord' },
+];
+
 /** Enemies a regular fight draws from: the floor sets the cast, late rows of a floor add tougher ones. */
 function mobPool(f: number, t: number): MobKind[] {
-  if (f === 0) return t === 0 ? ['skel', 'skel', 'skel', 'archer'] : t < 3 ? ['skel', 'skel', 'archer'] : ['skel', 'archer', 'slime'];
-  if (f === 1) return t < 3 ? ['skel', 'archer', 'slime'] : ['skel', 'archer', 'archer', 'slime'];
-  return t < 3 ? ['skel', 'archer', 'slime', 'slime'] : ['skel', 'archer', 'slime', 'golem'];
+  const cast = CASTS[Math.min(f, CASTS.length - 1)];
+  if (t === 0) return cast.early.slice(0, 3);
+  return t < 3 ? cast.early : cast.late;
 }
+
+/** Enemies that set the pace of a fight: at most one of each in a room. */
+const SOLO: MobKind[] = ['golem', 'necro', 'witch', 'yeti', 'bomber'];
 
 /** How much every enemy's HP grows per room of the run (on top of MOB_HP_MUL). */
 export const HP_STEP = 0.065;
@@ -377,23 +404,26 @@ export function generate(spec: RoomSpec): Layout {
   }
 
   const hpMul = MOB_HP_MUL * (1 + HP_STEP * (d - 1)), dmgAdd = dmgBonus(f, t);
-  const pool = mobPool(f, t);
-  const draw = (n: number) => {
+  const pool = mobPool(f, t), cast = CASTS[Math.min(f, CASTS.length - 1)];
+  const solo = (k: MobKind) => SOLO.includes(k) || (t === 0 && isRanged(k));
+  const draw = (n: number, has: MobKind[] = []) => {
     const out: MobKind[] = [];
     for (let i = 0; i < n; i++) {
       let k = pick(pool);
-      // one archer at most in the first room, one golem at most anywhere: they set the pace of a fight
-      for (let tr = 0; tr < 8 && ((k === 'archer' && t === 0) || k === 'golem') && out.includes(k); tr++) k = pick(pool);
-      if (((k === 'archer' && t === 0) || k === 'golem') && out.includes(k)) k = 'skel';
+      // one shooter at most in the first room, one of each heavy hitter anywhere,
+      // and never more than two shooters of a kind: a room full of them can't be reached
+      const full = (k: MobKind) => (solo(k) && (out.includes(k) || has.includes(k))) || (isRanged(k) && out.filter(o => o === k).length >= 2);
+      for (let tr = 0; tr < 8 && full(k); tr++) k = pick(pool);
+      if (full(k)) k = cast.early[0];
       out.push(k);
     }
     return out;
   };
   const count = Math.min(roll(tier.mobs) + f, 7);
   let mk: MobKind[];
-  if (type === 'treasure') mk = ['skel', 'archer'];
-  else if (type === 'boss') mk = ['king', ...draw(2 + f).map(k => (k === 'golem' ? 'skel' : k))];
-  else if (type === 'elite') mk = ['golem', ...draw(count - 1).map(k => (k === 'golem' ? 'skel' : k))];
+  if (type === 'treasure') mk = cast.early.filter((k, i, a) => a.indexOf(k) === i).slice(0, 2);
+  else if (type === 'boss') mk = [cast.boss, ...draw(2 + f, SOLO)];
+  else if (type === 'elite') mk = [cast.elite, ...draw(count - 1, [cast.elite])];
   else mk = draw(count);
   const mobs: Mob[] = [];
   for (const k of mk) {

@@ -1,7 +1,7 @@
 // Draws one frame of a room: walls, floor, obstacles, resources, discs and miniatures.
 // Everything is drawn in iso space through the camera, so zoom and rotation are free.
 
-import { HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE } from '../data';
+import { HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, isRanged } from '../data';
 import type { Camera, Vec } from '../camera';
 import type { Disc, Game, HeroState } from '../game';
 import { floorAt, hazKey, isFloor, type Block, type Edge, type Mob, type ResNode } from '../room';
@@ -15,6 +15,15 @@ export interface Carry { hero: HeroState; x: number; y: number; pad: number | nu
 
 
 const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** Label and colour of an enemy's special intent badge. */
+const INTENT_PILL: Record<'charge' | 'slam' | 'heal' | 'summon' | 'heat', (dmg: number, chill: boolean) => [string, string]> = {
+  charge: () => ['фитиль', '#8a5a2b'],
+  slam: (d, chill) => [(chill ? 'метель ' : 'всем ') + d, chill ? '#3f7fa8' : '#b8323f'],
+  heal: d => ['лечит ' + d, '#3c8a52'],
+  summon: () => ['призыв', '#6b4fa8'],
+  heat: () => ['жар', '#c2501f'],
+};
 
 export class SceneRenderer {
   private c!: Ctx;
@@ -60,6 +69,7 @@ export class SceneRenderer {
     this.wallItems(items);
     items.sort((a, b) => a[0] - b[0]).forEach(i => i[1]());
 
+    this.drawOmens();
     this.drawTelegraph();
     this.drawAim(aim);
     this.drawFx();
@@ -306,6 +316,33 @@ export class SceneRenderer {
     });
   }
 
+  /** Glowing summon circles and tiles about to turn to lava, a turn ahead; drawn over the figures so nothing hides them. */
+  private drawOmens() {
+    const { c, P, g } = this;
+    const S = g.S;
+    if (S.phase === 'over' || (S.phase === 'enemy' && S.attacked)) return;
+    const pulse = reduce ? 0.7 : 0.55 + 0.35 * Math.sin(this.t * 4);
+    for (const m of g.liveMobs()) {
+      const it = m.intent;
+      if (!it?.spots) continue;
+      for (const p of it.spots) {
+        if (it.t === 'summon') {
+          const r = MOBS[MOBS[m.k].acts!.find(a => a.k === 'summon')!.kind!].r + 3, [x, y] = P(p.x, p.y);
+          ell(c, x, y, r * 1.27, r * 0.64);
+          c.fillStyle = `rgba(150,110,255,${0.3 * pulse})`; c.fill();
+          c.strokeStyle = `rgba(200,170,255,${pulse})`; c.lineWidth = 1.6; c.stroke();
+          ell(c, x, y, r * 0.8, r * 0.4);
+          c.setLineDash([2, 2]); c.stroke(); c.setLineDash([]);
+        } else {
+          const x0 = p.x - 7, y0 = p.y - 7, x1 = p.x + 7, y1 = p.y + 7;
+          pth(c, [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)]);
+          c.fillStyle = `rgba(255,120,40,${0.35 * pulse})`; c.fill();
+          c.strokeStyle = `rgba(255,170,70,${pulse})`; c.lineWidth = 1; c.stroke();
+        }
+      }
+    }
+  }
+
   private drawTelegraph() {
     const { c, P, g } = this;
     const S = g.S;
@@ -314,12 +351,19 @@ export class SceneRenderer {
     c.save();
     c.lineCap = 'round';
     const lw = Math.max(1.4, 2.4 / this.cam.zoom);
+    const lines: { m: Mob; to: { x: number; y: number }; col: string }[] = [];
     for (const m of g.liveMobs()) {
       const it = m.intent;
-      if (!it || it.t !== 'hit') continue;
-      const hero = g.heroOf(it.hero);
-      if (hero.pad === null) continue;
-      const p = S.pads[hero.pad], [ax, ay] = P(m.x, m.y, 8), [bx, by] = P(p.x, p.y, 8);
+      if (!it) continue;
+      if (it.t === 'hit') {
+        const hero = g.heroOf(it.hero);
+        if (hero.pad !== null) lines.push({ m, to: S.pads[hero.pad], col: isRanged(m.k) ? 'rgba(150,235,120,.9)' : 'rgba(255,90,115,.9)' });
+      } else if (it.t === 'slam') {
+        for (const h of g.alive()) if (h.pad !== null) lines.push({ m, to: S.pads[h.pad], col: it.chill ? 'rgba(170,225,255,.95)' : 'rgba(255,211,77,.95)' });
+      } else if (it.t === 'heal' && S.mobs[it.mob!]) lines.push({ m, to: S.mobs[it.mob!], col: 'rgba(123,227,154,.95)' });
+    }
+    for (const { m, to: p, col } of lines) {
+      const [ax, ay] = P(m.x, m.y, 8), [bx, by] = P(p.x, p.y, 8);
       c.beginPath();
       c.moveTo(ax, ay);
       c.quadraticCurveTo((ax + bx) / 2, Math.min(ay, by) - 18, bx, by);
@@ -329,7 +373,7 @@ export class SceneRenderer {
       c.stroke();
       c.setLineDash([lw * 2.5, lw * 2]);
       c.lineDashOffset = reduce ? 0 : -this.t * 12;
-      c.strokeStyle = m.k === 'archer' ? 'rgba(150,235,120,.9)' : 'rgba(255,90,115,.9)';
+      c.strokeStyle = col;
       c.lineWidth = lw;
       c.stroke();
     }
@@ -517,6 +561,11 @@ export class SceneRenderer {
       fs(c, '#3fc4b6', 0.8);
     }
     for (let k = 0; k < h.hand; k++) { ell(c, sx - 15 - k * 5, sy - 1, 3, 1.6); fs(c, h.def.col, 0.7); }
+    if (h.chill > 0 || h.fire > 0) {
+      c.font = '600 6.5px Oswald, sans-serif'; c.textAlign = 'right';
+      c.fillStyle = h.chill > 0 ? '#bfe6ff' : '#ff9a5c';
+      c.fillText(h.chill > 0 && h.fire > 0 ? 'озноб, горит' : h.chill > 0 ? 'озноб' : 'горит', sx - 11, top + 1);
+    }
     if (g.hero === h && S.phase !== 'over') {
       const yy = top - 7 - (reduce ? 0 : Math.sin(this.t * 6) * 1.2);
       pth(c, [[sx - 3, yy - 3], [sx + 3, yy - 3], [sx, yy + 1]]);
@@ -530,7 +579,8 @@ export class SceneRenderer {
     const it = m.intent, th = it ? g.heroOf(it.hero) : null, tgt = th && th.pad !== null ? S.pads[th.pad] : { x: S.Wx, y: S.Wy };
     drawMiniature(c, {
       key: m.k, x, y, baseR: m.r, baseCol: ENEMY_BASE, fig: MOBS[m.k].fig,
-      faceRight: this.faceRight(m.x, m.y, tgt.x, tgt.y), flash: m.flash > 0, hop: m.hop, alpha: m.dead ? Math.max(0, 1 - m.dead) : 1,
+      faceRight: this.faceRight(m.x, m.y, tgt.x, tgt.y), flash: m.flash > 0, hop: m.hop,
+      alpha: m.dead ? Math.max(0, 1 - m.dead) : (1 - (m.born ?? 0)) * (m.hp > 0 && !g.solid(m) ? 0.35 : 1),
       placeholder: (cc, fx, fy, fl) => drawMobFigure(cc, m.k, fx, fy, fl),
     });
     if (m.hp <= 0) return;
@@ -552,10 +602,20 @@ export class SceneRenderer {
         pth(c, [[bx, by], [bx + 11, by], [bx + 11, by + 6], [bx + 5.5, by + 11], [bx, by + 6]]); fs(c, '#b8323f', 0.9);
         c.font = '600 7.5px Oswald, sans-serif'; c.textAlign = 'center'; c.fillStyle = '#fff'; c.fillText(String(it.dmg), bx + 5.5, by + 7);
         circ(c, bx + 12, by + 1, 2); fs(c, g.heroOf(it.hero).def.col, 0.6);
-      } else {
+      } else if (it.t === 'move') {
         rr(c, bx, by + 1, 11, 7, 2); fs(c, '#d6cfbd', 0.8);
         c.font = '600 6.5px Oswald, sans-serif'; c.textAlign = 'center'; c.fillStyle = INK; c.fillText('→', bx + 5.5, by + 6.7);
+      } else {
+        const [txt, col] = INTENT_PILL[it.t](it.dmg, !!it.chill);
+        c.font = '600 6.5px Oswald, sans-serif';
+        const tw = c.measureText(txt).width + 6;
+        rr(c, bx, by + 1, tw, 8, 2); fs(c, col, 0.8);
+        c.textAlign = 'center'; c.fillStyle = '#fff'; c.fillText(txt, bx + tw / 2, by + 7.2);
       }
+    }
+    if (!g.solid(m) && m.hp > 0 && S.phase !== 'over') {
+      c.font = '600 6px Oswald, sans-serif'; c.textAlign = 'center'; c.fillStyle = '#d9f2ff';
+      c.fillText('бесплотен', x, y + m.r * 0.64 + 8);
     }
   }
 

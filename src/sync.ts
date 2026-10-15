@@ -24,6 +24,8 @@ export interface Snapshot {
   floats: Float[];
   sparks: Spark[];
   bank: Bank;
+  /** Hazard tiles change mid-fight: lava from slimes and the forge boss. */
+  haz: string[];
 }
 
 export function snapshot(g: Game): Snapshot {
@@ -38,6 +40,7 @@ export function snapshot(g: Game): Snapshot {
     floats: S.floats,
     sparks: S.sparks,
     bank: g.bank,
+    haz: [...S.haz],
   };
 }
 
@@ -61,6 +64,7 @@ export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boo
   if (s.ice) S.blocks.filter(b => b.ice).forEach((b, k) => { if (s.ice![k] !== undefined) b.hp = s.ice![k]; });
   S.discs = s.discs.map(d => ({ ...d, hero: g.heroOf(d.hero) }));
   Object.assign(g.bank, s.bank);
+  if (s.haz) S.haz = new Set(s.haz);
   g.pickActive();
   return { party, room };
 }
