@@ -13,8 +13,17 @@ export interface RoomSpec {
 
 export interface Pad { x: number; y: number }
 export interface Pit { x: number; y: number; r: number }
-/** A one-tile obstacle; `ice` marks an icicle growing from the floor, which collides exactly like a stone block. */
-export interface Block { x0: number; y0: number; x1: number; y1: number; v: number; ice?: boolean }
+/**
+ * A one-tile obstacle. `ice` marks an icicle growing from the floor: it collides exactly like a stone block,
+ * but discs chip `hp` off it and it shatters at 0. `big` icicles take several hits, small ones one or two.
+ */
+export interface Block { x0: number; y0: number; x1: number; y1: number; v: number; ice?: boolean; big?: boolean; hp?: number; max?: number }
+
+/** Icicle toughness: a small one breaks to a fair hit, a big one needs two or three. */
+export const ICICLE_HP = { small: 3, big: 11 };
+
+/** Blocks discs still bounce off: everything but shattered icicles. */
+export const standing = (blocks: Block[]) => blocks.filter(b => !b.ice || b.hp! > 0);
 export interface Decal { x: number; y: number; k: number; a: number }
 
 export interface ResNode {
@@ -344,12 +353,15 @@ export function generate(spec: RoomSpec): Layout {
     }
   }
 
-  // ice caves: icicles rise from the floor on top of the stone blocks; same one-tile footprint, same bounce
+  // ice caves: icicles, big and small, rise from the floor on top of the stone blocks; same one-tile footprint, same bounce
   if (biome.iceMu !== undefined) {
     for (let i = 0, n = roll(tier.blocks); i < n; i++) {
       for (let tr = 0; tr < 40; tr++) {
         const tx = ri(1, gw - 4), ty = ri(1, gh - 4), sh = pick(SHAPES);
-        const cells = sh.map(([a, b]) => ({ x0: (tx + a) * TILE, y0: (ty + b) * TILE, x1: (tx + a + 1) * TILE, y1: (ty + b + 1) * TILE, v: ri(0, 7), ice: true }));
+        const cells = sh.map(([a, b]) => {
+          const v = ri(0, 7), big = v % 2 === 0, max = big ? ICICLE_HP.big : ICICLE_HP.small;
+          return { x0: (tx + a) * TILE, y0: (ty + b) * TILE, x1: (tx + a + 1) * TILE, y1: (ty + b + 1) * TILE, v, ice: true, big, hp: max, max };
+        });
         if (cells.every(c => free(c.x0 + 8, c.y0 + 8, 11, 4) && clearOfRock(geo, c.x0 + 8, c.y0 + 8, 20))) {
           for (const c of cells) { blocks.push(c); objs.push({ x: c.x0 + 8, y: c.y0 + 8, r: 11 }); }
           break;
