@@ -145,7 +145,7 @@ export class Game {
 
   /**
    * Where a throw with pull-back (dx, dy) would roll, ignoring other discs: path points, the bounce points along it,
-   * and the mob it would hit first. Stops after `maxBounces` bounces so the preview helps aim without solving the shot.
+   * and the mob it would hit first. Stops after `maxBounces` bounces (the aim line uses 0: it ends at the first obstacle).
    */
   predict(h: HeroState, dx: number, dy: number, maxBounces = 2) {
     const S = this.S, L = Math.hypot(dx, dy), path: [number, number][] = [], bounces: [number, number][] = [];

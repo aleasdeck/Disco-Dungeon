@@ -493,16 +493,17 @@ export class SceneRenderer {
     const { c, P, g } = this;
     const h = aim.hero, p = g.S.pads[h.pad!], len = Math.hypot(aim.dx, aim.dy);
     if (len < 4) return;
-    const pr = g.predict(h, aim.dx, aim.dy);
+    // one straight line up to the first wall, block or mob; ricochets are left for the player to judge
+    const pr = g.predict(h, aim.dx, aim.dy, 0);
     if (pr.path.length < 2) return;
     // thick enough to read on a phone at any zoom: at least ~4 screen pixels
     const lw = Math.max(2.4, 4 / this.cam.zoom);
-    const pts = pr.path.map(([x, y]) => P(x, y, 2));
+    const [x0, y0] = P(...pr.path[0], 2), [x1, y1] = P(...pr.path[pr.path.length - 1], 2);
     c.save();
     c.lineCap = 'round';
-    c.lineJoin = 'round';
     c.beginPath();
-    pts.forEach(([x, y], k) => (k ? c.lineTo(x, y) : c.moveTo(x, y)));
+    c.moveTo(x0, y0);
+    c.lineTo(x1, y1);
     c.strokeStyle = INK;
     c.lineWidth = lw + 2.2;
     c.stroke();
@@ -512,35 +513,13 @@ export class SceneRenderer {
     c.lineWidth = lw;
     c.stroke();
     c.setLineDash([]);
-    for (const [bx, by] of pr.bounces) {
-      const [sx, sy] = P(bx, by, 2);
-      circ(c, sx, sy, lw * 1.1);
-      c.fillStyle = '#fff';
-      c.fill();
-      c.strokeStyle = INK;
-      c.lineWidth = 1.2;
-      c.stroke();
-    }
-    // where it ends: a ghost of the disc, or a target ring on the mob it would hit
-    const [ex, ey] = pr.path[pr.path.length - 1];
-    if (pr.hit) {
-      const [mx, my] = P(pr.hit.x, pr.hit.y);
-      const pulse = reduce ? 1 : 1 + Math.sin(this.t * 8) * 0.08;
-      ell(c, mx, my, (pr.hit.r * 1.27 + 4) * pulse, (pr.hit.r * 0.64 + 2) * pulse);
-      c.strokeStyle = '#fff';
-      c.lineWidth = lw * 0.7;
-      c.stroke();
-    } else {
-      const [sx, sy] = P(ex, ey, 1);
-      ell(c, sx, sy, h.def.r * 1.27, h.def.r * 0.64);
-      c.globalAlpha = 0.55;
-      c.fillStyle = h.def.col;
-      c.fill();
-      c.globalAlpha = 1;
-      c.strokeStyle = INK;
-      c.lineWidth = 1.2;
-      c.stroke();
-    }
+    const a = Math.atan2(y1 - y0, x1 - x0), k = lw * 2.4;
+    pth(c, [[x1 + Math.cos(a) * k, y1 + Math.sin(a) * k], [x1 + Math.cos(a + 2.4) * k, y1 + Math.sin(a + 2.4) * k], [x1 + Math.cos(a - 2.4) * k, y1 + Math.sin(a - 2.4) * k]]);
+    c.fillStyle = h.def.col;
+    c.fill();
+    c.strokeStyle = INK;
+    c.lineWidth = 1.2;
+    c.stroke();
     c.restore();
     const [px, py] = P(p.x, p.y), pw = Math.round((len / 60) * 5);
     for (let k = 0; k < 5; k++) { rr(c, px - 11 + k * 4.6, py + 7, 3.6, 2.6, 1); fs(c, k < pw ? h.def.col : '#2a1f18', 0.6); }
