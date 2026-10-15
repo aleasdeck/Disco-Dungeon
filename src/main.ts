@@ -55,14 +55,24 @@ const controls = {
     const r = playRect();
     return [r.x + r.w / 2, r.y + r.h / 2];
   },
-  changed() {},
+  changed() { movedAt = performance.now(); },
 };
 
-function resize() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+/** Highest canvas resolution allowed; lowered at run time when the device can't keep up. */
+let dprCap = 2;
+
+/** While the camera turns, zooms or pans, frames are drawn at one pixel per CSS pixel and sharpen again once it stops. */
+let moving = false, movedAt = -1;
+
+function sizeCanvas() {
+  const dpr = moving ? 1 : Math.min(window.devicePixelRatio || 1, dprCap);
   view = { w: window.innerWidth, h: window.innerHeight, dpr };
   cv.width = Math.round(view.w * dpr);
   cv.height = Math.round(view.h * dpr);
+}
+
+function resize() {
+  sizeCanvas();
   if (game.S) controls.fit();
 }
 
@@ -149,11 +159,18 @@ $('helpClose').addEventListener('click', () => { $('help').hidden = true; });
 
 // ------------------------------------------------------------ loop
 
-let last = performance.now(), T = 0;
+let last = performance.now(), T = 0, slow = 0;
 function frame(now: number) {
-  const dt = Math.min(0.05, (now - last) / 1000);
+  const raw = (now - last) / 1000, dt = Math.min(0.05, raw);
   last = now;
   T += dt;
+  // a device that keeps missing frames gets a coarser canvas, step by step, down to one pixel per CSS pixel
+  if (moving) slow = 0;
+  else if (raw < 0.5) slow = Math.max(0, slow + (raw > 1 / 40 ? raw : -raw / 2));
+  if (slow > 1.5 && !moving && view.dpr > 1) { dprCap = Math.max(1, view.dpr - 0.5); slow = 0; sizeCanvas(); }
+  if (anim) movedAt = now;
+  const nowMoving = now - movedAt < 250;
+  if (nowMoving !== moving) { moving = nowMoving; sizeCanvas(); }
   if (anim) {
     anim.t = Math.min(1, anim.t + dt / 0.28);
     const e = anim.t * anim.t * (3 - 2 * anim.t);
@@ -175,4 +192,4 @@ try {
 requestAnimationFrame(frame);
 
 // handle for automated checks and the future netcode
-Object.assign(window, { __dd: { game, cam, get run() { return run; } } });
+Object.assign(window, { __dd: { game, cam, scene, ctx, get view() { return view; }, get run() { return run; } } });

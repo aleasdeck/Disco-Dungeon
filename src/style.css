@@ -30,6 +30,13 @@ html, body {
   overscroll-behavior: none;
 }
 
+/* static, so the browser composites it once instead of the game painting it every frame */
+.vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 50%, rgba(0, 0, 0, 0) 45%, rgba(10, 5, 2, 0.5) 100%);
+}
 #stage {
   position: fixed;
   inset: 0;

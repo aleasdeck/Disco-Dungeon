@@ -78,9 +78,9 @@ export interface HeroDef {
 }
 
 export const HEROES: HeroDef[] = [
-  { key: 'bastion', name: 'Бастион', col: '#4f9a8f', dk: '#2b5a53', skin: '#e3a882', r: 8.5, m: 4, e: 0.55, fr: 1.1, pw: 0.75, ab: 'Стена', abTxt: 'Все герои получают +3 щита до конца хода.' },
-  { key: 'ricochet', name: 'Рикошет', col: '#c9a03a', dk: '#6f5420', skin: '#e3a882', r: 5.5, m: 1.2, e: 0.95, fr: 0.8, pw: 1.25, ab: 'Град чакр', abTxt: '4 урона каждому мобу в комнате.' },
-  { key: 'ash', name: 'Пепельница', col: '#b85a2e', dk: '#5e2a14', skin: '#d8b59a', r: 7, m: 2, e: 0.75, fr: 1, pw: 1, ab: 'Поджог', abTxt: 'Самый живучий моб горит 3 хода по 4 урона.' },
+  { key: 'bastion', name: 'Бастион', col: '#4f9a8f', dk: '#2b5a53', skin: '#e3a882', r: 6, m: 4, e: 0.55, fr: 1.1, pw: 0.75, ab: 'Стена', abTxt: 'Все герои получают +3 щита до конца хода.' },
+  { key: 'ricochet', name: 'Рикошет', col: '#c9a03a', dk: '#6f5420', skin: '#e3a882', r: 4, m: 1.2, e: 0.95, fr: 0.8, pw: 1.25, ab: 'Град чакр', abTxt: '4 урона каждому мобу в комнате.' },
+  { key: 'ash', name: 'Пепельница', col: '#b85a2e', dk: '#5e2a14', skin: '#d8b59a', r: 5, m: 2, e: 0.75, fr: 1, pw: 1, ab: 'Поджог', abTxt: 'Самый живучий моб горит 3 хода по 4 урона.' },
 ];
 
 export const HERO_FIG = 34;
