@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#16110d" />
+  <title>DiscoDungeon</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Rubik:wght@400;500;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <canvas id="stage" aria-label="Игровое поле"></canvas>
+
+  <header class="hud-top">
+    <div class="chip loc">
+      <b id="locName">DiscoDungeon</b>
+      <span id="locSub"></span>
+    </div>
+    <div class="chip stats">
+      <span>Ход <b id="hTurn">1</b></span>
+      <span>Мобов <b id="hMobs">0</b></span>
+      <span class="wave">Подмога <b id="hWave">нет</b></span>
+    </div>
+    <div class="top-btns">
+      <button class="btn" id="btnMap">Карта</button>
+      <button class="btn round" id="btnHelp" aria-label="Управление">?</button>
+    </div>
+  </header>
+
+  <div id="phase" class="phase"></div>
+  <button id="fightBtn" class="btn big fight" hidden>В бой!</button>
+  <aside id="allies" class="allies" aria-label="Отряд"></aside>
+
+  <div class="camctl" id="camctl">
+    <button class="btn round" id="zoomIn" aria-label="Приблизить">+</button>
+    <button class="btn round" id="zoomOut" aria-label="Отдалить">−</button>
+    <button class="btn round" id="rotL" aria-label="Повернуть против часовой">⟲</button>
+    <button class="btn round" id="rotR" aria-label="Повернуть по часовой">⟳</button>
+    <button class="btn round" id="camFit" aria-label="Вернуть вид">⌂</button>
+  </div>
+
+  <footer id="frame" class="frame">
+    <div class="pf-wrap"><canvas id="pf" width="192" height="192"></canvas></div>
+    <div class="who">
+      <div class="name-row"><b id="fName"></b><span id="fState" class="state"></span></div>
+      <div class="hpbar"><i id="fHpBar"></i><span id="fHp"></span></div>
+      <div class="res">
+        <span class="r shield" title="Щит"><svg viewBox="0 0 16 16"><path d="M8 1l6 2v4c0 4-3 6.5-6 8-3-1.5-6-4-6-8V3z"/></svg><b id="fShield">0</b></span>
+        <span class="r ore" title="Руда"><svg viewBox="0 0 16 16"><path d="M8 1l6 6-6 8-6-8z"/></svg><b id="fOre">0</b></span>
+        <span class="r spk" title="Искры"><svg viewBox="0 0 16 16"><path d="M8 0l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></svg><b id="fSpk">0</b></span>
+        <span class="r hand" title="Диски в руке" id="fHand"></span>
+      </div>
+    </div>
+    <button class="ability" id="abBtn">
+      <span class="ab-head"><b id="abName"></b><span id="abCost" class="pips"></span></span>
+      <small id="abTxt"></small>
+    </button>
+    <button class="btn ups-toggle" id="upsToggle" aria-expanded="false">Диск</button>
+    <div class="ups" id="ups"></div>
+  </footer>
+
+  <section id="mapScreen" class="overlay" hidden>
+    <div class="panel map-panel">
+      <div class="panel-head">
+        <h2>Карта забега</h2>
+        <div class="panel-btns">
+          <button class="btn" id="newRun">Новый забег</button>
+          <button class="btn" id="mapClose">Закрыть</button>
+        </div>
+      </div>
+      <div id="ftabs" class="ftabs"></div>
+      <div class="map-scroll"><svg id="map" viewBox="0 0 680 300" role="group" aria-label="Комнаты этажа"></svg></div>
+      <div id="mapStats" class="map-stats"></div>
+      <p id="mapInfo" class="map-info"></p>
+    </div>
+  </section>
+
+  <section id="roomEnd" class="overlay dim" hidden>
+    <div class="panel end-panel">
+      <h2 id="endTitle"></h2>
+      <p id="endText"></p>
+      <button class="btn big" id="endBtn"></button>
+    </div>
+  </section>
+
+  <section id="help" class="overlay dim" hidden>
+    <div class="panel help-panel">
+      <h2>Управление</h2>
+      <ul>
+        <li><b>Расстановка.</b> В начале комнаты герои уже стоят на рунах у ближних стен. Перетащи фигурку на другую руну (на занятой герои поменяются местами) и нажми «В бой!». Пока герой не бросил, его можно переставить и во время боя: выбери героя и тапни руну.</li>
+        <li><b>Диски.</b> На старте у каждого героя один диск за ход. Второй и третий покупаются за руду в прокачке.</li>
+        <li><b>Бросок.</b> Потяни свою фигурку назад, как рогатку, и отпусти. Чем длиннее натяжка, тем сильнее.</li>
+        <li><b>Камера.</b> Перетаскивай пустой пол, чтобы двигать комнату. Колесо или щипок двумя пальцами приближает.</li>
+        <li><b>Поворот.</b> Поверни двумя пальцами, правой кнопкой мыши, Shift+колесо или клавишами Q и E. Кнопка ⌂ возвращает вид.</li>
+        <li><b>Отряд.</b> Пока игра локальная: переключайся между героями карточками слева или тапом по фигурке.</li>
+      </ul>
+      <button class="btn big" id="helpClose">Понятно</button>
+    </div>
+  </section>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
