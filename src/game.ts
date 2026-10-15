@@ -12,8 +12,6 @@ export interface HeroState {
   hp: number;
   max: number;
   shield: number;
-  ore: number;
-  sparks: number;
   up: Record<StatKey, number>;
   /** Discs per turn; starts at 1 and grows through upgrades. */
   discs: number;
@@ -58,9 +56,16 @@ export interface State extends Layout {
 
 const STEP = 1 / 120;
 
+/** Ore and sparks belong to the whole party: any hero's hit fills the pool, any hero spends from it. */
+export interface Bank { ore: number; sparks: number }
+
+export function newBank(): Bank {
+  return { ore: 2, sparks: 1 };
+}
+
 export function newParty(): HeroState[] {
   return HEROES.map((def, i) => ({
-    i, def, hp: 14, max: 14, shield: 0, ore: 1, sparks: 1, up: { m: 0, pw: 0, e: 0 }, discs: HAND_START,
+    i, def, hp: 14, max: 14, shield: 0, up: { m: 0, pw: 0, e: 0 }, discs: HAND_START,
     pad: null, hand: HAND_START, thrown: false, flash: 0,
   }));
 }
@@ -69,6 +74,7 @@ export class Game {
   S!: State;
   act = 0;
   party: HeroState[] = newParty();
+  bank: Bank = newBank();
   onChange: () => void = () => {};
   onRoomEnd: (win: boolean) => void = () => {};
   private acc = 0;
@@ -191,8 +197,8 @@ export class Game {
 
   buyDisc() {
     const S = this.S, h = this.hero, c = this.discCost(h);
-    if (!c || h.ore < c || h.hp <= 0 || S.phase === 'over') return;
-    h.ore -= c;
+    if (!c || this.bank.ore < c || h.hp <= 0 || S.phase === 'over') return;
+    this.bank.ore -= c;
     h.discs++;
     // the new disc can be thrown this very turn
     if (S.phase === 'throw' || S.phase === 'place') h.hand++;
@@ -206,8 +212,8 @@ export class Game {
 
   upgrade(k: StatKey) {
     const S = this.S, h = this.hero, lv = h.up[k], c = UP_COST[lv];
-    if (!c || h.ore < c || h.hp <= 0 || S.phase === 'over') return;
-    h.ore -= c;
+    if (!c || this.bank.ore < c || h.hp <= 0 || S.phase === 'over') return;
+    this.bank.ore -= c;
     h.up[k]++;
     if (h.pad !== null) {
       const p = S.pads[h.pad];
@@ -219,13 +225,13 @@ export class Game {
 
   canUseAbility() {
     const h = this.hero;
-    return this.S.phase === 'throw' && h.hp > 0 && h.sparks >= AB_COST && this.liveMobs().length > 0;
+    return this.S.phase === 'throw' && h.hp > 0 && this.bank.sparks >= AB_COST && this.liveMobs().length > 0;
   }
 
   useAbility() {
     const S = this.S, h = this.hero;
     if (!this.canUseAbility()) return;
-    h.sparks -= AB_COST;
+    this.bank.sparks -= AB_COST;
     if (h.i === 0) {
       for (const o of this.alive()) { o.shield += 3; if (o.pad !== null) this.float(S.pads[o.pad].x, S.pads[o.pad].y, '+3 щит', '#3fc4b6'); }
     } else if (h.i === 1) {
@@ -361,8 +367,8 @@ export class Game {
         const big = Math.ceil((d.m * vn) / 120) >= 4, h = d.hero, q = big ? 2 : 1;
         n.left--;
         n.hit = 0.2;
-        if (n.k === 'ore') { h.ore += q; this.float(n.x, n.y, `+${q} руда`, '#ffb070'); this.burst(n.x, n.y, '#ffcf6a', big ? 14 : 8); }
-        if (n.k === 'spk') { h.sparks += q; this.float(n.x, n.y, `+${q} искр${q > 1 ? 'ы' : 'а'}`, '#c9a8ff'); this.burst(n.x, n.y, '#c9a8ff', big ? 14 : 8); }
+        if (n.k === 'ore') { this.bank.ore += q; this.float(n.x, n.y, `+${q} руда`, '#ffb070'); this.burst(n.x, n.y, '#ffcf6a', big ? 14 : 8); }
+        if (n.k === 'spk') { this.bank.sparks += q; this.float(n.x, n.y, `+${q} искр${q > 1 ? 'ы' : 'а'}`, '#c9a8ff'); this.burst(n.x, n.y, '#c9a8ff', big ? 14 : 8); }
         if (n.k === 'herb') { const hl = Math.min(h.max - h.hp, 2 + q); h.hp += hl; this.float(n.x, n.y, hl ? `+${hl} HP` : 'HP полное', '#7be39a'); this.burst(n.x, n.y, '#7be39a', 8); }
         if (n.left <= 0) this.float(n.x, n.y - 6, 'истощено', '#c7cbe0');
         changed = true;

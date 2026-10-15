@@ -1,7 +1,7 @@
 // Run structure: 3 floors, each a layered branching map of rooms; a path takes 5 rooms ending at the boss.
 
 import { ROOM_TYPES, type RoomType } from './data';
-import type { HeroState } from './game';
+import type { Bank, HeroState } from './game';
 import { makeRng } from './rng';
 
 export interface MapNode { id: string; l: number; i: number; type: RoomType; next: string[] }
@@ -83,24 +83,25 @@ export function minutes(run: Run) {
 }
 
 /** Rooms without a fight resolve at once; returns what happened. */
-export function restRoom(type: RoomType, party: HeroState[], seed: number): string {
+export function restRoom(type: RoomType, party: HeroState[], bank: Bank, seed: number): string {
   if (type === 'camp') {
     for (const h of party) h.hp = h.hp <= 0 ? Math.ceil(h.max / 2) : Math.min(h.max, h.hp + 6);
     return 'Костёр: отряд подлечился на 6 HP, павшие встали с половиной здоровья.';
   }
   if (type === 'forge') {
-    for (const h of party) h.ore += 3;
-    return 'Кузнец раздал по 3 руды. Прокачай диски в рамке героя.';
+    bank.ore += 6;
+    return 'Кузнец дал отряду 6 руды. Прокачай диски в рамке героя.';
   }
   const R = makeRng(seed);
   const roll = R.int(0, 2);
   if (roll === 0) {
-    for (const h of party) h.sparks += 2;
-    return 'Алтарь искр: каждый герой получил 2 искры.';
+    bank.sparks += 4;
+    return 'Алтарь искр: отряд получил 4 искры.';
   }
   if (roll === 1) {
-    for (const h of party) if (h.hp > 0) { h.hp = Math.max(1, h.hp - 3); h.ore += 2; }
-    return 'Ловушка в сундуке: −3 HP каждому, зато внутри по 2 руды.';
+    for (const h of party) if (h.hp > 0) h.hp = Math.max(1, h.hp - 3);
+    bank.ore += 5;
+    return 'Ловушка в сундуке: −3 HP каждому, зато внутри 5 руды.';
   }
   for (const h of party) { h.max += 2; if (h.hp > 0) h.hp += 2; }
   return 'Бродячий лекарь: +2 к максимуму здоровья всему отряду.';
