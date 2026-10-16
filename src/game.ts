@@ -88,18 +88,6 @@ export function pointAt(w: Pt[], d: number): Pt {
   return { ...w[w.length - 1] };
 }
 
-/** The first d units of a route. */
-export function cutWay(w: Pt[], d: number): Pt[] {
-  const out = [w[0]];
-  for (let k = 1; k < w.length; k++) {
-    const a = w[k - 1], b = w[k], L = Math.hypot(b.x - a.x, b.y - a.y);
-    if (d <= L) { out.push(pointAt([a, b], d)); return out; }
-    out.push(b);
-    d -= L;
-  }
-  return out;
-}
-
 /** Ore and sparks belong to the whole party: any hero's hit fills the pool, any hero spends from it. */
 export interface Bank { ore: number; sparks: number }
 
