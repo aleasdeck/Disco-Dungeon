@@ -5,7 +5,18 @@ import { HEROES, INK, type MobKind } from '../data';
 import { sprites } from '../assets';
 import { brow, circ, ell, eye, fs, lg, mix, pth, rg, rr, type Ctx, type Pt } from './util';
 
-export const BASE_TH = 3.2;
+export const BASE_TH = 4;
+
+/** How health is shown on the stand (preview variants, picked via ?hp=band|ring|pips|plate). */
+export type HpStyle = 'band' | 'ring' | 'pips' | 'plate';
+export const hpStyle: HpStyle = ((): HpStyle => {
+  const v = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('hp') : null;
+  return v === 'ring' || v === 'pips' || v === 'plate' ? v : 'band';
+})();
+
+/** Health colour: green when healthy, amber when hurt, red when nearly dead. */
+const hpCol = (f: number) => (f > 0.5 ? '#6fd35a' : f > 0.25 ? '#f2b53a' : '#ff4a4a');
+
 
 export interface MiniatureOpts {
   key: string;
@@ -20,11 +31,13 @@ export interface MiniatureOpts {
   flash: boolean;
   hop: number;
   alpha: number;
+  /** Current and maximum health, shown on the stand; left out for icons. */
+  hp?: { now: number; max: number };
   placeholder: (c: Ctx, x: number, y: number, flash: boolean) => void;
 }
 
 /** Round painted base, as on a board-game miniature. (x, y) is the centre of its bottom face. */
-export function drawBase(c: Ctx, x: number, y: number, R: number, col: string) {
+export function drawBase(c: Ctx, x: number, y: number, R: number, col: string, hp?: { now: number; max: number }) {
   const rx = R * 1.27, ry = R * 0.64, th = BASE_TH;
   c.beginPath();
   c.ellipse(x, y, rx, ry, 0, 0, Math.PI);
@@ -44,6 +57,70 @@ export function drawBase(c: Ctx, x: number, y: number, R: number, col: string) {
   c.beginPath();
   c.ellipse(x, y - th, rx * 0.62, ry * 0.6, 0, 0, Math.PI * 2);
   c.stroke();
+  if (hp) drawStandHp(c, x, y, rx, ry, th, hp.now, hp.max);
+}
+
+/** The front rim of the stand, between its top and bottom faces. */
+function sidePath(c: Ctx, x: number, y: number, rx: number, ry: number, th: number) {
+  c.beginPath();
+  c.ellipse(x, y, rx, ry, 0, 0, Math.PI);
+  c.lineTo(x - rx, y - th);
+  c.ellipse(x, y - th, rx, ry, 0, Math.PI, 0, true);
+  c.closePath();
+}
+
+function drawStandHp(c: Ctx, x: number, y: number, rx: number, ry: number, th: number, now: number, max: number) {
+  const f = Math.max(0, Math.min(1, now / max)), col = hpCol(f);
+  if (hpStyle === 'band' || hpStyle === 'pips') {
+    // the whole front rim of the stand is the health bar, draining from right to left
+    sidePath(c, x, y, rx, ry, th);
+    c.fillStyle = '#1d1410';
+    c.fill();
+    c.save();
+    sidePath(c, x, y, rx, ry, th);
+    c.clip();
+    const x0 = x - rx;
+    if (hpStyle === 'band') {
+      c.fillStyle = lg(c, 0, y - th - ry, 0, y + ry, mix(col, '#ffffff', 0.35), mix(col, '#000000', 0.35));
+      c.fillRect(x0, y - th - ry, 2 * rx * f, th + 2 * ry + 1);
+    } else {
+      // one notch per chunk of health, at most ten
+      const n = Math.min(max, 10), on = Math.ceil(f * n - 1e-6), w = (2 * rx) / n;
+      for (let k = 0; k < on; k++) {
+        c.fillStyle = mix(col, '#000000', k % 2 ? 0.12 : 0);
+        c.fillRect(x0 + k * w + 0.35, y - th - ry, w - 0.7, th + 2 * ry + 1);
+      }
+    }
+    c.restore();
+    sidePath(c, x, y, rx, ry, th);
+    c.strokeStyle = 'rgba(0,0,0,.55)';
+    c.lineWidth = 0.5;
+    c.stroke();
+  } else if (hpStyle === 'ring') {
+    // a coloured ring around the top face, emptying from the back towards the front
+    const t = y - th;
+    c.lineCap = 'round';
+    c.strokeStyle = 'rgba(20,12,8,.85)';
+    c.lineWidth = 2.2;
+    c.beginPath(); c.ellipse(x, t, rx - 1.3, ry - 0.9, 0, 0, Math.PI * 2); c.stroke();
+    if (f > 0) {
+      c.strokeStyle = col;
+      c.lineWidth = 1.5;
+      c.beginPath(); c.ellipse(x, t, rx - 1.3, ry - 0.9, 0, Math.PI / 2 - Math.PI * f, Math.PI / 2 + Math.PI * f); c.stroke();
+    }
+    c.lineCap = 'butt';
+  } else {
+    // a small plaque on the front of the stand with the number
+    const txt = String(Math.max(0, Math.ceil(now))), w = 4 + txt.length * 3.4, h = 6.2, py = y + ry - 2.2;
+    rr(c, x - w / 2, py - h / 2, w, h, 1.6);
+    fs(c, '#1d1410', 0.6);
+    c.font = '700 5.4px Oswald, sans-serif';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillStyle = col;
+    c.fillText(txt, x, py + 0.3);
+    c.textBaseline = 'alphabetic';
+  }
 }
 
 export function drawMiniature(c: Ctx, o: MiniatureOpts) {
@@ -54,7 +131,7 @@ export function drawMiniature(c: Ctx, o: MiniatureOpts) {
   c.fillStyle = 'rgba(15,8,4,.38)';
   c.fill();
   const y = o.y - o.hop;
-  drawBase(c, o.x, y, r, o.baseCol);
+  drawBase(c, o.x, y, r, o.baseCol, o.hp);
   const feet = y - BASE_TH;
   const sp = sprites.get(o.key);
   c.save();
