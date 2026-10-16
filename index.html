@@ -22,6 +22,7 @@
     <div class="chip stats">
       <span>Ход <b id="hTurn">1</b></span>
       <span>Мобов <b id="hMobs">0</b></span>
+      <span id="hRage" class="rage" hidden></span>
     </div>
     <div class="top-btns">
       <button class="btn" id="btnMap">Карта</button>
@@ -46,7 +47,7 @@
     <div class="pf-wrap"><canvas id="pf" width="192" height="192"></canvas></div>
     <div class="who">
       <div class="name-row"><b id="fName"></b><span id="fState" class="state"></span></div>
-      <div class="hpbar"><i id="fHpBar"></i><span id="fHp"></span></div>
+      <div class="hpbar" id="fHpWrap"><i id="fHpBar"></i><em id="fRisk"></em><span id="fHp"></span></div>
       <div class="res">
         <span class="r shield" title="Щит"><svg viewBox="0 0 16 16"><path d="M8 1l6 2v4c0 4-3 6.5-6 8-3-1.5-6-4-6-8V3z"/></svg><b id="fShield">0</b></span>
         <span class="r ore" title="Руда, общая на отряд"><svg viewBox="0 0 16 16"><path d="M8 1l6 6-6 8-6-8z"/></svg><b id="fOre">0</b></span>

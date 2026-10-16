@@ -78,7 +78,7 @@ export class Hud {
       b.id = 'ally' + h.i;
       b.style.setProperty('--c', h.def.col);
       b.setAttribute('aria-label', 'Играть за ' + h.def.name);
-      b.innerHTML = '<canvas></canvas><span class="a-hp"><i></i></span><span class="a-res"></span>';
+      b.innerHTML = '<canvas></canvas><span class="a-hp"><i></i><em></em></span><span class="a-res"></span>';
       drawPortrait(b.querySelector('canvas')!, h);
       b.addEventListener('click', () => this.g.select(h.i));
       b.disabled = !this.g.canControl(h);
@@ -93,6 +93,12 @@ export class Hud {
     $('locSub').textContent = `${S.biome.name} · сложность ${S.spec.depth}`;
     $('hTurn').textContent = String(S.turn);
     $('hMobs').textContent = String(g.liveMobs().length);
+    // enemies grow angrier every turn once a fight drags on; warn a turn ahead
+    const rage = $('hRage'), fighting = S.phase !== 'place' && S.phase !== 'over', soon = g.rageFrom() - S.turn;
+    rage.hidden = !fighting || (g.rage() === 0 && soon > 1);
+    rage.classList.toggle('soon', g.rage() === 0);
+    rage.textContent = g.rage() ? `Ярость +${g.rage()}` : 'Ярость со след. хода';
+    rage.title = `С ${g.rageFrom()}-го хода каждый враг с каждым ходом бьёт на 1 сильнее.`;
 
     const left = g.alive().filter(o => o.hand > 0).length;
     const phase = $('phase');
@@ -110,7 +116,12 @@ export class Hud {
       if (!t) continue;
       t.hidden = o === h;
       t.classList.toggle('dead', o.hp <= 0);
-      (t.querySelector('.a-hp i') as HTMLElement).style.width = (Math.max(0, o.hp) / o.max) * 100 + '%';
+      const hpPct = (Math.max(0, o.hp) / o.max) * 100, inc = g.incoming(o), risk = (Math.min(inc, Math.max(0, o.hp)) / o.max) * 100;
+      (t.querySelector('.a-hp i') as HTMLElement).style.width = hpPct + '%';
+      const em = t.querySelector('.a-hp em') as HTMLElement;
+      em.style.left = hpPct - risk + '%';
+      em.style.width = risk + '%';
+      t.classList.toggle('lethal', o.hp > 0 && inc >= o.hp);
       t.querySelector('.a-res')!.textContent = o.hp <= 0 ? 'пал' : o.pad === null ? 'ждёт' : S.phase === 'place' ? (!g.online || S.ready.includes(o.i) ? 'готов' : 'ставит') : o.hand ? `${o.hand} в руке` : 'бросил';
     }
 
@@ -132,8 +143,14 @@ export class Hud {
     if (this.lastPortrait !== pk) { drawPortrait($<HTMLCanvasElement>('pf'), h); this.lastPortrait = pk; }
     $('fName').textContent = h.def.name;
     $('fName').style.color = h.def.col;
-    $('fHp').textContent = `${Math.max(0, h.hp)}/${h.max}`;
-    $('fHpBar').style.width = (Math.max(0, h.hp) / h.max) * 100 + '%';
+    // what the coming enemy turn will take is marked on the bar; a blow that would kill makes the bar pulse
+    const inc = g.incoming(h), dead = h.hp > 0 && inc >= h.hp, hpPct = (Math.max(0, h.hp) / h.max) * 100, risk = (Math.min(inc, Math.max(0, h.hp)) / h.max) * 100;
+    $('fHp').textContent = `${Math.max(0, h.hp)}/${h.max}` + (inc ? (dead ? `  · −${inc} смертельно` : `  · −${inc}`) : '');
+    $('fHpBar').style.width = hpPct + '%';
+    $('fRisk').style.left = hpPct - risk + '%';
+    $('fRisk').style.width = risk + '%';
+    $('fHpWrap').classList.toggle('lethal', dead);
+    $('fHpWrap').title = inc ? `Враги в этот ход снимут ${inc} HP, если их не остановить.` : '';
     $('fShield').textContent = String(h.shield);
     $('fOre').textContent = String(g.bank.ore);
     $('fSpk').textContent = String(g.bank.sparks);

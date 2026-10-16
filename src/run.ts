@@ -87,8 +87,8 @@ export function minutes(run: Run) {
 /** Rooms without a fight resolve at once; returns what happened. */
 export function restRoom(type: RoomType, party: HeroState[], bank: Bank, seed: number): string {
   if (type === 'camp') {
-    for (const h of party) h.hp = h.hp <= 0 ? Math.ceil(h.max / 2) : Math.min(h.max, h.hp + 6);
-    return 'Костёр: отряд подлечился на 6 HP, павшие встали с половиной здоровья.';
+    for (const h of party) h.hp = h.hp <= 0 ? Math.ceil(h.max / 2) : Math.min(h.max, h.hp + 8);
+    return 'Костёр: отряд подлечился на 8 HP, павшие встали с половиной здоровья.';
   }
   if (type === 'forge') {
     bank.ore += 6;

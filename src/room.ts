@@ -392,6 +392,8 @@ export function generate(spec: RoomSpec): Layout {
   const far = (x: number, y: number) => x / Wx + y / Wy < 0.95;
   const mid = (x: number, y: number) => { const s = x / Wx + y / Wy; return s > 0.55 && s < 1.45; };
   const any = () => true;
+  // off to the sides of the line from the runes to the enemies: a resource takes a throw of its own, it isn't picked up on the way
+  const flank = (x: number, y: number) => mid(x, y) && Math.abs(x / Wx - y / Wy) > 0.3;
 
   const pads = pickPads(gw, gh, floor, R);
   for (const p of pads) { objs.push({ x: p.x, y: p.y, r: 22 }); take(Math.floor(p.x / TILE), Math.floor(p.y / TILE)); }
@@ -473,7 +475,7 @@ export function generate(spec: RoomSpec): Layout {
   const nodes: ResNode[] = [];
   const kinds: NodeKind[] = type === 'treasure' ? ['ore', 'ore', 'ore', 'ore', 'spk', 'spk', 'spk', 'herb', 'herb'] : ['ore', 'ore', 'spk', 'spk', 'herb'];
   for (const k of kinds) {
-    const q = placeCell(1, NODES[k].r, type === 'treasure' ? any : mid) ?? placeCell(1, NODES[k].r, any) ?? placeCell(1, NODES[k].r, any, true);
+    const q = placeCell(1, NODES[k].r, type === 'treasure' ? any : flank) ?? placeCell(1, NODES[k].r, mid) ?? placeCell(1, NODES[k].r, any) ?? placeCell(1, NODES[k].r, any, true);
     if (q) { nodes.push({ k, ...NODES[k], x: q[0], y: q[1], left: NODES[k].ch, hit: 0 }); objs.push({ x: q[0], y: q[1], r: NODES[k].r }); }
   }
 
