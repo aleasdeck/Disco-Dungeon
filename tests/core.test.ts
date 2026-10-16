@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Camera } from '../src/camera';
-import { HAND_MAX, HAND_START, HEROES, MOBS, TILE, mobSize } from '../src/data';
+import { CRIT, HAND_MAX, HAND_START, HEROES, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, mobSize } from '../src/data';
 import { Game, newParty, stepsOf, wayLen, type Action } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { cellAt, cellCentre, clearOfRock, floorAt, generate, isFloor, muAt, newMob, tierOf } from '../src/room';
@@ -30,7 +30,7 @@ describe('room generator', () => {
   it('puts every enemy in the room from the start, tougher than the base stats', () => {
     const L = generate({ seed: 5, depth: 1, floor: 0, type: 'fight' });
     expect('waves' in L).toBe(false);
-    for (const m of L.mobs) expect(m.max).toBe(Math.round(MOBS[m.k].hp * 1.6));
+    for (const m of L.mobs) expect(m.max).toBe(Math.round(MOBS[m.k].hp * MOB_HP_MUL));
   });
 
   it('makes rooms of different shapes, each one connected', () => {
@@ -302,7 +302,7 @@ describe('ice caves', () => {
     const b = g.S.blocks.find(o => o.ice && o.big)!;
     let hits = 0;
     while (b.hp! > 0 && hits < 10) {
-      g.S.discs = [{ hero: g.hero, x: b.x0 - 6, y: (b.y0 + b.y1) / 2, vx: 260, vy: 0, r: 5, m: 4, e: 0.6, fr: 1, fall: 0, gone: false, charged: false, bounces: 0, spin: 0 }];
+      g.S.discs = [{ hero: g.hero, x: b.x0 - 6, y: (b.y0 + b.y1) / 2, vx: 260, vy: 0, r: 5, m: 4, e: 0.6, fr: 1, fall: 0, gone: false, charged: false, bounces: 0, spin: 0, hits: 0 }];
       g.step(1 / 60);
       hits++;
     }
@@ -380,6 +380,66 @@ describe('floor casts and enemy abilities', () => {
     const g = fight(1, ['ghoul']), h = g.hero, p = g.power(h);
     h.chill = 1;
     expect(g.power(h)).toBeCloseTo(p * 0.7);
+  });
+});
+
+describe('pressure in a fight', () => {
+  /** A fight on floor 0 with just the given enemies standing in a row along the top. */
+  const arena = (kinds: (keyof typeof MOBS)[]) => {
+    const g = new Game();
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    g.S.mobs = kinds.map((k, i) => newMob(k, 40 + i * 30, 30, 1, 0));
+    g.S.nodes = [];
+    g.S.blocks = [];
+    placeAll(g); g.startFight();
+    return g;
+  };
+  const disc = (g: Game, x: number, y: number, vx: number, vy: number, bounces = 0) =>
+    ({ hero: g.party[0], x, y, vx, vy, r: 5, m: 4, e: 0.6, fr: 1, fall: 0, gone: false, charged: false, bounces, spin: 0, hits: 0 });
+
+  it('enemies hit one harder every turn once the fight drags on', () => {
+    const g = arena(['archer']), m = g.S.mobs[0];
+    expect(g.rage()).toBe(0);
+    expect(m.intent!.dmg).toBe(m.dmg);
+    g.S.turn = RAGE_FROM + 1;
+    g.pickIntents();
+    expect(g.rage()).toBe(2);
+    expect(m.intent!.dmg).toBe(m.dmg + 2);
+  });
+
+  it('marks how much the coming enemy turn takes from each hero, minus the shield', () => {
+    const g = arena(['archer', 'archer']);
+    const h = g.heroOf(g.S.mobs[0].intent!.hero), aimed = g.S.mobs.filter(m => m.intent!.hero === h.i).reduce((n, m) => n + m.intent!.dmg, 0);
+    expect(g.incoming(h)).toBe(aimed);
+    h.shield = 1;
+    expect(g.incoming(h)).toBe(aimed - 1);
+  });
+
+  it('a straight, square hit deals more than the same hit after a bounce', () => {
+    const hit = (bounces: number) => {
+      const g = arena(['golem']), m = g.S.mobs[0];
+      m.armor = 0;
+      const hp = m.hp;
+      g.S.discs = [disc(g, m.x, m.y + m.r + 5.5, 0, -200, bounces)];
+      g.step(1 / 60);
+      return { dmg: hp - m.hp, sure: g.S.floats.some(f => f.txt === 'ТОЧНО!') };
+    };
+    const straight = hit(0), banked = hit(1);
+    expect(straight.sure).toBe(true);
+    expect(banked.sure).toBe(false);
+    expect(straight.dmg).toBe(Math.ceil(banked.dmg * CRIT));
+  });
+
+  it('a resource soaks up the disc, so collecting costs the throw', () => {
+    const g = arena(['archer']);
+    const n = { k: 'ore' as const, name: 'Рудная жила', r: 7, ch: 3, x: 88, y: 88, left: 3, hit: 0 };
+    g.S.nodes = [n];
+    const d = disc(g, n.x, n.y + TILE / 2 + 5.5, 0, -200);
+    g.S.discs = [d];
+    g.step(1 / 60);
+    expect(g.bank.ore).toBeGreaterThan(0);
+    expect(Math.hypot(d.vx, d.vy)).toBeLessThan(200 * NODE_E + 5);
+    expect(d.hits).toBe(1);
   });
 });
 

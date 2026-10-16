@@ -155,7 +155,8 @@ button { font: inherit; color: inherit; }
 }
 .ally canvas { display: block; width: 100%; aspect-ratio: 1; }
 .ally .a-hp { position: absolute; left: 4px; right: 4px; bottom: 16px; height: 5px; background: #2a1f18; border-radius: 3px; overflow: hidden; }
-.ally .a-hp i { display: block; height: 100%; background: var(--hp); }
+.ally .a-hp i { position: absolute; inset: 0 auto 0 0; background: var(--hp); }
+.ally .a-hp em { position: absolute; top: 0; bottom: 0; }
 .ally .a-res { display: block; font-size: 10px; text-align: center; padding: 1px 0 2px; background: rgba(0, 0, 0, 0.55); color: var(--text); }
 .ally.dead { filter: grayscale(1) brightness(0.6); }
 
@@ -240,6 +241,15 @@ button { font: inherit; color: inherit; }
 .state { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hpbar { position: relative; height: 16px; background: #1d1611; border: 1.5px solid var(--ink); border-radius: 8px; overflow: hidden; }
 .hpbar i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(#e85b66, #a52a35); transition: width 0.25s; }
+/* the part of the health that the coming enemy turn will take, unless someone stops it */
+.hpbar em, .ally .a-hp em { background: repeating-linear-gradient(-45deg, #ffd34d 0 3px, #8a1f2a 3px 6px); animation: risk 0.9s ease-in-out infinite; }
+.hpbar em { position: absolute; top: 0; bottom: 0; }
+.hpbar.lethal { border-color: #ff4d6a; box-shadow: 0 0 0 2px rgba(255, 77, 106, 0.45); animation: lethal 0.9s ease-in-out infinite; }
+.ally.lethal { animation: lethal 0.9s ease-in-out infinite; }
+@keyframes risk { 50% { opacity: 0.45; } }
+@keyframes lethal { 50% { box-shadow: 0 0 0 3px rgba(255, 77, 106, 0.85); } }
+.stats .rage { color: #ff6b7d; font-weight: 600; }
+.stats .rage.soon { color: #ffb070; font-weight: 400; }
 .hpbar span { position: relative; display: block; text-align: center; font: 600 12px/13px Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #000; }
 .res { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .r { display: inline-flex; align-items: center; gap: 4px; font: 600 15px Oswald, sans-serif; }

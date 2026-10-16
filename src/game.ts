@@ -1,7 +1,7 @@
 // Combat rules: turn flow, disc physics, damage, abilities.
 // Rendering and input live elsewhere; this module only changes state.
 
-import { AB_COST, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, TILE, UPS, UP_COST, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
+import { AB_COST, CRIT, CRIT_COS, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
 import { cellAt, cellCentre, generate, hazKey, isFloor, muAt, newMob, nodeBox, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
@@ -40,6 +40,8 @@ export interface Disc {
   charged: boolean;
   bounces: number;
   spin: number;
+  /** Enemies and resources this disc has hit; a disc that hit nothing is a miss. */
+  hits: number;
 }
 
 export interface Float { x: number; y: number; txt: string; col: string; t: number }
@@ -92,7 +94,7 @@ export function pointAt(w: Pt[], d: number): Pt {
 export interface Bank { ore: number; sparks: number }
 
 export function newBank(): Bank {
-  return { ore: 2, sparks: 1 };
+  return { ore: 0, sparks: 0 };
 }
 
 /** A fresh party; `picks` lists which heroes (by index into HEROES) take part, all of them by default. */
@@ -102,7 +104,7 @@ export function newParty(picks: number[] = HEROES.map((_, i) => i)): HeroState[]
 
 function heroStart() {
   return {
-    hp: 14, max: 14, shield: 0, up: { m: 0, pw: 0, e: 0 }, discs: HAND_START,
+    hp: 22, max: 22, shield: 0, up: { m: 0, pw: 0, e: 0 }, discs: HAND_START,
     pad: null as number | null, hand: HAND_START, thrown: false, flash: 0, chill: 0, fire: 0,
   };
 }
@@ -231,7 +233,7 @@ export class Game {
     S.discs.push({
       hero: h, x: p.x + (dx / L) * 6, y: p.y + (dy / L) * 6, vx: dx * s, vy: dy * s,
       r: h.def.r, m: this.stat(h, 'm'), e: Math.min(0.99, this.stat(h, 'e')), fr: h.def.fr,
-      fall: 0, gone: false, charged: false, bounces: 0, spin: 0,
+      fall: 0, gone: false, charged: false, bounces: 0, spin: 0, hits: 0,
     });
     h.hand--;
     h.thrown = true;
@@ -358,8 +360,29 @@ export class Game {
 
   // ------------------------------------------------------------ intents
 
+  /** Turn from which the enemies grow angrier every turn. */
+  rageFrom() {
+    return this.S.spec.type === 'boss' ? RAGE_FROM_BOSS : RAGE_FROM;
+  }
+
+  /** Extra damage every enemy deals this turn: one more for each turn the fight has dragged past rageFrom. */
+  rage() {
+    return Math.max(0, this.S.turn - this.rageFrom() + 1);
+  }
+
+  /** Damage coming at a hero in this enemy turn if nobody is stopped: strikes aimed at it, blows on the whole party, burning. */
+  incoming(h: HeroState) {
+    if (h.hp <= 0 || this.S.phase === 'place' || this.S.phase === 'over') return 0;
+    let n = h.fire > 0 ? 2 : 0;
+    for (const m of this.liveMobs()) {
+      const it = m.intent;
+      if (it && ((it.t === 'hit' && it.hero === h.i) || it.t === 'slam')) n += it.dmg;
+    }
+    return Math.max(0, n - h.shield);
+  }
+
   pickIntents() {
-    const S = this.S, hs = this.alive().filter(h => h.pad !== null);
+    const S = this.S, hs = this.alive().filter(h => h.pad !== null), rage = this.rage();
     if (!hs.length) return;
     const taken: { x: number; y: number }[] = [];
     this.liveMobs().forEach((m, i) => {
@@ -367,10 +390,10 @@ export class Game {
       for (const a of d.acts ?? []) {
         if (S.turn % a.every !== a.at) continue;
         const it = this.special(m, a, hs, taken);
-        if (it) { m.intent = it; return; }
+        if (it) { if (it.t === 'slam') it.dmg += rage; m.intent = it; return; }
       }
       if (d.charge && S.turn % 2 === 1) { m.intent = { t: 'charge', hero: hs[(S.turn + i) % hs.length].i, dmg: 0 }; return; }
-      const dmg = d.charge ? m.dmg * 2 : m.dmg;
+      const dmg = (d.charge ? m.dmg * 2 : m.dmg) + rage;
       if (isRanged(m.k)) { m.intent = { t: 'hit', hero: hs[(S.turn + i) % hs.length].i, dmg }; return; }
       let best = hs[0], way: Pt[] | null = null, bd = Infinity;
       for (const h of hs) {
@@ -486,7 +509,7 @@ export class Game {
 
   private bodies() { return this.S.discs.filter(d => !d.gone && !d.fall); }
 
-  private bounceStatic(d: Disc, o: { x: number; y: number; r: number }) {
+  private bounceStatic(d: Disc, o: { x: number; y: number; r: number }, e = d.e) {
     const dx = d.x - o.x, dy = d.y - o.y, L = Math.hypot(dx, dy), mn = d.r + o.r;
     if (L >= mn || L === 0) return 0;
     const nx = dx / L, ny = dy / L;
@@ -494,12 +517,12 @@ export class Game {
     d.y = o.y + ny * mn;
     const vn = d.vx * nx + d.vy * ny;
     if (vn >= 0) return 0;
-    d.vx -= (1 + d.e) * vn * nx;
-    d.vy -= (1 + d.e) * vn * ny;
+    d.vx -= (1 + e) * vn * nx;
+    d.vy -= (1 + e) * vn * ny;
     return -vn;
   }
 
-  private bounceBox(d: Disc, b: { x0: number; y0: number; x1: number; y1: number }) {
+  private bounceBox(d: Disc, b: { x0: number; y0: number; x1: number; y1: number }, e = d.e) {
     const cx = Math.max(b.x0, Math.min(d.x, b.x1)), cy = Math.max(b.y0, Math.min(d.y, b.y1));
     const dx = d.x - cx, dy = d.y - cy, L = Math.hypot(dx, dy);
     if (L >= d.r) return 0;
@@ -516,8 +539,8 @@ export class Game {
     d.y += ny * pen;
     const vn = d.vx * nx + d.vy * ny;
     if (vn >= 0) return 0;
-    d.vx -= (1 + d.e) * vn * nx;
-    d.vy -= (1 + d.e) * vn * ny;
+    d.vx -= (1 + e) * vn * nx;
+    d.vy -= (1 + e) * vn * ny;
     return -vn;
   }
 
@@ -561,24 +584,31 @@ export class Game {
       for (const b of S.rock) if (this.bounceBox(d, b) > 0) d.bounces++;
       for (const n of S.nodes) {
         if (n.left <= 0) continue;
-        const vn = this.bounceBox(d, nodeBox(n));
+        // a resource soaks up most of the disc's run: collecting costs the throw
+        const vn = this.bounceBox(d, nodeBox(n), NODE_E);
         if (vn <= 30) continue;
+        d.hits++;
         const big = Math.ceil((d.m * vn) / 120) >= 4, h = d.hero, q = big ? 2 : 1;
         n.left--;
         n.hit = 0.2;
         if (n.k === 'ore') { this.bank.ore += q; this.float(n.x, n.y, `+${q} руда`, '#ffb070'); this.burst(n.x, n.y, '#ffcf6a', big ? 14 : 8); }
         if (n.k === 'spk') { this.bank.sparks += q; this.float(n.x, n.y, `+${q} искр${q > 1 ? 'ы' : 'а'}`, '#c9a8ff'); this.burst(n.x, n.y, '#c9a8ff', big ? 14 : 8); }
-        if (n.k === 'herb') { const hl = Math.min(h.max - h.hp, 2 + q); h.hp += hl; this.float(n.x, n.y, hl ? `+${hl} HP` : 'HP полное', '#7be39a'); this.burst(n.x, n.y, '#7be39a', 8); }
+        if (n.k === 'herb') { const hl = Math.min(h.max - h.hp, 1 + 2 * q); h.hp += hl; this.float(n.x, n.y, hl ? `+${hl} HP` : 'HP полное', '#7be39a'); this.burst(n.x, n.y, '#7be39a', 8); }
         if (n.left <= 0) this.float(n.x, n.y - 6, 'истощено', '#c7cbe0');
         changed = true;
       }
       for (const m of S.mobs) {
         if (!this.solid(m)) continue;
-        const vn = this.bounceStatic(d, m);
+        const v = Math.hypot(d.vx, d.vy), vn = this.bounceStatic(d, m, MOB_E);
         if (vn <= 5) continue;
         let dmg = Math.ceil((d.m * vn) / 120);
+        // straight from the rune into the enemy, square on: a precise throw hits much harder
+        const crit = d.bounces === 0 && d.hits === 0 && vn >= v * CRIT_COS;
+        d.hits++;
+        if (crit) dmg = Math.ceil(dmg * CRIT);
         if (d.hero.i === 1) dmg += Math.min(d.bounces, 4);
         if (d.charged) { dmg *= 2; d.charged = false; }
+        if (crit && m.hp > 0) this.float(m.x, m.y - 24, 'ТОЧНО!', '#ffe27a');
         this.hurtMob(m, dmg);
         this.burst(d.x, d.y, d.hero.def.col, 8);
         changed = true;
@@ -621,6 +651,7 @@ export class Game {
     for (const d of S.discs) {
       d.vx = d.vy = 0;
       if (d.gone || d.fall || d.hero.hp <= 0) continue;
+      if (!d.hits) this.float(d.x, d.y, 'мимо', '#c7cbe0');
       if (S.haz.has(hazKey(Math.floor(d.x / 16), Math.floor(d.y / 16)))) {
         this.float(d.x, d.y, S.biome.haz === 'lava' ? 'лава!' : 'шипы!', '#ff4d6a');
         this.hurtHero(d.hero, S.biome.hazDmg);
@@ -825,6 +856,7 @@ export class Game {
     S.phase = 'throw';
     this.pickActive();
     this.pickIntents();
+    if (this.rage() > 0) { this.float(S.Wx / 2, S.Wy / 2, `ВРАГИ ЗВЕРЕЮТ +${this.rage()}`, '#ff4d6a'); S.shake = Math.max(S.shake, 0.15); }
     this.onChange();
   }
 

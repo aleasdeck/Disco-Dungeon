@@ -11,6 +11,16 @@ export const HAND_COST = [4, 6];
 export const AB_COST = 3;
 export const UP_COST = [2, 3, 4];
 
+/** Enemy turn from which every enemy hits one harder each turn ("ярость"): long fights get deadly. Bosses start later. */
+export const RAGE_FROM = 5;
+export const RAGE_FROM_BOSS = 7;
+/** How much of its speed a disc keeps after hitting an enemy or a resource: one throw, one target, no pinball. */
+export const MOB_E = 0.35;
+export const NODE_E = 0.3;
+/** A disc that flies straight into an enemy, nothing touched on the way, and hits it square on deals this much more. */
+export const CRIT = 2;
+export const CRIT_COS = 0.95;
+
 export interface Biome {
   name: string;
   f: [string, string];
@@ -87,7 +97,7 @@ export interface MobDef {
 }
 
 /** Every enemy is in the room from the start (no reinforcements), so all of them get this much more HP. */
-export const MOB_HP_MUL = 1.6;
+export const MOB_HP_MUL = 1.15;
 
 export const MOBS: Record<MobKind, MobDef> = {
   skel: { name: 'Скелет', floor: 0, hp: 9, r: 7, speed: 34, reach: 30, dmg: 4, fig: 31, txt: 'Идёт к ближайшему герою и бьёт вблизи.' },
@@ -178,7 +188,7 @@ export const ROOM_TYPES: Record<RoomType, { name: string; col: string; min: numb
   fight: { name: 'Бой', col: '#c2364f', min: 2, txt: 'Обычные мобы, пара жил и кристаллов.' },
   elite: { name: 'Элитный бой', col: '#7a1d33', min: 3, txt: 'Сильный враг этажа и свита. Больше награда.' },
   treasure: { name: 'Рудная пещера', col: '#d39612', min: 1.5, txt: 'Девять ресурсных точек и всего два моба.' },
-  camp: { name: 'Костёр', col: '#e8642c', min: 0.5, txt: 'Отряд лечится на 6 HP. Павшие встают с половиной здоровья.' },
+  camp: { name: 'Костёр', col: '#e8642c', min: 0.5, txt: 'Отряд лечится на 8 HP. Павшие встают с половиной здоровья.' },
   forge: { name: 'Кузнец', col: '#5d6488', min: 0.75, txt: 'Отряд получает 6 руды на прокачку дисков.' },
   event: { name: 'Событие', col: '#6b4fa8', min: 0.75, txt: 'Сцена с неожиданным исходом: алтарь, торговец, ловушка.' },
   boss: { name: 'Босс этажа', col: '#2a1a3a', min: 3.5, txt: 'Свой босс на каждом этаже, со свитой.' },
