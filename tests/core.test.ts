@@ -6,6 +6,9 @@ import { applySnapshot, snapshot } from '../src/sync';
 import { cellAt, cellCentre, clearOfRock, floorAt, generate, isFloor, muAt, newMob, tierOf } from '../src/room';
 import { FLOORS, LAYERS, genFloor, newRun } from '../src/run';
 
+/** Put every living hero on its own rune, as players do before the fight. */
+const placeAll = (g: Game) => g.alive().forEach((h, k) => g.movePad(h, k));
+
 describe('room generator', () => {
   it('builds the same room from the same seed', () => {
     const spec = { seed: 48213, depth: 4, floor: 1, type: 'fight' as const };
@@ -13,10 +16,10 @@ describe('room generator', () => {
     expect(JSON.stringify({ ...a, haz: [...a.haz] })).toBe(JSON.stringify({ ...b, haz: [...b.haz] }));
   });
 
-  it('always has three open throw runes, locked ones deeper in, and at least one mob', () => {
+  it('always has four throw runes and at least one mob', () => {
     for (let seed = 1; seed < 60; seed++) {
       const f = seed % 3, L = generate({ seed, depth: f * LAYERS + 1 + (seed % 6), floor: f, type: seed % 5 ? 'fight' : 'boss' });
-      expect(L.pads.filter(p => !p.locked)).toHaveLength(3);
+      expect(L.pads).toHaveLength(4);
       expect(L.mobs.length).toBeGreaterThan(0);
       for (const m of L.mobs) expect(clearOfRock(L, m.x, m.y, m.r)).toBe(true);
       for (const n of L.nodes) expect(clearOfRock(L, n.x, n.y, n.r)).toBe(true);
@@ -70,7 +73,7 @@ describe('difficulty along a floor', () => {
       for (let seed = 1; seed < 60; seed++) {
         const spec = { seed, depth: f * LAYERS + row + 1, floor: f, type }, L = generate(spec);
         expect(L.mobs.length).toBeGreaterThanOrEqual(Math.min(tierOf(spec).tier.mobs[0] + f, 7));
-        expect(L.pads.filter(p => !p.locked)).toHaveLength(3);
+        expect(L.pads).toHaveLength(4);
       }
     }
   });
@@ -136,19 +139,30 @@ describe('run map', () => {
 describe('placement and discs', () => {
   const fresh = () => { const g = new Game(); g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' }); return g; };
 
-  it('puts every hero on its own rune with one disc', () => {
-    const g = fresh(), pads = g.party.map(h => h.pad);
+  it('starts with four empty runes and every hero waiting with one disc', () => {
+    const g = fresh();
     expect(g.S.phase).toBe('place');
-    expect(new Set(pads).size).toBe(g.party.length);
-    for (const h of g.party) { expect(h.pad).not.toBeNull(); expect(h.discs).toBe(HAND_START); expect(h.hand).toBe(1); }
+    expect(g.S.pads).toHaveLength(4);
+    for (const h of g.party) { expect(h.pad).toBeNull(); expect(h.discs).toBe(HAND_START); expect(h.hand).toBe(1); }
   });
 
-  it('swaps heroes when one is dragged onto an occupied rune', () => {
-    const g = fresh(), [a, b] = g.party, pa = a.pad!, pb = b.pad!;
-    expect(g.movePad(a, pb)).toBe(true);
-    expect([a.pad, b.pad]).toEqual([pb, pa]);
+  it('starts the fight only once every hero stands on a rune, then nobody moves', () => {
+    const g = fresh(), [a, b, c] = g.party;
+    g.startFight();
+    expect(g.S.phase).toBe('place');
+    expect(g.movePad(a, 0)).toBe(true);
+    // placing one hero picks up the next one still waiting
+    expect(g.act).toBe(b.i);
+    expect(g.movePad(b, 0)).toBe(false);
+    g.movePad(b, 1);
+    g.movePad(c, 3);
+    // a placed hero dragged onto a taken rune swaps with the hero there
+    expect(g.movePad(a, 1)).toBe(true);
+    expect([a.pad, b.pad]).toEqual([1, 0]);
     g.startFight();
     expect(g.S.phase).toBe('throw');
+    expect(g.movePad(a, 2)).toBe(false);
+    expect(a.pad).toBe(1);
   });
 
   it('spends ore from one pool shared by the party', () => {
@@ -175,7 +189,7 @@ describe('placement and discs', () => {
     const g = fresh();
     let won: boolean | null = null;
     g.onRoomEnd = w => { won = w; };
-    g.startFight();
+    placeAll(g); g.startFight();
     g.throwDisc(g.party[0], 1, 0);
     for (const m of g.S.mobs) m.hp = 0;
     g.update(1 / 60);
@@ -193,7 +207,7 @@ describe('discs and aiming', () => {
   it('predicts a path that starts at the rune and heads where the throw points', () => {
     const g = new Game();
     g.loadRoom({ seed: 11, depth: 2, floor: 0, type: 'fight' });
-    g.startFight();
+    placeAll(g); g.startFight();
     const h = g.hero, p = g.S.pads[h.pad!];
     const cx = g.S.Wx / 2 - p.x, cy = g.S.Wy / 2 - p.y, L = Math.hypot(cx, cy);
     const pr = g.predict(h, (cx / L) * 60, (cy / L) * 60);
@@ -209,6 +223,7 @@ describe('online play', () => {
     host.party = newParty([0, 2]);
     host.online = true;
     host.loadRoom({ seed: 21, depth: 2, floor: 0, type: 'fight' });
+    placeAll(host);
     const sent: Action[] = [];
     cli.online = true;
     cli.send = a => sent.push(a);
@@ -283,7 +298,7 @@ describe('ice caves', () => {
     let seed = 1;
     while (!generate({ seed, depth: 10, floor: 1, type: 'fight' }).blocks.some(o => o.ice && o.big)) seed++;
     g.loadRoom({ seed, depth: 10, floor: 1, type: 'fight' });
-    g.startFight();
+    placeAll(g); g.startFight();
     const b = g.S.blocks.find(o => o.ice && o.big)!;
     let hits = 0;
     while (b.hp! > 0 && hits < 10) {
@@ -317,7 +332,7 @@ describe('floor casts and enemy abilities', () => {
     const g = new Game();
     g.loadRoom({ seed: 7, depth: floor * LAYERS + 2, floor, type: 'fight' });
     g.S.mobs = kinds.map((k, i) => newMob(k, 40 + i * 30, 30, 1, 0));
-    g.startFight();
+    placeAll(g); g.startFight();
     return g;
   };
   const enemyTurn = (g: Game) => {
@@ -374,7 +389,7 @@ describe('every floor plays out', () => {
       const g = new Game();
       g.loadRoom({ seed: 99 + f, depth: f * LAYERS + (type === 'boss' ? LAYERS : 4), floor: f, type });
       for (const h of g.party) h.hp = h.max = 999;
-      g.startFight();
+      placeAll(g); g.startFight();
       const seen = new Set<string>();
       const over = () => g.S.phase === 'over';
       for (let turn = 0; turn < 7 && !over(); turn++) {
@@ -395,7 +410,7 @@ describe('enemy walking', () => {
     for (let seed = 1; seed < 80; seed++) {
       const g = new Game();
       g.loadRoom({ seed, depth: 1 + (seed % 12), floor: seed % 3, type: 'fight' });
-      g.startFight();
+      placeAll(g); g.startFight();
       const taken = g.occupied(null, false);
       for (const m of g.liveMobs()) {
         const it = m.intent;
@@ -444,7 +459,7 @@ describe('enemy walking', () => {
     for (let seed = 1; seed < 30; seed++) {
       const g = new Game();
       g.loadRoom({ seed, depth: 1 + (seed % 12), floor: seed % 3, type: seed % 4 ? 'fight' : 'boss' });
-      g.startFight();
+      placeAll(g); g.startFight();
       for (let turn = 0; turn < 4 && g.S.phase !== 'over'; turn++) {
         // nobody throws: the enemies walk up turn after turn
         const t0 = g.S.turn;
@@ -465,48 +480,4 @@ describe('enemy walking', () => {
       }
     }
   }, 20_000);
-});
-
-describe('locked runes', () => {
-  const fresh = () => { const g = new Game(); g.party = newParty([0]); g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' }); return g; };
-
-  it('every room has three open runes near the heroes and locked ones further in', () => {
-    for (let seed = 1; seed < 60; seed++) {
-      const L = generate({ seed, depth: 1 + (seed % 6), floor: seed % 3, type: 'fight' });
-      expect(L.pads.slice(0, 3).every(p => !p.locked)).toBe(true);
-      expect(L.pads.filter(p => p.locked).length).toBeGreaterThanOrEqual(2);
-      for (const p of L.pads.filter(o => o.locked)) expect(clearOfRock(L, p.x, p.y, 8)).toBe(true);
-    }
-  });
-
-  it('heroes swap runes only while preparing', () => {
-    const g = new Game();
-    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
-    const [a, b] = g.party, pb = b.pad!;
-    g.startFight();
-    expect(g.movePad(a, pb)).toBe(false);
-  });
-
-  it('a disc rolled over a locked rune opens it, and stepping there costs a disc', () => {
-    const g = fresh(), h = g.party[0], pi = g.S.pads.findIndex(p => p.locked), p = g.S.pads[pi];
-    expect(g.movePad(h, pi)).toBe(false);
-    g.startFight();
-    expect(g.movePad(h, pi)).toBe(false);
-    g.S.discs.push({ hero: h, x: p.x, y: p.y + 2, vx: 0, vy: -5, r: h.def.r, m: 1, e: 0.8, fr: 1, fall: 0, gone: false, charged: false, bounces: 0, spin: 0 });
-    g.update(1 / 60);
-    expect(p.locked).toBe(false);
-    expect(g.moveKind(h, pi)).toBe('disc');
-    expect(g.movePad(h, pi)).toBe(true);
-    expect(h.pad).toBe(pi);
-    expect(h.hand).toBe(0);
-    // no discs left this turn: no more moves
-    expect(g.moveKind(h, 0)).toBe(null);
-  });
-
-  it('keeps opened runes open on online clients', () => {
-    const host = fresh(), cli = new Game(), pi = host.S.pads.findIndex(p => p.locked);
-    host.S.pads[pi].locked = false;
-    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
-    expect(cli.S.pads[pi].locked).toBe(false);
-  });
 });

@@ -303,41 +303,10 @@ export class SceneRenderer {
       }
     }
     // throw runes
-    const h = g.hero, mine = g.canControl(h), cr = this.carry;
+    const h = g.hero, canMove = g.canControl(h) && g.canPlace(h), cr = this.carry;
     S.pads.forEach((p, k) => {
       const occ = S.heroes.find(o => o.pad === k && o.hp > 0), [sx, sy] = P(p.x, p.y);
-      const kind = mine && !occ ? g.moveKind(h, k) : null, on = kind === 'free', pulse = reduce ? 0.8 : 0.6 + Math.sin(t * 5) * 0.3;
-      if (p.locked) {
-        // a locked rune: dim, with a padlock; a disc rolled over it opens it
-        ell(c, sx, sy, 13, 6.5);
-        c.fillStyle = 'rgba(20,14,10,.25)';
-        c.fill();
-        c.lineWidth = 1.2;
-        c.strokeStyle = 'rgba(200,190,170,.45)';
-        c.stroke();
-        c.lineWidth = 1;
-        c.strokeStyle = '#8d8478';
-        c.beginPath(); c.arc(sx, sy - 5, 2.4, Math.PI, 0); c.stroke();
-        rr(c, sx - 3.6, sy - 5, 7.2, 5.6, 1); fs(c, '#8d8478', 0.8);
-        return;
-      }
-      if (kind === 'disc') {
-        // an open rune the hero can step onto mid-fight, for one of this turn's discs
-        ell(c, sx, sy, 13, 6.5);
-        c.fillStyle = `rgba(120,200,255,${0.3 * pulse})`;
-        c.fill();
-        c.lineWidth = 1.4;
-        c.strokeStyle = `rgba(120,200,255,${pulse})`;
-        c.stroke();
-        c.font = 'bold 6px system-ui, sans-serif';
-        c.textAlign = 'center';
-        c.lineWidth = 2;
-        c.strokeStyle = INK;
-        c.strokeText('−1 диск', sx, sy + 13);
-        c.fillStyle = '#bfe6ff';
-        c.fillText('−1 диск', sx, sy + 13);
-        return;
-      }
+      const on = !occ && canMove, pulse = reduce ? 0.8 : 0.6 + Math.sin(t * 5) * 0.3;
       if (cr && cr.pad === k && cr.hero.pad !== k) {
         ell(c, sx, sy, 17, 8.5);
         c.fillStyle = cr.hero.def.col + '66';

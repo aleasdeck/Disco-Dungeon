@@ -138,9 +138,7 @@ export class Game {
     const L = generate(spec);
     for (const h of this.party) Object.assign(h, { pad: null, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0, chill: 0, fire: 0 });
     this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [] };
-    // everyone starts on a rune, spread along the near edge; players may rearrange before the fight
-    const living = this.party.filter(h => h.hp > 0), n = L.pads.filter(p => !p.locked).length;
-    living.forEach((h, k) => { h.pad = living.length === 1 ? Math.floor(n / 2) : Math.round((k * (n - 1)) / (living.length - 1)); });
+    // every rune starts empty: the players put their heroes on them before the fight
     this.pickActive();
     this.pickIntents();
     this.acc = 0;
@@ -188,30 +186,32 @@ export class Game {
     return !this.S.heroes.some(h => h.pad === pi && h.hp > 0);
   }
 
-  /**
-   * Whether a hero may step onto rune pi now: 'free' while preparing (heroes swap on a taken rune),
-   * 'disc' during the fight onto a free open rune, which costs one of the hero's discs this turn.
-   */
-  moveKind(h: HeroState, pi: number): 'free' | 'disc' | null {
-    const S = this.S, p = S.pads[pi];
-    if (!p || p.locked || h.pad === null || h.pad === pi || h.hp <= 0) return null;
-    if (S.phase === 'place') return 'free';
-    return S.phase === 'throw' && h.hand > 0 && this.padFree(pi) ? 'disc' : null;
+  /** Heroes go on runes only while preparing; once the fight starts nobody moves. */
+  canPlace(h: HeroState) {
+    return h.hp > 0 && this.S.phase === 'place' && !this.S.ready.includes(h.i);
   }
 
-  /** Move a hero to rune pi; while preparing, a hero standing there swaps places. */
+  /** Every living hero (online: this hero) stands on a rune, so the fight can start. */
+  placed(h?: HeroState) {
+    return h ? h.pad !== null : this.alive().every(o => o.pad !== null);
+  }
+
+  /** Put a hero on rune pi; a placed hero standing there swaps places with it (online, someone else's rune stays theirs). */
   movePad(h: HeroState, pi: number) {
-    const S = this.S, kind = this.moveKind(h, pi);
-    if (!kind) return false;
+    const S = this.S;
+    if (!this.canPlace(h) || !S.pads[pi] || h.pad === pi) return false;
     const other = S.heroes.find(o => o.pad === pi && o.hp > 0);
-    // online, a rune taken by someone else's hero stays theirs
-    if (other && this.online) return false;
+    if (other && (this.online || h.pad === null)) return false;
     if (this.send) { this.send({ k: 'move', h: h.i, pad: pi }); return true; }
+    const first = h.pad === null;
     if (other) other.pad = h.pad;
     h.pad = pi;
-    // in the fight, moving takes the place of a throw
-    if (kind === 'disc') { h.hand--; this.float(S.pads[pi].x, S.pads[pi].y, '-1 диск', h.def.col); }
     this.burst(S.pads[pi].x, S.pads[pi].y, h.def.col, 10);
+    // in the campaign, the next hero still waiting for a rune is picked up right away
+    if (first && !this.online) {
+      const next = this.alive().find(o => o.pad === null && this.canControl(o));
+      if (next) this.act = next.i;
+    }
     this.pickIntents();
     this.onChange();
     return true;
@@ -221,6 +221,7 @@ export class Game {
   startFight(h = this.hero) {
     const S = this.S;
     if (S.phase !== 'place') return;
+    if (this.online ? !this.placed(h) : !this.placed()) return;
     if (this.send) { this.send({ k: 'ready', h: h.i }); return; }
     if (this.online) {
       if (!S.ready.includes(h.i)) S.ready.push(h.i);
@@ -549,13 +550,6 @@ export class Game {
       if (d.y < d.r) { d.y = d.r; d.vy = -d.vy * d.e; d.bounces++; }
       if (d.x > S.Wx - d.r) { d.x = S.Wx - d.r; d.vx = -d.vx * d.e; d.bounces++; }
       if (d.y > S.Wy - d.r) { d.y = S.Wy - d.r; d.vy = -d.vy * d.e; d.bounces++; }
-      for (const p of S.pads) {
-        if (!p.locked || Math.hypot(d.x - p.x, d.y - p.y) > 9) continue;
-        p.locked = false;
-        this.float(p.x, p.y, 'руна открыта!', '#ffd65a');
-        this.burst(p.x, p.y, '#ffd65a', 14);
-        changed = true;
-      }
       if (S.pits.some(p => Math.hypot(d.x - p.x, d.y - p.y) < p.r - 2)) {
         d.fall = 0.001; d.vx = d.vy = 0;
         this.float(d.x, d.y, 'провал', '#c7cbe0');
@@ -685,7 +679,7 @@ export class Game {
     return k;
   }
 
-  /** Cells under the room's runes, open or locked. */
+  /** Cells under the room's runes. */
   runeCells() {
     return new Set(this.S.pads.map(p => hazKey(Math.floor(p.x / TILE), Math.floor(p.y / TILE))));
   }

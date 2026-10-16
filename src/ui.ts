@@ -98,7 +98,7 @@ export class Hud {
     const phase = $('phase');
     phase.className = 'phase ' + S.phase;
     phase.textContent = {
-      place: g.online ? 'Расстановка: поставь своего героя и нажми «Готов»' : 'Расстановка: перетащи фигурки на руны',
+      place: g.online ? 'Расстановка: поставь своего героя на руну и нажми «Готов»' : 'Расстановка: поставь героев на руны и нажми «В бой!»',
       throw: left ? `Броски · ждём ${left}` : 'Диски катятся',
       resolve: 'Подсчёт',
       enemy: 'Ход мобов',
@@ -139,7 +139,7 @@ export class Hud {
     $('fSpk').textContent = String(g.bank.sparks);
     $('fHand').innerHTML = Array.from({ length: h.discs }, (_, k) => `<i class="${k < h.hand ? 'on' : ''}" style="--c:${h.def.col}"></i>`).join('');
     $('fState').textContent = h.hp <= 0 ? 'Пал'
-      : S.phase === 'place' ? (g.online ? 'Перетащи фигурку на руну, потом «Готов»' : 'Перетащи фигурку на руну, потом «В бой!»')
+      : S.phase === 'place' ? (h.pad === null ? 'Тапни свободную руну, чтобы поставить героя' : g.online ? 'Можно переставить, потом «Готов»' : g.placed() ? 'Можно переставить, потом «В бой!»' : 'Поставь остальных героев')
       : S.phase !== 'throw' ? (S.phase === 'over' ? 'Комната закрыта' : 'Ждём конца хода')
       : h.hand === 0 ? 'Бросил, ждём остальных'
       : h.thrown ? 'Бросай следующий диск'
@@ -151,7 +151,7 @@ export class Hud {
     $('abBtn').title = `${h.def.ab}: ${h.def.abTxt} Стоит ${AB_COST} искры из общего запаса.`;
     const fb = $<HTMLButtonElement>('fightBtn'), isReady = S.ready.includes(h.i);
     fb.hidden = S.phase !== 'place' || h.hp <= 0;
-    fb.disabled = g.online && isReady;
+    fb.disabled = (g.online && isReady) || !(g.online ? g.placed(h) : g.placed());
     fb.textContent = !g.online ? 'В бой!' : isReady ? `Ждём остальных · ${S.ready.length}/${g.alive().length}` : 'Готов';
     const dc = g.discCost(h), dOk = dc && g.bank.ore >= dc && h.hp > 0 && S.phase !== 'over';
     const discRow = `<div class="up"><span>Диски</span><span class="lvl">${Array.from({ length: HAND_MAX - HAND_START }, (_, k) => `<i class="${k < h.discs - HAND_START ? 'on' : ''}"></i>`).join('')}</span><b>${h.discs}</b><button class="btn sm" data-k="n" ${dOk ? '' : 'disabled'}>${dc ? '+ ' + dc + ' руды' : 'макс'}</button></div>`;
