@@ -343,6 +343,17 @@ function mobPool(f: number, t: number): MobKind[] {
 /** Enemies that set the pace of a fight: at most one of each in a room. */
 const SOLO: MobKind[] = ['golem', 'necro', 'witch', 'yeti', 'bomber'];
 
+/**
+ * Resources in each kind of fight room. Ore is scarce, so a party can't buy every upgrade in one run;
+ * an elite fight pays a second vein, the ore cave the most.
+ */
+export const NODE_SETS: Partial<Record<RoomType, NodeKind[]>> = {
+  fight: ['ore', 'spk', 'spk', 'herb'],
+  elite: ['ore', 'ore', 'spk', 'spk', 'herb'],
+  boss: ['ore', 'spk', 'spk', 'herb'],
+  treasure: ['ore', 'ore', 'ore', 'spk', 'spk', 'herb', 'herb'],
+};
+
 /** How much every enemy's HP grows per room of the run (on top of MOB_HP_MUL). */
 export const HP_STEP = 0.065;
 
@@ -472,7 +483,7 @@ export function generate(spec: RoomSpec): Layout {
   }
 
   const nodes: ResNode[] = [];
-  const kinds: NodeKind[] = type === 'treasure' ? ['ore', 'ore', 'ore', 'ore', 'spk', 'spk', 'spk', 'herb', 'herb'] : ['ore', 'ore', 'spk', 'spk', 'herb'];
+  const kinds = NODE_SETS[type] ?? NODE_SETS.fight!;
   for (const k of kinds) {
     const q = placeCell(1, NODES[k].r, type === 'treasure' ? any : flank) ?? placeCell(1, NODES[k].r, mid) ?? placeCell(1, NODES[k].r, any) ?? placeCell(1, NODES[k].r, any, true);
     if (q) { nodes.push({ k, ...NODES[k], x: q[0], y: q[1], left: NODES[k].ch, hit: 0 }); objs.push({ x: q[0], y: q[1], r: NODES[k].r }); }

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { Camera } from '../src/camera';
-import { CRIT, HAND_MAX, HAND_START, HEROES, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, mobSize } from '../src/data';
+import { CRIT, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, mobSize } from '../src/data';
 import { Game, newParty, stepsOf, wayLen, type Action } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { cellAt, cellCentre, clearOfRock, floorAt, generate, isFloor, muAt, newMob, tierOf } from '../src/room';
-import { FLOORS, LAYERS, genFloor, newRun } from '../src/run';
+import { FLOORS, LAYERS, genFloor, newRun, restRoom } from '../src/run';
 
 /** Put every living hero on its own rune, as players do before the fight. */
 const placeAll = (g: Game) => g.alive().forEach((h, k) => g.movePad(h, k));
@@ -50,6 +50,19 @@ describe('room generator', () => {
       expect(seen.size).toBe(L.floor.reduce((a, b) => a + b, 0));
     }
     expect(shapes.size).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe('resources', () => {
+  it('puts one ore vein in a plain fight, two in an elite one and the most in the ore cave', () => {
+    const veins = (type: 'fight' | 'elite' | 'treasure' | 'boss', seed: number) =>
+      generate({ seed, depth: type === 'boss' ? LAYERS : 5, floor: 0, type }).nodes.filter(n => n.k === 'ore').length;
+    for (let seed = 1; seed < 30; seed++) {
+      expect(veins('fight', seed)).toBe(1);
+      expect(veins('elite', seed)).toBe(2);
+      expect(veins('boss', seed)).toBe(1);
+      expect(veins('treasure', seed)).toBe(3);
+    }
   });
 });
 
@@ -167,7 +180,7 @@ describe('placement and discs', () => {
 
   it('spends ore from one pool shared by the party', () => {
     const g = fresh();
-    g.bank.ore = 4;
+    g.bank.ore = HAND_COST[0];
     g.select(1);
     g.buyDisc();
     expect(g.party[1].discs).toBe(HAND_START + 1);
@@ -183,7 +196,50 @@ describe('placement and discs', () => {
     while (g.discCost(h)) g.buyDisc();
     expect(h.discs).toBe(HAND_MAX);
     expect(h.hand).toBe(HAND_MAX);
-    expect(g.bank.ore).toBe(100 - 4 - 6);
+    expect(g.bank.ore).toBe(100 - HAND_COST[0] - HAND_COST[1]);
+  });
+
+  it('prices an extra disc above any single stat level', () => {
+    for (const c of HAND_COST) expect(c).toBeGreaterThan(Math.max(...UP_COST));
+  });
+
+  it('grows damage and speed by the same share for every hero, and stops the bounce at its limit', () => {
+    const g = fresh();
+    g.bank.ore = 100;
+    for (const h of g.party) {
+      g.select(h.i);
+      g.upgrade('m');
+      g.upgrade('pw');
+      expect(g.stat(h, 'm')).toBeCloseTo(h.def.m * 1.25);
+      expect(g.stat(h, 'pw')).toBeCloseTo(h.def.pw * 1.15);
+    }
+    // Ricochet's disc already keeps almost all its speed off a wall: one level reaches the limit, then nothing is for sale
+    const r = g.party[1];
+    g.select(r.i);
+    g.upgrade('e');
+    expect(g.stat(r, 'e')).toBe(E_MAX);
+    expect(g.upCost(r, 'e')).toBe(0);
+    const ore = g.bank.ore;
+    g.upgrade('e');
+    expect(g.bank.ore).toBe(ore);
+  });
+
+  it('starts every fight without sparks, except the altar gift for the next one', () => {
+    const g = fresh();
+    g.bank.sparks = 7;
+    g.bank.ore = 5;
+    g.loadRoom({ seed: 3, depth: 2, floor: 0, type: 'fight' });
+    expect(g.bank.sparks).toBe(0);
+    expect(g.bank.ore).toBe(5);
+    // the altar of sparks is one of the events; find a seed that rolls it
+    let seed = 0;
+    while (!restRoom('event', newParty(), { ore: 0, sparks: 0 }, seed).startsWith('Алтарь')) seed++;
+    restRoom('event', g.party, g.bank, seed);
+    expect(g.bank.sparks).toBe(0);
+    g.loadRoom({ seed: 4, depth: 3, floor: 0, type: 'fight' });
+    expect(g.bank.sparks).toBe(4);
+    g.loadRoom({ seed: 5, depth: 4, floor: 0, type: 'fight' });
+    expect(g.bank.sparks).toBe(0);
   });
   it('ends the fight the moment the last enemy falls, with throws still left', () => {
     const g = fresh();

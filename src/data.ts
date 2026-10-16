@@ -4,12 +4,16 @@ export const INK = '#1a1210';
 export const ENEMY_BASE = '#b8323f';
 export const TILE = 16;
 export const WALL_H = 34;
-/** Discs each hero throws per turn at the start of a run, the most they can upgrade to, and what each extra disc costs in ore. */
+/**
+ * Discs each hero throws per turn at the start of a run, the most they can upgrade to, and what each extra disc costs in ore.
+ * A second disc doubles a hero's throws, so it costs far more than a level of any stat.
+ */
 export const HAND_START = 1;
 export const HAND_MAX = 3;
-export const HAND_COST = [4, 6];
+export const HAND_COST = [8, 16];
 export const AB_COST = 3;
-export const UP_COST = [2, 3, 4];
+/** Ore for each level of a disc stat; a party can't buy everything in one run, so it has to choose. */
+export const UP_COST = [3, 4, 6];
 
 /** Enemy turn from which every enemy hits one harder each turn ("ярость"): long fights get deadly. Bosses start later. */
 export const RAGE_FROM = 5;
@@ -178,20 +182,52 @@ export const HERO_FIG = 34;
 /** Hero stand radius in world units: a cell is 16 across, so the stand sits inside its cell with a rim of floor around it. */
 export const HERO_BASE = 7;
 
-export const UPS: { k: StatKey; name: string; step: number; fmt: (v: number) => string }[] = [
-  { k: 'm', name: 'Масса', step: 0.8, fmt: v => v.toFixed(1) },
-  { k: 'pw', name: 'Сила', step: 0.15, fmt: v => String(Math.round(v * 260)) },
-  { k: 'e', name: 'Упругость', step: 0.08, fmt: v => v.toFixed(2) },
+/** Most of its speed a disc can keep off a wall. */
+export const E_MAX = 0.99;
+
+/**
+ * Disc upgrades, named for what they do. Damage and speed grow by a share of the hero's own value per level,
+ * so "+25% урона" means the same for every hero; the bounce adds to the share of speed kept off walls.
+ */
+export interface Upgrade {
+  k: StatKey;
+  name: string;
+  /** What it does, in a line. */
+  txt: string;
+  step: number;
+  /** What a level adds, shown over the hero when bought. */
+  next: string;
+  /** The value shown in the hero frame: `bonus` is the share gained so far, `v` the stat itself. */
+  fmt: (bonus: number, v: number) => string;
+  /** Where the stat stands now, for the tooltip. */
+  now?: (v: number) => string;
+}
+
+const pct = (x: number) => Math.round(x * 100) + '%';
+
+export const UPS: Upgrade[] = [
+  { k: 'm', name: 'Урон', txt: 'Диск бьёт сильнее: +25% за уровень', step: 0.25, next: '+25% урона', fmt: b => '+' + pct(b) },
+  { k: 'pw', name: 'Скорость', txt: 'Летит быстрее и дальше, а быстрый диск и бьёт сильнее: +15% за уровень', step: 0.15, next: '+15% скорости', fmt: b => '+' + pct(b) },
+  {
+    k: 'e', name: 'Отскок', txt: 'Меньше теряет скорость о стены и камни', step: 0.08, next: '+8% отскока',
+    fmt: (_, v) => pct(v), now: v => `Сейчас после отскока у диска остаётся ${pct(v)} скорости. `,
+  },
 ];
+
+/** Damage of a full-strength throw that hits square on before the disc slows down (no precise-hit bonus). */
+export const fullHit = (m: number, pw: number) => Math.ceil((m * 270 * pw) / 120);
+
+/** Ore the blacksmith hands the party. */
+export const FORGE_ORE = 5;
 
 export type RoomType = 'fight' | 'elite' | 'treasure' | 'camp' | 'forge' | 'event' | 'boss';
 
 export const ROOM_TYPES: Record<RoomType, { name: string; col: string; min: number; txt: string }> = {
-  fight: { name: 'Бой', col: '#c2364f', min: 2, txt: 'Обычные мобы, пара жил и кристаллов.' },
-  elite: { name: 'Элитный бой', col: '#7a1d33', min: 3, txt: 'Сильный враг этажа и свита. Больше награда.' },
-  treasure: { name: 'Рудная пещера', col: '#d39612', min: 1.5, txt: 'Девять ресурсных точек и всего два моба.' },
+  fight: { name: 'Бой', col: '#c2364f', min: 2, txt: 'Обычные мобы, одна рудная жила и пара кристаллов.' },
+  elite: { name: 'Элитный бой', col: '#7a1d33', min: 3, txt: 'Сильный враг этажа и свита. Две рудные жилы вместо одной.' },
+  treasure: { name: 'Рудная пещера', col: '#d39612', min: 1.5, txt: 'Три рудные жилы и всего два моба.' },
   camp: { name: 'Костёр', col: '#e8642c', min: 0.5, txt: 'Отряд лечится на 8 HP. Павшие встают с половиной здоровья.' },
-  forge: { name: 'Кузнец', col: '#5d6488', min: 0.75, txt: 'Отряд получает 6 руды на прокачку дисков.' },
+  forge: { name: 'Кузнец', col: '#5d6488', min: 0.75, txt: `Отряд получает ${FORGE_ORE} руды на прокачку дисков.` },
   event: { name: 'Событие', col: '#6b4fa8', min: 0.75, txt: 'Сцена с неожиданным исходом: алтарь, торговец, ловушка.' },
   boss: { name: 'Босс этажа', col: '#2a1a3a', min: 3.5, txt: 'Свой босс на каждом этаже, со свитой.' },
 };
