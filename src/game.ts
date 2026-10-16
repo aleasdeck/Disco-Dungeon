@@ -2,7 +2,7 @@
 // Rendering and input live elsewhere; this module only changes state.
 
 import { AB_COST, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, TILE, UPS, UP_COST, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
-import { cellAt, cellCentre, generate, hazKey, isFloor, muAt, newMob, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
+import { cellAt, cellCentre, generate, hazKey, isFloor, muAt, newMob, nodeBox, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
 
@@ -273,7 +273,7 @@ export class Game {
         if (d.x > S.Wx - d.r) { d.x = S.Wx - d.r; d.vx = -d.vx * d.e; hitWall = true; }
         if (d.y > S.Wy - d.r) { d.y = S.Wy - d.r; d.vy = -d.vy * d.e; hitWall = true; }
         for (const b of boxes) if (this.bounceBox(d, b) > 0) hitWall = true;
-        for (const n of S.nodes) if (n.left > 0 && this.bounceStatic(d, n) > 0) hitWall = true;
+        for (const n of S.nodes) if (n.left > 0 && this.bounceBox(d, nodeBox(n)) > 0) hitWall = true;
         const m = S.mobs.find(o => this.solid(o) && Math.hypot(d.x - o.x, d.y - o.y) < d.r + o.r);
         if (m) { path.push([d.x, d.y]); return { path, bounces, hit: m }; }
         if (S.pits.some(o => Math.hypot(d.x - o.x, d.y - o.y) < o.r - 2)) { path.push([d.x, d.y]); return { path, bounces, hit: null }; }
@@ -561,7 +561,7 @@ export class Game {
       for (const b of S.rock) if (this.bounceBox(d, b) > 0) d.bounces++;
       for (const n of S.nodes) {
         if (n.left <= 0) continue;
-        const vn = this.bounceStatic(d, n);
+        const vn = this.bounceBox(d, nodeBox(n));
         if (vn <= 30) continue;
         const big = Math.ceil((d.m * vn) / 120) >= 4, h = d.hero, q = big ? 2 : 1;
         n.left--;
