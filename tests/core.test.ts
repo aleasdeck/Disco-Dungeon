@@ -13,10 +13,10 @@ describe('room generator', () => {
     expect(JSON.stringify({ ...a, haz: [...a.haz] })).toBe(JSON.stringify({ ...b, haz: [...b.haz] }));
   });
 
-  it('always has five throw runes and at least one mob', () => {
+  it('always has three open throw runes, locked ones deeper in, and at least one mob', () => {
     for (let seed = 1; seed < 60; seed++) {
       const f = seed % 3, L = generate({ seed, depth: f * LAYERS + 1 + (seed % 6), floor: f, type: seed % 5 ? 'fight' : 'boss' });
-      expect(L.pads.filter(p => !p.sec)).toHaveLength(5);
+      expect(L.pads.filter(p => !p.locked)).toHaveLength(3);
       expect(L.mobs.length).toBeGreaterThan(0);
       for (const m of L.mobs) expect(clearOfRock(L, m.x, m.y, m.r)).toBe(true);
       for (const n of L.nodes) expect(clearOfRock(L, n.x, n.y, n.r)).toBe(true);
@@ -70,7 +70,7 @@ describe('difficulty along a floor', () => {
       for (let seed = 1; seed < 60; seed++) {
         const spec = { seed, depth: f * LAYERS + row + 1, floor: f, type }, L = generate(spec);
         expect(L.mobs.length).toBeGreaterThanOrEqual(Math.min(tierOf(spec).tier.mobs[0] + f, 7));
-        expect(L.pads.filter(p => !p.sec)).toHaveLength(5);
+        expect(L.pads.filter(p => !p.locked)).toHaveLength(3);
       }
     }
   });
@@ -416,69 +416,46 @@ describe('enemy walking', () => {
   }, 20_000);
 });
 
-describe('locked wing', () => {
-  const winged = () => {
-    for (let seed = 1; seed < 400; seed++) {
-      const spec = { seed, depth: 3, floor: 0, type: 'fight' as const }, L = generate(spec);
-      if (L.wing.length) return spec;
-    }
-    throw new Error('no room with a wing');
-  };
+describe('locked runes', () => {
+  const fresh = () => { const g = new Game(); g.party = newParty([0]); g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' }); return g; };
 
-  it('some rooms get a wing behind a door, with its own runes and nothing else in it', () => {
-    let n = 0;
-    for (let seed = 1; seed < 120; seed++) {
+  it('every room has three open runes near the heroes and locked ones further in', () => {
+    for (let seed = 1; seed < 60; seed++) {
       const L = generate({ seed, depth: 1 + (seed % 6), floor: seed % 3, type: 'fight' });
-      if (!L.wing.length) continue;
-      n++;
-      const inWing = (x: number, y: number) => L.wing.includes(Math.floor(y / TILE) * L.gw + Math.floor(x / TILE));
-      expect(L.blocks.filter(b => b.door)).toHaveLength(1);
-      expect(L.pads.filter(p => p.sec === 1)).toHaveLength(2);
-      for (const p of L.pads) expect(inWing(p.x, p.y)).toBe(p.sec === 1);
-      for (const m of L.mobs) expect(inWing(m.x, m.y)).toBe(false);
-      for (const o of L.nodes) expect(inWing(o.x, o.y)).toBe(false);
-    }
-    expect(n).toBeGreaterThan(10);
-    // the first room of a floor and the boss room stay plain
-    for (let seed = 1; seed < 40; seed++) {
-      expect(generate({ seed, depth: 1, floor: 0, type: 'fight' }).wing).toHaveLength(0);
-      expect(generate({ seed, depth: 7, floor: 0, type: 'boss' }).wing).toHaveLength(0);
+      expect(L.pads.slice(0, 3).every(p => !p.locked)).toBe(true);
+      expect(L.pads.filter(p => p.locked).length).toBeGreaterThanOrEqual(2);
+      for (const p of L.pads.filter(o => o.locked)) expect(clearOfRock(L, p.x, p.y, 8)).toBe(true);
     }
   });
 
-  it('opens its door to a disc, then a hero can step in for one disc', () => {
+  it('heroes swap runes only while preparing', () => {
     const g = new Game();
-    g.party = newParty([0]);
-    g.loadRoom(winged());
-    const h = g.party[0], wi = g.S.pads.findIndex(p => p.sec === 1), door = g.S.blocks.find(b => b.door)!;
-    g.bank.ore = 4;
-    g.buyDisc(h);
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    const [a, b] = g.party, pb = b.pad!;
     g.startFight();
-    expect(h.hand).toBe(2);
-    // locked: no way in
-    expect(g.movePad(h, wi)).toBe(false);
-    // a disc rolling into the door knocks it open
-    g.S.discs.push({ hero: h, x: (door.x0 + door.x1) / 2, y: door.y1 + h.def.r + 1, vx: 0, vy: -200, r: h.def.r, m: 1, e: 0.8, fr: 1, fall: 0, gone: false, charged: false, bounces: 0, spin: 0 });
-    for (let k = 0; k < 20; k++) g.update(1 / 60);
-    expect(door.open).toBe(true);
-    expect(g.moveKind(h, wi)).toBe('disc');
-    expect(g.movePad(h, wi)).toBe(true);
-    expect(h.pad).toBe(wi);
-    expect(h.hand).toBe(1);
-    // moving between the wing's own runes before throwing stays free
-    const wj = g.S.pads.findIndex((p, k) => p.sec === 1 && k !== wi);
-    expect(g.moveKind(h, wj)).toBe('free');
-    // the last disc can buy the way back, which ends the hero's turn
-    expect(g.movePad(h, 0)).toBe(true);
-    expect(h.hand).toBe(0);
-    expect(g.moveKind(h, wi)).toBe(null);
+    expect(g.movePad(a, pb)).toBe(false);
   });
 
-  it('keeps the door open on online clients', () => {
-    const host = new Game(), cli = new Game();
-    host.loadRoom(winged());
-    host.S.blocks.find(b => b.door)!.open = true;
+  it('a disc rolled over a locked rune opens it, and stepping there costs a disc', () => {
+    const g = fresh(), h = g.party[0], pi = g.S.pads.findIndex(p => p.locked), p = g.S.pads[pi];
+    expect(g.movePad(h, pi)).toBe(false);
+    g.startFight();
+    expect(g.movePad(h, pi)).toBe(false);
+    g.S.discs.push({ hero: h, x: p.x, y: p.y + 2, vx: 0, vy: -5, r: h.def.r, m: 1, e: 0.8, fr: 1, fall: 0, gone: false, charged: false, bounces: 0, spin: 0 });
+    g.update(1 / 60);
+    expect(p.locked).toBe(false);
+    expect(g.moveKind(h, pi)).toBe('disc');
+    expect(g.movePad(h, pi)).toBe(true);
+    expect(h.pad).toBe(pi);
+    expect(h.hand).toBe(0);
+    // no discs left this turn: no more moves
+    expect(g.moveKind(h, 0)).toBe(null);
+  });
+
+  it('keeps opened runes open on online clients', () => {
+    const host = fresh(), cli = new Game(), pi = host.S.pads.findIndex(p => p.locked);
+    host.S.pads[pi].locked = false;
     applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
-    expect(cli.S.blocks.find(b => b.door)!.open).toBe(true);
+    expect(cli.S.pads[pi].locked).toBe(false);
   });
 });

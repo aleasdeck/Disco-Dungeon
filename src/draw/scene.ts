@@ -271,13 +271,6 @@ export class SceneRenderer {
         c.restore();
       }
     }
-    // the locked wing lies in the dark until its door opens
-    if (S.wing.length && !g.secOpen(1)) {
-      c.beginPath();
-      for (const k of S.wing) { const i = k % S.gw, j = (k - i) / S.gw; quad(i * TILE, j * TILE, (i + 1) * TILE, (j + 1) * TILE); }
-      c.fillStyle = 'rgba(8,5,3,.5)';
-      c.fill();
-    }
     c.strokeStyle = INK;
     c.lineWidth = 1.2;
     c.beginPath();
@@ -303,11 +296,13 @@ export class SceneRenderer {
     S.pads.forEach((p, k) => {
       const occ = S.heroes.find(o => o.pad === k && o.hp > 0), [sx, sy] = P(p.x, p.y);
       const kind = mine && !occ ? g.moveKind(h, k) : null, on = kind === 'free', pulse = reduce ? 0.8 : 0.6 + Math.sin(t * 5) * 0.3;
-      if (p.sec && !g.secOpen(p.sec)) {
-        // a rune behind the closed door: dim, with a padlock
+      if (p.locked) {
+        // a locked rune: dim, with a padlock; a disc rolled over it opens it
         ell(c, sx, sy, 13, 6.5);
+        c.fillStyle = 'rgba(20,14,10,.25)';
+        c.fill();
         c.lineWidth = 1.2;
-        c.strokeStyle = 'rgba(255,214,90,.22)';
+        c.strokeStyle = 'rgba(200,190,170,.45)';
         c.stroke();
         c.lineWidth = 1;
         c.strokeStyle = '#8d8478';
@@ -316,7 +311,7 @@ export class SceneRenderer {
         return;
       }
       if (kind === 'disc') {
-        // the way through the door is open: stepping here costs one of this turn's discs
+        // an open rune the hero can step onto mid-fight, for one of this turn's discs
         ell(c, sx, sy, 13, 6.5);
         c.fillStyle = `rgba(120,200,255,${0.3 * pulse})`;
         c.fill();
@@ -512,52 +507,8 @@ export class SceneRenderer {
     }
   }
 
-  /** The wing's door: a banded wooden slab filling its doorway, or a bare threshold once it swings open. */
-  private drawDoor(b: Block) {
-    const { c, P, cam } = this;
-    if (b.open) {
-      pth(c, [P(b.x0 + 1, b.y0 + 1), P(b.x1 - 1, b.y0 + 1), P(b.x1 - 1, b.y1 - 1), P(b.x0 + 1, b.y1 - 1)]);
-      c.fillStyle = 'rgba(70,45,25,.55)';
-      c.fill();
-      return;
-    }
-    const H = 28, wood: [string, string] = ['#6b4526', '#8a5c34'];
-    const faces: { a: Vec; b: Vec; n: Vec }[] = [
-      { a: [b.x1, b.y0], b: [b.x1, b.y1], n: [1, 0] },
-      { a: [b.x0, b.y1], b: [b.x1, b.y1], n: [0, 1] },
-      { a: [b.x0, b.y0], b: [b.x0, b.y1], n: [-1, 0] },
-      { a: [b.x0, b.y0], b: [b.x1, b.y0], n: [0, -1] },
-    ];
-    for (const f of faces) {
-      if (cam.facing(f.n[0], f.n[1]) <= 1e-6) continue;
-      const at = (u: number, h: number) => P(f.a[0] + (f.b[0] - f.a[0]) * u, f.a[1] + (f.b[1] - f.a[1]) * u, h);
-      pth(c, [P(...f.a), P(...f.b), P(...f.b, H), P(...f.a, H)]);
-      fs(c, this.shade(f.n, wood), 1.1);
-      // planks
-      c.strokeStyle = 'rgba(30,15,6,.55)';
-      c.lineWidth = 0.6;
-      c.beginPath();
-      for (const u of [0.25, 0.5, 0.75]) { c.moveTo(...at(u, 0)); c.lineTo(...at(u, H)); }
-      c.stroke();
-      // iron bands and a ring
-      c.strokeStyle = '#3a3633';
-      c.lineWidth = 1.6;
-      c.beginPath();
-      for (const hh of [6, 21]) { c.moveTo(...at(0, hh)); c.lineTo(...at(1, hh)); }
-      c.stroke();
-      const [rx, ry] = at(0.5, 13);
-      circ(c, rx, ry, 1.8);
-      c.lineWidth = 0.9;
-      c.strokeStyle = '#c9b48a';
-      c.stroke();
-    }
-    pth(c, [P(b.x0, b.y0, H), P(b.x1, b.y0, H), P(b.x1, b.y1, H), P(b.x0, b.y1, H)]);
-    fs(c, '#9a6a3e', 1.1);
-  }
-
   private drawBlock(b: Block) {
     if (b.ice) return this.drawIcicle(b);
-    if (b.door) return this.drawDoor(b);
     const { c, P, cam } = this;
     const B = this.g.S.biome, H = 24;
     const fp: Pt[] = [P(b.x0, b.y0), P(b.x1, b.y0), P(b.x1, b.y1), P(b.x0, b.y1)];

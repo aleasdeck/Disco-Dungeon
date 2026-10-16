@@ -137,8 +137,7 @@ export class Game {
     for (const h of this.party) Object.assign(h, { pad: null, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0, chill: 0, fire: 0 });
     this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [] };
     // everyone starts on a rune, spread along the near edge; players may rearrange before the fight
-    // (the runes of a locked wing come after the main ones and stay empty until its door opens)
-    const living = this.party.filter(h => h.hp > 0), n = L.pads.filter(p => !p.sec).length;
+    const living = this.party.filter(h => h.hp > 0), n = L.pads.filter(p => !p.locked).length;
     living.forEach((h, k) => { h.pad = living.length === 1 ? Math.floor(n / 2) : Math.round((k * (n - 1)) / (living.length - 1)); });
     this.pickActive();
     this.pickIntents();
@@ -182,57 +181,34 @@ export class Game {
     this.onChange();
   }
 
-  canPlace(h: HeroState) {
-    return h.hp > 0 && !h.thrown && (this.S.phase === 'place' || this.S.phase === 'throw');
-  }
 
   padFree(pi: number) {
     return !this.S.heroes.some(h => h.pad === pi && h.hp > 0);
   }
 
-  /** Which part of the room a rune is in: 0 is the main part, 1 the locked wing. */
-  secOf(pi: number) {
-    return this.S.pads[pi]?.sec ?? 0;
-  }
-
-  /** The wing opens when a disc hits its door; the main part is always open. */
-  secOpen(sec: number) {
-    return !sec || this.S.blocks.some(b => b.door && b.open);
-  }
-
   /**
-   * Whether a hero may step onto rune pi now: 'free' within the same part of the room (before throwing),
-   * 'disc' into the other part through an open door, which costs one of the hero's discs this turn.
+   * Whether a hero may step onto rune pi now: 'free' while preparing (heroes swap on a taken rune),
+   * 'disc' during the fight onto a free open rune, which costs one of the hero's discs this turn.
    */
   moveKind(h: HeroState, pi: number): 'free' | 'disc' | null {
-    const S = this.S;
-    if (h.pad === null || h.pad === pi || h.hp <= 0 || !this.secOpen(this.secOf(pi))) return null;
-    if (this.secOf(pi) !== this.secOf(h.pad)) return S.phase === 'throw' && h.hand > 0 && this.padFree(pi) ? 'disc' : null;
-    return this.canPlace(h) ? 'free' : null;
+    const S = this.S, p = S.pads[pi];
+    if (!p || p.locked || h.pad === null || h.pad === pi || h.hp <= 0) return null;
+    if (S.phase === 'place') return 'free';
+    return S.phase === 'throw' && h.hand > 0 && this.padFree(pi) ? 'disc' : null;
   }
 
-  /** Move a hero to rune pi; if another hero who hasn't thrown stands there, they swap places. */
+  /** Move a hero to rune pi; while preparing, a hero standing there swaps places. */
   movePad(h: HeroState, pi: number) {
-    const S = this.S;
-    const kind = this.moveKind(h, pi);
+    const S = this.S, kind = this.moveKind(h, pi);
     if (!kind) return false;
-    if (kind === 'disc') {
-      if (this.send) { this.send({ k: 'move', h: h.i, pad: pi }); return true; }
-      // going through the door takes the hero's throw: one disc fewer this turn
-      h.hand--;
-      h.pad = pi;
-      this.float(S.pads[pi].x, S.pads[pi].y, '-1 диск', h.def.col);
-      this.burst(S.pads[pi].x, S.pads[pi].y, h.def.col, 10);
-      this.pickIntents();
-      this.onChange();
-      return true;
-    }
     const other = S.heroes.find(o => o.pad === pi && o.hp > 0);
     // online, a rune taken by someone else's hero stays theirs
-    if (other && (!this.canPlace(other) || this.online)) return false;
+    if (other && this.online) return false;
     if (this.send) { this.send({ k: 'move', h: h.i, pad: pi }); return true; }
     if (other) other.pad = h.pad;
     h.pad = pi;
+    // in the fight, moving takes the place of a throw
+    if (kind === 'disc') { h.hand--; this.float(S.pads[pi].x, S.pads[pi].y, '-1 диск', h.def.col); }
     this.burst(S.pads[pi].x, S.pads[pi].y, h.def.col, 10);
     this.pickIntents();
     this.onChange();
@@ -565,6 +541,13 @@ export class Game {
       if (d.y < d.r) { d.y = d.r; d.vy = -d.vy * d.e; d.bounces++; }
       if (d.x > S.Wx - d.r) { d.x = S.Wx - d.r; d.vx = -d.vx * d.e; d.bounces++; }
       if (d.y > S.Wy - d.r) { d.y = S.Wy - d.r; d.vy = -d.vy * d.e; d.bounces++; }
+      for (const p of S.pads) {
+        if (!p.locked || Math.hypot(d.x - p.x, d.y - p.y) > 9) continue;
+        p.locked = false;
+        this.float(p.x, p.y, 'руна открыта!', '#ffd65a');
+        this.burst(p.x, p.y, '#ffd65a', 14);
+        changed = true;
+      }
       if (S.pits.some(p => Math.hypot(d.x - p.x, d.y - p.y) < p.r - 2)) {
         d.fall = 0.001; d.vx = d.vy = 0;
         this.float(d.x, d.y, 'провал', '#c7cbe0');
@@ -573,20 +556,10 @@ export class Game {
         continue;
       }
       for (const b of S.blocks) {
-        if ((b.ice && b.hp! <= 0) || b.open) continue;
+        if (b.ice && b.hp! <= 0) continue;
         const vn = this.bounceBox(d, b);
         if (vn <= 0) continue;
         d.bounces++;
-        if (b.door) {
-          // any real knock swings the wing's door open; the disc still bounces off it this once
-          if (vn <= 5) continue;
-          b.open = true;
-          const x = (b.x0 + b.x1) / 2, y = (b.y0 + b.y1) / 2;
-          this.float(x, y, 'дверь открыта!', '#ffd65a');
-          this.burst(x, y, '#c89a5a', 16);
-          changed = true;
-          continue;
-        }
         if (!b.ice || vn <= 30) continue;
         // icicles chip like mobs take damage, and shatter at zero
         const x = (b.x0 + b.x1) / 2, y = (b.y0 + b.y1) / 2;
@@ -737,7 +710,10 @@ export class Game {
         const i = ci + di, j = cj + dj;
         if ((!di && !dj) || i < 0 || j < 0 || i >= gw || j >= gh || !open(i, j)) continue;
         if (di && dj && (!open(ci + di, cj) || !open(ci, cj + dj) || !this.clearLine({ x: ci * TILE + 8, y: cj * TILE + 8 }, { x: i * TILE + 8, y: j * TILE + 8 }, r, obs))) continue;
-        const k = j * gw + i, nd = cd + (di && dj ? Math.SQRT2 : 1);
+        const k = j * gw + i;
+        // a resource can sit between two tile centres: the step between them must be clear too
+        if (!(di && dj) && c !== start && k !== goal && !this.walkable((ci + i) * 8 + 8, (cj + j) * 8 + 8, r, obs)) continue;
+        const nd = cd + (di && dj ? Math.SQRT2 : 1);
         if (nd < dist[k]) { dist[k] = nd; from[k] = c; }
       }
     }
