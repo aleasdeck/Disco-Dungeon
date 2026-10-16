@@ -2,6 +2,21 @@
   "figures": {
     "bastion": { "file": "heroes/bastion.png", "facing": "left" },
     "ash": { "file": "heroes/ash.png", "facing": "right" },
-    "ricochet": { "file": "heroes/ricochet.png", "facing": "left" }
+    "ricochet": { "file": "heroes/ricochet.png", "facing": "left" },
+    "skel": { "file": "mobs/skel.png", "facing": "left" },
+    "archer": { "file": "mobs/archer.png", "facing": "left" },
+    "rat": { "file": "mobs/rat.png", "facing": "left" },
+    "necro": { "file": "mobs/necro.png", "facing": "right" },
+    "king": { "file": "mobs/king.png", "facing": "right" },
+    "ghoul": { "file": "mobs/ghoul.png", "facing": "right" },
+    "ghost": { "file": "mobs/ghost.png", "facing": "right" },
+    "yeti": { "file": "mobs/yeti.png", "facing": "left" },
+    "witch": { "file": "mobs/witch.png", "facing": "left" },
+    "lich": { "file": "mobs/lich.png", "facing": "left" },
+    "imp": { "file": "mobs/imp.png", "facing": "left" },
+    "slime": { "file": "mobs/slime.png", "facing": "left" },
+    "bomber": { "file": "mobs/bomber.png", "facing": "left" },
+    "golem": { "file": "mobs/golem.png", "facing": "left" },
+    "forgelord": { "file": "mobs/forgelord.png", "facing": "left" }
   }
 }
