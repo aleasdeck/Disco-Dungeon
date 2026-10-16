@@ -100,42 +100,42 @@ export interface MobDef {
   txt: string;
 }
 
-/** Every enemy is in the room from the start (no reinforcements), so all of them get this much more HP. */
-export const MOB_HP_MUL = 1.15;
+/** Every enemy is in the room from the start (no reinforcements) and a room holds only a few, so each gets this much more HP. */
+export const MOB_HP_MUL = 1.5;
 
 export const MOBS: Record<MobKind, MobDef> = {
-  skel: { name: 'Скелет', floor: 0, hp: 9, r: 7, speed: 34, reach: 30, dmg: 4, fig: 31, txt: 'Идёт к ближайшему герою и бьёт вблизи.' },
-  archer: { name: 'Гоблин-лучник', floor: 0, hp: 6, r: 6, speed: 0, reach: 999, dmg: 3, fig: 26, txt: 'Стоит на месте и стреляет через всю комнату.' },
-  rat: { name: 'Тюремная крыса', floor: 0, hp: 5, r: 6, speed: 64, reach: 26, dmg: 3, fig: 18, txt: 'Хилая, но очень быстрая: добегает до рун за ход-два.' },
+  skel: { name: 'Скелет', floor: 0, hp: 9, r: 7, speed: 34, reach: 30, dmg: 5, fig: 31, txt: 'Идёт к ближайшему герою и бьёт вблизи.' },
+  archer: { name: 'Гоблин-лучник', floor: 0, hp: 6, r: 6, speed: 0, reach: 999, dmg: 4, fig: 26, txt: 'Стоит на месте и стреляет через всю комнату.' },
+  rat: { name: 'Тюремная крыса', floor: 0, hp: 5, r: 6, speed: 64, reach: 26, dmg: 4, fig: 18, txt: 'Хилая, но очень быстрая: добегает до рун за ход-два.' },
   necro: {
-    name: 'Некромант', floor: 0, hp: 12, r: 8, speed: 0, reach: 999, dmg: 2, fig: 36,
+    name: 'Некромант', floor: 0, hp: 12, r: 8, speed: 0, reach: 999, dmg: 3, fig: 36,
     acts: [{ k: 'summon', every: 2, at: 0, n: 1, kind: 'skel', cap: 3 }],
     txt: 'Каждый второй ход поднимает скелета из светящегося круга. Круг видно заранее: убей некроманта, пока не поздно.',
   },
   king: {
-    size: 2, name: 'Король-в-короне', floor: 0, boss: true, hp: 60, r: 15, speed: 10, reach: 40, dmg: 9, armor: 3, fig: 50,
+    size: 2, name: 'Король-в-короне', floor: 0, boss: true, hp: 60, r: 15, speed: 10, reach: 40, dmg: 10, armor: 3, fig: 50,
     acts: [{ k: 'slam', every: 3, at: 0 }],
     txt: 'Босс казематов. Каждый третий ход бьёт скипетром об пол и задевает весь отряд.',
   },
-  ghoul: { name: 'Ледяной упырь', floor: 1, hp: 10, r: 7, speed: 36, reach: 30, dmg: 4, fig: 30, chill: true, txt: 'Бьёт вблизи и морозит: следующий бросок героя слабее.' },
-  ghost: { name: 'Призрак', floor: 1, hp: 7, r: 7, speed: 0, reach: 999, dmg: 3, fig: 30, ghost: true, txt: 'Стреляет издалека. Каждый второй ход бесплотен: диски пролетают насквозь.' },
-  yeti: { name: 'Йети', floor: 1, hp: 22, r: 9, speed: 18, reach: 34, dmg: 6, armor: 2, fig: 38, txt: 'Толстая шкура, броня 2. Медленный, но бьёт больно.' },
+  ghoul: { name: 'Ледяной упырь', floor: 1, hp: 10, r: 7, speed: 36, reach: 30, dmg: 5, fig: 30, chill: true, txt: 'Бьёт вблизи и морозит: следующий бросок героя слабее.' },
+  ghost: { name: 'Призрак', floor: 1, hp: 7, r: 7, speed: 0, reach: 999, dmg: 4, fig: 30, ghost: true, txt: 'Стреляет издалека. Каждый второй ход бесплотен: диски пролетают насквозь.' },
+  yeti: { name: 'Йети', floor: 1, hp: 22, r: 9, speed: 18, reach: 34, dmg: 7, armor: 2, fig: 38, txt: 'Толстая шкура, броня 2. Медленный, но бьёт больно.' },
   witch: {
-    name: 'Ледяная ведьма', floor: 1, hp: 14, r: 8, speed: 0, reach: 999, dmg: 2, fig: 36,
+    name: 'Ледяная ведьма', floor: 1, hp: 14, r: 8, speed: 0, reach: 999, dmg: 3, fig: 36,
     acts: [{ k: 'heal', every: 2, at: 0, amt: 8 }],
     txt: 'Каждый второй ход лечит самого раненого моба на 8.',
   },
   lich: {
-    size: 2, name: 'Ледяной лич', floor: 1, boss: true, hp: 64, r: 14, speed: 0, reach: 999, dmg: 6, armor: 2, fig: 52,
+    size: 2, name: 'Ледяной лич', floor: 1, boss: true, hp: 64, r: 14, speed: 0, reach: 999, dmg: 7, armor: 2, fig: 52,
     acts: [{ k: 'summon', every: 3, at: 2, n: 2, kind: 'ghoul', cap: 4 }, { k: 'slam', every: 3, at: 0, chill: true }],
     txt: 'Босс склепа. Призывает упырей из ледяных кругов, а следом насылает метель на весь отряд.',
   },
-  imp: { name: 'Бес-кочегар', floor: 2, hp: 7, r: 6, speed: 52, reach: 28, dmg: 3, fig: 24, fire: true, txt: 'Шустрый, поджигает: герой горит и в следующий ход теряет ещё 2.' },
-  slime: { name: 'Лавовый слизень', floor: 2, hp: 14, r: 9, speed: 20, reach: 30, dmg: 5, fig: 24, lava: true, txt: 'Толстый и медленный. Где лопнет, там остаётся лужа лавы.' },
-  bomber: { name: 'Гном-подрывник', floor: 2, hp: 8, r: 7, speed: 0, reach: 999, dmg: 4, fig: 28, charge: true, txt: 'Ход поджигает фитиль, следующий ход кидает бомбу на двойной урон.' },
-  golem: { name: 'Голем', floor: 2, hp: 26, r: 9, speed: 14, reach: 34, dmg: 7, armor: 3, fig: 38, txt: 'Броня 3: удары слабее не проходят.' },
+  imp: { name: 'Бес-кочегар', floor: 2, hp: 7, r: 6, speed: 52, reach: 28, dmg: 4, fig: 24, fire: true, txt: 'Шустрый, поджигает: герой горит и в следующий ход теряет ещё 2.' },
+  slime: { name: 'Лавовый слизень', floor: 2, hp: 14, r: 9, speed: 20, reach: 30, dmg: 6, fig: 24, lava: true, txt: 'Толстый и медленный. Где лопнет, там остаётся лужа лавы.' },
+  bomber: { name: 'Гном-подрывник', floor: 2, hp: 8, r: 7, speed: 0, reach: 999, dmg: 5, fig: 28, charge: true, txt: 'Ход поджигает фитиль, следующий ход кидает бомбу на двойной урон.' },
+  golem: { name: 'Голем', floor: 2, hp: 26, r: 9, speed: 14, reach: 34, dmg: 8, armor: 3, fig: 38, txt: 'Броня 3: удары слабее не проходят.' },
   forgelord: {
-    size: 2, name: 'Владыка кузни', floor: 2, boss: true, hp: 70, r: 15, speed: 12, reach: 44, dmg: 9, armor: 4, fig: 54, rage: true,
+    size: 2, name: 'Владыка кузни', floor: 2, boss: true, hp: 70, r: 15, speed: 12, reach: 44, dmg: 10, armor: 4, fig: 54, rage: true,
     acts: [{ k: 'heat', every: 3, at: 0, n: 2 }],
     txt: 'Босс кузни, броня 4. Каждый третий ход раскаляет пол перед рунами, а раненый впадает в ярость (+3 к удару).',
   },
