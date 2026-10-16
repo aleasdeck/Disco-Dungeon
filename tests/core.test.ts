@@ -389,6 +389,7 @@ describe('every floor plays out', () => {
 });
 
 describe('enemy walking', () => {
+  // routes every walker in 80 rooms: a few seconds locally, more on a busy CI runner
   it('routes walkers around blocks and resources to the rune they go for and says when they strike', () => {
     let detours = 0;
     for (let seed = 1; seed < 80; seed++) {
@@ -412,7 +413,7 @@ describe('enemy walking', () => {
       }
     }
     expect(detours).toBeGreaterThan(0);
-  });
+  }, 20_000);
 });
 
 describe('locked wing', () => {
