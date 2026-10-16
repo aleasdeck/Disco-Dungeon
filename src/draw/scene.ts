@@ -1,9 +1,9 @@
 // Draws one frame of a room: walls, floor, obstacles, resources, discs and miniatures.
 // Everything is drawn in iso space through the camera, so zoom and rotation are free.
 
-import { HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, isRanged, mobSize } from '../data';
+import { HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize } from '../data';
 import type { Camera, Vec } from '../camera';
-import { cutWay, type Disc, type Game, type HeroState } from '../game';
+import { type Disc, type Game, type HeroState } from '../game';
 import { cellAt, floorAt, hazKey, isFloor, type Block, type Edge, type Mob, type ResNode } from '../room';
 import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure } from './figures';
 import { circ, ell, fs, lg, mix, pth, rr, type Ctx, type Pt } from './util';
@@ -354,86 +354,26 @@ export class SceneRenderer {
     }
   }
 
+  /** Runes enemies strike this turn glow red. No lines across the field: they hid the figures. */
   private drawTelegraph() {
     const { c, P, g } = this;
     const S = g.S;
     if ((S.phase !== 'throw' && S.phase !== 'place') || !settings.attackLines) return;
-    // drawn over the figures, faint, so it never hides them but is never hidden by them either
+    const pulse = reduce ? 0.8 : 0.6 + 0.3 * Math.sin(this.t * 5);
+    const pads = new Set<number>();
+    for (const m of g.liveMobs()) {
+      const it = m.intent;
+      if (it?.t === 'hit') { const h = g.heroOf(it.hero); if (h.pad !== null) pads.add(h.pad); }
+      else if (it?.t === 'slam') for (const h of g.alive()) if (h.pad !== null) pads.add(h.pad);
+    }
     c.save();
-    c.lineCap = 'round';
-    const lw = Math.max(1.4, 2.4 / this.cam.zoom);
-    const lines: { m: Mob; to: { x: number; y: number }; col: string }[] = [];
-    for (const m of g.liveMobs()) {
-      const it = m.intent;
-      if (!it) continue;
-      if (it.way && (it.t === 'hit' || it.t === 'move')) continue;
-      if (it.t === 'hit') {
-        const hero = g.heroOf(it.hero);
-        if (hero.pad !== null) lines.push({ m, to: S.pads[hero.pad], col: isRanged(m.k) ? 'rgba(150,235,120,.9)' : 'rgba(255,90,115,.9)' });
-      } else if (it.t === 'slam') {
-        for (const h of g.alive()) if (h.pad !== null) lines.push({ m, to: S.pads[h.pad], col: it.chill ? 'rgba(170,225,255,.95)' : 'rgba(255,211,77,.95)' });
-      } else if (it.t === 'heal' && S.mobs[it.mob!]) lines.push({ m, to: S.mobs[it.mob!], col: 'rgba(123,227,154,.95)' });
+    for (const i of pads) {
+      const p = S.pads[i], [x, y] = P(p.x, p.y);
+      ell(c, x, y, 13, 6.5);
+      c.fillStyle = `rgba(217,67,79,${0.25 * pulse})`; c.fill();
+      c.strokeStyle = `rgba(255,90,115,${pulse})`; c.lineWidth = 1.8; c.stroke();
     }
-    for (const { m, to: p, col } of lines) {
-      const [ax, ay] = P(m.x, m.y, 8), [bx, by] = P(p.x, p.y, 8);
-      c.beginPath();
-      c.moveTo(ax, ay);
-      c.quadraticCurveTo((ax + bx) / 2, Math.min(ay, by) - 18, bx, by);
-      c.setLineDash([]);
-      c.strokeStyle = 'rgba(18,13,10,.5)';
-      c.lineWidth = lw + 1.6;
-      c.stroke();
-      c.setLineDash([lw * 2.5, lw * 2]);
-      c.lineDashOffset = reduce ? 0 : -this.t * 12;
-      c.strokeStyle = col;
-      c.lineWidth = lw;
-      c.stroke();
-    }
-    this.drawRoutes(lw);
     c.restore();
-  }
-
-  /**
-   * Walkers' routes to the rune they go for: the stretch they walk this turn is bright, the rest faint,
-   * with a ring where they stop. A walker that strikes this turn lights the rune it will hit.
-   */
-  private drawRoutes(lw: number) {
-    const { c, P, g } = this;
-    const S = g.S, pulse = reduce ? 0.8 : 0.6 + 0.3 * Math.sin(this.t * 5);
-    const line = (w: { x: number; y: number }[], col: string, width: number, dash: number[]) => {
-      if (w.length < 2) return;
-      c.beginPath();
-      w.forEach((p, k) => { const [x, y] = P(p.x, p.y, 1); if (k) c.lineTo(x, y); else c.moveTo(x, y); });
-      c.setLineDash(dash);
-      c.strokeStyle = col;
-      c.lineWidth = width;
-      c.stroke();
-    };
-    for (const m of g.liveMobs()) {
-      const it = m.intent;
-      if (!it?.way || (it.t !== 'hit' && it.t !== 'move')) continue;
-      const hero = g.heroOf(it.hero);
-      if (hero.pad === null) continue;
-      const now = cutWay(it.way, it.go ?? 0), stop = now[now.length - 1];
-      line(it.way, 'rgba(18,13,10,.35)', lw + 1.2, []);
-      line(it.way, 'rgba(255,90,115,.35)', lw, [lw * 1.5, lw * 2.5]);
-      line(now, 'rgba(18,13,10,.5)', lw + 1.6, []);
-      c.lineDashOffset = reduce ? 0 : -this.t * 12;
-      line(now, 'rgba(255,90,115,.95)', lw, [lw * 2.5, lw * 2]);
-      c.lineDashOffset = 0;
-      c.setLineDash([]);
-      if (it.go && it.go > 2) {
-        const [x, y] = P(stop.x, stop.y);
-        ell(c, x, y, m.r * 1.1, m.r * 0.55);
-        c.strokeStyle = 'rgba(255,90,115,.8)'; c.lineWidth = 1; c.stroke();
-      }
-      if (it.t === 'hit') {
-        const p = S.pads[hero.pad], [x, y] = P(p.x, p.y);
-        ell(c, x, y, 13, 6.5);
-        c.fillStyle = `rgba(217,67,79,${0.25 * pulse})`; c.fill();
-        c.strokeStyle = `rgba(255,90,115,${pulse})`; c.lineWidth = 1.8; c.stroke();
-      }
-    }
   }
 
   // ------------------------------------------------------------ props
