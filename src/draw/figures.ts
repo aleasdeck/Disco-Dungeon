@@ -101,7 +101,12 @@ export function drawMiniature(c: Ctx, o: MiniatureOpts) {
   if (sp) {
     const h = o.fig, w = (h * sp.img.naturalWidth) / sp.img.naturalHeight;
     if (o.flash) c.filter = 'brightness(3) saturate(0)';
-    c.drawImage(sp.img, o.x - w / 2, feet - h + 1, w, h);
+    const b = sp.board;
+    if (b) {
+      const k = h / b.h, m = c.getTransform(), px = h * Math.hypot(m.a, m.b);
+      const lv = b.levels[Math.max(0, Math.min(b.levels.length - 1, Math.floor(Math.log2(b.h / px))))];
+      c.drawImage(lv, o.x - w / 2 - b.x * k, feet - h + 1 - b.y * k, b.W * k, b.H * k);
+    } else c.drawImage(sp.img, o.x - w / 2, feet - h + 1, w, h);
     c.filter = 'none';
   } else {
     o.placeholder(c, o.x, feet, o.flash);
