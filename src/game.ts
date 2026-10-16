@@ -1,7 +1,7 @@
 // Combat rules: turn flow, disc physics, damage, abilities.
 // Rendering and input live elsewhere; this module only changes state.
 
-import { AB_COST, CRIT, CRIT_COS, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
+import { AB_COST, CRIT, CRIT_COS, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
 import { cellAt, cellCentre, generate, hazKey, isFloor, muAt, newMob, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
@@ -101,11 +101,14 @@ export function pointAt(w: Pt[], d: number): Pt {
   return { ...w[w.length - 1] };
 }
 
-/** Ore and sparks belong to the whole party: any hero's hit fills the pool, any hero spends from it. */
-export interface Bank { ore: number; sparks: number }
+/**
+ * Ore and sparks belong to the whole party: any hero's hit fills the pool, any hero spends from it.
+ * Ore lasts the whole run; sparks are for one fight only, and every fight starts with `boon` of them (usually none).
+ */
+export interface Bank { ore: number; sparks: number; boon?: number }
 
 export function newBank(): Bank {
-  return { ore: 0, sparks: 0 };
+  return { ore: 0, sparks: 0, boon: 0 };
 }
 
 /** A fresh party; `picks` lists which heroes (by index into HEROES) take part, all of them by default. */
@@ -138,6 +141,9 @@ export class Game {
   loadRoom(spec: RoomSpec) {
     const L = generate(spec);
     for (const h of this.party) Object.assign(h, { pad: null, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0, chill: 0, fire: 0 });
+    // sparks don't carry over: every fight starts afresh
+    this.bank.sparks = this.bank.boon ?? 0;
+    this.bank.boon = 0;
     this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [] };
     // every rune starts empty: the players put their heroes on them before the fight
     this.pickActive();
@@ -172,7 +178,10 @@ export class Game {
 
   alive = () => this.S.heroes.filter(h => h.hp > 0);
   liveMobs = () => this.S.mobs.filter(m => m.hp > 0);
-  stat = (h: HeroState, k: StatKey) => h.def[k] + h.up[k] * UPS.find(u => u.k === k)!.step;
+  stat = (h: HeroState, k: StatKey) => {
+    const step = UPS.find(u => u.k === k)!.step;
+    return k === 'e' ? Math.min(E_MAX, h.def.e + h.up.e * step) : h.def[k] * (1 + h.up[k] * step);
+  };
   get hero() { return this.heroOf(this.act); }
 
   select(i: number) {
@@ -243,7 +252,7 @@ export class Game {
     const p = S.pads[h.pad], s = this.power(h);
     S.discs.push({
       hero: h, x: p.x + (dx / L) * 6, y: p.y + (dy / L) * 6, vx: dx * s, vy: dy * s,
-      r: h.def.r, m: this.stat(h, 'm'), e: Math.min(0.99, this.stat(h, 'e')), fr: h.def.fr,
+      r: h.def.r, m: this.stat(h, 'm'), e: this.stat(h, 'e'), fr: h.def.fr,
       fall: 0, gone: false, charged: false, bounces: 0, spin: 0, hits: 0,
     });
     h.hand--;
@@ -269,7 +278,7 @@ export class Game {
     const S = this.S, L = Math.hypot(dx, dy), path: [number, number][] = [], bounces: [number, number][] = [];
     if (h.pad === null || L < 4) return { path, bounces, hit: null as Mob | null };
     const p = S.pads[h.pad], s = this.power(h), dt = 1 / 60;
-    const d = { x: p.x + (dx / L) * 6, y: p.y + (dy / L) * 6, vx: dx * s, vy: dy * s, r: h.def.r, e: Math.min(0.99, this.stat(h, 'e')) } as Disc;
+    const d = { x: p.x + (dx / L) * 6, y: p.y + (dy / L) * 6, vx: dx * s, vy: dy * s, r: h.def.r, e: this.stat(h, 'e') } as Disc;
     const boxes = standing(S.blocks).concat(S.rock);
     path.push([d.x, d.y]);
     for (let k = 0; k < 600; k++) {
@@ -323,15 +332,21 @@ export class Game {
     this.onChange();
   }
 
+  /** Cost of the next level of a disc stat, or 0 when there is nothing more to gain (a bounce already at the limit). */
+  upCost(h: HeroState, k: StatKey) {
+    if (k === 'e' && this.stat(h, 'e') >= E_MAX) return 0;
+    return UP_COST[h.up[k]] ?? 0;
+  }
+
   upgrade(k: StatKey, h = this.hero) {
-    const S = this.S, lv = h.up[k], c = UP_COST[lv];
+    const S = this.S, c = this.upCost(h, k);
     if (!c || this.bank.ore < c || h.hp <= 0 || S.phase === 'over') return;
     if (this.send) { this.send({ k: 'up', h: h.i, stat: k }); return; }
     this.bank.ore -= c;
     h.up[k]++;
     if (h.pad !== null) {
       const p = S.pads[h.pad];
-      this.float(p.x, p.y, UPS.find(u => u.k === k)!.name + ' +', h.def.col);
+      this.float(p.x, p.y, UPS.find(u => u.k === k)!.next, h.def.col);
       this.burst(p.x, p.y, h.def.col, 10);
     }
     this.onChange();

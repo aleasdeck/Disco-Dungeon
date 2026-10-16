@@ -172,11 +172,19 @@ export class Hud {
     fb.hidden = S.phase !== 'place' || h.hp <= 0;
     fb.disabled = (g.online && isReady) || !(g.online ? g.placed(h) : g.placed());
     fb.textContent = !g.online ? 'В бой!' : isReady ? `Ждём остальных · ${S.ready.length}/${g.alive().length}` : 'Готов';
-    const dc = g.discCost(h), dOk = dc && g.bank.ore >= dc && h.hp > 0 && S.phase !== 'over';
-    const discRow = `<div class="up"><span>Диски</span><span class="lvl">${Array.from({ length: HAND_MAX - HAND_START }, (_, k) => `<i class="${k < h.discs - HAND_START ? 'on' : ''}"></i>`).join('')}</span><b>${h.discs}</b><button class="btn sm" data-k="n" ${dOk ? '' : 'disabled'}>${dc ? '+ ' + dc + ' руды' : 'макс'}</button></div>`;
-    $('ups').innerHTML = discRow + UPS.map(u => {
-      const lv = h.up[u.k], cost = UP_COST[lv], ok = cost && g.bank.ore >= cost && h.hp > 0 && S.phase !== 'over';
-      return `<div class="up"><span>${u.name}</span><span class="lvl">${[0, 1, 2].map(k => `<i class="${k < lv ? 'on' : ''}"></i>`).join('')}</span><b>${u.fmt(g.stat(h, u.k))}</b><button class="btn sm" data-k="${u.k}" ${ok ? '' : 'disabled'}>${cost ? '+ ' + cost + ' руды' : 'макс'}</button></div>`;
-    }).join('');
+    // each upgrade says what it does: a line under the name in the phone pop-up, a tooltip on the desktop
+    const canBuy = (c: number) => !!c && g.bank.ore >= c && h.hp > 0 && S.phase !== 'over';
+    const row = (k: string, name: string, txt: string, pips: number, lv: number, val: string, cost: number, tip: string) =>
+      `<div class="up" title="${tip}"><span class="up-name">${name}<small>${txt}</small></span>`
+      + `<span class="lvl">${Array.from({ length: pips }, (_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('')}</span>`
+      + `<b>${val}</b><button class="btn sm" data-k="${k}" ${canBuy(cost) ? '' : 'disabled'}>${cost ? '+ ' + cost + ' руды' : 'макс'}</button></div>`;
+    const dc = g.discCost(h), discTxt = 'Больше бросков за ход. Самое сильное улучшение';
+    $('ups').innerHTML = row('n', 'Диски за ход', discTxt, HAND_MAX - HAND_START, h.discs - HAND_START, String(h.discs), dc,
+      `${discTxt}. ` + (dc ? `Следующий диск за ${dc} руды.` : 'Больше дисков не бывает.'))
+      + UPS.map(u => {
+        const lv = h.up[u.k], cost = g.upCost(h, u.k), v = g.stat(h, u.k);
+        return row(u.k, u.name, u.txt, UP_COST.length, lv, u.fmt(lv * u.step, v), cost,
+          `${u.txt}. ${u.now?.(v) ?? ''}` + (cost ? `Следующий уровень за ${cost} руды.` : 'Больше не прокачать.'));
+      }).join('');
   }
 }

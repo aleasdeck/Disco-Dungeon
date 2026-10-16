@@ -1,6 +1,6 @@
 // Main menu and its screens: collection, settings and the online lobby.
 
-import { BIOMES, HEROES, MOB_HP_MUL, MOBS, UPS, type MobKind } from './data';
+import { BIOMES, HEROES, MOB_HP_MUL, MOBS, fullHit, type MobKind } from './data';
 import { drawPortrait, mobIcon } from './ui';
 import { saveSettings, settings } from './settings';
 import type { Player } from './net';
@@ -31,7 +31,8 @@ export function renderCollection(tab: 'heroes' | 'mobs') {
       card.className = 'card';
       const cv = document.createElement('canvas');
       drawPortrait(cv, { i, def });
-      const stats = UPS.map(u => `<dt>${u.name}</dt><dd>${u.fmt(def[u.k])}</dd>`).join('');
+      // the same words as the disc upgrades: damage of a full straight throw, speed next to Ash's, speed kept off a wall
+      const stats = `<dt>Урон</dt><dd>${fullHit(def.m, def.pw)}</dd><dt>Скорость</dt><dd>${Math.round(def.pw * 100)}%</dd><dt>Отскок</dt><dd>${Math.round(def.e * 100)}%</dd>`;
       card.innerHTML = `<div></div><div><h3 style="color:${def.col}">${def.name}</h3><p>${HERO_ROLES[i] ?? ''}. Способность «${def.ab}»: ${def.abTxt}</p>`
         + `<dl>${stats}<dt>Диск</dt><dd>${def.r * 2}</dd></dl></div>`;
       card.firstElementChild!.replaceWith(cv);
