@@ -65,6 +65,8 @@ export interface MobDef {
   reach: number;
   dmg: number;
   armor?: number;
+  /** Cells it covers on each side: big enemies stand on 2 × 2 cells, the rest on one. */
+  size?: 2;
   /** Height of the figure above its base, in world units; used to scale sprites. */
   fig: number;
   boss?: boolean;
@@ -97,29 +99,29 @@ export const MOBS: Record<MobKind, MobDef> = {
     txt: 'Каждый второй ход поднимает скелета из светящегося круга. Круг видно заранее: убей некроманта, пока не поздно.',
   },
   king: {
-    name: 'Король-в-короне', floor: 0, boss: true, hp: 60, r: 15, speed: 10, reach: 40, dmg: 9, armor: 3, fig: 50,
+    size: 2, name: 'Король-в-короне', floor: 0, boss: true, hp: 60, r: 15, speed: 10, reach: 40, dmg: 9, armor: 3, fig: 50,
     acts: [{ k: 'slam', every: 3, at: 0 }],
     txt: 'Босс казематов. Каждый третий ход бьёт скипетром об пол и задевает весь отряд.',
   },
   ghoul: { name: 'Ледяной упырь', floor: 1, hp: 10, r: 7, speed: 36, reach: 30, dmg: 4, fig: 30, chill: true, txt: 'Бьёт вблизи и морозит: следующий бросок героя слабее.' },
   ghost: { name: 'Призрак', floor: 1, hp: 7, r: 7, speed: 0, reach: 999, dmg: 3, fig: 30, ghost: true, txt: 'Стреляет издалека. Каждый второй ход бесплотен: диски пролетают насквозь.' },
-  yeti: { name: 'Йети', floor: 1, hp: 22, r: 11, speed: 18, reach: 34, dmg: 6, armor: 2, fig: 38, txt: 'Толстая шкура, броня 2. Медленный, но бьёт больно.' },
+  yeti: { name: 'Йети', floor: 1, hp: 22, r: 9, speed: 18, reach: 34, dmg: 6, armor: 2, fig: 38, txt: 'Толстая шкура, броня 2. Медленный, но бьёт больно.' },
   witch: {
     name: 'Ледяная ведьма', floor: 1, hp: 14, r: 8, speed: 0, reach: 999, dmg: 2, fig: 36,
     acts: [{ k: 'heal', every: 2, at: 0, amt: 8 }],
     txt: 'Каждый второй ход лечит самого раненого моба на 8.',
   },
   lich: {
-    name: 'Ледяной лич', floor: 1, boss: true, hp: 64, r: 14, speed: 0, reach: 999, dmg: 6, armor: 2, fig: 52,
+    size: 2, name: 'Ледяной лич', floor: 1, boss: true, hp: 64, r: 14, speed: 0, reach: 999, dmg: 6, armor: 2, fig: 52,
     acts: [{ k: 'summon', every: 3, at: 2, n: 2, kind: 'ghoul', cap: 4 }, { k: 'slam', every: 3, at: 0, chill: true }],
     txt: 'Босс склепа. Призывает упырей из ледяных кругов, а следом насылает метель на весь отряд.',
   },
   imp: { name: 'Бес-кочегар', floor: 2, hp: 7, r: 6, speed: 52, reach: 28, dmg: 3, fig: 24, fire: true, txt: 'Шустрый, поджигает: герой горит и в следующий ход теряет ещё 2.' },
   slime: { name: 'Лавовый слизень', floor: 2, hp: 14, r: 9, speed: 20, reach: 30, dmg: 5, fig: 24, lava: true, txt: 'Толстый и медленный. Где лопнет, там остаётся лужа лавы.' },
   bomber: { name: 'Гном-подрывник', floor: 2, hp: 8, r: 7, speed: 0, reach: 999, dmg: 4, fig: 28, charge: true, txt: 'Ход поджигает фитиль, следующий ход кидает бомбу на двойной урон.' },
-  golem: { name: 'Голем', floor: 2, hp: 26, r: 12, speed: 14, reach: 34, dmg: 7, armor: 3, fig: 38, txt: 'Броня 3: удары слабее не проходят.' },
+  golem: { name: 'Голем', floor: 2, hp: 26, r: 9, speed: 14, reach: 34, dmg: 7, armor: 3, fig: 38, txt: 'Броня 3: удары слабее не проходят.' },
   forgelord: {
-    name: 'Владыка кузни', floor: 2, boss: true, hp: 70, r: 15, speed: 12, reach: 44, dmg: 9, armor: 4, fig: 54, rage: true,
+    size: 2, name: 'Владыка кузни', floor: 2, boss: true, hp: 70, r: 15, speed: 12, reach: 44, dmg: 9, armor: 4, fig: 54, rage: true,
     acts: [{ k: 'heat', every: 3, at: 0, n: 2 }],
     txt: 'Босс кузни, броня 4. Каждый третий ход раскаляет пол перед рунами, а раненый впадает в ярость (+3 к удару).',
   },
@@ -127,6 +129,9 @@ export const MOBS: Record<MobKind, MobDef> = {
 
 /** Shoots across the room instead of walking up. */
 export const isRanged = (k: MobKind) => MOBS[k].reach >= 999;
+
+/** Cells a mob covers on each side. */
+export const mobSize = (k: MobKind) => MOBS[k].size ?? 1;
 
 export type NodeKind = 'ore' | 'spk' | 'herb';
 
