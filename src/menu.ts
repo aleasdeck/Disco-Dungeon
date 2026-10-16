@@ -51,16 +51,14 @@ export function renderCollection(tab: 'heroes' | 'mobs') {
 // ------------------------------------------------------------ settings
 
 export function bindSettings(onChange: () => void) {
-  const name = $<HTMLInputElement>('setName'), aim = $<HTMLInputElement>('setAim'), lines = $<HTMLInputElement>('setLines');
+  const name = $<HTMLInputElement>('setName'), aim = $<HTMLInputElement>('setAim');
   const sync = () => {
     name.value = settings.name;
     aim.checked = settings.aimLine;
-    lines.checked = settings.attackLines;
     document.querySelectorAll<HTMLInputElement>('input[name=quality]').forEach(r => { r.checked = r.value === settings.quality; });
   };
   name.addEventListener('input', () => { settings.name = name.value.trim(); saveSettings(); });
   aim.addEventListener('change', () => { settings.aimLine = aim.checked; saveSettings(); });
-  lines.addEventListener('change', () => { settings.attackLines = lines.checked; saveSettings(); });
   document.querySelectorAll<HTMLInputElement>('input[name=quality]').forEach(r => r.addEventListener('change', () => {
     if (r.checked) { settings.quality = r.value as typeof settings.quality; saveSettings(); onChange(); }
   }));
