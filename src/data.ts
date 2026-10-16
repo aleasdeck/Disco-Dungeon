@@ -175,6 +175,8 @@ export const HEROES: HeroDef[] = [
 ];
 
 export const HERO_FIG = 34;
+/** Hero stand radius in world units: a cell is 16 across, so the stand sits inside its cell with a rim of floor around it. */
+export const HERO_BASE = 7;
 
 export const UPS: { k: StatKey; name: string; step: number; fmt: (v: number) => string }[] = [
   { k: 'm', name: 'Масса', step: 0.8, fmt: v => v.toFixed(1) },
