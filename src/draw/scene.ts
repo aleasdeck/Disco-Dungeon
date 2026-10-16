@@ -261,6 +261,20 @@ export class SceneRenderer {
         c.restore();
       }
     }
+    // a spent resource leaves only a flat scatter of chips on its cell, not something to bounce off
+    for (const n of S.nodes) {
+      if (n.left > 0) continue;
+      const [dx, dy] = P(n.x, n.y);
+      ell(c, dx, dy, 9, 4.2); c.fillStyle = 'rgba(25,15,10,.18)'; c.fill();
+      const tint = n.k === 'ore' ? '#e8b44a' : n.k === 'spk' ? '#a98ae8' : '#c9584a';
+      const chips: [number, number, number, boolean][] = [[-4, -1, 1.4, false], [3, -3, 1.1, true], [1, 2.5, 1.3, false], [-2, 3.5, 0.9, true], [5, 2, 1, false], [-5, 2, 0.8, true]];
+      for (const [ox, oy, r, tinted] of chips) {
+        const [x, y] = P(n.x + ox, n.y + oy);
+        pth(c, [[x - r * 1.4, y], [x, y - r * 0.6], [x + r * 1.4, y], [x, y + r * 0.6]]);
+        c.fillStyle = tinted ? tint : 'rgba(120,110,104,.85)';
+        c.fill();
+      }
+    }
     // the cells enemies and resources stand on are shaded like a square on a board; enemies get a red rim
     c.beginPath();
     for (const n of S.nodes) if (n.left > 0) { const [i, j] = cellAt(n.x, n.y); inner(i, j); }
@@ -522,12 +536,11 @@ export class SceneRenderer {
   }
 
   private drawNode(n: ResNode) {
+    // a spent node is drawn with the floor
+    if (n.left <= 0) return;
     const { c, P } = this;
     ell(c, ...P(n.x + 1.5, n.y + 1.5), 11, 5.5); c.fillStyle = 'rgba(15,8,4,.35)'; c.fill();
-    if (n.left > 0) return this.drawNodeShape(n, Math.min(n.left, n.ch), n.hit > 0);
-    // a low heap of rubble where the node was
-    this.frustum(n.x, n.y, 7, 6, 4, 0, 2.2, 0.4, ['#7a6d68', '#4a403c'], '#6a5e59');
-    for (const [ox, oy] of [[-4, 3], [4, 2], [1, 5]]) { const [px, py] = P(n.x + ox, n.y + oy); circ(c, px, py, 1.3); fs(c, '#8a7d78', 0.5); }
+    this.drawNodeShape(n, Math.min(n.left, n.ch), n.hit > 0);
   }
 
   private drawDisc(d: Disc) {
