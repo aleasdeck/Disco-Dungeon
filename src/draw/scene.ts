@@ -1,7 +1,7 @@
 // Draws one frame of a room: walls, floor, obstacles, resources, discs and miniatures.
 // Everything is drawn in iso space through the camera, so zoom and rotation are free.
 
-import { HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize } from '../data';
+import { HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize } from '../data';
 import type { Camera, Vec } from '../camera';
 import { type Disc, type Game, type HeroState } from '../game';
 import { cellAt, floorAt, hazKey, isFloor, type Block, type Edge, type Mob, type ResNode } from '../room';
@@ -313,20 +313,20 @@ export class SceneRenderer {
       const occ = S.heroes.find(o => o.pad === k && o.hp > 0), [sx, sy] = P(p.x, p.y);
       const on = !occ && canMove, pulse = reduce ? 0.8 : 0.6 + Math.sin(t * 5) * 0.3;
       if (cr && cr.pad === k && cr.hero.pad !== k) {
-        ell(c, sx, sy, 17, 8.5);
+        ell(c, sx, sy, 10, 5);
         c.fillStyle = cr.hero.def.col + '66';
         c.fill();
         c.lineWidth = 2;
         c.strokeStyle = '#ffd65a';
         c.stroke();
       }
-      ell(c, sx, sy, 13, 6.5);
+      ell(c, sx, sy, 9.6, 4.8);
       c.fillStyle = occ ? occ.def.col + '55' : on ? `rgba(255,214,90,${0.35 * pulse})` : 'rgba(255,214,90,.12)';
       c.fill();
       c.lineWidth = 1.4;
       c.strokeStyle = occ ? occ.def.col : on ? `rgba(255,214,90,${pulse})` : 'rgba(255,214,90,.4)';
       c.stroke();
-      ell(c, sx, sy, 8, 4);
+      ell(c, sx, sy, 6, 3);
       c.lineWidth = 0.8;
       c.stroke();
     });
@@ -575,9 +575,9 @@ export class SceneRenderer {
     const lifted = !!at, carried = !at && this.carry?.hero === h;
     const S = g.S, p = at ?? S.pads[h.pad!], [sx, sy0] = P(p.x, p.y), sy = sy0 - (lifted ? 8 : 0), dead = h.hp <= 0;
     const target = g.liveMobs()[0] ?? { x: S.Wx / 2, y: S.Wy / 2 };
-    if (lifted) { ell(c, sx, sy0, 9, 4.5); c.fillStyle = 'rgba(0,0,0,.35)'; c.fill(); }
+    if (lifted) { ell(c, sx, sy0, HERO_BASE * 1.27, HERO_BASE * 0.64); c.fillStyle = 'rgba(0,0,0,.35)'; c.fill(); }
     drawMiniature(c, {
-      key: h.def.key, x: sx, y: sy, baseR: 9, baseCol: h.def.col, fig: HERO_FIG,
+      key: h.def.key, x: sx, y: sy, baseR: HERO_BASE, baseCol: h.def.col, fig: HERO_FIG,
       faceRight: this.faceRight(p.x, p.y, target.x, target.y), flash: h.flash > 0, hop: 0,
       alpha: dead ? 0.45 : carried ? 0.3 : lifted ? 0.85 : 1,
       hp: dead || carried ? undefined : { now: h.hp, max: h.max },
@@ -587,12 +587,12 @@ export class SceneRenderer {
     const top = sy - BASE_TH - HERO_FIG - 6;
     if (h.shield > 0) {
       // shield badge on the right of the stand
-      const bx = sx + 14, by = sy - 6;
+      const bx = sx + 12, by = sy - 6;
       c.beginPath(); c.moveTo(bx - 2.5, by - 3); c.lineTo(bx + 2.5, by - 3); c.lineTo(bx + 2.5, by);
       c.quadraticCurveTo(bx + 2.5, by + 2.5, bx, by + 3.5); c.quadraticCurveTo(bx - 2.5, by + 2.5, bx - 2.5, by); c.closePath();
       fs(c, '#3fc4b6', 0.8);
     }
-    for (let k = 0; k < h.hand; k++) { ell(c, sx - 15 - k * 5, sy - 1, 3, 1.6); fs(c, h.def.col, 0.7); }
+    for (let k = 0; k < h.hand; k++) { ell(c, sx - 13 - k * 5, sy - 1, 3, 1.6); fs(c, h.def.col, 0.7); }
     if (h.chill > 0 || h.fire > 0) {
       c.font = '600 6.5px Oswald, sans-serif'; c.textAlign = 'right';
       c.fillStyle = h.chill > 0 ? '#bfe6ff' : '#ff9a5c';

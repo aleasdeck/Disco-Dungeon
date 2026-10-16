@@ -315,7 +315,9 @@ function pickPads(gw: number, gh: number, floor: Uint8Array, R: ReturnType<typeo
       chosen.push(best);
     }
   }
-  return chosen.map(([i, j]) => ({ x: i * TILE + 8 + (R.next() - 0.5) * 3, y: j * TILE + 8 + (R.next() - 0.5) * 3 }));
+  // a rune sits in the middle of its cell, so the hero's stand fits inside it; the two draws that once nudged it
+  // off centre stay, so a seed still lays out the rest of the room the same
+  return chosen.map(([i, j]) => (R.next(), R.next(), { x: i * TILE + 8, y: j * TILE + 8 }));
 }
 
 /** Throw runes in every room; heroes are put on them before the fight and stay there. */
