@@ -437,62 +437,93 @@ export class SceneRenderer {
     }
   }
 
+  /**
+   * An upright box from height h0 to h1 over a floor rectangle, its visible sides shaded by the light.
+   * Returns the visible sides so callers can paint details onto them.
+   */
+  private prism(x0: number, y0: number, x1: number, y1: number, h0: number, h1: number, sides: [string, string] | string, top: string | CanvasGradient) {
+    const { c, P, cam } = this;
+    const faces: { a: Vec; b: Vec; n: Vec }[] = [
+      { a: [x1, y0], b: [x1, y1], n: [1, 0] },
+      { a: [x0, y1], b: [x1, y1], n: [0, 1] },
+      { a: [x0, y0], b: [x0, y1], n: [-1, 0] },
+      { a: [x0, y0], b: [x1, y0], n: [0, -1] },
+    ].filter(f => cam.facing(f.n[0], f.n[1]) > 1e-6) as { a: Vec; b: Vec; n: Vec }[];
+    for (const f of faces) {
+      pth(c, [P(...f.a, h0), P(...f.b, h0), P(...f.b, h1), P(...f.a, h1)]);
+      fs(c, typeof sides === 'string' ? sides : this.shade(f.n, sides), 1.1);
+    }
+    pth(c, [P(x0, y0, h1), P(x1, y0, h1), P(x1, y1, h1), P(x0, y1, h1)]);
+    fs(c, top, 1.1);
+    const at = (f: { a: Vec; b: Vec }, u: number, h: number) => P(f.a[0] + (f.b[0] - f.a[0]) * u, f.a[1] + (f.b[1] - f.a[1]) * u, h);
+    return { faces, at };
+  }
+
+  /** Resource nodes stand on their cell like the stone blocks, and wear down one stage per charge taken. */
   private drawNode(n: ResNode) {
     const { c, P } = this;
-    const [x, y] = P(n.x, n.y);
+    const h = TILE / 2 - 1, x0 = n.x - h, y0 = n.y - h, x1 = n.x + h, y1 = n.y + h;
+    const fp: Pt[] = [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)];
+    pth(c, fp.map(([x, y]) => [x + 3, y + 2] as Pt));
+    c.fillStyle = 'rgba(15,8,4,.35)';
+    c.fill();
     if (n.left <= 0) {
-      ell(c, x, y, n.r * 1.1, n.r * 0.5); fs(c, '#5a4d48', 0.8);
-      circ(c, x - 3, y - 1, 1.6); fs(c, '#7a6d68', 0.6);
-      circ(c, x + 3, y, 1.3); fs(c, '#7a6d68', 0.6);
+      // a low heap of rubble where the node was
+      this.prism(x0 + 2, y0 + 2, x1 - 2, y1 - 2, 0, 2.5, ['#7a6d68', '#4a403c'], '#6a5e59');
+      for (const [ox, oy] of [[-3, -2], [3, 1], [-1, 3]]) { const [px, py] = P(n.x + ox, n.y + oy, 2.5); circ(c, px, py, 1.3); fs(c, '#8a7d78', 0.5); }
       return;
     }
-    // no counters: the node itself wears down, one visible stage per charge left
-    const f = n.hit > 0, left = Math.min(n.left, n.ch), worn = n.ch - left;
-    ell(c, x + 1, y + 1, n.r * 1.3, n.r * 0.6); c.fillStyle = 'rgba(20,10,5,.35)'; c.fill();
-    // chips knocked off so far lie around the base
-    for (let k = 0; k < worn * 2; k++) {
-      const a = 0.6 + k * 2.4, rx = Math.cos(a) * (n.r + 3), ry = Math.sin(a) * (n.r * 0.5 + 1.5);
-      circ(c, x + rx, y + ry, 1.1 + (k % 2) * 0.4); fs(c, n.k === 'spk' ? '#7a4fe0' : n.k === 'ore' ? '#6e6963' : '#9a3226', 0.5);
-    }
-    c.save();
-    // the whole node shrinks a little with every charge taken
-    const sc = 0.62 + 0.38 * (left / n.ch);
-    c.translate(x, y); c.scale(sc, sc); c.translate(-x, -y);
+    const f = n.hit > 0, left = Math.min(n.left, n.ch), q = left / n.ch, W = '#ffffff';
     if (n.k === 'ore') {
-      pth(c, [[x - 9, y], [x - 8, y - 7], [x - 3, y - 11], [x + 4, y - 10], [x + 9, y - 4], [x + 8, y]]);
-      fs(c, f ? '#fff' : lg(c, 0, y - 11, 0, y, '#8f8a84', '#55504a'), 1.1);
-      const gems = [[-4, -6, 2.2], [2, -7, 1.8], [4, -3, 2], [-1, -2.5, 1.5]].slice(0, [0, 1, 2, 4][Math.min(3, Math.round((left / n.ch) * 3))]);
-      for (const [ox, oy, r] of gems) {
-        pth(c, [[x + ox - r, y + oy], [x + ox, y + oy - r], [x + ox + r, y + oy], [x + ox, y + oy + r * 0.8]]);
-        fs(c, f ? '#fff' : '#e8b44a', 0.7);
+      // a block of rock shot through with gold; it gets shorter and loses gems with every hit
+      const H = 8 + 14 * q;
+      const { faces, at } = this.prism(x0, y0, x1, y1, 0, H, f ? W : ['#9d968d', '#57514b'], f ? W : '#aaa399');
+      const spots: [number, number][] = [[0.28, 0.32], [0.7, 0.58], [0.42, 0.78], [0.82, 0.22]];
+      for (const fc of faces) for (const [u0, v] of spots.slice(0, left + 1)) {
+        // shift the pattern per side so the block reads as a vein, not a die
+        const u = ((u0 + fc.n[0] * 0.31 + fc.n[1] * 0.17 + 1) % 0.76) + 0.12;
+        const [gx, gy] = at(fc, u, H * v), r = 1.9;
+        pth(c, [[gx - r, gy], [gx, gy - r * 1.2], [gx + r, gy], [gx, gy + r * 1.2]]);
+        fs(c, f ? W : '#f0bb45', 0.6);
       }
-      if (worn) { c.strokeStyle = '#2a2622'; c.lineWidth = 0.7; c.beginPath(); c.moveTo(x - 2, y - 10); c.lineTo(x, y - 6); c.lineTo(x - 1, y - 3); c.stroke(); }
+      if (left === n.ch) { const [gx, gy] = P(n.x + 1, n.y - 1, H); pth(c, [[gx - 2.6, gy], [gx, gy - 1.6], [gx + 2.6, gy], [gx, gy + 1.6]]); fs(c, '#ffd36a', 0.6); }
+      else {
+        c.strokeStyle = '#2a2622'; c.lineWidth = 0.7; c.beginPath();
+        c.moveTo(...P(x0 + 3, n.y - 2, H)); c.lineTo(...P(n.x, n.y, H)); c.lineTo(...P(n.x + 2, y1 - 3, H));
+        c.stroke();
+      }
     } else if (n.k === 'spk') {
+      // a stone plinth holding a glowing crystal column with a pointed tip
+      const Hc = 6 + 13 * q, tip = 3 + 4 * q, i = 3.2;
+      const [gx, gy] = P(n.x, n.y, 4 + Hc / 2);
       c.save(); c.globalCompositeOperation = 'lighter';
-      const g = c.createRadialGradient(x, y - 8, 0, x, y - 8, 18), gl = 0.15 + 0.25 * (left / n.ch);
-      g.addColorStop(0, `rgba(190,150,255,${gl})`); g.addColorStop(1, 'rgba(190,150,255,0)');
-      c.fillStyle = g; c.fillRect(x - 18, y - 26, 36, 36); c.restore();
-      // crystals break off one by one, the tall middle one last
-      const all = [[-5, 3, 9], [4, 3, 11], [0, 4, 16]], keep = all.slice(all.length - Math.max(1, Math.round((left / n.ch) * 3)));
-      for (const [ox, w, hgt] of keep) {
-        pth(c, [[x + ox - w, y - 1], [x + ox - w, y - hgt + 3], [x + ox, y - hgt], [x + ox + w, y - hgt + 3], [x + ox + w, y - 1]]);
-        fs(c, f ? '#fff' : lg(c, x + ox - w, 0, x + ox + w, 0, '#d9c4ff', '#7a4fe0'), 1);
+      const g = c.createRadialGradient(gx, gy, 0, gx, gy, 20);
+      g.addColorStop(0, `rgba(190,150,255,${0.12 + 0.3 * q})`); g.addColorStop(1, 'rgba(190,150,255,0)');
+      c.fillStyle = g; c.fillRect(gx - 20, gy - 20, 40, 40); c.restore();
+      this.prism(x0, y0, x1, y1, 0, 4, ['#6d6670', '#3d3740'], '#7d7580');
+      const { faces } = this.prism(x0 + i, y0 + i, x1 - i, y1 - i, 4, 4 + Hc, f ? W : ['#dcc8ff', '#6c43d6'], f ? W : '#b99bff');
+      const top = 4 + Hc, apex = P(n.x, n.y, top + tip);
+      for (const fc of faces) {
+        pth(c, [P(...fc.a, top), P(...fc.b, top), apex]);
+        fs(c, f ? W : this.shade(fc.n, ['#efe4ff', '#8a63ea']), 1);
       }
-      for (const [ox, w] of all.slice(0, all.length - keep.length)) { pth(c, [[x + ox - w, y - 1], [x + ox - w, y - 3], [x + ox + w, y - 4], [x + ox + w, y - 1]]); fs(c, '#6a46c0', 0.8); }
+      // a highlight down the lit edge
+      c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = 0.8; c.beginPath();
+      c.moveTo(...P(x0 + i, y1 - i, 5)); c.lineTo(...P(x0 + i, y1 - i, top)); c.stroke();
     } else {
-      rr(c, x - 1.5, y - 7, 3, 7, 1.2); fs(c, f ? '#fff' : '#f3ead8', 0.9);
-      c.beginPath(); c.arc(x, y - 7, 6, Math.PI, 0); c.closePath(); fs(c, f ? '#fff' : lg(c, 0, y - 13, 0, y - 7, '#d9604f', '#9a3226'), 1);
-      for (const [ox, oy] of [[-2.5, -10], [1.8, -11], [2.8, -8.5]]) { circ(c, x + ox, y + oy, 0.9); c.fillStyle = '#f3ead8'; c.fill(); }
-      if (left >= n.ch) {
-        // the small mushroom goes first
-        rr(c, x + 4, y - 4, 2.4, 4, 1); fs(c, '#f3ead8', 0.8);
-        c.beginPath(); c.arc(x + 5.2, y - 4, 3.4, Math.PI, 0); c.closePath(); fs(c, '#d9604f', 0.9);
-        circ(c, x + 5, y - 5.5, 0.9); c.fillStyle = '#f3ead8'; c.fill();
-      } else {
-        rr(c, x + 4.2, y - 2, 2, 2, 0.6); fs(c, '#d8cdb8', 0.7);
-      }
+      // a mossy clod of earth with mushrooms; one mushroom is picked per hit
+      const H = 8;
+      this.prism(x0, y0, x1, y1, 0, H, f ? W : ['#7a5434', '#3e2a1a'], f ? W : '#5f8a3a');
+      const shroom = (wx: number, wy: number, s: number) => {
+        const [x, y] = P(wx, wy, H);
+        rr(c, x - 1.5 * s, y - 7 * s, 3 * s, 7 * s, 1.2); fs(c, f ? W : '#f3ead8', 0.9);
+        c.beginPath(); c.arc(x, y - 7 * s, 6 * s, Math.PI, 0); c.closePath(); fs(c, f ? W : lg(c, 0, y - 13 * s, 0, y - 7 * s, '#e0634f', '#9a3226'), 1);
+        for (const [ox, oy] of [[-2.5, -10], [1.8, -11], [2.8, -8.5]]) { circ(c, x + ox * s, y + oy * s, 0.9 * s); c.fillStyle = '#f3ead8'; c.fill(); }
+      };
+      const spots: [number, number, number][] = [[-2, -2, 1.15], [3, 3, 0.75], [-3, 3, 0.6]];
+      const show = spots.slice(0, left === n.ch ? 3 : left).sort((a, b) => a[0] + a[1] - b[0] - b[1]);
+      for (const [ox, oy, sc] of show) shroom(n.x + ox, n.y + oy, sc);
     }
-    c.restore();
   }
 
   private drawDisc(d: Disc) {
