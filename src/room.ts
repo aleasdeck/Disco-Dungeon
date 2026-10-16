@@ -22,9 +22,6 @@ export interface Block { x0: number; y0: number; x1: number; y1: number; v: numb
 /** Icicle toughness: a small one breaks to a fair hit, a big one needs two or three. */
 export const ICICLE_HP = { small: 3, big: 11 };
 
-/** The cell a resource node fills; discs bounce off it like a stone block. */
-export const nodeBox = (n: { x: number; y: number }) => ({ x0: n.x - TILE / 2, y0: n.y - TILE / 2, x1: n.x + TILE / 2, y1: n.y + TILE / 2 });
-
 /** Blocks discs still bounce off: everything but shattered icicles. */
 export const standing = (blocks: Block[]) => blocks.filter(b => !b.ice || b.hp! > 0);
 export interface Decal { x: number; y: number; k: number; a: number }
