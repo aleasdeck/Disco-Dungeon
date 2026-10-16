@@ -11,11 +11,7 @@ export interface RoomSpec {
   type: RoomType;
 }
 
-/**
- * A throw rune. Three open runes wait at the near edge; the rest of the room's runes start `locked`
- * and open when a disc rolls over them.
- */
-export interface Pad { x: number; y: number; locked?: boolean }
+export interface Pad { x: number; y: number }
 export interface Pit { x: number; y: number; r: number }
 /**
  * A one-tile obstacle. `ice` marks an icicle growing from the floor: it collides exactly like a stone block,
@@ -297,7 +293,7 @@ function buildEdges(gw: number, gh: number, floor: Uint8Array) {
   return { edges, rock };
 }
 
-/** Runes heroes start the fight on: spread along the near boundary of the floor. */
+/** Throw runes: spread along the near boundary of the floor. */
 function pickPads(gw: number, gh: number, floor: Uint8Array, R: ReturnType<typeof makeRng>): Pad[] {
   const L = { gw, gh, floor };
   const cand: [number, number][] = [];
@@ -322,9 +318,8 @@ function pickPads(gw: number, gh: number, floor: Uint8Array, R: ReturnType<typeo
   return chosen.map(([i, j]) => ({ x: i * TILE + 8 + (R.next() - 0.5) * 3, y: j * TILE + 8 + (R.next() - 0.5) * 3 }));
 }
 
-/** Runes open from the start, and locked runes further into the room by tier (fewer in the first rooms). */
-export const OPEN_PADS = 3;
-const LOCKED_PADS = [2, 3, 3, 4, 4];
+/** Throw runes in every room; heroes are put on them before the fight and stay there. */
+export const OPEN_PADS = 4;
 
 /** Block clusters from plain to awkward: single, pairs, an L, a diagonal pair. */
 const BLOCK_SHAPES = [[[0, 0]], [[0, 0], [1, 0]], [[0, 0], [0, 1]], [[0, 0], [1, 0], [0, 1]], [[0, 0], [1, 1]]];
@@ -397,16 +392,6 @@ export function generate(spec: RoomSpec): Layout {
 
   const pads = pickPads(gw, gh, floor, R);
   for (const p of pads) { objs.push({ x: p.x, y: p.y, r: 22 }); take(Math.floor(p.x / TILE), Math.floor(p.y / TILE)); }
-  // locked runes deeper in the room, on the flanks and in the middle: a disc rolled over one opens it
-  // (its own stream, so the rest of the room comes out as before)
-  const LR = makeRng(spec.seed * 31 + spec.depth + 3571);
-  const deep = (x: number, y: number) => { const s = x / Wx + y / Wy; return s > 0.45 && s < 1.35; };
-  for (let k = 0, n = LOCKED_PADS[Math.min(t, LOCKED_PADS.length - 1)]; k < n; k++) {
-    for (let tr = 0; tr < 200; tr++) {
-      const x = 22 + LR.next() * (Wx - 44), y = 22 + LR.next() * (Wy - 44);
-      if (deep(x, y) && free(x, y, 12, 2) && clearOfRock(geo, x, y, 12)) { pads.push({ x, y, locked: true }); objs.push({ x, y, r: 12 }); take(Math.floor(x / TILE), Math.floor(y / TILE)); break; }
-    }
-  }
 
   const pits: Pit[] = [];
   for (let i = 0, n = roll(tier.pits); i < n; i++) {
