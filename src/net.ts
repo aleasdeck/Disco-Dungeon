@@ -20,7 +20,7 @@ export type Msg =
   | { t: 'act'; a: Action }
   | { t: 'snap'; s: Snapshot }
   /** A screen everyone sees while the host chooses (the map, the end of a room); an empty title hides it. */
-  | { t: 'screen'; title: string; text: string }
+  | { t: 'screen'; title: string; text: string; win?: boolean }
   | { t: 'lobbyBack' }
   /** The host closed the room on purpose, so there is nothing to reconnect to. */
   | { t: 'bye' }

@@ -113,7 +113,7 @@ let dirty = false, lastSnap = 0, lastSave = 0;
 /** This browser's secret for taking its seat back after a drop. */
 let myKey = '';
 /** Host: what the clients' waiting screen shows now, for players who rejoin. */
-let lastScreen = { title: '', text: '' };
+let lastScreen: HostSave['screen'] = { title: '', text: '' };
 /** The room's result screen while it shows, so a reopened room can show it again. */
 let ending: HostSave['ending'] = null;
 /** Client: bumped to cancel a reconnect in progress. */
@@ -125,14 +125,16 @@ const ownerOf = (i: number) => players.find(p => p.hero === i)?.id ?? 'host';
 const pub = () => players.map(({ key: _key, ...p }) => p);
 
 /** The waiting screen online clients see while the host is on the map or reading a room's result. */
-function screen(title: string, text = '') {
-  if (mode === 'host') { lastScreen = { title, text }; net.broadcast({ t: 'screen', title, text }); }
-  if (mode === 'client') wait(title, text);
+function screen(title: string, text = '', win = false) {
+  if (mode === 'host') { lastScreen = { title, text, win }; net.broadcast({ t: 'screen', title, text, win }); }
+  if (mode === 'client') wait(title, text, false, win);
 }
 
 /** Show or hide the waiting screen on this browser; `away` is for a lost connection, which the player may give up on. */
-function wait(title: string, text = '', away = false) {
+function wait(title: string, text = '', away = false, win = false) {
   $('waitScreen').hidden = !title;
+  victory($('waitScreen'), win && !!title);
+  $('waitNote').textContent = win ? 'Хозяин комнаты вернёт всех в лобби.' : 'Хозяин комнаты выбирает, куда идти дальше.';
   $('waitTitle').textContent = title;
   $('waitText').innerHTML = text;
   $('waitNote').hidden = away || mode !== 'client';
@@ -201,7 +203,11 @@ game.onRoomEnd = win => {
   const last = boss && run.floor === FLOORS - 1;
   setTimeout(() => {
     if (!win) return showEnd({ title: 'Отряд пал', text: `Забег окончен на этаже ${run.floor + 1}, сложность ${S.spec.depth}.`, kind: 'again' });
-    if (last) return showEnd({ title: 'Забег пройден!', text: 'Владыка кузни повержен на последнем этаже.', kind: 'again' });
+    if (last) {
+      const left = game.alive().map(h => h.def.name).join(', ');
+      return showEnd({ title: 'Вы победили!', kind: 'win',
+        text: `Владыка кузни повержен, все три этажа позади. Комнат пройдено: ${run.path.reduce((a, p) => a + p.length, 0)}. Дошли до конца: ${left}.` });
+    }
     if (boss) run.floor++;
     choosing = true;
     showEnd({ title: boss ? `Этаж ${run.floor} пройден` : 'Комната зачищена',
@@ -213,13 +219,28 @@ game.onRoomEnd = win => {
 function showEnd(e: NonNullable<HostSave['ending']>) {
   ending = e;
   $('roomEnd').hidden = false;
+  victory($('roomEnd'), e.kind === 'win');
   $('endTitle').textContent = e.title;
   $('endText').textContent = e.text;
   $('endBtn').textContent = e.kind === 'map' ? 'К карте' : mode === 'host' ? 'В лобби' : 'Новый забег';
   $('endBtn').onclick = e.kind === 'map'
     ? () => { hideEnd(); showMap(true); screen('Выбор комнаты', 'Хозяин комнаты смотрит на карту забега.'); }
     : mode === 'host' ? backToLobby : () => startRun();
-  screen(e.title, e.text);
+  screen(e.title, e.text, e.kind === 'win');
+}
+
+/** Dress a result screen up as the victory banner: a spinning disco ball and confetti falling over it. */
+function victory(el: HTMLElement, on: boolean) {
+  el.classList.toggle('win', on);
+  el.querySelectorAll('.confetti').forEach(c => c.remove());
+  if (!on) return;
+  const cols = ['#d9b24a', '#d9733a', '#3fc4b6', '#b8323f', '#9a7bd9', '#f0e5d0'];
+  for (let k = 0; k < 40; k++) {
+    const c = document.createElement('i');
+    c.className = 'confetti';
+    c.style.cssText = `left:${Math.random() * 100}%;background:${cols[k % cols.length]};animation-delay:${-Math.random() * 4}s;animation-duration:${3 + Math.random() * 3}s;--dx:${Math.random() * 80 - 40}px`;
+    el.prepend(c);
+  }
 }
 
 function hideEnd() {
@@ -467,7 +488,7 @@ net.onMsg = (from, m) => {
     if (ch.party) hud.buildAllies();
     if (ch.room) controls.fit();
     hud.refresh();
-  } else if (m.t === 'screen') screen(m.title, m.text);
+  } else if (m.t === 'screen') screen(m.title, m.text, m.win);
   else if (m.t === 'lobbyBack') { started = false; wait(''); lobbyView(); show('lobby'); }
 };
 

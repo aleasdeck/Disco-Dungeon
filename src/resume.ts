@@ -16,9 +16,9 @@ export interface HostSave {
   run: Run;
   choosing: boolean;
   mapInfo: string;
-  /** The room's result screen, if it was showing; `again` leads back to the lobby, `map` to the map. */
-  ending: { title: string; text: string; kind: 'again' | 'map' } | null;
-  screen: { title: string; text: string };
+  /** The room's result screen, if it was showing; `again` and `win` (the whole run beaten) lead back to the lobby, `map` to the map. */
+  ending: { title: string; text: string; kind: 'again' | 'map' | 'win' } | null;
+  screen: { title: string; text: string; win?: boolean };
   snap: Snapshot | null;
 }
 
