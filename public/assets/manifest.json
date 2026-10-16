@@ -5,7 +5,7 @@
     "ricochet": { "file": "heroes/ricochet.png", "facing": "left" },
     "skel": { "file": "mobs/skel.png", "facing": "left" },
     "archer": { "file": "mobs/archer.png", "facing": "left" },
-    "rat": { "file": "mobs/rat.png", "facing": "left" },
+    "rat": { "file": "mobs/rat.png", "facing": "right" },
     "necro": { "file": "mobs/necro.png", "facing": "right" },
     "king": { "file": "mobs/king.png", "facing": "right" },
     "ghoul": { "file": "mobs/ghoul.png", "facing": "right" },
