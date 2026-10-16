@@ -105,7 +105,8 @@ describe('difficulty along a floor', () => {
   it('hits harder on later floors and in the last rooms before the boss', () => {
     expect(room(0, 0, 3).dmgAdd).toBe(0);
     expect(room(0, LAYERS - 2, 3).dmgAdd).toBe(1);
-    expect(room(2, 0, 3).dmgAdd).toBe(2);
+    expect(room(1, 0, 3).dmgAdd).toBe(2);
+    expect(room(2, 0, 3).dmgAdd).toBe(3);
   });
 });
 
