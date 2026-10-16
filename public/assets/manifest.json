@@ -1,1 +1,7 @@
-{ "figures": {} }
+{
+  "figures": {
+    "bastion": { "file": "heroes/bastion.png", "facing": "left" },
+    "ash": { "file": "heroes/ash.png", "facing": "right" },
+    "ricochet": { "file": "heroes/ricochet.png", "facing": "left" }
+  }
+}
