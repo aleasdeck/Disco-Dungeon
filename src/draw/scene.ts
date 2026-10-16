@@ -16,15 +16,6 @@ export interface Carry { hero: HeroState; x: number; y: number; pad: number | nu
 
 const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/** Label and colour of an enemy's special intent badge. */
-const INTENT_PILL: Record<'charge' | 'slam' | 'heal' | 'summon' | 'heat', (dmg: number, chill: boolean) => [string, string]> = {
-  charge: () => ['фитиль', '#8a5a2b'],
-  slam: (d, chill) => [(chill ? 'метель ' : 'всем ') + d, chill ? '#3f7fa8' : '#b8323f'],
-  heal: d => ['лечит ' + d, '#3c8a52'],
-  summon: () => ['призыв', '#6b4fa8'],
-  heat: () => ['жар', '#c2501f'],
-};
-
 export class SceneRenderer {
   private c!: Ctx;
   private cam!: Camera;
@@ -70,7 +61,6 @@ export class SceneRenderer {
     items.sort((a, b) => a[0] - b[0]).forEach(i => i[1]());
 
     this.drawOmens();
-    this.drawTelegraph();
     this.drawAim(aim);
     this.drawFx();
 
@@ -302,7 +292,8 @@ export class SceneRenderer {
         c.beginPath(); c.moveTo(sx, sy); c.lineTo(sx + 5, sy - 1.5); c.stroke();
       }
     }
-    // throw runes
+    // throw runes: only while heroes are being placed, the fight itself hides them
+    if (S.phase !== 'place') return;
     const h = g.hero, canMove = g.canControl(h) && g.canPlace(h), cr = this.carry;
     S.pads.forEach((p, k) => {
       const occ = S.heroes.find(o => o.pad === k && o.hp > 0), [sx, sy] = P(p.x, p.y);
@@ -352,28 +343,6 @@ export class SceneRenderer {
         }
       }
     }
-  }
-
-  /** Runes enemies strike this turn glow red. No lines across the field: they hid the figures. */
-  private drawTelegraph() {
-    const { c, P, g } = this;
-    const S = g.S;
-    if ((S.phase !== 'throw' && S.phase !== 'place') || !settings.attackLines) return;
-    const pulse = reduce ? 0.8 : 0.6 + 0.3 * Math.sin(this.t * 5);
-    const pads = new Set<number>();
-    for (const m of g.liveMobs()) {
-      const it = m.intent;
-      if (it?.t === 'hit') { const h = g.heroOf(it.hero); if (h.pad !== null) pads.add(h.pad); }
-      else if (it?.t === 'slam') for (const h of g.alive()) if (h.pad !== null) pads.add(h.pad);
-    }
-    c.save();
-    for (const i of pads) {
-      const p = S.pads[i], [x, y] = P(p.x, p.y);
-      ell(c, x, y, 13, 6.5);
-      c.fillStyle = `rgba(217,67,79,${0.25 * pulse})`; c.fill();
-      c.strokeStyle = `rgba(255,90,115,${pulse})`; c.lineWidth = 1.8; c.stroke();
-    }
-    c.restore();
   }
 
   // ------------------------------------------------------------ props
@@ -592,23 +561,6 @@ export class SceneRenderer {
     rr(c, x - w / 2, top, w, 3.6, 1.2); fs(c, '#2a1f18', 0.7);
     rr(c, x - w / 2 + 0.6, top + 0.6, ((w - 1.2) * Math.max(0, m.hp)) / m.max, 2.4, 0.8); c.fillStyle = '#d9434f'; c.fill();
     if (m.armor) { c.font = '600 6px Oswald, sans-serif'; c.textAlign = 'right'; c.fillStyle = '#d6cfbd'; c.fillText('бр ' + m.armor, x - w / 2 - 1.5, top + 3.8); }
-    if (it && (S.phase === 'throw' || S.phase === 'place')) {
-      const bx = x + w / 2 + 2, by = top - 3;
-      if (it.t === 'hit') {
-        pth(c, [[bx, by], [bx + 11, by], [bx + 11, by + 6], [bx + 5.5, by + 11], [bx, by + 6]]); fs(c, '#b8323f', 0.9);
-        c.font = '600 7.5px Oswald, sans-serif'; c.textAlign = 'center'; c.fillStyle = '#fff'; c.fillText(String(it.dmg), bx + 5.5, by + 7);
-        circ(c, bx + 12, by + 1, 2); fs(c, g.heroOf(it.hero).def.col, 0.6);
-      } else if (it.t === 'move') {
-        rr(c, bx, by + 1, 11, 7, 2); fs(c, '#d6cfbd', 0.8);
-        c.font = '600 6.5px Oswald, sans-serif'; c.textAlign = 'center'; c.fillStyle = INK; c.fillText('→', bx + 5.5, by + 6.7);
-      } else {
-        const [txt, col] = INTENT_PILL[it.t](it.dmg, !!it.chill);
-        c.font = '600 6.5px Oswald, sans-serif';
-        const tw = c.measureText(txt).width + 6;
-        rr(c, bx, by + 1, tw, 8, 2); fs(c, col, 0.8);
-        c.textAlign = 'center'; c.fillStyle = '#fff'; c.fillText(txt, bx + tw / 2, by + 7.2);
-      }
-    }
     if (!g.solid(m) && m.hp > 0 && S.phase !== 'over') {
       c.font = '600 6px Oswald, sans-serif'; c.textAlign = 'center'; c.fillStyle = '#d9f2ff';
       c.fillText('бесплотен', x, y + m.r * 0.64 + 8);
