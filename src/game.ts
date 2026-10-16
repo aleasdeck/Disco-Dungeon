@@ -137,7 +137,8 @@ export class Game {
     for (const h of this.party) Object.assign(h, { pad: null, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0, chill: 0, fire: 0 });
     this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [] };
     // everyone starts on a rune, spread along the near edge; players may rearrange before the fight
-    const living = this.party.filter(h => h.hp > 0), n = L.pads.length;
+    // (the runes of a locked wing come after the main ones and stay empty until its door opens)
+    const living = this.party.filter(h => h.hp > 0), n = L.pads.filter(p => !p.sec).length;
     living.forEach((h, k) => { h.pad = living.length === 1 ? Math.floor(n / 2) : Math.round((k * (n - 1)) / (living.length - 1)); });
     this.pickActive();
     this.pickIntents();
@@ -189,10 +190,43 @@ export class Game {
     return !this.S.heroes.some(h => h.pad === pi && h.hp > 0);
   }
 
+  /** Which part of the room a rune is in: 0 is the main part, 1 the locked wing. */
+  secOf(pi: number) {
+    return this.S.pads[pi]?.sec ?? 0;
+  }
+
+  /** The wing opens when a disc hits its door; the main part is always open. */
+  secOpen(sec: number) {
+    return !sec || this.S.blocks.some(b => b.door && b.open);
+  }
+
+  /**
+   * Whether a hero may step onto rune pi now: 'free' within the same part of the room (before throwing),
+   * 'disc' into the other part through an open door, which costs one of the hero's discs this turn.
+   */
+  moveKind(h: HeroState, pi: number): 'free' | 'disc' | null {
+    const S = this.S;
+    if (h.pad === null || h.pad === pi || h.hp <= 0 || !this.secOpen(this.secOf(pi))) return null;
+    if (this.secOf(pi) !== this.secOf(h.pad)) return S.phase === 'throw' && h.hand > 0 && this.padFree(pi) ? 'disc' : null;
+    return this.canPlace(h) ? 'free' : null;
+  }
+
   /** Move a hero to rune pi; if another hero who hasn't thrown stands there, they swap places. */
   movePad(h: HeroState, pi: number) {
     const S = this.S;
-    if (!this.canPlace(h) || h.pad === pi) return false;
+    const kind = this.moveKind(h, pi);
+    if (!kind) return false;
+    if (kind === 'disc') {
+      if (this.send) { this.send({ k: 'move', h: h.i, pad: pi }); return true; }
+      // going through the door takes the hero's throw: one disc fewer this turn
+      h.hand--;
+      h.pad = pi;
+      this.float(S.pads[pi].x, S.pads[pi].y, '-1 диск', h.def.col);
+      this.burst(S.pads[pi].x, S.pads[pi].y, h.def.col, 10);
+      this.pickIntents();
+      this.onChange();
+      return true;
+    }
     const other = S.heroes.find(o => o.pad === pi && o.hp > 0);
     // online, a rune taken by someone else's hero stays theirs
     if (other && (!this.canPlace(other) || this.online)) return false;
@@ -539,10 +573,20 @@ export class Game {
         continue;
       }
       for (const b of S.blocks) {
-        if (b.ice && b.hp! <= 0) continue;
+        if ((b.ice && b.hp! <= 0) || b.open) continue;
         const vn = this.bounceBox(d, b);
         if (vn <= 0) continue;
         d.bounces++;
+        if (b.door) {
+          // any real knock swings the wing's door open; the disc still bounces off it this once
+          if (vn <= 5) continue;
+          b.open = true;
+          const x = (b.x0 + b.x1) / 2, y = (b.y0 + b.y1) / 2;
+          this.float(x, y, 'дверь открыта!', '#ffd65a');
+          this.burst(x, y, '#c89a5a', 16);
+          changed = true;
+          continue;
+        }
         if (!b.ice || vn <= 30) continue;
         // icicles chip like mobs take damage, and shatter at zero
         const x = (b.x0 + b.x1) / 2, y = (b.y0 + b.y1) / 2;

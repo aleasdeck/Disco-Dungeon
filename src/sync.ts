@@ -20,6 +20,8 @@ export interface Snapshot {
   nodes: [number, number][];
   /** Hit points left on each icicle, in block order. */
   ice?: number[];
+  /** Whether each wing door is open, in block order. */
+  doors?: boolean[];
   discs: (Omit<Disc, 'hero'> & { hero: number })[];
   floats: Float[];
   sparks: Spark[];
@@ -36,6 +38,7 @@ export function snapshot(g: Game): Snapshot {
     mobs: S.mobs,
     nodes: S.nodes.map(n => [n.left, n.hit]),
     ice: S.blocks.filter(b => b.ice).map(b => b.hp!),
+    doors: S.blocks.filter(b => b.door).map(b => !!b.open),
     discs: S.discs.filter(d => !d.gone).map(d => ({ ...d, hero: d.hero.i })),
     floats: S.floats,
     sparks: S.sparks,
@@ -62,6 +65,7 @@ export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boo
   Object.assign(S, { turn: s.turn, phase: s.phase, timer: s.timer, attacked: s.attacked, ready: s.ready, shake: s.shake, mobs: s.mobs, floats: s.floats, sparks: s.sparks });
   S.nodes.forEach((n, k) => { if (s.nodes[k]) [n.left, n.hit] = s.nodes[k]; });
   if (s.ice) S.blocks.filter(b => b.ice).forEach((b, k) => { if (s.ice![k] !== undefined) b.hp = s.ice![k]; });
+  if (s.doors) S.blocks.filter(b => b.door).forEach((b, k) => { b.open = !!s.doors![k]; });
   S.discs = s.discs.map(d => ({ ...d, hero: g.heroOf(d.hero) }));
   Object.assign(g.bank, s.bank);
   if (s.haz) S.haz = new Set(s.haz);
