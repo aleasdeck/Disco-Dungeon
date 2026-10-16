@@ -264,6 +264,24 @@ describe('online play', () => {
     expect(plain(back)).toBe(plain(host));
   });
 
+  it('shows every player the same enemy moving', () => {
+    const { host, cli } = pair();
+    host.startFight(host.heroOf(0));
+    host.startFight(host.heroOf(2));
+    for (const h of host.party) { h.hand = 0; h.thrown = true; }
+    for (let k = 0; k < 2000 && !(host.S.phase === 'enemy' && host.S.actor >= 0 && host.S.clock > 0.05 && !host.S.attacked); k++) host.update(1 / 60);
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    expect(cli.S.phase).toBe('enemy');
+    expect(cli.S.actor).toBe(host.S.actor);
+    expect(cli.acted(cli.S.mobs[host.S.actor])).toBe(false);
+    const still = cli.S.mobs.map(m => [m.x, m.y]);
+    for (let k = 0; k < 3; k++) { cli.update(1 / 60); host.update(1 / 60); }
+    // between snapshots the client plays the same move on its own: nobody else stirs
+    cli.S.mobs.forEach((m, i) => { if (i !== cli.S.actor) expect([m.x, m.y]).toEqual(still[i]); });
+    expect(cli.S.mobs[cli.S.actor].x).toBeCloseTo(host.S.mobs[host.S.actor].x, 5);
+    expect(cli.S.mobs[cli.S.actor].y).toBeCloseTo(host.S.mobs[host.S.actor].y, 5);
+  });
+
   it('lets a client control only its own hero', () => {
     const { cli } = pair();
     cli.select(0);
@@ -440,6 +458,65 @@ describe('pressure in a fight', () => {
     expect(g.bank.ore).toBeGreaterThan(0);
     expect(Math.hypot(d.vx, d.vy)).toBeLessThan(200 * NODE_E + 5);
     expect(d.hits).toBe(1);
+  });
+});
+
+describe('enemy turn order', () => {
+  /** A floor 0 fight with just the given enemies on the cells along the top, nobody throwing. */
+  const arena = (kinds: (keyof typeof MOBS)[]) => {
+    const g = new Game();
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    g.S.mobs = kinds.map((k, i) => newMob(k, cellCentre(2 + i * 2, 1).x, cellCentre(2 + i * 2, 1).y, 1, 0));
+    g.S.nodes = [];
+    g.S.blocks = [];
+    placeAll(g); g.startFight();
+    for (const h of g.party) { h.hp = h.max = 99; h.hand = 0; h.thrown = true; }
+    return g;
+  };
+
+  it('enemies take their moves one at a time, from the top of the list down', () => {
+    const g = arena(['archer', 'skel', 'archer', 'rat']), t0 = g.S.turn;
+    const order: number[] = [], drops: number[] = [];
+    let hp = g.party.reduce((n, h) => n + h.hp, 0);
+    for (let k = 0; k < 2000 && g.S.turn === t0; k++) {
+      g.update(1 / 60);
+      const now = g.party.reduce((n, h) => n + h.hp, 0);
+      if (now < hp) drops.push(k);
+      hp = now;
+      if (g.S.phase !== 'enemy') continue;
+      if (g.S.actor >= 0 && order[order.length - 1] !== g.S.actor) order.push(g.S.actor);
+      // only the enemy whose move it is leaves its cell or lifts off the floor
+      const off = g.S.mobs.filter((m, i) => i !== g.S.actor && (m.hop > 0 || m.x !== m.tx || m.y !== m.ty));
+      expect(off).toEqual([]);
+    }
+    expect(g.S.turn).toBe(t0 + 1);
+    expect(order).toEqual([0, 1, 2, 3]);
+    // the two archers shoot in their own moves, a good while apart
+    expect(drops.length).toBeGreaterThanOrEqual(2);
+    expect(drops[1] - drops[0]).toBeGreaterThan(20);
+  });
+
+  it('counts only the blows still to come against a hero while the enemies move', () => {
+    const g = arena(['archer', 'archer']);
+    const [a, b] = g.S.mobs, ha = g.heroOf(a.intent!.hero), hb = g.heroOf(b.intent!.hero);
+    const before = g.incoming(hb);
+    for (let k = 0; k < 2000 && !(g.S.phase === 'enemy' && g.S.actor === 0 && g.S.attacked); k++) g.update(1 / 60);
+    expect(g.acted(a)).toBe(true);
+    expect(g.acted(b)).toBe(false);
+    expect(g.incoming(hb)).toBe(ha === hb ? before - a.intent!.dmg : before);
+  });
+
+  it('a mob raised in the enemy turn waits for the next turn to move', () => {
+    const g = arena(['necro', 'archer']), t0 = g.S.turn;
+    // the necromancer raises its skeleton on the second turn
+    for (let k = 0; k < 2000 && g.S.turn === t0; k++) g.update(1 / 60);
+    for (const h of g.party) { h.hand = 0; h.thrown = true; }
+    expect(g.S.mobs[0].intent!.t).toBe('summon');
+    const actors = new Set<number>();
+    for (let k = 0; k < 2000 && g.S.turn === t0 + 1; k++) { g.update(1 / 60); if (g.S.phase === 'enemy' && g.S.actor >= 0) actors.add(g.S.actor); }
+    expect(g.S.mobs).toHaveLength(3);
+    expect([...actors]).toEqual([0, 1]);
+    expect(g.S.mobs[2].intent).not.toBeNull();
   });
 });
 

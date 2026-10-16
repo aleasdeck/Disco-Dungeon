@@ -336,11 +336,12 @@ export class SceneRenderer {
   private drawOmens() {
     const { c, P, g } = this;
     const S = g.S;
-    if (S.phase === 'over' || (S.phase === 'enemy' && S.attacked)) return;
+    if (S.phase === 'over') return;
     const pulse = reduce ? 0.7 : 0.55 + 0.35 * Math.sin(this.t * 4);
     for (const m of g.liveMobs()) {
       const it = m.intent;
-      if (!it?.spots) continue;
+      // gone once that enemy has made its move: the mob has risen, the floor has turned to lava
+      if (!it?.spots || g.acted(m)) continue;
       for (const p of it.spots) {
         if (it.t === 'summon') {
           const r = MOBS[MOBS[m.k].acts!.find(a => a.k === 'summon')!.kind!].r + 3, [x, y] = P(p.x, p.y);

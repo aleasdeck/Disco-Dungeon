@@ -12,6 +12,9 @@ export interface Snapshot {
   turn: number;
   phase: Phase;
   timer: number;
+  /** Which enemy is making its move and how far into it: every screen shows the same one going. */
+  actor?: number;
+  clock?: number;
   attacked: boolean;
   ready: number[];
   shake: number;
@@ -31,7 +34,8 @@ export interface Snapshot {
 export function snapshot(g: Game): Snapshot {
   const S = g.S;
   return {
-    spec: S.spec, turn: S.turn, phase: S.phase, timer: S.timer, attacked: S.attacked, ready: S.ready, shake: S.shake,
+    spec: S.spec, turn: S.turn, phase: S.phase, timer: S.timer, actor: S.actor, clock: S.clock, attacked: S.attacked,
+    ready: S.ready, shake: S.shake,
     heroes: g.party.map(({ def: _def, ...h }) => h),
     mobs: S.mobs,
     nodes: S.nodes.map(n => [n.left, n.hit]),
@@ -59,7 +63,10 @@ export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boo
   if (!g.S || !sameSpec(g.S.spec, s.spec)) { g.showRoom(s.spec); room = true; }
   const S = g.S;
   S.heroes = g.party;
-  Object.assign(S, { turn: s.turn, phase: s.phase, timer: s.timer, attacked: s.attacked, ready: s.ready, shake: s.shake, mobs: s.mobs, floats: s.floats, sparks: s.sparks });
+  Object.assign(S, {
+    turn: s.turn, phase: s.phase, timer: s.timer, actor: s.actor ?? -1, clock: s.clock ?? 0, attacked: s.attacked,
+    ready: s.ready, shake: s.shake, mobs: s.mobs, floats: s.floats, sparks: s.sparks,
+  });
   S.nodes.forEach((n, k) => { if (s.nodes[k]) [n.left, n.hit] = s.nodes[k]; });
   if (s.ice) S.blocks.filter(b => b.ice).forEach((b, k) => { if (s.ice![k] !== undefined) b.hp = s.ice![k]; });
   S.discs = s.discs.map(d => ({ ...d, hero: g.heroOf(d.hero) }));

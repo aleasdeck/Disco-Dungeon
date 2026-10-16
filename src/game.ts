@@ -52,6 +52,11 @@ export interface State extends Layout {
   turn: number;
   phase: Phase;
   timer: number;
+  /** Enemy turn: the index in `mobs` of the enemy making its move now, -1 before the first one goes. */
+  actor: number;
+  /** Enemy turn: seconds since the current enemy began its move. */
+  clock: number;
+  /** Enemy turn: the current enemy has already struck (or cast, healed, summoned). */
   attacked: boolean;
   discs: Disc[];
   floats: Float[];
@@ -72,6 +77,12 @@ export type Action =
   | { k: 'ready'; h: number };
 
 const STEP = 1 / 120;
+
+/**
+ * Enemy turn pacing, in seconds: a pause before the first enemy goes, a cell of walking, the beat an enemy
+ * that stays put takes before it acts, and the pause after an enemy acts before the next one starts.
+ */
+const LEAD = 0.3, CELL_T = 0.14, BEAT = 0.18, AFTER = 0.35;
 
 type Pt = { x: number; y: number };
 
@@ -127,7 +138,7 @@ export class Game {
   loadRoom(spec: RoomSpec) {
     const L = generate(spec);
     for (const h of this.party) Object.assign(h, { pad: null, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0, chill: 0, fire: 0 });
-    this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [] };
+    this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [] };
     // every rune starts empty: the players put their heroes on them before the fight
     this.pickActive();
     this.pickIntents();
@@ -137,7 +148,7 @@ export class Game {
 
   /** Online client: rebuild a room from its spec (rooms are generated from the seed), state comes from the host. */
   showRoom(spec: RoomSpec) {
-    this.S = { ...generate(spec), spec, turn: 1, phase: 'place', timer: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [] };
+    this.S = { ...generate(spec), spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [] };
     this.pickActive();
   }
 
@@ -370,15 +381,25 @@ export class Game {
     return Math.max(0, this.S.turn - this.rageFrom() + 1);
   }
 
-  /** Damage coming at a hero in this enemy turn if nobody is stopped: strikes aimed at it, blows on the whole party, burning. */
+  /**
+   * Damage coming at a hero in this enemy turn if nobody is stopped: strikes aimed at it, blows on the whole party, burning.
+   * While the enemies take their moves, only the ones still to go count: the rest has already landed.
+   */
   incoming(h: HeroState) {
-    if (h.hp <= 0 || this.S.phase === 'place' || this.S.phase === 'over') return 0;
-    let n = h.fire > 0 ? 2 : 0;
+    const S = this.S;
+    if (h.hp <= 0 || S.phase === 'place' || S.phase === 'over') return 0;
+    let n = h.fire > 0 && S.phase !== 'enemy' ? 2 : 0;
     for (const m of this.liveMobs()) {
       const it = m.intent;
-      if (it && ((it.t === 'hit' && it.hero === h.i) || it.t === 'slam')) n += it.dmg;
+      if (it && !this.acted(m) && ((it.t === 'hit' && it.hero === h.i) || it.t === 'slam')) n += it.dmg;
     }
     return Math.max(0, n - h.shield);
+  }
+
+  /** In the enemy turn: this enemy has already made its move. */
+  acted(m: Mob) {
+    const S = this.S, k = S.mobs.indexOf(m);
+    return S.phase === 'enemy' && (k < S.actor || (k === S.actor && S.attacked));
   }
 
   pickIntents() {
@@ -659,28 +680,74 @@ export class Game {
     }
   }
 
+  /** The enemy turn begins: burning heroes smoulder, then the enemies take their moves one at a time. */
   private mobsStart() {
     const S = this.S;
     for (const h of this.alive()) if (h.fire > 0) { h.fire--; this.hurtHero(h, 2, 'горит'); }
-    for (const m of this.liveMobs()) {
-      if (m.burn > 0) { this.hurtMob(m, 4, '#ff7a3d', true); m.burn--; }
-      m.fx = m.tx = m.x;
-      m.fy = m.ty = m.y;
-      m.walk = undefined;
+    for (const m of S.mobs) { m.fx = m.tx = m.x; m.fy = m.ty = m.y; m.walk = undefined; m.hop = 0; }
+    S.actor = -1;
+    S.clock = 0;
+    S.attacked = false;
+  }
+
+  /**
+   * Hand the move to the next enemy in the order of the room's list (the enemy list shows the same order),
+   * skipping ones with nothing to do. False when every enemy has had its move.
+   */
+  private nextActor() {
+    const S = this.S;
+    for (let k = S.actor + 1; k < S.mobs.length; k++) {
+      const m = S.mobs[k];
+      // risen this turn: no intent yet, it acts from the next turn on
+      if (m.hp <= 0 || !m.intent) continue;
+      S.actor = k;
+      S.clock = 0;
+      S.attacked = false;
+      const burnt = m.burn > 0;
+      if (burnt) { this.hurtMob(m, 4, '#ff7a3d', true); m.burn--; }
+      this.planWalk(m);
+      if (burnt || (m.hp > 0 && !this.idle(m))) return true;
     }
-    // one after another, each walker steps around where the ones before it will stand
-    for (const m of this.liveMobs()) {
-      if (m.hp <= 0 || !m.intent || m.intent.hero < 0 || m.speed === 0) continue;
-      const h = this.heroOf(m.intent.hero);
-      if (h.hp <= 0 || h.pad === null) continue;
-      // the rune or the room may have changed since the intent was picked (a hero moved, an icicle broke)
-      const way = this.route(m, S.pads[h.pad]);
-      if (!way) continue;
-      m.walk = way.slice(0, this.stopAt(m, way) + 1);
-      const end = m.walk[m.walk.length - 1];
-      m.tx = end.x;
-      m.ty = end.y;
-    }
+    return false;
+  }
+
+  /** Where a walker goes on its move: along its way to the hero it is after, as far as its steps take it. */
+  private planWalk(m: Mob) {
+    const S = this.S, it = m.intent;
+    m.fx = m.tx = m.x;
+    m.fy = m.ty = m.y;
+    m.walk = undefined;
+    if (m.hp <= 0 || !it || it.hero < 0 || m.speed === 0) return;
+    const h = this.heroOf(it.hero);
+    if (h.hp <= 0 || h.pad === null) return;
+    // the room has changed since the intent was picked: the enemies before it have moved, an icicle may have broken
+    const way = this.route(m, S.pads[h.pad]);
+    if (!way) return;
+    const walk = way.slice(0, this.stopAt(m, way) + 1);
+    if (walk.length < 2) return;
+    m.walk = walk;
+    m.tx = walk[walk.length - 1].x;
+    m.ty = walk[walk.length - 1].y;
+  }
+
+  /** An enemy with nothing to do on its move: walled off, or the one it was after has already fallen. */
+  private idle(m: Mob) {
+    const it = m.intent!;
+    if (it.t === 'move') return !m.walk;
+    if (it.t === 'hit') { const h = this.heroOf(it.hero); return h.hp <= 0 || h.pad === null; }
+    if (it.t === 'heal') { const o = this.S.mobs[it.mob!]; return !o || o.hp <= 0; }
+    return false;
+  }
+
+  /** Seconds an enemy spends walking on its move: a beat per cell. */
+  walkTime(m: Mob) {
+    return m.walk && m.walk.length > 1 ? Math.max(0.25, (m.walk.length - 1) * CELL_T) : 0;
+  }
+
+  /** When an enemy acts, counted from the start of its move: as soon as it has walked up, or after a beat in place. */
+  private actAt(m: Mob) {
+    const w = this.walkTime(m);
+    return w ? w + 0.06 : BEAT;
   }
 
   /**
@@ -796,46 +863,44 @@ export class Game {
     return way.reverse();
   }
 
-  private mobsAttack() {
-    const S = this.S;
-    for (const m of this.liveMobs()) {
-      const it = m.intent, d = MOBS[m.k];
-      if (!it) continue;
-      if (it.t === 'slam') {
-        m.flash = 0.12; S.shake = 0.3;
-        this.float(m.x, m.y - 10, it.chill ? 'МЕТЕЛЬ' : 'УДАР ОБ ПОЛ', it.chill ? '#bfe6ff' : '#ffd34d');
-        for (const h of this.alive()) { this.hurtHero(h, it.dmg); if (it.chill) this.chillHero(h); }
-      } else if (it.t === 'heal') {
-        const o = S.mobs[it.mob!];
-        if (!o || o.hp <= 0) continue;
-        const hl = Math.min(o.max - o.hp, it.dmg);
-        o.hp += hl;
-        this.float(o.x, o.y, `+${hl}`, '#7be39a'); this.burst(o.x, o.y, '#9fe3ff', 12);
-      } else if (it.t === 'summon') {
-        const kind = d.acts!.find(a => a.k === 'summon')!.kind!, mi = S.mobs.indexOf(m);
-        this.float(m.x, m.y - 10, 'призыв!', '#c9a8ff');
-        for (const p of it.spots ?? []) {
-          // a disc may have come to rest on the circle; the mob still rises, the disc is long gone by then
-          const o = newMob(kind, p.x, p.y, S.hpMul, S.dmgAdd);
-          o.owner = mi; o.born = 1;
-          S.mobs.push(o);
-          this.burst(p.x, p.y, '#b893ff', 16);
-        }
-      } else if (it.t === 'heat') {
-        this.float(m.x, m.y - 10, 'РАСКАЛЯЕТ ПОЛ', '#ff7a3d');
-        for (const p of it.spots ?? []) { S.haz.add(hazKey(Math.floor(p.x / TILE), Math.floor(p.y / TILE))); this.burst(p.x, p.y, '#ff7a3d', 10); }
-      } else if (it.t === 'charge') {
-        this.float(m.x, m.y - 10, 'фитиль горит', '#ffb070');
-      } else if (it.t === 'hit') {
-        const h = this.heroOf(it.hero);
-        if (h.hp <= 0 || h.pad === null) continue;
-        const p = S.pads[h.pad];
-        if (isRanged(m.k) || this.besideRune(m, p)) {
-          this.hurtHero(h, it.dmg); m.flash = 0.12;
-          if (d.chill && h.hp > 0) this.chillHero(h);
-          if (d.fire && h.hp > 0) { h.fire = 1; this.float(p.x, p.y - 8, 'горит!', '#ff7a3d'); }
-        } else this.float(m.x, m.y, 'не достал', '#c7cbe0');
+  /** The enemy making its move strikes, casts, heals or summons, as its intent said. */
+  private mobAct(m: Mob) {
+    const S = this.S, it = m.intent, d = MOBS[m.k];
+    if (m.hp <= 0 || !it) return;
+    if (it.t === 'slam') {
+      m.flash = 0.12; S.shake = 0.3;
+      this.float(m.x, m.y - 10, it.chill ? 'МЕТЕЛЬ' : 'УДАР ОБ ПОЛ', it.chill ? '#bfe6ff' : '#ffd34d');
+      for (const h of this.alive()) { this.hurtHero(h, it.dmg); if (it.chill) this.chillHero(h); }
+    } else if (it.t === 'heal') {
+      const o = S.mobs[it.mob!];
+      if (!o || o.hp <= 0) return;
+      const hl = Math.min(o.max - o.hp, it.dmg);
+      o.hp += hl;
+      this.float(o.x, o.y, `+${hl}`, '#7be39a'); this.burst(o.x, o.y, '#9fe3ff', 12);
+    } else if (it.t === 'summon') {
+      const kind = d.acts!.find(a => a.k === 'summon')!.kind!, mi = S.mobs.indexOf(m);
+      this.float(m.x, m.y - 10, 'призыв!', '#c9a8ff');
+      for (const p of it.spots ?? []) {
+        // a disc may have come to rest on the circle; the mob still rises, the disc is long gone by then
+        const o = newMob(kind, p.x, p.y, S.hpMul, S.dmgAdd);
+        o.owner = mi; o.born = 1;
+        S.mobs.push(o);
+        this.burst(p.x, p.y, '#b893ff', 16);
       }
+    } else if (it.t === 'heat') {
+      this.float(m.x, m.y - 10, 'РАСКАЛЯЕТ ПОЛ', '#ff7a3d');
+      for (const p of it.spots ?? []) { S.haz.add(hazKey(Math.floor(p.x / TILE), Math.floor(p.y / TILE))); this.burst(p.x, p.y, '#ff7a3d', 10); }
+    } else if (it.t === 'charge') {
+      this.float(m.x, m.y - 10, 'фитиль горит', '#ffb070');
+    } else if (it.t === 'hit') {
+      const h = this.heroOf(it.hero);
+      if (h.hp <= 0 || h.pad === null) return;
+      const p = S.pads[h.pad];
+      if (isRanged(m.k) || this.besideRune(m, p)) {
+        this.hurtHero(h, it.dmg); m.flash = 0.12;
+        if (d.chill && h.hp > 0) this.chillHero(h);
+        if (d.fire && h.hp > 0) { h.fire = 1; this.float(p.x, p.y - 8, 'горит!', '#ff7a3d'); }
+      } else this.float(m.x, m.y, 'не достал', '#c7cbe0');
     }
   }
 
@@ -876,28 +941,42 @@ export class Game {
     else if (S.phase === 'throw' && this.allThrown() && !this.moving()) {
       S.phase = 'resolve'; S.timer = 0.9; this.resolve(); this.onChange();
     } else if (S.phase === 'resolve' && (S.timer -= dt) <= 0) {
-      S.phase = 'enemy'; S.timer = 1.5; this.mobsStart(); S.attacked = false; this.onChange();
-    } else if (S.phase === 'enemy') {
-      S.timer -= dt;
-      this.walkMobs();
-      if (!S.attacked && S.timer < 0.8) { S.attacked = true; this.mobsAttack(); this.onChange(); }
-      if (S.timer <= 0) this.nextTurn();
-    }
+      S.phase = 'enemy'; this.mobsStart(); this.onChange();
+    } else if (S.phase === 'enemy') this.enemyTurn(dt);
     this.fade(dt);
   }
 
-  /** Mobs walk from (fx, fy) to (tx, ty) during the first part of the enemy phase. */
-  private walkMobs() {
-    const u = Math.min(1, (1.5 - this.S.timer) / 0.6);
-    for (const m of this.liveMobs()) {
-      const w = m.walk && m.walk.length > 1 ? m.walk : [{ x: m.fx, y: m.fy }, { x: m.tx, y: m.ty }];
-      if (u >= 1 || Math.hypot(m.tx - m.fx, m.ty - m.fy) <= 1) { m.x = m.tx; m.y = m.ty; m.hop = 0; continue; }
-      // like a piece on a board: lifted and put down on every cell along the way
-      const n = w.length - 1, at = Math.min(n - 1e-6, u * n), k = Math.floor(at), f = at - k, e = f * f * (3 - 2 * f);
-      m.x = w[k].x + (w[k + 1].x - w[k].x) * e;
-      m.y = w[k].y + (w[k + 1].y - w[k].y) * e;
-      m.hop = Math.sin(Math.PI * f) * 6;
+  /** The enemies move one at a time: each walks up and acts, and after a short pause the next one goes. */
+  private enemyTurn(dt: number) {
+    const S = this.S, m = S.mobs[S.actor];
+    S.clock += dt;
+    if (m) {
+      this.walkMob(m);
+      if (!S.attacked && S.clock >= this.actAt(m)) { S.attacked = true; this.mobAct(m); this.onChange(); }
+      // a walker that doesn't strike has nothing more to show once it stands
+      if (S.clock < this.actAt(m) + (m.intent?.t === 'move' ? 0.12 : AFTER)) return;
+    } else if (S.clock < LEAD) return;
+    // once the party has fallen nobody is left to hit
+    if (this.alive().length && this.nextActor()) this.onChange();
+    else this.nextTurn();
+  }
+
+  /**
+   * The enemy making its move, like a piece on a board: lifted and put down on every cell it walks,
+   * or lifted once in place before it acts.
+   */
+  private walkMob(m: Mob) {
+    const S = this.S, T = this.walkTime(m), w = m.walk;
+    if (!T || !w) {
+      const u = S.clock / BEAT;
+      m.hop = m.hp > 0 && u < 1 ? Math.sin(Math.PI * u) * 4 : 0;
+      return;
     }
+    if (S.clock >= T) { m.x = m.tx; m.y = m.ty; m.hop = 0; return; }
+    const n = w.length - 1, at = Math.min(n - 1e-6, (S.clock / T) * n), k = Math.floor(at), f = at - k, e = f * f * (3 - 2 * f);
+    m.x = w[k].x + (w[k + 1].x - w[k].x) * e;
+    m.y = w[k].y + (w[k + 1].y - w[k].y) * e;
+    m.hop = Math.sin(Math.PI * f) * 6;
   }
 
   /**
@@ -912,7 +991,11 @@ export class Game {
       d.x = Math.max(d.r, Math.min(S.Wx - d.r, d.x + d.vx * dt));
       d.y = Math.max(d.r, Math.min(S.Wy - d.r, d.y + d.vy * dt));
     }
-    if (S.phase === 'enemy') { S.timer -= dt; this.walkMobs(); }
+    if (S.phase === 'enemy') {
+      S.clock += dt;
+      const m = S.mobs[S.actor];
+      if (m) this.walkMob(m);
+    }
     this.fade(dt);
   }
 
