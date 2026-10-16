@@ -5,7 +5,7 @@ import { HEROES, INK, type MobKind } from '../data';
 import { sprites } from '../assets';
 import { brow, circ, ell, eye, fs, lg, mix, pth, rg, rr, type Ctx, type Pt } from './util';
 
-export const BASE_TH = 4;
+export const BASE_TH = 2.5;
 
 /** Health colour: green when healthy, amber when hurt, red when nearly dead. */
 const hpCol = (f: number) => (f > 0.5 ? '#6fd35a' : f > 0.25 ? '#f2b53a' : '#ff4a4a');
