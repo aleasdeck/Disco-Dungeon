@@ -69,11 +69,22 @@ let dprCap = 2;
 /** While the camera turns, zooms or pans, frames are drawn at one pixel per CSS pixel and sharpen again once it stops. */
 let moving = false, movedAt = -1;
 
+/**
+ * The room is redrawn only as often as it needs, since redrawing every frame regardless is what heats phones:
+ * about 60 times a second while something moves (a 120 Hz screen draws every other frame), 30 while the room
+ * stands still and only torches and runes flicker (slow enough to look the same), and behind a full-screen
+ * menu only when something changes. Milliseconds between drawn frames:
+ */
+const BUSY_GAP = 9.5, IDLE_GAP = 29;
+/** `cleared`: the canvas was resized and is blank, draw right away; `stale`: the game changed, draw soon. */
+let cleared = true, stale = true, drawnAt = -Infinity, drawnCam = '', drawnRoom: unknown = null;
+
 function sizeCanvas() {
   const dpr = moving ? 1 : Math.min(window.devicePixelRatio || 1, dprCap);
   view = { w: window.innerWidth, h: window.innerHeight, dpr };
   cv.width = Math.round(view.w * dpr);
   cv.height = Math.round(view.h * dpr);
+  cleared = true;
 }
 
 function resize() {
@@ -197,7 +208,7 @@ mapView.onChoose = id => {
   }
 };
 
-game.onChange = () => { hud.refresh(); dirty = true; };
+game.onChange = () => { hud.refresh(); dirty = true; stale = true; };
 game.onRoomEnd = win => {
   const S = game.S, boss = S.spec.type === 'boss';
   const last = boss && run.floor === FLOORS - 1;
@@ -485,6 +496,7 @@ net.onMsg = (from, m) => {
     screen('Начинаем', 'Хозяин комнаты выбирает первую комнату.');
   } else if (m.t === 'snap') {
     const ch = applySnapshot(game, m.s);
+    stale = true;
     if (ch.party) hud.buildAllies();
     if (ch.room) controls.fit();
     hud.refresh();
@@ -582,8 +594,27 @@ function frame(now: number) {
   game.update(dt);
   shareState(now);
   keepSeat(now);
-  scene.draw(ctx, cam, game, T, view, input.aim, input.carry);
+  const camKey = `${cam.panX},${cam.panY},${cam.zoom},${cam.rot}`;
+  const changed = stale || camKey !== drawnCam || game.S !== drawnRoom || busy();
+  const covered = document.querySelector('.overlay:not([hidden])') !== null;
+  const gap = covered ? (changed ? IDLE_GAP : Infinity) : changed ? BUSY_GAP : IDLE_GAP;
+  if (cleared || now - drawnAt >= gap) {
+    scene.draw(ctx, cam, game, T, view, input.aim, input.carry);
+    cleared = stale = false;
+    drawnAt = now;
+    drawnCam = camKey;
+    drawnRoom = game.S;
+  }
   requestAnimationFrame(frame);
+}
+
+/** Something on the field moves, fades or follows a finger right now. */
+function busy() {
+  if (anim || moving || input.aim || input.carry) return true;
+  const S = game.S;
+  return S.phase === 'resolve' || S.phase === 'enemy' || S.shake > 0 || S.sparks.length > 0 || S.floats.length > 0 || game.moving()
+    || S.mobs.some(m => m.flash > 0 || m.born > 0 || (m.dead > 0 && m.dead <= 1))
+    || S.heroes.some(h => h.flash > 0) || S.nodes.some(n => n.hit > 0);
 }
 
 applyQuality();
@@ -594,7 +625,7 @@ controls.fit();
 window.addEventListener('resize', resize);
 // closing the tab tells the others right away instead of after the heartbeat timeout
 window.addEventListener('pagehide', () => { if (net.active) net.close(); });
-loadSprites(() => { hud.buildAllies(); hud.refresh(); });
+loadSprites(() => { hud.buildAllies(); hud.refresh(); stale = true; });
 // a shared link (…#CODE) opens straight into that room's lobby; a room this browser dropped out of is rejoined
 const linkCode = location.hash.slice(1).toUpperCase(), seat = loadSeat();
 if (linkCode) history.replaceState(null, '', location.pathname + location.search);
