@@ -466,3 +466,55 @@ button { font: inherit; color: inherit; }
   .mobs { top: 58px; max-height: calc(100dvh - var(--frame-h) - 140px); }
 }
 .ally:disabled { cursor: default; }
+
+/* ---------- victory banner: the result screen after the last boss */
+.win-deco { display: none; }
+.overlay.win { overflow: hidden; }
+.overlay.win .end-panel {
+  position: relative;
+  border-color: var(--gold);
+  outline-color: #7a5a1c;
+  padding-top: 64px;
+  margin-top: 40px;
+  box-shadow: 0 0 0 4px #120d0a, 0 0 60px rgba(217, 178, 74, 0.35), 0 10px 40px rgba(0, 0, 0, 0.6);
+  animation: win-pop 0.6s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+.overlay.win .win-deco { display: block; }
+.win-ball {
+  position: absolute; left: 50%; top: -46px; width: 84px; height: 84px; margin-left: -42px; border-radius: 50%;
+  border: 3px solid #120d0a;
+  background:
+    radial-gradient(circle at 34% 30%, #fff 0 6%, transparent 18%),
+    repeating-linear-gradient(0deg, transparent 0 9px, rgba(18, 13, 10, 0.55) 9px 11px),
+    repeating-linear-gradient(90deg, #f0e5d0 0 9px, #b2a38c 9px 11px, #d9b24a 11px 20px, #8c7b62 20px 22px);
+  background-size: auto, auto, 44px 100%;
+  box-shadow: 0 0 30px rgba(255, 220, 140, 0.55);
+  animation: win-spin 2.4s linear infinite;
+}
+.win-ribbon {
+  position: absolute; left: 50%; top: 44px; transform: translateX(-50%) rotate(-2deg);
+  font: 600 12px Oswald, sans-serif; letter-spacing: 0.18em; text-transform: uppercase; white-space: nowrap;
+  color: #120d0a; background: var(--gold); padding: 3px 14px; border: 2px solid #120d0a; border-radius: 4px;
+}
+.overlay.win h2 {
+  margin: 12px 0 0;
+  font: 700 clamp(40px, 11vw, 60px)/1 Oswald, sans-serif;
+  color: var(--gold); text-transform: uppercase; letter-spacing: 0.02em;
+  text-shadow: 0 4px 0 #120d0a, 0 0 24px rgba(217, 178, 74, 0.45);
+  transform: rotate(-2deg);
+}
+.overlay.win .end-panel p:not(.muted) { color: var(--text); }
+.confetti {
+  position: absolute; top: -16px; width: 8px; height: 14px; border-radius: 2px; pointer-events: none;
+  animation: win-fall linear infinite;
+}
+@keyframes win-fall {
+  from { transform: translate(0, 0) rotate(0); }
+  to { transform: translate(var(--dx), 110vh) rotate(720deg); }
+}
+@keyframes win-spin { to { background-position: 0 0, 0 0, 44px 0; } }
+@keyframes win-pop { from { transform: scale(0.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .confetti { display: none; }
+  .win-ball, .overlay.win .end-panel { animation: none; }
+}
