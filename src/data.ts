@@ -223,7 +223,7 @@ export const FORGE_ORE = 5;
 export type RoomType = 'fight' | 'elite' | 'treasure' | 'camp' | 'forge' | 'event' | 'boss';
 
 export const ROOM_TYPES: Record<RoomType, { name: string; col: string; min: number; txt: string }> = {
-  fight: { name: 'Бой', col: '#c2364f', min: 2, txt: 'Обычные мобы, одна рудная жила и пара кристаллов.' },
+  fight: { name: 'Бой', col: '#c2364f', min: 2, txt: 'Обычные мобы, рудная жила, кристалл искр и грибы.' },
   elite: { name: 'Элитный бой', col: '#7a1d33', min: 3, txt: 'Сильный враг этажа и свита. Две рудные жилы вместо одной.' },
   treasure: { name: 'Рудная пещера', col: '#d39612', min: 1.5, txt: 'Три рудные жилы и всего два моба.' },
   camp: { name: 'Костёр', col: '#e8642c', min: 0.5, txt: 'Отряд лечится на 8 HP. Павшие встают с половиной здоровья.' },

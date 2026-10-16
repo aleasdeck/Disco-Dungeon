@@ -3,7 +3,7 @@ import { Camera } from '../src/camera';
 import { CRIT, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, mobSize } from '../src/data';
 import { Game, newParty, stepsOf, wayLen, type Action } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { cellAt, cellCentre, clearOfRock, floorAt, generate, isFloor, muAt, newMob, tierOf } from '../src/room';
+import { MOB_CAP, cellAt, cellCentre, clearOfRock, floorAt, generate, isFloor, muAt, newMob, tierOf } from '../src/room';
 import { FLOORS, LAYERS, genFloor, newRun, restRoom } from '../src/run';
 
 /** Put every living hero on its own rune, as players do before the fight. */
@@ -85,9 +85,20 @@ describe('difficulty along a floor', () => {
     for (let f = 0; f < FLOORS; f++) for (let row = 0; row < LAYERS - 1; row++) for (const type of ['fight', 'elite'] as const) {
       for (let seed = 1; seed < 60; seed++) {
         const spec = { seed, depth: f * LAYERS + row + 1, floor: f, type }, L = generate(spec);
-        expect(L.mobs.length).toBeGreaterThanOrEqual(Math.min(tierOf(spec).tier.mobs[0] + f, 7));
+        expect(L.mobs.length).toBeGreaterThanOrEqual(Math.min(tierOf(spec).tier.mobs[0] + f, MOB_CAP));
+        expect(L.mobs.length).toBeLessThanOrEqual(MOB_CAP);
         expect(L.pads).toHaveLength(4);
       }
+    }
+  });
+
+  it('keeps even the last rooms of the last floor uncluttered', () => {
+    for (let seed = 1; seed < 40; seed++) {
+      const L = room(FLOORS - 1, LAYERS - 2, seed), area = L.floor.reduce((a, b) => a + b, 0);
+      const busy = L.mobs.length + L.blocks.length + L.pits.length + L.haz.size + L.nodes.length;
+      expect(L.nodes).toHaveLength(3);
+      expect(L.decals.length).toBeLessThanOrEqual(6);
+      expect(busy / area).toBeLessThan(0.2);
     }
   });
 
