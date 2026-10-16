@@ -389,7 +389,7 @@ describe('every floor plays out', () => {
 });
 
 describe('enemy walking', () => {
-  it('routes walkers around blocks to the rune they go for and says when they strike', () => {
+  it('routes walkers around blocks and resources to the rune they go for and says when they strike', () => {
     let detours = 0;
     for (let seed = 1; seed < 80; seed++) {
       const g = new Game();
@@ -405,6 +405,7 @@ describe('enemy walking', () => {
         for (let d = 10; d < L - 10; d += 2) {
           const p = pointAt(it.way, d);
           expect(g.inBlock(p.x, p.y, 1)).toBe(false);
+          for (const n of g.S.nodes) if (n.left > 0) expect(Math.hypot(n.x - p.x, n.y - p.y)).toBeGreaterThan(n.r);
         }
         expect(it.eta).toBe(it.t === 'hit' ? 1 : Math.ceil((L - m.reach) / m.speed));
         if (it.t === 'move') expect(it.eta).toBeGreaterThan(1);
