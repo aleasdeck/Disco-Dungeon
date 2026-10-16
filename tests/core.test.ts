@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { Camera } from '../src/camera';
-import { HAND_MAX, HAND_START, HEROES, MOBS, TILE } from '../src/data';
-import { Game, newParty, pointAt, wayLen, type Action } from '../src/game';
+import { HAND_MAX, HAND_START, HEROES, MOBS, TILE, mobSize } from '../src/data';
+import { Game, newParty, stepsOf, wayLen, type Action } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { clearOfRock, floorAt, generate, isFloor, muAt, newMob, tierOf } from '../src/room';
+import { cellAt, cellCentre, clearOfRock, floorAt, generate, isFloor, muAt, newMob, tierOf } from '../src/room';
 import { FLOORS, LAYERS, genFloor, newRun } from '../src/run';
 
 describe('room generator', () => {
@@ -390,29 +390,80 @@ describe('every floor plays out', () => {
 
 describe('enemy walking', () => {
   // routes every walker in 80 rooms: a few seconds locally, more on a busy CI runner
-  it('routes walkers around blocks and resources to the rune they go for and says when they strike', () => {
+  it('routes walkers cell by cell around blocks and resources to the rune they go for and says when they strike', () => {
     let detours = 0;
     for (let seed = 1; seed < 80; seed++) {
       const g = new Game();
       g.loadRoom({ seed, depth: 1 + (seed % 12), floor: seed % 3, type: 'fight' });
       g.startFight();
+      const taken = g.occupied(null, false);
       for (const m of g.liveMobs()) {
         const it = m.intent;
         if (!it?.way || (it.t !== 'hit' && it.t !== 'move')) continue;
         const pad = g.S.pads[g.heroOf(it.hero).pad!], end = it.way[it.way.length - 1];
         expect(end).toEqual({ x: pad.x, y: pad.y });
-        const L = wayLen(it.way);
-        if (L > Math.hypot(pad.x - m.x, pad.y - m.y) + 1) detours++;
-        for (let d = 10; d < L - 10; d += 2) {
-          const p = pointAt(it.way, d);
-          expect(g.inBlock(p.x, p.y, 1)).toBe(false);
-          for (const n of g.S.nodes) if (n.left > 0) expect(Math.hypot(n.x - p.x, n.y - p.y)).toBeGreaterThan(n.r);
+        const cells = it.way.slice(0, -1), sz = mobSize(m.k);
+        if (wayLen(cells) > Math.hypot(pad.x - m.x, pad.y - m.y) + 24) detours++;
+        // every stop is a whole footprint on free floor; steps go to a neighbouring cell
+        for (let k = 1; k < cells.length; k++) {
+          const [i, j] = cellAt(cells[k].x, cells[k].y, sz);
+          expect(cellCentre(i, j, sz)).toEqual(cells[k]);
+          for (let b = 0; b < sz; b++) for (let a = 0; a < sz; a++) expect(isFloor(g.S, i + a, j + b) && !taken[(j + b) * g.S.gw + i + a]).toBe(true);
+          expect(Math.max(Math.abs(cells[k].x - cells[k - 1].x), Math.abs(cells[k].y - cells[k - 1].y))).toBe(TILE);
         }
-        expect(it.eta).toBe(it.t === 'hit' ? 1 : Math.ceil((L - m.reach) / m.speed));
+        const n = cells.length - 1;
+        expect(it.eta).toBe(it.t === 'hit' ? 1 : Math.ceil(n / stepsOf(m)));
         if (it.t === 'move') expect(it.eta).toBeGreaterThan(1);
       }
     }
     expect(detours).toBeGreaterThan(0);
+  }, 20_000);
+
+  it('stands every enemy and resource on the cell grid, big ones on 2 × 2 cells, never two on one cell', () => {
+    for (let seed = 1; seed < 60; seed++) for (const type of ['fight', 'elite', 'boss', 'treasure'] as const) {
+      const L = generate({ seed, depth: 1 + (seed % 12), floor: seed % 3, type });
+      const seen = new Set<string>();
+      const claim = (x: number, y: number, sz: number) => {
+        const [i, j] = cellAt(x, y, sz);
+        expect(cellCentre(i, j, sz)).toEqual({ x, y });
+        for (let b = 0; b < sz; b++) for (let a = 0; a < sz; a++) {
+          const k = (i + a) + ',' + (j + b);
+          expect(isFloor(L, i + a, j + b)).toBe(true);
+          expect(seen.has(k)).toBe(false);
+          seen.add(k);
+        }
+      };
+      for (const b of L.blocks) claim(b.x0 + 8, b.y0 + 8, 1);
+      for (const m of L.mobs) claim(m.x, m.y, mobSize(m.k));
+      for (const n of L.nodes) claim(n.x, n.y, 1);
+      if (type === 'boss') expect(mobSize(L.mobs[0].k)).toBe(2);
+    }
+  });
+
+  it('walkers end every turn on whole cells, never two on one cell', () => {
+    for (let seed = 1; seed < 30; seed++) {
+      const g = new Game();
+      g.loadRoom({ seed, depth: 1 + (seed % 12), floor: seed % 3, type: seed % 4 ? 'fight' : 'boss' });
+      g.startFight();
+      for (let turn = 0; turn < 4 && g.S.phase !== 'over'; turn++) {
+        // nobody throws: the enemies walk up turn after turn
+        const t0 = g.S.turn;
+        for (let t = 0; t < 600 && g.S.turn === t0 && (g.S.phase as string) !== 'over'; t++) {
+          for (const h of g.alive()) { h.hand = 0; h.thrown = true; }
+          g.update(1 / 60);
+        }
+        expect(g.S.turn > t0 || (g.S.phase as string) === 'over').toBe(true);
+        const cells = new Set<string>();
+        for (const m of g.liveMobs()) {
+          const sz = mobSize(m.k), [i, j] = cellAt(m.x, m.y, sz);
+          expect(cellCentre(i, j, sz)).toEqual({ x: m.x, y: m.y });
+          for (let b = 0; b < sz; b++) for (let a = 0; a < sz; a++) {
+            expect(cells.has(i + a + ',' + (j + b))).toBe(false);
+            cells.add(i + a + ',' + (j + b));
+          }
+        }
+      }
+    }
   }, 20_000);
 });
 

@@ -1,8 +1,8 @@
 // Combat rules: turn flow, disc physics, damage, abilities.
 // Rendering and input live elsewhere; this module only changes state.
 
-import { AB_COST, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, TILE, UPS, UP_COST, isRanged, type HeroDef, type MobAct, type StatKey } from './data';
-import { clearOfRock, generate, hazKey, isFloor, muAt, newMob, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
+import { AB_COST, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, TILE, UPS, UP_COST, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
+import { cellAt, cellCentre, generate, hazKey, isFloor, muAt, newMob, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
 
@@ -72,7 +72,9 @@ export type Action =
 const STEP = 1 / 120;
 
 type Pt = { x: number; y: number };
-type Circle = Pt & { r: number };
+
+/** Cells a walker covers each enemy turn: its speed in cells, at least one. */
+export const stepsOf = (m: Mob) => Math.max(1, Math.round(m.speed / TILE));
 
 export const wayLen = (w: Pt[]) => w.reduce((n, p, k) => (k ? n + Math.hypot(p.x - w[k - 1].x, p.y - w[k - 1].y) : 0), 0);
 
@@ -381,13 +383,16 @@ export class Game {
       if (d.charge && S.turn % 2 === 1) { m.intent = { t: 'charge', hero: hs[(S.turn + i) % hs.length].i, dmg: 0 }; return; }
       const dmg = d.charge ? m.dmg * 2 : m.dmg;
       if (isRanged(m.k)) { m.intent = { t: 'hit', hero: hs[(S.turn + i) % hs.length].i, dmg }; return; }
-      let best = hs[0], way: Pt[] = [], bd = Infinity;
+      let best = hs[0], way: Pt[] | null = null, bd = Infinity;
       for (const h of hs) {
-        const w = this.route(m, S.pads[h.pad!]), dd = wayLen(w);
-        if (dd < bd) { bd = dd; best = h; way = w; }
+        const w = this.route(m, S.pads[h.pad!]);
+        if (w && w.length < bd) { bd = w.length; best = h; way = w; }
       }
-      const go = this.walkLen(m, bd), eta = Math.max(1, Math.ceil((bd - m.reach) / Math.max(1, m.speed)));
-      m.intent = bd - m.speed <= m.reach ? { t: 'hit', hero: best.i, dmg, way, go, eta: 1 } : { t: 'move', hero: best.i, dmg: 0, way, go, eta };
+      // walled off from every rune: it stays put
+      if (!way) { m.intent = { t: 'move', hero: best.i, dmg: 0 }; return; }
+      const n = way.length - 1, go = wayLen(way.slice(0, this.stopAt(m, way) + 1)), eta = Math.max(1, Math.ceil(n / stepsOf(m)));
+      way.push({ x: S.pads[best.pad!].x, y: S.pads[best.pad!].y });
+      m.intent = n <= stepsOf(m) ? { t: 'hit', hero: best.i, dmg, way, go, eta: 1 } : { t: 'move', hero: best.i, dmg: 0, way, go, eta };
     });
   }
 
@@ -403,16 +408,20 @@ export class Game {
       const mine = S.mobs.filter(o => o.hp > 0 && o.owner === mi).length;
       const n = Math.min(a.n ?? 1, (a.cap ?? 3) - mine, 9 - this.liveMobs().length);
       if (n <= 0) return null;
-      const r = MOBS[a.kind!].r, spots: { x: number; y: number }[] = [];
-      // circles right next to the summoner on the side facing the runes, so the risen mob plainly comes from it
-      const face = Math.atan2(S.Wy - m.y, S.Wx - m.x);
-      for (let ring = 0; ring < 3 && spots.length < n; ring++) {
-        const dist = m.r + r + 6 + ring * 12;
-        for (let k = 0; k < 12 && spots.length < n; k++) {
-          const ang = face + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (Math.PI / 6);
-          const x = m.x + Math.cos(ang) * dist, y = m.y + Math.sin(ang) * dist;
-          if (this.spotFree(x, y, r, taken)) { spots.push({ x, y }); taken.push({ x, y }); }
+      const spots: { x: number; y: number }[] = [];
+      // circles on the cells right around the summoner, the side facing the runes first, so the risen mob plainly comes from it
+      const sz = mobSize(m.k), [i0, j0] = cellAt(m.x, m.y, sz), cells: Pt[] = [];
+      for (let ring = 1; ring <= 2; ring++) {
+        for (let j = j0 - ring; j < j0 + sz + ring; j++) for (let i = i0 - ring; i < i0 + sz + ring; i++) {
+          if (i >= i0 - ring + 1 && i < i0 + sz + ring - 1 && j >= j0 - ring + 1 && j < j0 + sz + ring - 1) continue;
+          cells.push(cellCentre(i, j));
         }
+      }
+      const toRunes = (p: Pt) => -(p.x - m.x) * (S.Wx - m.x) - (p.y - m.y) * (S.Wy - m.y) + Math.hypot(p.x - m.x, p.y - m.y) * 1e4;
+      cells.sort((p, q) => toRunes(p) - toRunes(q));
+      for (const c of cells) {
+        if (spots.length >= n) break;
+        if (this.spotFree(c.x, c.y, taken)) { spots.push(c); taken.push(c); }
       }
       return spots.length ? { t: 'summon', hero: -1, dmg: 0, spots } : null;
     }
@@ -434,11 +443,10 @@ export class Game {
     return spots.length ? { t: 'heat', hero: -1, dmg: 0, spots } : null;
   }
 
-  /** Room for a summoned mob of radius r at (x, y): on open floor, clear of everything else in the room. */
-  private spotFree(x: number, y: number, r: number, taken: { x: number; y: number }[]) {
-    const S = this.S;
-    const objs = [...this.liveMobs(), ...S.nodes.filter(n => n.left > 0), ...S.pits, ...S.pads.map(p => ({ ...p, r: 14 })), ...taken.map(p => ({ ...p, r: 8 }))];
-    return clearOfRock(S, x, y, r + 2) && objs.every(o => Math.hypot(o.x - x, o.y - y) > o.r + r + 3) && !this.inBlock(x, y, r + 2);
+  /** Room for a summoned mob on the cell at (x, y): open floor no one stands on, off the runes and the circles already marked. */
+  private spotFree(x: number, y: number, taken: { x: number; y: number }[]) {
+    const [i, j] = cellAt(x, y);
+    return this.cellFree(i, j, this.occupied(null, true)) && !this.runeCells().has(hazKey(i, j)) && !taken.some(p => p.x === x && p.y === y);
   }
 
   // ------------------------------------------------------------ damage & fx
@@ -654,84 +662,125 @@ export class Game {
       if (h.hp <= 0 || h.pad === null) continue;
       // the rune or the room may have changed since the intent was picked (a hero moved, an icicle broke)
       const way = this.route(m, S.pads[h.pad]);
-      m.walk = cutWay(way, this.walkLen(m, wayLen(way)));
+      if (!way) continue;
+      m.walk = way.slice(0, this.stopAt(m, way) + 1);
       const end = m.walk[m.walk.length - 1];
       m.tx = end.x;
       m.ty = end.y;
     }
   }
 
-  /** How far a walker goes this turn along a route of length L: its speed, but no closer than striking range. */
-  private walkLen(m: Mob, L: number) {
-    return Math.max(0, Math.min(m.speed, L - m.reach + 8));
+  /**
+   * The cell index along a route where a walker stops this enemy turn: as far as its steps take it,
+   * backing off cells that hold a rune or another enemy (a route that had to squeeze past them).
+   */
+  private stopAt(m: Mob, cells: Pt[]) {
+    const sz = mobSize(m.k), taken = this.occupied(m, true), runes = this.runeCells();
+    let k = Math.min(cells.length - 1, stepsOf(m));
+    while (k > 0) {
+      const [i, j] = cellAt(cells[k].x, cells[k].y, sz);
+      if (this.fits(i, j, sz, taken) && !this.onRune(i, j, sz, runes)) break;
+      k--;
+    }
+    return k;
   }
 
-  /** Whether a walker of clearance r fits at (x, y): on the floor, off blocks and rock, clear of round things in its way. */
-  private walkable(x: number, y: number, r: number, obs: Circle[]) {
-    return isFloor(this.S, Math.floor(x / TILE), Math.floor(y / TILE)) && !this.inBlock(x, y, r) && !obs.some(o => Math.hypot(o.x - x, o.y - y) < o.r + r - 3);
-  }
-
-  private clearLine(a: Pt, b: Pt, r: number, obs: Circle[]) {
-    const L = Math.hypot(b.x - a.x, b.y - a.y), n = Math.ceil(L / 2);
-    for (let k = 1; k <= n; k++) if (!this.walkable(a.x + ((b.x - a.x) * k) / n, a.y + ((b.y - a.y) * k) / n, r, obs)) return false;
-    return true;
-  }
-
-  /** Round things a walker goes around: pits, resource nodes and the other enemies (where they will stand this turn). */
-  private obstacles(m: Mob, mobs: boolean): Circle[] {
-    const S = this.S;
-    return [
-      ...S.pits,
-      ...S.nodes.filter(n => n.left > 0),
-      ...(mobs ? this.liveMobs().filter(o => o !== m && this.solid(o)).map(o => ({ x: o.tx, y: o.ty, r: o.r })) : []),
-    ];
+  /** Cells under the room's runes, open or locked. */
+  runeCells() {
+    return new Set(this.S.pads.map(p => hazKey(Math.floor(p.x / TILE), Math.floor(p.y / TILE))));
   }
 
   /**
-   * A walker's route to a point: shortest path over floor tiles around blocks and pits (8 directions, no corner cutting),
-   * pulled tight into straight runs. Falls back to a straight line when nothing connects.
+   * Cells nobody can step on: under blocks, resources, pits and (with `mobs`) the enemies other than `self`,
+   * at the cells they will stand on this turn. 1 = taken, row-major gw × gh.
    */
-  route(m: Mob, to: Pt, mobs = true): Pt[] {
-    const S = this.S, gw = S.gw, gh = S.gh, r = Math.min(m.r, 7), obs = this.obstacles(m, mobs);
-    const si = Math.floor(m.x / TILE), sj = Math.floor(m.y / TILE), ti = Math.floor(to.x / TILE), tj = Math.floor(to.y / TILE);
-    const open = (i: number, j: number) => (i === ti && j === tj) || (i === si && j === sj) || this.walkable(i * TILE + 8, j * TILE + 8, r, obs);
+  occupied(self: Mob | null, mobs: boolean) {
+    const S = this.S, gw = S.gw, out = new Uint8Array(gw * S.gh);
+    const mark = (i: number, j: number, sz = 1) => {
+      for (let b = 0; b < sz; b++) for (let a = 0; a < sz; a++) if (i + a >= 0 && j + b >= 0 && i + a < gw && j + b < S.gh) out[(j + b) * gw + i + a] = 1;
+    };
+    for (const b of standing(S.blocks)) mark(Math.floor(b.x0 / TILE), Math.floor(b.y0 / TILE));
+    for (const n of S.nodes) if (n.left > 0) mark(Math.floor(n.x / TILE), Math.floor(n.y / TILE));
+    for (const p of S.pits) {
+      for (let j = Math.floor((p.y - p.r) / TILE); j <= Math.floor((p.y + p.r) / TILE); j++) for (let i = Math.floor((p.x - p.r) / TILE); i <= Math.floor((p.x + p.r) / TILE); i++) {
+        if (Math.hypot(p.x - (i * TILE + 8), p.y - (j * TILE + 8)) < p.r + 4) mark(i, j);
+      }
+    }
+    if (mobs) for (const o of S.mobs) {
+      if (o === self || o.hp <= 0) continue;
+      mark(...cellAt(o.tx, o.ty, mobSize(o.k)), mobSize(o.k));
+      // a summoning circle is where a mob will rise this turn
+      if (o.intent?.t === 'summon') for (const p of o.intent.spots ?? []) mark(...cellAt(p.x, p.y));
+    }
+    return out;
+  }
+
+  private cellFree(i: number, j: number, taken: Uint8Array) {
+    return isFloor(this.S, i, j) && !taken[j * this.S.gw + i];
+  }
+
+  /** Whether an s × s enemy with its top-left cell at (i, j) fits on open floor. */
+  private fits(i: number, j: number, sz: number, taken: Uint8Array) {
+    for (let b = 0; b < sz; b++) for (let a = 0; a < sz; a++) if (!this.cellFree(i + a, j + b, taken)) return false;
+    return true;
+  }
+
+  private onRune(i: number, j: number, sz: number, runes: Set<string>) {
+    for (let b = 0; b < sz; b++) for (let a = 0; a < sz; a++) if (runes.has(hazKey(i + a, j + b))) return true;
+    return false;
+  }
+
+  /** Whether an s × s enemy at (i, j) stands right next to the cell (ti, tj), close enough to strike it. */
+  private nextTo(i: number, j: number, sz: number, ti: number, tj: number) {
+    const inside = ti >= i && ti < i + sz && tj >= j && tj < j + sz;
+    return !inside && ti >= i - 1 && ti <= i + sz && tj >= j - 1 && tj <= j + sz;
+  }
+
+  /** Whether a mob stands next to the rune at p. */
+  private besideRune(m: Mob, p: Pt) {
+    const sz = mobSize(m.k), [i, j] = cellAt(m.x, m.y, sz);
+    return this.nextTo(i, j, sz, Math.floor(p.x / TILE), Math.floor(p.y / TILE));
+  }
+
+  /**
+   * A walker's way to the hero on the rune at `to`, cell by cell like a piece on a board: 8 directions, no corner cutting,
+   * around blocks, pits, resources and the other enemies, to the nearest cells next to the rune it can stand on.
+   * Big enemies move their whole 2 × 2 footprint. Returns the centres it steps through, starting where it stands,
+   * or null when nothing connects. Other enemies crowding the rune don't stop a walker from heading there.
+   */
+  route(m: Mob, to: Pt, mobs = true): Pt[] | null {
+    const S = this.S, gw = S.gw, gh = S.gh, sz = mobSize(m.k), taken = this.occupied(m, mobs), runes = this.runeCells();
+    const ti = Math.floor(to.x / TILE), tj = Math.floor(to.y / TILE);
+    const [si, sj] = cellAt(m.x, m.y, sz);
+    const inRoom = (i: number, j: number) => i >= 0 && j >= 0 && i <= gw - sz && j <= gh - sz;
+    if (!inRoom(si, sj)) return null;
+    const start = sj * gw + si;
+    // a rune can sit in a one-cell corridor: walkers pass over runes, they just never stop on one
+    const open = (i: number, j: number) => inRoom(i, j) && !this.onRune(i, j, sz, new Set([hazKey(ti, tj)])) && ((i === si && j === sj) || this.fits(i, j, sz, taken));
+    const goal = (i: number, j: number) => this.nextTo(i, j, sz, ti, tj) && ((i === si && j === sj) || (this.fits(i, j, sz, taken) && !this.onRune(i, j, sz, runes)));
     const dist = new Float64Array(gw * gh).fill(Infinity), from = new Int32Array(gw * gh).fill(-1), done = new Uint8Array(gw * gh);
-    const goal = tj * gw + ti, start = sj * gw + si;
-    if (si < 0 || sj < 0 || si >= gw || sj >= gh || ti < 0 || tj < 0 || ti >= gw || tj >= gh) return [{ x: m.x, y: m.y }, to];
     dist[start] = 0;
-    // rooms are a couple of hundred tiles: a plain scan for the nearest open tile is plenty
+    let end = -1;
+    // rooms are a couple of hundred cells: a plain scan for the nearest open cell is plenty
     for (;;) {
       let c = -1, cd = Infinity;
       for (let k = 0; k < dist.length; k++) if (!done[k] && dist[k] < cd) { cd = dist[k]; c = k; }
-      if (c < 0 || c === goal) break;
-      done[c] = 1;
+      if (c < 0) break;
       const ci = c % gw, cj = (c - ci) / gw;
+      if (goal(ci, cj)) { end = c; break; }
+      done[c] = 1;
       for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
         const i = ci + di, j = cj + dj;
-        if ((!di && !dj) || i < 0 || j < 0 || i >= gw || j >= gh || !open(i, j)) continue;
-        if (di && dj && (!open(ci + di, cj) || !open(ci, cj + dj) || !this.clearLine({ x: ci * TILE + 8, y: cj * TILE + 8 }, { x: i * TILE + 8, y: j * TILE + 8 }, r, obs))) continue;
-        const k = j * gw + i;
-        // a resource can sit between two tile centres: the step between them must be clear too
-        if (!(di && dj) && c !== start && k !== goal && !this.walkable((ci + i) * 8 + 8, (cj + j) * 8 + 8, r, obs)) continue;
-        const nd = cd + (di && dj ? Math.SQRT2 : 1);
+        if ((!di && !dj) || !open(i, j)) continue;
+        if (di && dj && (!open(ci + di, cj) || !open(ci, cj + dj))) continue;
+        const k = j * gw + i, nd = cd + (di && dj ? Math.SQRT2 : 1);
         if (nd < dist[k]) { dist[k] = nd; from[k] = c; }
       }
     }
-    // other enemies crowding the rune don't stop a walker from heading there
-    if (dist[goal] === Infinity) return mobs ? this.route(m, to, false) : [{ x: m.x, y: m.y }, to];
-    const pts: Pt[] = [to];
-    for (let k = from[goal]; k >= 0 && k !== start; k = from[k]) pts.push({ x: (k % gw) * TILE + 8, y: Math.floor(k / gw) * TILE + 8 });
-    pts.push({ x: m.x, y: m.y });
-    pts.reverse();
-    // pull the tile path tight: from each corner, jump to the farthest point still in plain sight
-    const way: Pt[] = [pts[0]];
-    for (let a = 0; a < pts.length - 1;) {
-      let b = a + 1;
-      for (let k = pts.length - 1; k > a + 1; k--) if (this.clearLine(pts[a], pts[k], r, obs)) { b = k; break; }
-      way.push(pts[b]);
-      a = b;
-    }
-    return way;
+    if (end < 0) return mobs ? this.route(m, to, false) : null;
+    const way: Pt[] = [];
+    for (let k = end; k >= 0; k = from[k]) way.push(k === start ? { x: m.x, y: m.y } : cellCentre(k % gw, Math.floor(k / gw), sz));
+    return way.reverse();
   }
 
   private mobsAttack() {
@@ -768,7 +817,7 @@ export class Game {
         const h = this.heroOf(it.hero);
         if (h.hp <= 0 || h.pad === null) continue;
         const p = S.pads[h.pad];
-        if (isRanged(m.k) || Math.hypot(p.x - m.x, p.y - m.y) <= m.reach + 2) {
+        if (isRanged(m.k) || this.besideRune(m, p)) {
           this.hurtHero(h, it.dmg); m.flash = 0.12;
           if (d.chill && h.hp > 0) this.chillHero(h);
           if (d.fire && h.hp > 0) { h.fire = 1; this.float(p.x, p.y - 8, 'горит!', '#ff7a3d'); }
@@ -825,14 +874,15 @@ export class Game {
 
   /** Mobs walk from (fx, fy) to (tx, ty) during the first part of the enemy phase. */
   private walkMobs() {
-    const u = Math.min(1, (1.5 - this.S.timer) / 0.6), e = u * u * (3 - 2 * u);
+    const u = Math.min(1, (1.5 - this.S.timer) / 0.6);
     for (const m of this.liveMobs()) {
       const w = m.walk && m.walk.length > 1 ? m.walk : [{ x: m.fx, y: m.fy }, { x: m.tx, y: m.ty }];
-      const p = pointAt(w, wayLen(w) * e);
-      m.x = p.x;
-      m.y = p.y;
-      // a miniature is lifted and put down when it moves
-      m.hop = Math.hypot(m.tx - m.fx, m.ty - m.fy) > 1 ? Math.sin(Math.PI * u) * 7 : 0;
+      if (u >= 1 || Math.hypot(m.tx - m.fx, m.ty - m.fy) <= 1) { m.x = m.tx; m.y = m.ty; m.hop = 0; continue; }
+      // like a piece on a board: lifted and put down on every cell along the way
+      const n = w.length - 1, at = Math.min(n - 1e-6, u * n), k = Math.floor(at), f = at - k, e = f * f * (3 - 2 * f);
+      m.x = w[k].x + (w[k + 1].x - w[k].x) * e;
+      m.y = w[k].y + (w[k + 1].y - w[k].y) * e;
+      m.hop = Math.sin(Math.PI * f) * 6;
     }
   }
 

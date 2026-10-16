@@ -1,10 +1,10 @@
 // Draws one frame of a room: walls, floor, obstacles, resources, discs and miniatures.
 // Everything is drawn in iso space through the camera, so zoom and rotation are free.
 
-import { HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, isRanged } from '../data';
+import { HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, isRanged, mobSize } from '../data';
 import type { Camera, Vec } from '../camera';
 import { cutWay, type Disc, type Game, type HeroState } from '../game';
-import { floorAt, hazKey, isFloor, type Block, type Edge, type Mob, type ResNode } from '../room';
+import { cellAt, floorAt, hazKey, isFloor, type Block, type Edge, type Mob, type ResNode } from '../room';
 import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure } from './figures';
 import { circ, ell, fs, lg, mix, pth, rr, type Ctx, type Pt } from './util';
 import { settings } from '../settings';
@@ -271,6 +271,17 @@ export class SceneRenderer {
         c.restore();
       }
     }
+    // the cells enemies and resources stand on are shaded like a square on a board; enemies get a red rim
+    c.beginPath();
+    for (const n of S.nodes) if (n.left > 0) { const [i, j] = cellAt(n.x, n.y); inner(i, j); }
+    for (const m of S.mobs) if (m.hp > 0) { const s = mobSize(m.k), [i, j] = cellAt(m.tx, m.ty, s); quad(i * TILE + gap, j * TILE + gap, (i + s) * TILE - gap, (j + s) * TILE - gap); }
+    c.fillStyle = 'rgba(25,15,10,.2)';
+    c.fill();
+    c.beginPath();
+    for (const m of S.mobs) if (m.hp > 0) { const s = mobSize(m.k), [i, j] = cellAt(m.tx, m.ty, s); quad(i * TILE + 1.6, j * TILE + 1.6, (i + s) * TILE - 1.6, (j + s) * TILE - 1.6); }
+    c.strokeStyle = 'rgba(184,50,63,.55)';
+    c.lineWidth = 0.9;
+    c.stroke();
     c.strokeStyle = INK;
     c.lineWidth = 1.2;
     c.beginPath();

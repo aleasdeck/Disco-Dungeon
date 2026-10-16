@@ -1,6 +1,6 @@
 // Procedural room generator. Pure: the same RoomSpec always yields the same layout.
 
-import { BIOMES, MOB_HP_MUL, MOBS, NODES, TILE, isRanged, type Biome, type MobKind, type NodeKind, type RoomType } from './data';
+import { BIOMES, MOB_HP_MUL, MOBS, NODES, TILE, isRanged, mobSize, type Biome, type MobKind, type NodeKind, type RoomType } from './data';
 import { makeRng } from './rng';
 import { LAYERS } from './run';
 
@@ -144,6 +144,13 @@ export function newMob(k: MobKind, x: number, y: number, hpMul = 1, dmgAdd = 0):
 }
 
 export const hazKey = (tx: number, ty: number) => tx + ',' + ty;
+
+/**
+ * Enemies and resources stand on the cell grid like the blocks: a thing s cells wide has its centre in the middle
+ * of its s × s cells. These map between that centre and its top-left cell.
+ */
+export const cellAt = (x: number, y: number, s = 1): [number, number] => [Math.round(x / TILE - s / 2), Math.round(y / TILE - s / 2)];
+export const cellCentre = (i: number, j: number, s = 1) => ({ x: (i + s / 2) * TILE, y: (j + s / 2) * TILE });
 
 export function isFloor(L: { gw: number; gh: number; floor: Uint8Array }, i: number, j: number) {
   return i >= 0 && j >= 0 && i < L.gw && j < L.gh && L.floor[j * L.gw + i] === 1;
@@ -360,6 +367,22 @@ export function generate(spec: RoomSpec): Layout {
   const biome = BIOMES[Math.min(spec.floor, BIOMES.length - 1)];
   const objs: { x: number; y: number; r: number }[] = [];
   const free = (x: number, y: number, r: number, pad = 6) => objs.every(o => Math.hypot(o.x - x, o.y - y) > o.r + r + pad);
+  // cells already holding a rune, a block, an enemy or a resource
+  const taken = new Set<string>();
+  const take = (i: number, j: number, s = 1) => { for (let b = 0; b < s; b++) for (let a = 0; a < s; a++) taken.add(hazKey(i + a, j + b)); };
+  /**
+   * A free s × s patch of floor cells for something of radius r, centre passing `test`.
+   * Things keep a little air around them; `tight` lets them stand side by side and against the walls in a crowded room.
+   */
+  const placeCell = (s: number, r: number, test: (x: number, y: number) => boolean, tight = false): [number, number] | null => {
+    for (let k = 0; k < 300; k++) {
+      const i = ri(0, gw - s), j = ri(0, gh - s), c = cellCentre(i, j, s);
+      let ok = test(c.x, c.y) && free(c.x, c.y, r, tight ? -2 : 6) && clearOfRock(geo, c.x, c.y, r + (tight ? 1 : 6));
+      for (let b = 0; b < s && ok; b++) for (let a = 0; a < s && ok; a++) ok = isFloor(geo, i + a, j + b) && !taken.has(hazKey(i + a, j + b));
+      if (ok) { take(i, j, s); return [c.x, c.y]; }
+    }
+    return null;
+  };
   const place = (r: number, test: (x: number, y: number) => boolean): [number, number] | null => {
     for (let i = 0; i < 300; i++) {
       const x = r + 8 + R.next() * (Wx - 2 * r - 16), y = r + 8 + R.next() * (Wy - 2 * r - 16);
@@ -373,7 +396,7 @@ export function generate(spec: RoomSpec): Layout {
   const any = () => true;
 
   const pads = pickPads(gw, gh, floor, R);
-  for (const p of pads) objs.push({ x: p.x, y: p.y, r: 22 });
+  for (const p of pads) { objs.push({ x: p.x, y: p.y, r: 22 }); take(Math.floor(p.x / TILE), Math.floor(p.y / TILE)); }
   // locked runes deeper in the room, on the flanks and in the middle: a disc rolled over one opens it
   // (its own stream, so the rest of the room comes out as before)
   const LR = makeRng(spec.seed * 31 + spec.depth + 3571);
@@ -381,7 +404,7 @@ export function generate(spec: RoomSpec): Layout {
   for (let k = 0, n = LOCKED_PADS[Math.min(t, LOCKED_PADS.length - 1)]; k < n; k++) {
     for (let tr = 0; tr < 200; tr++) {
       const x = 22 + LR.next() * (Wx - 44), y = 22 + LR.next() * (Wy - 44);
-      if (deep(x, y) && free(x, y, 12, 2) && clearOfRock(geo, x, y, 12)) { pads.push({ x, y, locked: true }); objs.push({ x, y, r: 12 }); break; }
+      if (deep(x, y) && free(x, y, 12, 2) && clearOfRock(geo, x, y, 12)) { pads.push({ x, y, locked: true }); objs.push({ x, y, r: 12 }); take(Math.floor(x / TILE), Math.floor(y / TILE)); break; }
     }
   }
 
@@ -399,7 +422,7 @@ export function generate(spec: RoomSpec): Layout {
       const cells = sh.map(([a, b]) => ({ x0: (tx + a) * TILE, y0: (ty + b) * TILE, x1: (tx + a + 1) * TILE, y1: (ty + b + 1) * TILE, v: ri(0, 7) }));
       // blocks keep a free tile between themselves and the rock so discs can't get wedged
       if (cells.every(c => free(c.x0 + 8, c.y0 + 8, 11, 4) && clearOfRock(geo, c.x0 + 8, c.y0 + 8, 20))) {
-        for (const c of cells) { blocks.push(c); objs.push({ x: c.x0 + 8, y: c.y0 + 8, r: 11 }); }
+        for (const c of cells) { blocks.push(c); objs.push({ x: c.x0 + 8, y: c.y0 + 8, r: 11 }); take(c.x0 / TILE, c.y0 / TILE); }
         break;
       }
     }
@@ -415,7 +438,7 @@ export function generate(spec: RoomSpec): Layout {
           return { x0: (tx + a) * TILE, y0: (ty + b) * TILE, x1: (tx + a + 1) * TILE, y1: (ty + b + 1) * TILE, v, ice: true, big, hp: max, max };
         });
         if (cells.every(c => free(c.x0 + 8, c.y0 + 8, 11, 4) && clearOfRock(geo, c.x0 + 8, c.y0 + 8, 20))) {
-          for (const c of cells) { blocks.push(c); objs.push({ x: c.x0 + 8, y: c.y0 + 8, r: 11 }); }
+          for (const c of cells) { blocks.push(c); objs.push({ x: c.x0 + 8, y: c.y0 + 8, r: 11 }); take(c.x0 / TILE, c.y0 / TILE); }
           break;
         }
       }
@@ -453,14 +476,16 @@ export function generate(spec: RoomSpec): Layout {
   const mobs: Mob[] = [];
   for (const k of mk) {
     // a cut corner can eat the far half, so a mob that finds no room there stands anywhere short of the runes
-    const q = place(MOBS[k].r, far) ?? place(MOBS[k].r, (x, y) => x / Wx + y / Wy < 1.25) ?? place(MOBS[k].r, any);
+    const sz = mobSize(k), r = MOBS[k].r;
+    const short = (x: number, y: number) => x / Wx + y / Wy < 1.25;
+    const q = placeCell(sz, r, far) ?? placeCell(sz, r, short) ?? placeCell(sz, r, far, true) ?? placeCell(sz, r, short, true) ?? placeCell(sz, r, any, true);
     if (q) { mobs.push(newMob(k, q[0], q[1], hpMul, dmgAdd)); objs.push({ x: q[0], y: q[1], r: MOBS[k].r }); }
   }
 
   const nodes: ResNode[] = [];
   const kinds: NodeKind[] = type === 'treasure' ? ['ore', 'ore', 'ore', 'ore', 'spk', 'spk', 'spk', 'herb', 'herb'] : ['ore', 'ore', 'spk', 'spk', 'herb'];
   for (const k of kinds) {
-    const q = place(NODES[k].r, type === 'treasure' ? any : mid) ?? place(NODES[k].r, any);
+    const q = placeCell(1, NODES[k].r, type === 'treasure' ? any : mid) ?? placeCell(1, NODES[k].r, any) ?? placeCell(1, NODES[k].r, any, true);
     if (q) { nodes.push({ k, ...NODES[k], x: q[0], y: q[1], left: NODES[k].ch, hit: 0 }); objs.push({ x: q[0], y: q[1], r: NODES[k].r }); }
   }
 
