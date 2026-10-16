@@ -446,35 +446,53 @@ export class SceneRenderer {
       circ(c, x + 3, y, 1.3); fs(c, '#7a6d68', 0.6);
       return;
     }
-    const f = n.hit > 0;
+    // no counters: the node itself wears down, one visible stage per charge left
+    const f = n.hit > 0, left = Math.min(n.left, n.ch), worn = n.ch - left;
     ell(c, x + 1, y + 1, n.r * 1.3, n.r * 0.6); c.fillStyle = 'rgba(20,10,5,.35)'; c.fill();
+    // chips knocked off so far lie around the base
+    for (let k = 0; k < worn * 2; k++) {
+      const a = 0.6 + k * 2.4, rx = Math.cos(a) * (n.r + 3), ry = Math.sin(a) * (n.r * 0.5 + 1.5);
+      circ(c, x + rx, y + ry, 1.1 + (k % 2) * 0.4); fs(c, n.k === 'spk' ? '#7a4fe0' : n.k === 'ore' ? '#6e6963' : '#9a3226', 0.5);
+    }
+    c.save();
+    // the whole node shrinks a little with every charge taken
+    const sc = 0.62 + 0.38 * (left / n.ch);
+    c.translate(x, y); c.scale(sc, sc); c.translate(-x, -y);
     if (n.k === 'ore') {
       pth(c, [[x - 9, y], [x - 8, y - 7], [x - 3, y - 11], [x + 4, y - 10], [x + 9, y - 4], [x + 8, y]]);
       fs(c, f ? '#fff' : lg(c, 0, y - 11, 0, y, '#8f8a84', '#55504a'), 1.1);
-      for (const [ox, oy, r] of [[-4, -6, 2.2], [2, -7, 1.8], [4, -3, 2], [-1, -2.5, 1.5]]) {
+      const gems = [[-4, -6, 2.2], [2, -7, 1.8], [4, -3, 2], [-1, -2.5, 1.5]].slice(0, [0, 1, 2, 4][Math.min(3, Math.round((left / n.ch) * 3))]);
+      for (const [ox, oy, r] of gems) {
         pth(c, [[x + ox - r, y + oy], [x + ox, y + oy - r], [x + ox + r, y + oy], [x + ox, y + oy + r * 0.8]]);
         fs(c, f ? '#fff' : '#e8b44a', 0.7);
       }
+      if (worn) { c.strokeStyle = '#2a2622'; c.lineWidth = 0.7; c.beginPath(); c.moveTo(x - 2, y - 10); c.lineTo(x, y - 6); c.lineTo(x - 1, y - 3); c.stroke(); }
     } else if (n.k === 'spk') {
       c.save(); c.globalCompositeOperation = 'lighter';
-      const g = c.createRadialGradient(x, y - 8, 0, x, y - 8, 18);
-      g.addColorStop(0, 'rgba(190,150,255,.4)'); g.addColorStop(1, 'rgba(190,150,255,0)');
+      const g = c.createRadialGradient(x, y - 8, 0, x, y - 8, 18), gl = 0.15 + 0.25 * (left / n.ch);
+      g.addColorStop(0, `rgba(190,150,255,${gl})`); g.addColorStop(1, 'rgba(190,150,255,0)');
       c.fillStyle = g; c.fillRect(x - 18, y - 26, 36, 36); c.restore();
-      for (const [ox, w, hgt] of [[-5, 3, 9], [4, 3, 11], [0, 4, 16]]) {
+      // crystals break off one by one, the tall middle one last
+      const all = [[-5, 3, 9], [4, 3, 11], [0, 4, 16]], keep = all.slice(all.length - Math.max(1, Math.round((left / n.ch) * 3)));
+      for (const [ox, w, hgt] of keep) {
         pth(c, [[x + ox - w, y - 1], [x + ox - w, y - hgt + 3], [x + ox, y - hgt], [x + ox + w, y - hgt + 3], [x + ox + w, y - 1]]);
         fs(c, f ? '#fff' : lg(c, x + ox - w, 0, x + ox + w, 0, '#d9c4ff', '#7a4fe0'), 1);
       }
+      for (const [ox, w] of all.slice(0, all.length - keep.length)) { pth(c, [[x + ox - w, y - 1], [x + ox - w, y - 3], [x + ox + w, y - 4], [x + ox + w, y - 1]]); fs(c, '#6a46c0', 0.8); }
     } else {
       rr(c, x - 1.5, y - 7, 3, 7, 1.2); fs(c, f ? '#fff' : '#f3ead8', 0.9);
-      rr(c, x + 4, y - 4, 2.4, 4, 1); fs(c, '#f3ead8', 0.8);
       c.beginPath(); c.arc(x, y - 7, 6, Math.PI, 0); c.closePath(); fs(c, f ? '#fff' : lg(c, 0, y - 13, 0, y - 7, '#d9604f', '#9a3226'), 1);
-      c.beginPath(); c.arc(x + 5.2, y - 4, 3.4, Math.PI, 0); c.closePath(); fs(c, '#d9604f', 0.9);
-      for (const [ox, oy] of [[-2.5, -10], [1.8, -11], [2.8, -8.5], [5, -5.5]]) { circ(c, x + ox, y + oy, 0.9); c.fillStyle = '#f3ead8'; c.fill(); }
+      for (const [ox, oy] of [[-2.5, -10], [1.8, -11], [2.8, -8.5]]) { circ(c, x + ox, y + oy, 0.9); c.fillStyle = '#f3ead8'; c.fill(); }
+      if (left >= n.ch) {
+        // the small mushroom goes first
+        rr(c, x + 4, y - 4, 2.4, 4, 1); fs(c, '#f3ead8', 0.8);
+        c.beginPath(); c.arc(x + 5.2, y - 4, 3.4, Math.PI, 0); c.closePath(); fs(c, '#d9604f', 0.9);
+        circ(c, x + 5, y - 5.5, 0.9); c.fillStyle = '#f3ead8'; c.fill();
+      } else {
+        rr(c, x + 4.2, y - 2, 2, 2, 0.6); fs(c, '#d8cdb8', 0.7);
+      }
     }
-    for (let k = 0; k < n.left; k++) {
-      circ(c, x - (n.left - 1) * 2.5 + k * 5, y - 21, 1.6);
-      fs(c, n.k === 'ore' ? '#e8b44a' : n.k === 'spk' ? '#c9a8ff' : '#7be39a', 0.7);
-    }
+    c.restore();
   }
 
   private drawDisc(d: Disc) {
