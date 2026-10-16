@@ -107,7 +107,7 @@ export class Hud {
       place: g.online ? 'Расстановка: поставь своего героя на руну и нажми «Готов»' : 'Расстановка: поставь героев на руны и нажми «В бой!»',
       throw: left ? `Броски · ждём ${left}` : 'Диски катятся',
       resolve: 'Подсчёт',
-      enemy: 'Ход мобов',
+      enemy: S.mobs[S.actor]?.hp > 0 ? `Ход мобов · ${S.mobs[S.actor].name}` : 'Ход мобов',
       over: g.alive().length ? 'Комната зачищена' : 'Отряд пал',
     }[S.phase];
 
@@ -125,8 +125,10 @@ export class Hud {
       t.querySelector('.a-res')!.textContent = o.hp <= 0 ? 'пал' : o.pad === null ? 'ждёт' : S.phase === 'place' ? (!g.online || S.ready.includes(o.i) ? 'готов' : 'ставит') : o.hand ? `${o.hand} в руке` : 'бросил';
     }
 
-    // enemies in the room and what each will do this turn: a dot in the colour of the hero it goes for
+    // enemies in the room and what each will do this turn: a dot in the colour of the hero it goes for.
+    // In the enemy turn they go one at a time from the top: the one moving now is lit, the ones done are dimmed.
     $('mobs').hidden = S.phase === 'over' || !g.liveMobs().length;
+    const now = S.phase === 'enemy' ? S.mobs[S.actor] : undefined;
     $('mobList').innerHTML = g.liveMobs().map(m => {
       const it = m.intent, tgt = it && it.hero >= 0 ? g.heroOf(it.hero) : null;
       const act = !it ? '' : it.t === 'hit'
@@ -134,7 +136,7 @@ export class Hud {
         : it.t === 'move'
           ? `<span class="m-go" title="Идёт к ${tgt!.def.name}${it.eta ? ', ударит через ' + turns(it.eta) : ''}">→${it.eta ? ' ' + it.eta : ''}</span><i class="m-dot" style="--c:${tgt!.def.col}" title="${tgt!.def.name}"></i>`
           : `<span class="m-sp">${{ charge: 'фитиль', slam: (it.chill ? 'метель ' : 'всем ') + it.dmg, heal: 'лечит ' + it.dmg, summon: 'призыв', heat: 'жар' }[it.t]}</span>`;
-      return `<li><img src="${mobIcon(m.k)}" alt=""><span class="m-name">${m.name}</span>`
+      return `<li${m === now ? ' class="now" aria-current="true"' : g.acted(m) ? ' class="done"' : ''}><img src="${mobIcon(m.k)}" alt=""><span class="m-name">${m.name}</span>`
         + `<span class="m-hp" title="${m.hp}/${m.max} HP"><i style="width:${(Math.max(0, m.hp) / m.max) * 100}%"></i><b>${m.hp}</b></span>`
         + `<span class="m-act">${act}</span></li>`;
     }).join('');
