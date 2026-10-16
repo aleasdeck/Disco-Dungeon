@@ -9,6 +9,9 @@ import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure } from '
 import { circ, ell, fs, lg, mix, pth, rr, type Ctx, type Pt } from './util';
 import { settings } from '../settings';
 
+/** Preview of resource-node looks while one is being chosen (?node=a|b|c). */
+const NODE_STYLE = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('node') ?? 'blocks' : 'blocks';
+
 export interface Aim { hero: HeroState; dx: number; dy: number }
 /** A hero dragged to another rune: pointer position in screen pixels and the rune under it. */
 export interface Carry { hero: HeroState; x: number; y: number; pad: number | null; moved: boolean }
@@ -459,8 +462,147 @@ export class SceneRenderer {
     return { faces, at };
   }
 
+  /**
+   * A convex n-sided frustum standing on (cx, cy): base radius r0 at height h0, top radius r1 at h1,
+   * the top centre shifted by (tx, ty) to lean it. Sides are painted back to front, then the top.
+   */
+  private frustum(cx: number, cy: number, n: number, r0: number, r1: number, h0: number, h1: number, rot: number,
+    cols: [string, string], top: string, tx = 0, ty = 0, lw = 0.9) {
+    const { c, P, cam } = this;
+    const ang = (k: number) => rot + (k / n) * Math.PI * 2;
+    const lo = (k: number) => P(cx + Math.cos(ang(k)) * r0, cy + Math.sin(ang(k)) * r0, h0);
+    const hi = (k: number) => P(cx + tx + Math.cos(ang(k)) * r1, cy + ty + Math.sin(ang(k)) * r1, h1);
+    const sides = Array.from({ length: n }, (_, k) => { const a = ang(k + 0.5); return { k, nx: Math.cos(a), ny: Math.sin(a) }; })
+      .sort((a, b) => cam.facing(a.nx, a.ny) - cam.facing(b.nx, b.ny));
+    for (const sd of sides) {
+      pth(c, r1 > 0.01 ? [lo(sd.k), lo(sd.k + 1), hi(sd.k + 1), hi(sd.k)] : [lo(sd.k), lo(sd.k + 1), hi(0)]);
+      fs(c, this.shade([sd.nx, sd.ny], cols), lw);
+    }
+    if (r1 > 0.01) { pth(c, Array.from({ length: n }, (_, k) => hi(k))); fs(c, top, lw); }
+  }
+
+  /** A pointed n-sided crystal from height h0, leaning along (dx, dy). */
+  private crystal(cx: number, cy: number, h0: number, len: number, r: number, dx: number, dy: number, cols: [string, string], top: string, n = 6, lw = 0.7) {
+    const body = len * 0.72, bx = dx * body, by = dy * body;
+    this.frustum(cx, cy, n, r, r * 0.92, h0, h0 + body, 0.3, cols, top, bx, by, lw);
+    this.frustum(cx + bx, cy + by, n, r * 0.92, 0, h0 + body, h0 + len, 0.3, cols, top, dx * (len - body), dy * (len - body), lw);
+  }
+
+  /** Draw several parts of one node back to front. */
+  private parts(list: [number, number, () => void][]) {
+    list.sort((a, b) => this.cam.depth(a[0], a[1]) - this.cam.depth(b[0], b[1])).forEach(p => p[2]());
+  }
+
+  private drawNodeShape(n: ResNode, style: string, left: number, f: boolean) {
+    const W: [string, string] = ['#ffffff', '#e8e8e8'];
+    const rock: [string, string] = f ? W : ['#a19a90', '#4f4a44'], rockTop = f ? '#fff' : '#b5ada2';
+    const gold: [string, string] = f ? W : ['#ffe9a0', '#e0a43a'], goldTop = f ? '#fff' : '#fff0b8';
+    const vio: [string, string] = f ? W : ['#eadcff', '#6a41d4'], vioTop = f ? '#fff' : '#f6efff';
+    const stem: [string, string] = f ? W : ['#fbf4e4', '#c9bba0'], cap: [string, string] = f ? W : ['#ec6a52', '#8e2c20'];
+    const moss: [string, string] = f ? W : ['#7a9a45', '#3c5222'], soil: [string, string] = f ? W : ['#86603d', '#3e2a1a'];
+    const { x, y } = n, q = left / n.ch;
+    const mushroom = (mx: number, my: number, h0: number, s: number) => {
+      const lw = 0.35 + 0.25 * s;
+      this.frustum(mx, my, 6, 1.4 * s, 1.2 * s, h0, h0 + 5 * s, 0, stem, f ? '#fff' : '#fbf4e4', 0, 0, lw);
+      this.frustum(mx, my, 8, 4.6 * s, 3.4 * s, h0 + 4.5 * s, h0 + 6.3 * s, 0.2, cap, f ? '#fff' : '#e0604a', 0, 0, lw);
+      this.frustum(mx, my, 8, 3.4 * s, 0, h0 + 6.3 * s, h0 + 8 * s, 0.2, cap, '#fff', 0, 0, lw);
+      if (!f) for (const [ox, oy, oh] of [[-1.6, -0.6, 6.9], [1.2, 1.2, 6.6], [0.4, -1.8, 7.2]]) {
+        const [px, py] = this.P(mx + ox * s, my + oy * s, h0 + oh * s); circ(this.c, px, py, 0.55 * s + 0.2); this.c.fillStyle = '#f7eedc'; this.c.fill();
+      }
+    };
+    if (style === 'a') {
+      // low-poly boulders with gold crystals growing out of them
+      if (n.k === 'ore') {
+        // a rough boulder with gold flecks set into its faces; each hit knocks it lower and takes flecks away
+        const H = 6 + 6 * q, R0 = 6.8, R1 = 4.4, rot = 0.4;
+        const p: [number, number, () => void][] = [[x - 0.5, y - 0.5, () => {
+          this.frustum(x - 0.5, y - 0.5, 7, R0, R1, 0, H, rot, rock, rockTop);
+          this.frustum(x - 0.5, y - 0.5, 7, R1, 2, H, H + 2.6, rot + 0.45, rock, rockTop);
+          // flecks: fixed spots around the rock, only those on the side facing the viewer are drawn
+          const fl: [number, number, number][] = [[0.3, 0.3, 1.5], [1.4, 0.6, 1.2], [2.2, 0.25, 1.4], [2.9, 0.7, 1.1], [3.7, 0.4, 1.5], [4.5, 0.65, 1.2], [5.3, 0.3, 1.3], [6.0, 0.55, 1.0], [0.9, 0.85, 1.0], [3.3, 0.9, 1.0]];
+          const keep = Math.round(fl.length * (0.35 + 0.65 * q));
+          for (const [ang, v, sz] of fl.slice(0, keep)) {
+            const nx = Math.cos(ang), ny = Math.sin(ang);
+            if (this.cam.facing(nx, ny) < 0.25) continue;
+            const r = R0 + (R1 - R0) * v - 0.1, [gx, gy] = this.P(x - 0.5 + nx * r, y - 0.5 + ny * r, H * v);
+            const t = sz * (f ? 1 : 1);
+            pth(this.c, [[gx - 1.6 * t, gy + 0.2], [gx - 0.4 * t, gy - 1.3 * t], [gx + 1.5 * t, gy - 0.5 * t], [gx + 0.9 * t, gy + 1.1 * t], [gx - 0.8 * t, gy + 1 * t]]);
+            fs(this.c, f ? '#fff' : '#f2b83c', 0.45);
+            circ(this.c, gx - 0.3 * t, gy - 0.4 * t, 0.45 * t); this.c.fillStyle = '#fff2c0'; this.c.fill();
+          }
+          for (const [ox, oy] of [[-1.2, 0.6], [1.4, -0.8]].slice(0, left >= 2 ? 2 : 1)) {
+            const [gx, gy] = this.P(x - 0.5 + ox, y - 0.5 + oy, H + 1.3);
+            pth(this.c, [[gx - 1.5, gy], [gx - 0.3, gy - 0.9], [gx + 1.4, gy - 0.3], [gx + 0.6, gy + 0.8]]);
+            fs(this.c, f ? '#fff' : '#f2b83c', 0.45);
+          }
+        }]];
+        if (left >= 3) p.push([x + 4.5, y - 3.5, () => this.frustum(x + 4.5, y - 3.5, 6, 3, 1.8, 0, 3.5, 0.2, rock, rockTop)]);
+        this.parts(p);
+      } else if (n.k === 'spk') {
+        this.frustum(x, y, 7, 6, 4, 0, 3, 0.4, rock, rockTop);
+        const cr: [number, number, number, number, number][] = [[0, 0, 15, 0, 0], [-2, 2, 10, -0.35, 0.3], [2, -2, 9, 0.35, -0.3]];
+        this.parts(cr.slice(0, left).map(([gx, gy, L, dx, dy]) => [x + gx, y + gy, () => this.crystal(x + gx, y + gy, 2.5, L * (0.75 + 0.25 * q), 2.2, dx, dy, vio, vioTop)]));
+      } else {
+        // mushrooms straight on the floor, no clod under them
+        const sh: [number, number, number][] = [[-1, -1, 1.35], [3.5, 3, 0.85], [-3.5, 3, 0.7]];
+        this.parts(sh.slice(0, left === n.ch ? 3 : left).map(([ox, oy, s]) => [x + ox, y + oy, () => mushroom(x + ox, y + oy, 0, s)]));
+      }
+    } else if (style === 'b') {
+      // stalagmite spires
+      if (n.k === 'ore') {
+        const sp: [number, number, number, number][] = [[-1, -1, 19, 4.4], [3.5, 2, 13, 3.2], [-3.5, 3, 10, 2.8]];
+        this.parts(sp.slice(0, left).map(([ox, oy, H, r]) => [x + ox, y + oy, () => {
+          const h = H * (0.8 + 0.2 * q);
+          this.frustum(x + ox, y + oy, 5, r, r * 0.55, 0, h * 0.45, 0.3, rock, rockTop);
+          this.frustum(x + ox, y + oy, 5, r * 0.55, r * 0.5, h * 0.45, h * 0.6, 0.3, gold, goldTop);
+          this.frustum(x + ox, y + oy, 5, r * 0.5, 0, h * 0.6, h, 0.3, rock, rockTop);
+        }]));
+      } else if (n.k === 'spk') {
+        this.frustum(x, y, 6, 5.4, 4.6, 0, 2.5, 0, rock, rockTop);
+        const cr: [number, number, number, number][] = [[0, 0, 20, 3], [3.2, 2, 9, 1.6], [-3, 2.4, 7, 1.4]];
+        this.parts(cr.slice(0, left).map(([ox, oy, L, r]) => [x + ox, y + oy, () => this.crystal(x + ox, y + oy, 2, L * (0.7 + 0.3 * q), r, 0, 0, vio, vioTop, 6)]));
+      } else {
+        // one big toadstool, a small one beside it while the clump is full
+        const p: [number, number, () => void][] = [[x, y, () => mushroom(x, y, 0, 1.25 + 0.35 * q)]];
+        if (left === n.ch) p.push([x + 4.5, y + 3.5, () => mushroom(x + 4.5, y + 3.5, 0, 0.7)]);
+        this.parts(p);
+      }
+    } else {
+      // a squat rock mound carrying one big cut gem
+      if (n.k === 'ore') {
+        this.frustum(x, y, 6, 7, 5, 0, 5, 0.5, rock, rockTop);
+        const r = 2.2 + 2.2 * q;
+        this.frustum(x, y, 4, r * 0.6, r, 5, 5 + r * 0.6, 0.78, gold, goldTop);
+        this.frustum(x, y, 4, r, 0, 5 + r * 0.6, 5 + r * 1.8, 0.78, gold, goldTop);
+      } else if (n.k === 'spk') {
+        // a floating cut crystal over a stone pedestal
+        this.frustum(x, y, 8, 5, 4.2, 0, 3, 0.2, rock, rockTop);
+        this.frustum(x, y, 8, 3, 3, 3, 6, 0.2, ['#6d6670', '#3d3740'], '#7d7580');
+        const r = 2.4 + 2.4 * q, bob = reduce ? 0 : Math.sin(this.t * 2.2) * 1.2, h = 9 + r + bob;
+        const [gx, gy] = this.P(x, y, h);
+        this.c.save(); this.c.globalCompositeOperation = 'lighter';
+        const g = this.c.createRadialGradient(gx, gy, 0, gx, gy, 16);
+        g.addColorStop(0, `rgba(190,150,255,${0.15 + 0.3 * q})`); g.addColorStop(1, 'rgba(190,150,255,0)');
+        this.c.fillStyle = g; this.c.fillRect(gx - 16, gy - 16, 32, 32); this.c.restore();
+        this.frustum(x, y, 4, 0, r, h - r * 1.3, h, 0, vio, vioTop);
+        this.frustum(x, y, 4, r, 0, h, h + r * 1.3, 0, vio, vioTop);
+      } else {
+        this.frustum(x, y, 8, 7, 5.5, 0, 2.5, 0.2, soil, '#6f9a3c');
+        this.frustum(x, y, 8, 5.5, 2.5, 2.5, 4.5, 0.2, moss, f ? '#fff' : '#86b04c');
+        const sh: [number, number, number][] = [[-2, -1, 0.75], [2, -2, 0.65], [0, 2, 0.7], [-3, 2.5, 0.5], [3, 2, 0.55]];
+        const k = left === n.ch ? 5 : left === 1 ? 2 : 3;
+        this.parts(sh.slice(0, k).map(([ox, oy, s]) => [x + ox, y + oy, () => mushroom(x + ox, y + oy, ox * ox + oy * oy < 6 ? 4.5 : 3, s)]));
+      }
+    }
+  }
+
   /** Resource nodes stand on their cell like the stone blocks, and wear down one stage per charge taken. */
   private drawNode(n: ResNode) {
+    if (NODE_STYLE !== 'blocks' && n.left > 0) {
+      const { c, P } = this;
+      ell(c, ...P(n.x + 1.5, n.y + 1.5), 11, 5.5); c.fillStyle = 'rgba(15,8,4,.35)'; c.fill();
+      return this.drawNodeShape(n, NODE_STYLE, Math.min(n.left, n.ch), n.hit > 0);
+    }
     const { c, P } = this;
     const h = TILE / 2 - 1, x0 = n.x - h, y0 = n.y - h, x1 = n.x + h, y1 = n.y + h;
     const fp: Pt[] = [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)];
