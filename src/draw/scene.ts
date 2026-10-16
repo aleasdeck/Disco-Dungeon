@@ -514,15 +514,16 @@ export class SceneRenderer {
       key: h.def.key, x: sx, y: sy, baseR: 9, baseCol: h.def.col, fig: HERO_FIG,
       faceRight: this.faceRight(p.x, p.y, target.x, target.y), flash: h.flash > 0, hop: 0,
       alpha: dead ? 0.45 : carried ? 0.3 : lifted ? 0.85 : 1,
+      hp: dead || carried ? undefined : { now: h.hp, max: h.max },
       placeholder: (cc, x, y, fl) => drawHeroFigure(cc, h.i, x, y, 0.8, fl, this.t),
     });
     if (dead || carried) return;
     const top = sy - BASE_TH - HERO_FIG - 6;
-    rr(c, sx - 9, top - 3, 18, 4, 2); fs(c, '#2a1f18', 0.8);
-    rr(c, sx - 8.3, top - 2.3, (16.6 * Math.max(0, h.hp)) / h.max, 2.6, 1.3); c.fillStyle = '#d9434f'; c.fill();
     if (h.shield > 0) {
-      c.beginPath(); c.moveTo(sx + 11, top - 4); c.lineTo(sx + 15, top - 4); c.lineTo(sx + 15, top - 1);
-      c.quadraticCurveTo(sx + 13, top + 2, sx + 13, top + 2); c.quadraticCurveTo(sx + 11, top, sx + 11, top - 1); c.closePath();
+      // shield badge on the right of the stand
+      const bx = sx + 14, by = sy - 6;
+      c.beginPath(); c.moveTo(bx - 2.5, by - 3); c.lineTo(bx + 2.5, by - 3); c.lineTo(bx + 2.5, by);
+      c.quadraticCurveTo(bx + 2.5, by + 2.5, bx, by + 3.5); c.quadraticCurveTo(bx - 2.5, by + 2.5, bx - 2.5, by); c.closePath();
       fs(c, '#3fc4b6', 0.8);
     }
     for (let k = 0; k < h.hand; k++) { ell(c, sx - 15 - k * 5, sy - 1, 3, 1.6); fs(c, h.def.col, 0.7); }
@@ -546,6 +547,7 @@ export class SceneRenderer {
       key: m.k, x, y, baseR: m.r, baseCol: ENEMY_BASE, fig: MOBS[m.k].fig,
       faceRight: this.faceRight(m.x, m.y, tgt.x, tgt.y), flash: m.flash > 0, hop: m.hop,
       alpha: m.dead ? Math.max(0, 1 - m.dead) : (1 - (m.born ?? 0)) * (m.hp > 0 && !g.solid(m) ? 0.35 : 1),
+      hp: m.hp > 0 ? { now: m.hp, max: m.max } : undefined,
       placeholder: (cc, fx, fy, fl) => drawMobFigure(cc, m.k, fx, fy, fl),
     });
     if (m.hp <= 0) return;
@@ -557,10 +559,7 @@ export class SceneRenderer {
         c.fillStyle = `rgba(255,140,60,${1 - ph})`; c.fill();
       }
     }
-    const w = Math.max(14, m.r * 2.2);
-    rr(c, x - w / 2, top, w, 3.6, 1.2); fs(c, '#2a1f18', 0.7);
-    rr(c, x - w / 2 + 0.6, top + 0.6, ((w - 1.2) * Math.max(0, m.hp)) / m.max, 2.4, 0.8); c.fillStyle = '#d9434f'; c.fill();
-    if (m.armor) { c.font = '600 6px Oswald, sans-serif'; c.textAlign = 'right'; c.fillStyle = '#d6cfbd'; c.fillText('бр ' + m.armor, x - w / 2 - 1.5, top + 3.8); }
+    if (m.armor) { c.font = '600 6px Oswald, sans-serif'; c.textAlign = 'right'; c.fillStyle = '#d6cfbd'; c.fillText('бр ' + m.armor, x - m.r * 1.27 - 2, y - m.hop - 1); }
     if (!g.solid(m) && m.hp > 0 && S.phase !== 'over') {
       c.font = '600 6px Oswald, sans-serif'; c.textAlign = 'center'; c.fillStyle = '#d9f2ff';
       c.fillText('бесплотен', x, y + m.r * 0.64 + 8);

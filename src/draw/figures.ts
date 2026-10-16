@@ -5,7 +5,11 @@ import { HEROES, INK, type MobKind } from '../data';
 import { sprites } from '../assets';
 import { brow, circ, ell, eye, fs, lg, mix, pth, rg, rr, type Ctx, type Pt } from './util';
 
-export const BASE_TH = 3.2;
+export const BASE_TH = 4;
+
+/** Health colour: green when healthy, amber when hurt, red when nearly dead. */
+const hpCol = (f: number) => (f > 0.5 ? '#6fd35a' : f > 0.25 ? '#f2b53a' : '#ff4a4a');
+
 
 export interface MiniatureOpts {
   key: string;
@@ -20,11 +24,13 @@ export interface MiniatureOpts {
   flash: boolean;
   hop: number;
   alpha: number;
+  /** Current and maximum health, shown on the stand; left out for icons. */
+  hp?: { now: number; max: number };
   placeholder: (c: Ctx, x: number, y: number, flash: boolean) => void;
 }
 
 /** Round painted base, as on a board-game miniature. (x, y) is the centre of its bottom face. */
-export function drawBase(c: Ctx, x: number, y: number, R: number, col: string) {
+export function drawBase(c: Ctx, x: number, y: number, R: number, col: string, hp?: { now: number; max: number }) {
   const rx = R * 1.27, ry = R * 0.64, th = BASE_TH;
   c.beginPath();
   c.ellipse(x, y, rx, ry, 0, 0, Math.PI);
@@ -44,6 +50,34 @@ export function drawBase(c: Ctx, x: number, y: number, R: number, col: string) {
   c.beginPath();
   c.ellipse(x, y - th, rx * 0.62, ry * 0.6, 0, 0, Math.PI * 2);
   c.stroke();
+  if (hp) drawStandHp(c, x, y, rx, ry, th, hp.now, hp.max);
+}
+
+/** The front rim of the stand, between its top and bottom faces. */
+function sidePath(c: Ctx, x: number, y: number, rx: number, ry: number, th: number) {
+  c.beginPath();
+  c.ellipse(x, y, rx, ry, 0, 0, Math.PI);
+  c.lineTo(x - rx, y - th);
+  c.ellipse(x, y - th, rx, ry, 0, Math.PI, 0, true);
+  c.closePath();
+}
+
+function drawStandHp(c: Ctx, x: number, y: number, rx: number, ry: number, th: number, now: number, max: number) {
+  // the whole front rim of the stand is the health bar, draining from right to left
+  const f = Math.max(0, Math.min(1, now / max)), col = hpCol(f);
+  sidePath(c, x, y, rx, ry, th);
+  c.fillStyle = '#1d1410';
+  c.fill();
+  c.save();
+  sidePath(c, x, y, rx, ry, th);
+  c.clip();
+  c.fillStyle = lg(c, 0, y - th - ry, 0, y + ry, mix(col, '#ffffff', 0.35), mix(col, '#000000', 0.35));
+  c.fillRect(x - rx, y - th - ry, 2 * rx * f, th + 2 * ry + 1);
+  c.restore();
+  sidePath(c, x, y, rx, ry, th);
+  c.strokeStyle = 'rgba(0,0,0,.55)';
+  c.lineWidth = 0.5;
+  c.stroke();
 }
 
 export function drawMiniature(c: Ctx, o: MiniatureOpts) {
@@ -54,7 +88,7 @@ export function drawMiniature(c: Ctx, o: MiniatureOpts) {
   c.fillStyle = 'rgba(15,8,4,.38)';
   c.fill();
   const y = o.y - o.hop;
-  drawBase(c, o.x, y, r, o.baseCol);
+  drawBase(c, o.x, y, r, o.baseCol, o.hp);
   const feet = y - BASE_TH;
   const sp = sprites.get(o.key);
   c.save();
