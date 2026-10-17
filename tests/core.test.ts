@@ -227,6 +227,15 @@ describe('holes in the floor', () => {
   });
 });
 
+describe('hero health', () => {
+  it('starts each hero with its own health: the tank the most, Ricochet the least', () => {
+    const [bastion, ricochet, ash] = newParty();
+    for (const h of [bastion, ricochet, ash]) expect([h.hp, h.max]).toEqual([h.def.hp, h.def.hp]);
+    expect(bastion.max).toBeGreaterThan(ash.max);
+    expect(ash.max).toBeGreaterThan(ricochet.max);
+  });
+});
+
 describe('party size', () => {
   const kinds = ['fight', 'elite', 'treasure', 'boss'] as const;
   const specs = Array.from({ length: 120 }, (_, k) => {

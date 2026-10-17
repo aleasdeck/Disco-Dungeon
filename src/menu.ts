@@ -31,8 +31,8 @@ export function renderCollection(tab: 'heroes' | 'mobs') {
       card.className = 'card';
       const cv = document.createElement('canvas');
       drawPortrait(cv, { i, def });
-      // the same words as the disc upgrades: damage of a full straight throw, speed next to Ash's, speed kept off a wall
-      const stats = `<dt>Урон</dt><dd>${fullHit(def.m, def.pw)}</dd><dt>Скорость</dt><dd>${Math.round(def.pw * 100)}%</dd><dt>Отскок</dt><dd>${Math.round(def.e * 100)}%</dd>`;
+      // starting health, then the same words as the disc upgrades: damage of a full straight throw, speed next to Ash's, speed kept off a wall
+      const stats = `<dt>HP</dt><dd>${def.hp}</dd><dt>Урон</dt><dd>${fullHit(def.m, def.pw)}</dd><dt>Скорость</dt><dd>${Math.round(def.pw * 100)}%</dd><dt>Отскок</dt><dd>${Math.round(def.e * 100)}%</dd>`;
       card.innerHTML = `<div></div><div><h3 style="color:${def.col}">${def.name}</h3><p>${HERO_ROLES[i] ?? ''}. Способность «${def.ab}»: ${def.abTxt} ${def.abMore}</p>`
         + `<dl>${stats}<dt>Диск</dt><dd>${def.r * 2}</dd></dl></div>`;
       card.firstElementChild!.replaceWith(cv);
@@ -70,7 +70,7 @@ export function renderHeroSelect(picked: number, onPick: (hero: number) => void)
     box.appendChild(b);
   });
   const def = HEROES[picked];
-  $('heroInfo').innerHTML = `<b style="color:${def.col}">${def.name}</b>. ${HERO_ROLES[picked] ?? ''}. Урон ${fullHit(def.m, def.pw)}, скорость ${Math.round(def.pw * 100)}%, отскок ${Math.round(def.e * 100)}%. `
+  $('heroInfo').innerHTML = `<b style="color:${def.col}">${def.name}</b>. ${HERO_ROLES[picked] ?? ''}. HP ${def.hp}, урон ${fullHit(def.m, def.pw)}, скорость ${Math.round(def.pw * 100)}%, отскок ${Math.round(def.e * 100)}%. `
     + `Способность «${def.ab}»: ${def.abTxt}`;
 }
 

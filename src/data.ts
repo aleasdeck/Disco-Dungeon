@@ -220,6 +220,8 @@ export interface HeroDef {
   col: string;
   dk: string;
   skin: string;
+  /** Health at the start of a run: the tank has the most, the light fast disc the least. */
+  hp: number;
   r: number;
   m: number;
   e: number;
@@ -235,17 +237,17 @@ export interface HeroDef {
 
 export const HEROES: HeroDef[] = [
   {
-    key: 'bastion', name: 'Бастион', acc: 'Бастиона', dat: 'Бастиону', col: '#4f9a8f', dk: '#2b5a53', skin: '#e3a882', r: 6, m: 4, e: 0.55, fr: 1.1, pw: 0.75,
+    key: 'bastion', name: 'Бастион', acc: 'Бастиона', dat: 'Бастиону', col: '#4f9a8f', dk: '#2b5a53', skin: '#e3a882', hp: 30, r: 6, m: 4, e: 0.55, fr: 1.1, pw: 0.75,
     ab: 'Щитобой', abTxt: `До конца хода каждое попадание его диска по врагу даёт всем героям +${AB_SHIELD} щита.`, abCol: '#3fc4b6',
     abMore: 'Щиты копятся с каждым попаданием и держатся до следующего хода.',
   },
   {
-    key: 'ricochet', name: 'Рикошет', acc: 'Рикошета', dat: 'Рикошету', col: '#c9a03a', dk: '#6f5420', skin: '#e3a882', r: 4, m: 1.2, e: 0.95, fr: 0.8, pw: 1.25,
+    key: 'ricochet', name: 'Рикошет', acc: 'Рикошета', dat: 'Рикошету', col: '#c9a03a', dk: '#6f5420', skin: '#e3a882', hp: 18, r: 4, m: 1.2, e: 0.95, fr: 0.8, pw: 1.25,
     ab: 'Шальной диск', abTxt: `До конца хода его диски первые ${AB_BOUNCES} отскоков не теряют скорость, даже от врагов.`, abCol: '#ffd34d',
     abMore: 'Один бросок прошивает всю толпу, а слабый бросок всё равно летит быстро. Ресурс гасит такой диск, как обычный.',
   },
   {
-    key: 'ash', name: 'Пепельница', acc: 'Пепельницу', dat: 'Пепельнице', fem: true, col: '#b85a2e', dk: '#5e2a14', skin: '#d8b59a', r: 5, m: 2, e: 0.75, fr: 1, pw: 1,
+    key: 'ash', name: 'Пепельница', acc: 'Пепельницу', dat: 'Пепельнице', fem: true, col: '#b85a2e', dk: '#5e2a14', skin: '#d8b59a', hp: 22, r: 5, m: 2, e: 0.75, fr: 1, pw: 1,
     ab: 'Поджог', abTxt: `До конца хода каждое попадание её диска добавляет врагу ${AB_BURN} огня. Огонь копится.`, abCol: '#ff7a3d',
     abMore: 'В свой ход враг теряет столько HP, сколько на нём огня, сквозь броню, и огонь стихает на 1. С павшего огонь перекидывается на ближайшего врага.',
   },
