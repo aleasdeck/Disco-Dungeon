@@ -305,13 +305,12 @@ i.ico { display: inline-block; font-style: normal; }
 .ability:disabled { cursor: default; }
 .ability:disabled::after { filter: saturate(0.45) brightness(0.7); }
 .ability.full::after { background: linear-gradient(160deg, #c7b0ff, #8f6fe0 55%, #5a3aa8); }
-.ability.full { filter: var(--outline) drop-shadow(0 0 10px #c9a8ff); }
+.ability.full { filter: var(--outline) drop-shadow(0 0 12px #c9a8ff); }
+.ability.full:not(.on) { animation: ab-full 1.4s ease-in-out infinite; }
+@keyframes ab-full { 50% { filter: var(--outline) drop-shadow(0 0 26px #e2d4ff) brightness(1.18); } }
 .ability.on { filter: var(--outline) drop-shadow(0 0 12px var(--ab)); }
 .ability.on::before { background: var(--ab); }
 .ability:not(:disabled):active { transform: translateY(2px); }
-.pips { display: inline-flex; gap: 4px; }
-.pips i { width: 10px; height: 10px; transform: rotate(45deg); border: 2px solid #120c09; background: #2b2140; }
-.pips i.on { background: #e4d6ff; }
 
 /* the hero's card from the portrait */
 .hero-card {
@@ -351,7 +350,7 @@ i.ico { display: inline-block; font-style: normal; }
 .turn-btn:disabled:not(.enemy):not(.wait) { cursor: default; }
 @keyframes lit { 50% { filter: var(--outline) drop-shadow(0 5px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 26px rgba(255, 210, 90, 0.95)); } }
 @keyframes wait { 50% { opacity: 0.6; } }
-@media (prefers-reduced-motion: reduce) { .turn-btn.lit, .turn-btn.wait b, .spk.full i { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .turn-btn.lit, .turn-btn.wait b, .spk.full i, .ability.full { animation: none !important; } }
 
 /* ---------- a phone on its side: the same corners, smaller */
 @media (max-height: 520px) and (orientation: landscape) {
@@ -387,7 +386,6 @@ i.ico { display: inline-block; font-style: normal; }
   .spk { height: 9px; margin-right: -16px; padding-right: 18px; }
   .ability { left: calc(var(--pf-w) + 176px); width: 68px; height: 74px; padding-top: 6px; gap: 3px; }
   .ability b { font-size: 10px; }
-  .pips i { width: 7px; height: 7px; border-width: 1.5px; }
   .turn-btn { right: max(10px, env(safe-area-inset-right)); bottom: calc(8px + var(--safe-b)); width: 210px; height: 58px; }
   .turn-btn b { font-size: 22px; }
   .turn-btn.long b { font-size: 18px; }
@@ -436,7 +434,6 @@ i.ico { display: inline-block; font-style: normal; }
   .spk { height: 10px; margin-right: -22px; padding-right: 24px; }
   .ability { left: auto; right: 0; bottom: 0; width: 90px; height: 96px; padding-top: 8px; gap: 4px; }
   .ability b { font-size: 12px; }
-  .pips i { width: 8px; height: 8px; }
   .hero-card { bottom: calc(100% + 8px); }
   .turn-btn {
     left: 146px; right: 10px; bottom: calc(6px + var(--safe-b) + 68px); width: auto; height: 58px; padding: 0 86px 14px 6px;
@@ -775,6 +772,8 @@ i.ico { display: inline-block; font-style: normal; }
 .art-btn_gem .ability::before, .art-btn_gem .ability::after { display: none; }
 .art-btn_gem .ability:disabled { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) saturate(0.4) brightness(0.65); }
 .art-btn_gem .ability.full { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 12px #c9a8ff); }
+.art-btn_gem .ability.full:not(.on) { animation-name: ab-full-art; }
+@keyframes ab-full-art { 50% { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 26px #e2d4ff) brightness(1.22); } }
 .art-btn_gem .ability.on { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px var(--ab)); }
 .art-btn_gem .ability b { padding: 2px 5px; background: rgba(18, 12, 9, 0.6); }
 

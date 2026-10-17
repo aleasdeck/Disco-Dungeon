@@ -432,12 +432,11 @@ export class Hud {
     wrap.classList.toggle('lethal', dead);
     wrap.title = inc ? `Враги в этот ход снимут ${inc} HP, если их не остановить.` : '';
 
-    // the sparks bar runs into the ability button: three cells, one per spark; full, both light up
+    // the sparks bar runs into the ability button: three cells, one per spark; full, both light up and the button pulses
     const sp = Math.min(AB_COST, h.sparks), full = sp >= AB_COST;
     $('fSpk').querySelectorAll('i').forEach((c, k) => c.classList.toggle('on', k < sp));
     $('fSpk').classList.toggle('full', full);
     $('abName').textContent = h.def.ab;
-    $('abCost').innerHTML = Array.from({ length: AB_COST }, (_, k) => `<i class="${k < sp ? 'on' : ''}"></i>`).join('');
     const ab = $<HTMLButtonElement>('abBtn');
     ab.disabled = !g.canUseAbility();
     ab.classList.toggle('full', full);
