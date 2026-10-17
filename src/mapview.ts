@@ -3,7 +3,7 @@
 import { BIOMES, MOBS, ROOM_TYPES, type RoomType } from './data';
 import type { HeroState } from './game';
 import { uiArt } from './assets';
-import { art as pic, fillIcons, icon as ico } from './icons';
+import { fillIcons, icon as ico } from './icons';
 import { CASTS } from './room';
 import { FLOORS, reachable, type Run } from './run';
 import { faceUrl, mobFace } from './ui';
@@ -46,11 +46,13 @@ function icon(g: SVGGElement, type: RoomType, x: number, y: number) {
 }
 
 /** Map size in SVG units: tall, so a phone shows the whole floor without scrolling; the entrance sits under the first row. */
-const W = 320, H = 600;
+const W = 320, H = 672;
+/** A painted room's radius in those units; the boss's face is a little bigger. */
+const R_ROOM = 28, R_BOSS = 30;
 
-/** Online: each player's token on the room they point at, and a line on how the vote stands. */
+/** Online: each player's face on the room they point at, and a line on how the vote stands. */
 export interface MapVotes {
-  pips: Record<string, { col: string; name: string }[]>;
+  pips: Record<string, { col: string; name: string; face: string }[]>;
   /** The room this player points at. */
   mine: string | null;
   note: string;
@@ -73,14 +75,6 @@ const el = <K extends keyof SVGElementTagNameMap>(parent: Element, tag: K, at: R
 export class MapView {
   info = '';
   onChoose: (id: string) => void = () => {};
-  /** The room whose card is open under the map. */
-  private peek: string | null = null;
-  /** How the last press on the map came: a touch shows what is in a room first, a mouse goes straight in. */
-  private touch = false;
-
-  constructor() {
-    $('map').addEventListener('pointerdown', e => { this.touch = e.pointerType !== 'mouse'; });
-  }
 
   render(run: Run, canChoose: boolean, party: MapParty, votes?: MapVotes) {
     const f = run.floor, layers = run.floors[f];
@@ -91,13 +85,12 @@ export class MapView {
     const svg = $('map');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.innerHTML = '';
-    // layer 0 at the bottom; rooms of a layer spread across, zigzagging a little so the paths read
+    // layer 0 at the bottom; rooms of a layer spread across, zigzagging a little so the paths read; a pair stands wider so its names don't touch
     const pos: Record<string, [number, number]> = {};
     layers.forEach((L, l) => L.forEach((n, i) => {
-      pos[n.id] = [W / 2 + (i - (L.length - 1) / 2) * 104 + (l % 2 ? 8 : -8) * (L.length > 1 ? 1 : 0), H - 86 - l * ((H - 144) / (layers.length - 1))];
+      pos[n.id] = [W / 2 + (i - (L.length - 1) / 2) * (L.length > 2 ? 104 : 124) + (l % 2 ? 8 : -8) * (L.length > 1 ? 1 : 0), H - 92 - l * ((H - 150) / (layers.length - 1))];
     }));
     const path = run.path[f], reach = canChoose ? reachable(run, f) : [], gate: [number, number] = [W / 2, H - 22];
-    if (this.peek && !pos[this.peek]) this.peek = null;
     const gl = el(svg, 'g', {});
     const edge = (a: [number, number], b: [number, number], cls: string) =>
       el(gl, 'path', { d: `M${a[0]} ${a[1]}C${a[0]} ${(a[1] + b[1]) / 2} ${b[0]} ${(a[1] + b[1]) / 2} ${b[0]} ${b[1]}`, class: cls });
@@ -114,9 +107,11 @@ export class MapView {
       const isR = reach.includes(n.id), isV = path.includes(n.id), isCur = path[path.length - 1] === n.id;
       const past = !isV && n.l < path.length;
       g.setAttribute('class', 'mnode' + (isR ? ' reach' : '') + (isV ? ' visited' : '') + (isCur ? ' cur' : '') + (past ? ' past' : '')
-        + (isR && votes?.mine === n.id ? ' mine' : '') + (this.peek === n.id ? ' peek' : ''));
+        + (isR && votes?.mine === n.id ? ' mine' : ''));
       g.dataset.id = n.id;
-      const boss = n.type === 'boss', r = boss ? 24 : 19, pic = boss ? undefined : uiArt.get('room_' + n.type);
+      const boss = n.type === 'boss', r = boss ? R_BOSS : R_ROOM, pic = boss ? undefined : uiArt.get('room_' + n.type);
+      // what is in the room, for a mouse resting on it
+      el(g, 'title', {}).textContent = `${t.name}. ${boss ? `${MOBS[CASTS[f].boss].name} со свитой.` : t.txt}`;
       if (pic) {
         // a painted room is its own token: no disc under it, and it glows instead of a ring when it can be picked
         g.classList.add('art');
@@ -132,31 +127,25 @@ export class MapView {
         el(clip, 'circle', { cx: x, cy: y, r: r - 2 });
         el(g, 'image', { href: mobFace(CASTS[f].boss), x: x - r, y: y - r, width: r * 2, height: r * 2, 'clip-path': 'url(#bossFace)', preserveAspectRatio: 'xMidYMid slice' });
         el(g, 'circle', { cx: x, cy: y, r, class: 'rim' });
-        el(g, 'path', { d: `M${x - 11} ${y - r + 3}L${x - 12} ${y - r - 9}L${x - 5} ${y - r - 3}L${x} ${y - r - 12}L${x + 5} ${y - r - 3}L${x + 12} ${y - r - 9}L${x + 11} ${y - r + 3}Z`, class: 'crown' });
+        el(g, 'path', { d: `M${x - 13} ${y - r + 4}L${x - 14} ${y - r - 10}L${x - 6} ${y - r - 3}L${x} ${y - r - 14}L${x + 6} ${y - r - 3}L${x + 14} ${y - r - 10}L${x + 13} ${y - r + 4}Z`, class: 'crown' });
       } else if (!pic) icon(g, n.type, x, y);
       el(g, 'text', { x, y: y + r + (pic ? 17 : 14), class: 'mlabel' }).textContent = t.name;
-      // the players' tokens sit on the room's top rim, in their heroes' colours
+      // the players' heroes stand on the room's top rim, each face in its hero's colour
       const ps = votes?.pips[n.id] ?? [];
       ps.forEach((p, k) => {
-        const px = x + (k - (ps.length - 1) / 2) * 19, py = y - r - 3;
+        const px = x + (k - (ps.length - 1) / 2) * 24, py = y - r + 4, id = `pip${n.id}-${k}`;
         const pg = el(g, 'g', { class: 'pip' });
         el(pg, 'title', {}).textContent = p.name;
-        el(pg, 'circle', { cx: px, cy: py, r: 9, fill: p.col });
-        el(pg, 'text', { x: px, y: py + 4.5 }).textContent = p.name.slice(0, 1).toUpperCase();
+        el(el(el(pg, 'defs', {}), 'clipPath', { id }), 'circle', { cx: px, cy: py, r: 11 });
+        el(pg, 'circle', { cx: px, cy: py, r: 13, fill: p.col });
+        el(pg, 'image', { href: p.face, x: px - 11, y: py - 11, width: 22, height: 22, 'clip-path': `url(#${id})` });
       });
       g.setAttribute('tabindex', '0');
       g.setAttribute('role', 'button');
       g.setAttribute('aria-label', t.name + (isR ? '' : isV ? ', пройдена' : ''));
-      g.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') this.show(n.id, run, canChoose); });
-      g.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && this.peek === n.id) this.show(null, run, canChoose); });
-      g.addEventListener('click', () => {
-        // a touch opens the room's card first and the second tap goes in; a mouse sees the card on hover already
-        if (isR && (!this.touch || this.peek === n.id)) { this.peek = null; this.onChoose(n.id); }
-        else this.show(n.id, run, canChoose);
-      });
-      g.addEventListener('keydown', e => { if (isR && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); this.peek = null; this.onChoose(n.id); } });
-      // the keyboard sees the card as it moves along; a tap also focuses the room, but the tap itself decides
-      g.addEventListener('focus', () => { if (g.matches(':focus-visible') && this.peek !== n.id) this.show(n.id, run, canChoose); });
+      // one tap goes in; online it is the player's vote, and the party goes once everyone tapped the same room
+      g.addEventListener('click', () => { if (isR) this.onChoose(n.id); });
+      g.addEventListener('keydown', e => { if (isR && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); this.onChoose(n.id); } });
     }
     // the party's token: the heroes' faces on the room they are in, or at the stairs before the first room
     const at = path.length ? pos[path[path.length - 1]] : gate, hs = party.heroes;
@@ -168,31 +157,12 @@ export class MapView {
       el(tok, 'circle', { cx: tx, cy: ty, r: 15, fill: h.def.col, class: 'tk-rim' + (h === party.me ? ' me' : '') });
       el(tok, 'image', { href: faceUrl(h), x: tx - 13, y: ty - 13, width: 26, height: 26, 'clip-path': `url(#${id})`, opacity: h.hp > 0 ? 1 : 0.4 });
     });
-    this.card(run, canChoose);
     // only the result of a rest room shows here; the map itself needs no explaining
     $('mapInfo').innerHTML = this.info;
     $('mapInfo').hidden = !this.info;
     fillIcons($('mapInfo'));
     $('mapVotes').textContent = votes?.note ?? '';
     $('mapVotes').hidden = !votes;
-  }
-
-  /** Open (or close) the card of a room under the map. */
-  private show(id: string | null, run: Run, canChoose: boolean) {
-    this.peek = id;
-    document.querySelectorAll<SVGGElement>('#map .mnode').forEach(g => g.classList.toggle('peek', g.dataset.id === id));
-    this.card(run, canChoose);
-  }
-
-  /** What is in the room picked on the map, and on a phone the button that goes there. */
-  private card(run: Run, canChoose: boolean) {
-    const box = $('mapPeek'), f = run.floor, n = this.peek ? run.floors[f].flat().find(o => o.id === this.peek) : undefined;
-    box.classList.toggle('off', !n);
-    if (!n) { box.innerHTML = ''; return; }
-    const t = ROOM_TYPES[n.type], go = canChoose && reachable(run, f).includes(n.id);
-    const txt = n.type === 'boss' ? `${MOBS[CASTS[f].boss].name} со свитой.` : t.txt;
-    box.innerHTML = pic(n.type === 'boss' ? '' : 'room_' + n.type) + `<p><b>${t.name}.</b> ${txt}</p>` + (go && this.touch ? `<button class="btn big" id="mapGo">Идём</button>` : '');
-    box.querySelector('#mapGo')?.addEventListener('click', () => { this.peek = null; this.onChoose(n.id); });
   }
 
   /** The heroes' health and the party's ore over the map: enough to choose between a camp and a fight. */
