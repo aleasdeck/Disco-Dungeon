@@ -72,9 +72,9 @@ const sameSpec = (a: RoomSpec, b: RoomSpec) => a.seed === b.seed && a.depth === 
 /** Make the client's game match the host's. Returns true when the party or the room changed (the HUD and camera need a rebuild). */
 export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boolean } {
   let party = false, room = false;
-  // an old save: the party's pool is shared out hero by hero, as much as each can hold
-  const { sparks: _pool, ...bank } = s.bank;
-  let pool = s.bank.sparks ?? 0;
+  // a save from before sparks were each hero's own: the party's pool is shared out hero by hero, as much as each can hold
+  const { sparks: old = 0, ...bank } = s.bank;
+  let pool = old;
   const heroes = s.heroes.map(h => {
     if ((h as Partial<HeroSnap>).sparks !== undefined) return h;
     const n = Math.min(AB_COST, pool);

@@ -962,6 +962,7 @@ export class Game {
     return this.bodies().some(d => Math.hypot(d.vx, d.vy) > 2) || this.S.discs.some(d => d.fall && !d.gone);
   }
 
+  /** Every living hero has thrown all its discs; the turn still waits for the players to end it. */
   allThrown() { return this.alive().every(h => h.hand === 0); }
 
   /** Every living hero's player has pressed «Конец хода»; the fallen never hold the turn up. */
