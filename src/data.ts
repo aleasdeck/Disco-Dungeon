@@ -144,44 +144,48 @@ export interface MobDef {
   /** Spends odd turns lighting a bomb and throws it for double damage on even turns. */
   charge?: boolean;
   txt: string;
+  /** The name in the accusative, for the enemy-turn journal: «подлечила Скелета». */
+  acc: string;
+  /** A feminine name: the journal says «ударила», not «ударил». */
+  fem?: boolean;
 }
 
 /** Every enemy is in the room from the start (no reinforcements) and a room holds only a few, so each gets this much more HP. */
 export const MOB_HP_MUL = 1.25;
 
 export const MOBS: Record<MobKind, MobDef> = {
-  skel: { name: 'Скелет', floor: 0, hp: 9, r: 7, speed: 34, reach: 30, dmg: 4, fig: 31, txt: 'Идёт к ближайшему герою и бьёт вблизи.' },
-  archer: { name: 'Гоблин-лучник', floor: 0, hp: 6, r: 6, speed: 0, reach: 999, dmg: 3, fig: 26, txt: 'Стоит на месте и стреляет через всю комнату.' },
-  rat: { name: 'Тюремная крыса', floor: 0, hp: 5, r: 6, speed: 64, reach: 26, dmg: 3, fig: 18, txt: 'Хилая, но очень быстрая: добегает до рун за ход-два.' },
+  skel: { name: 'Скелет', floor: 0, hp: 9, r: 7, speed: 34, reach: 30, dmg: 4, fig: 31, txt: 'Идёт к ближайшему герою и бьёт вблизи.', acc: 'Скелета' },
+  archer: { name: 'Гоблин-лучник', floor: 0, hp: 6, r: 6, speed: 0, reach: 999, dmg: 3, fig: 26, txt: 'Стоит на месте и стреляет через всю комнату.', acc: 'Гоблина-лучника' },
+  rat: { name: 'Тюремная крыса', floor: 0, hp: 5, r: 6, speed: 64, reach: 26, dmg: 3, fig: 18, txt: 'Хилая, но очень быстрая: добегает до рун за ход-два.', acc: 'Тюремную крысу', fem: true },
   necro: {
-    name: 'Некромант', floor: 0, hp: 12, r: 8, speed: 0, reach: 999, dmg: 2, fig: 36,
+    name: 'Некромант', acc: 'Некроманта', floor: 0, hp: 12, r: 8, speed: 0, reach: 999, dmg: 2, fig: 36,
     acts: [{ k: 'summon', every: 2, at: 0, n: 1, kind: 'skel', cap: 3 }],
     txt: 'Каждый второй ход поднимает скелета из светящегося круга. Круг видно заранее: убей некроманта, пока не поздно.',
   },
   king: {
-    size: 2, name: 'Король-в-короне', floor: 0, boss: true, hp: 60, r: 15, speed: 10, reach: 40, dmg: 9, armor: 3, fig: 50,
+    size: 2, name: 'Король-в-короне', acc: 'Короля-в-короне', floor: 0, boss: true, hp: 60, r: 15, speed: 10, reach: 40, dmg: 9, armor: 3, fig: 50,
     acts: [{ k: 'slam', every: 3, at: 0 }],
     txt: 'Босс казематов. Каждый третий ход бьёт скипетром об пол и задевает весь отряд.',
   },
-  ghoul: { name: 'Ледяной упырь', floor: 1, hp: 10, r: 7, speed: 36, reach: 30, dmg: 4, fig: 30, chill: true, txt: 'Бьёт вблизи и морозит: следующий бросок героя слабее.' },
-  ghost: { name: 'Призрак', floor: 1, hp: 7, r: 7, speed: 0, reach: 999, dmg: 3, fig: 30, ghost: true, txt: 'Стреляет издалека. Каждый второй ход бесплотен: диски пролетают насквозь.' },
-  yeti: { name: 'Йети', floor: 1, hp: 22, r: 9, speed: 18, reach: 34, dmg: 6, armor: 2, fig: 38, txt: 'Толстая шкура, броня 2. Медленный, но бьёт больно.' },
+  ghoul: { name: 'Ледяной упырь', floor: 1, hp: 10, r: 7, speed: 36, reach: 30, dmg: 4, fig: 30, chill: true, txt: 'Бьёт вблизи и морозит: следующий бросок героя слабее.', acc: 'Ледяного упыря' },
+  ghost: { name: 'Призрак', floor: 1, hp: 7, r: 7, speed: 0, reach: 999, dmg: 3, fig: 30, ghost: true, txt: 'Стреляет издалека. Каждый второй ход бесплотен: диски пролетают насквозь.', acc: 'Призрака' },
+  yeti: { name: 'Йети', floor: 1, hp: 22, r: 9, speed: 18, reach: 34, dmg: 6, armor: 2, fig: 38, txt: 'Толстая шкура, броня 2. Медленный, но бьёт больно.', acc: 'Йети' },
   witch: {
-    name: 'Ледяная ведьма', floor: 1, hp: 14, r: 8, speed: 0, reach: 999, dmg: 2, fig: 36,
+    name: 'Ледяная ведьма', acc: 'Ледяную ведьму', fem: true, floor: 1, hp: 14, r: 8, speed: 0, reach: 999, dmg: 2, fig: 36,
     acts: [{ k: 'heal', every: 2, at: 0, amt: 8 }],
     txt: 'Каждый второй ход лечит самого раненого моба на 8.',
   },
   lich: {
-    size: 2, name: 'Ледяной лич', floor: 1, boss: true, hp: 64, r: 14, speed: 0, reach: 999, dmg: 6, armor: 2, fig: 52,
+    size: 2, name: 'Ледяной лич', acc: 'Ледяного лича', floor: 1, boss: true, hp: 64, r: 14, speed: 0, reach: 999, dmg: 6, armor: 2, fig: 52,
     acts: [{ k: 'summon', every: 3, at: 2, n: 2, kind: 'ghoul', cap: 4 }, { k: 'slam', every: 3, at: 0, chill: true }],
     txt: 'Босс склепа. Призывает упырей из ледяных кругов, а следом насылает метель на весь отряд.',
   },
-  imp: { name: 'Бес-кочегар', floor: 2, hp: 7, r: 6, speed: 52, reach: 28, dmg: 3, fig: 24, fire: true, txt: 'Шустрый, поджигает: герой горит и в следующий ход теряет ещё 2.' },
-  slime: { name: 'Лавовый слизень', floor: 2, hp: 14, r: 9, speed: 20, reach: 30, dmg: 5, fig: 24, lava: true, txt: 'Толстый и медленный. Где лопнет, там остаётся лужа лавы.' },
-  bomber: { name: 'Гном-подрывник', floor: 2, hp: 8, r: 7, speed: 0, reach: 999, dmg: 4, fig: 28, charge: true, txt: 'Ход поджигает фитиль, следующий ход кидает бомбу на двойной урон.' },
-  golem: { name: 'Голем', floor: 2, hp: 26, r: 9, speed: 14, reach: 34, dmg: 7, armor: 3, fig: 38, txt: 'Броня 3: удары слабее не проходят.' },
+  imp: { name: 'Бес-кочегар', floor: 2, hp: 7, r: 6, speed: 52, reach: 28, dmg: 3, fig: 24, fire: true, txt: 'Шустрый, поджигает: герой горит и в следующий ход теряет ещё 2.', acc: 'Беса-кочегара' },
+  slime: { name: 'Лавовый слизень', floor: 2, hp: 14, r: 9, speed: 20, reach: 30, dmg: 5, fig: 24, lava: true, txt: 'Толстый и медленный. Где лопнет, там остаётся лужа лавы.', acc: 'Лавового слизня' },
+  bomber: { name: 'Гном-подрывник', floor: 2, hp: 8, r: 7, speed: 0, reach: 999, dmg: 4, fig: 28, charge: true, txt: 'Ход поджигает фитиль, следующий ход кидает бомбу на двойной урон.', acc: 'Гнома-подрывника' },
+  golem: { name: 'Голем', floor: 2, hp: 26, r: 9, speed: 14, reach: 34, dmg: 7, armor: 3, fig: 38, txt: 'Броня 3: удары слабее не проходят.', acc: 'Голема' },
   forgelord: {
-    size: 2, name: 'Владыка кузни', floor: 2, boss: true, hp: 70, r: 15, speed: 12, reach: 44, dmg: 9, armor: 4, fig: 54, rage: true,
+    size: 2, name: 'Владыка кузни', acc: 'Владыку кузни', floor: 2, boss: true, hp: 70, r: 15, speed: 12, reach: 44, dmg: 9, armor: 4, fig: 54, rage: true,
     acts: [{ k: 'heat', every: 3, at: 0, n: 2 }],
     txt: 'Босс кузни, броня 4. Каждый третий ход раскаляет пол перед рунами, а раненый впадает в ярость (+3 к удару).',
   },
@@ -206,6 +210,11 @@ export type StatKey = 'm' | 'pw' | 'e';
 export interface HeroDef {
   key: string;
   name: string;
+  /** The name in the accusative and the dative, for the enemy-turn journal: «ударил Бастиона», «идёт к Бастиону». */
+  acc: string;
+  dat: string;
+  /** A feminine name: the journal says «пала», not «пал». */
+  fem?: boolean;
   col: string;
   dk: string;
   skin: string;
@@ -224,17 +233,17 @@ export interface HeroDef {
 
 export const HEROES: HeroDef[] = [
   {
-    key: 'bastion', name: 'Бастион', col: '#4f9a8f', dk: '#2b5a53', skin: '#e3a882', r: 6, m: 4, e: 0.55, fr: 1.1, pw: 0.75,
+    key: 'bastion', name: 'Бастион', acc: 'Бастиона', dat: 'Бастиону', col: '#4f9a8f', dk: '#2b5a53', skin: '#e3a882', r: 6, m: 4, e: 0.55, fr: 1.1, pw: 0.75,
     ab: 'Щитобой', abTxt: `До конца хода каждое попадание его диска по врагу даёт всем героям +${AB_SHIELD} щита.`, abCol: '#3fc4b6',
     abMore: 'Щиты копятся с каждым попаданием и держатся до следующего хода.',
   },
   {
-    key: 'ricochet', name: 'Рикошет', col: '#c9a03a', dk: '#6f5420', skin: '#e3a882', r: 4, m: 1.2, e: 0.95, fr: 0.8, pw: 1.25,
+    key: 'ricochet', name: 'Рикошет', acc: 'Рикошета', dat: 'Рикошету', col: '#c9a03a', dk: '#6f5420', skin: '#e3a882', r: 4, m: 1.2, e: 0.95, fr: 0.8, pw: 1.25,
     ab: 'Шальной диск', abTxt: `До конца хода его диски первые ${AB_BOUNCES} отскоков не теряют скорость, даже от врагов.`, abCol: '#ffd34d',
     abMore: 'Один бросок прошивает всю толпу, а слабый бросок всё равно летит быстро. Ресурс гасит такой диск, как обычный.',
   },
   {
-    key: 'ash', name: 'Пепельница', col: '#b85a2e', dk: '#5e2a14', skin: '#d8b59a', r: 5, m: 2, e: 0.75, fr: 1, pw: 1,
+    key: 'ash', name: 'Пепельница', acc: 'Пепельницу', dat: 'Пепельнице', fem: true, col: '#b85a2e', dk: '#5e2a14', skin: '#d8b59a', r: 5, m: 2, e: 0.75, fr: 1, pw: 1,
     ab: 'Поджог', abTxt: `До конца хода каждое попадание её диска добавляет врагу ${AB_BURN} огня. Огонь копится.`, abCol: '#ff7a3d',
     abMore: 'В свой ход враг теряет столько HP, сколько на нём огня, сквозь броню, и огонь стихает на 1. С павшего огонь перекидывается на ближайшего врага.',
   },

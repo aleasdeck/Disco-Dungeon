@@ -32,6 +32,8 @@ export interface HeroState {
   fire: number;
   /** The ability is on for the rest of this turn: the discs thrown now shield, set on fire or keep their speed. */
   boost: boolean;
+  /** Sparks for the ability, 0 to AB_COST: each hero gathers its own with its discs, and they last one fight. */
+  sparks: number;
   /** The last knock it took: the figure rocks on its stand for a moment. */
   knock?: Knock;
 }
@@ -86,6 +88,10 @@ export interface State extends Layout {
   shake: number;
   /** Heroes (by `i`) whose players pressed "ready" during placement in an online game. */
   ready: number[];
+  /** Heroes (by `i`) whose players pressed «Конец хода» this turn: the enemies go once every living hero is here. */
+  done: number[];
+  /** The enemy-turn journal, oldest first: a line for each thing the enemies did, the room's last LOG_MAX of them. */
+  log: { turn: number; txt: string }[];
 }
 
 /** What a player can do to the shared game; online clients send these to the host instead of applying them. */
@@ -95,7 +101,8 @@ export type Action =
   | { k: 'disc'; h: number }
   | { k: 'up'; h: number; stat: StatKey }
   | { k: 'ability'; h: number }
-  | { k: 'ready'; h: number };
+  | { k: 'ready'; h: number }
+  | { k: 'end'; h: number; on: boolean };
 
 const STEP = 1 / 120;
 
@@ -108,6 +115,16 @@ const LEAD = 1, CELL_T = 0.14, BEAT = 0.18, AFTER = 0.35;
 
 /** Seconds a hero takes to hop over to where its last disc stopped. */
 const HOP_T = 0.45;
+
+/** Lines the enemy-turn journal keeps. */
+const LOG_MAX = 40;
+
+/** What the HUD calls a mob's special move. */
+const SPECIAL = { summon: 'призыв', heal: 'лечение', heat: 'жар', charge: 'фитиль' };
+const specialName = (k: keyof typeof SPECIAL | 'slam', chill?: boolean) => (k === 'slam' ? (chill ? 'метель' : 'удар по всем') : SPECIAL[k]);
+
+/** A past-tense verb agreeing with whoever did it: «ударил», «ударила». */
+const did = (o: { fem?: boolean }, he: string, she = he + 'а') => (o.fem ? she : he);
 
 type Pt = { x: number; y: number };
 
@@ -127,13 +144,14 @@ export function pointAt(w: Pt[], d: number): Pt {
 }
 
 /**
- * Ore and sparks belong to the whole party: any hero's hit fills the pool, any hero spends from it.
- * Ore lasts the whole run; sparks are for one fight only, and every fight starts with `boon` of them (usually none).
+ * Ore belongs to the whole party: any hero's hit fills the pool, any hero spends from it, and it lasts the whole run.
+ * Sparks are each hero's own (`HeroState.sparks`) and last one fight; every hero starts the next one with `boon` of them
+ * (the altar's gift, usually none).
  */
-export interface Bank { ore: number; sparks: number; boon?: number }
+export interface Bank { ore: number; boon?: number }
 
 export function newBank(): Bank {
-  return { ore: 0, sparks: 0, boon: 0 };
+  return { ore: 0, boon: 0 };
 }
 
 /** A fresh party; `picks` lists which heroes (by index into HEROES) take part, all of them by default. */
@@ -144,7 +162,7 @@ export function newParty(picks: number[] = HEROES.map((_, i) => i)): HeroState[]
 function heroStart() {
   return {
     hp: 22, max: 22, shield: 0, up: { m: 0, pw: 0, e: 0 }, discs: HAND_START,
-    pad: null as number | null, at: null as Pt | null, from: null as Pt | null, leap: 0, hand: HAND_START, thrown: false, flash: 0, chill: 0, fire: 0, boost: false,
+    pad: null as number | null, at: null as Pt | null, from: null as Pt | null, leap: 0, hand: HAND_START, thrown: false, flash: 0, chill: 0, fire: 0, boost: false, sparks: 0,
   };
 }
 
@@ -152,7 +170,9 @@ export class Game {
   S!: State;
   act = 0;
   party: HeroState[] = newParty();
-  bank: Bank = newBank();
+  private kept = this.withSparks(newBank());
+  get bank(): Bank & { readonly sparks: number } { return this.kept; }
+  set bank(b: Bank) { this.kept = this.withSparks(b); }
   onChange: () => void = () => {};
   onRoomEnd: (win: boolean) => void = () => {};
   /** Which heroes this screen may move, aim and select (online: only the player's own). */
@@ -170,17 +190,26 @@ export class Game {
   /** Host: the disc each hero is hopping over to; it picks the disc up once it lands. */
   private pickup = new Map<HeroState, Disc>();
 
+  /**
+   * Temporary, until the HUD reads sparks off the hero: `bank.sparks` gives the selected hero's own, where the party's pool
+   * used to be. Not enumerable, so snapshots and saves never carry it.
+   */
+  private withSparks(b: Bank) {
+    Object.defineProperty(b, 'sparks', { get: () => (this.S ? this.hero?.sparks ?? 0 : 0), configurable: true });
+    return b as Bank & { readonly sparks: number };
+  }
+
   /** Start a fight in a new room; unless the spec says otherwise, the room is built for the party's size. */
   loadRoom(spec: RoomSpec) {
     spec = { ...spec, heroes: spec.heroes ?? this.party.length };
     const L = generate(spec);
     this.forge = 0;
     this.pickup.clear();
-    for (const h of this.party) Object.assign(h, { pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0, chill: 0, fire: 0, boost: false });
-    // sparks don't carry over: every fight starts afresh
-    this.bank.sparks = this.bank.boon ?? 0;
+    // sparks don't carry over: every fight starts without them, or full after the altar
+    const boon = Math.min(AB_COST, this.bank.boon ?? 0);
+    for (const h of this.party) Object.assign(h, { pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0, chill: 0, fire: 0, boost: false, sparks: boon });
     this.bank.boon = 0;
-    this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [] };
+    this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [] };
     // every rune starts empty: the players put their heroes on them before the fight
     this.pickActive();
     this.pickIntents();
@@ -190,7 +219,7 @@ export class Game {
 
   /** Online client: rebuild a room from its spec (rooms are generated from the seed), state comes from the host. */
   showRoom(spec: RoomSpec) {
-    this.S = { ...generate(spec), spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [] };
+    this.S = { ...generate(spec), spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [] };
     this.pickActive();
   }
 
@@ -292,11 +321,45 @@ export class Game {
     this.onChange();
   }
 
+  /** This hero's player has pressed «Конец хода» this turn. */
+  ended(h = this.hero) {
+    return this.S.done.includes(h.i);
+  }
+
+  /** The player may say they are done with this turn: it is the heroes' turn, the hero stands, is theirs to move and isn't done yet. */
+  canEndTurn(h = this.hero) {
+    return this.mayEnd(h) && this.canControl(h);
+  }
+
+  private mayEnd(h: HeroState) {
+    return this.S.phase === 'throw' && h.hp > 0 && !this.ended(h);
+  }
+
+  /**
+   * The player is done with this turn: the hero throws no more, and discs left in hand are lost. The enemies go once
+   * every living hero's player has pressed it and the discs have stopped; alone that is at once.
+   */
+  endTurn(h = this.hero) {
+    if (!this.mayEnd(h)) return;
+    if (this.send) { this.send({ k: 'end', h: h.i, on: true }); return; }
+    this.S.done.push(h.i);
+    this.onChange();
+  }
+
+  /** Take the press back while the heroes' turn lasts: the hero may throw again. */
+  cancelEndTurn(h = this.hero) {
+    const S = this.S;
+    if (S.phase !== 'throw' || !this.ended(h)) return;
+    if (this.send) { this.send({ k: 'end', h: h.i, on: false }); return; }
+    S.done = S.done.filter(i => i !== h.i);
+    this.onChange();
+  }
+
   /** Throw the hero's next disc. (dx, dy) is the pull-back vector in world units, up to 60. */
   throwDisc(h: HeroState, dx: number, dy: number) {
     const S = this.S;
     const p = this.spot(h);
-    if (S.phase !== 'throw' || h.hand <= 0 || !p || h.hp <= 0) return;
+    if (S.phase !== 'throw' || h.hand <= 0 || !p || h.hp <= 0 || this.ended(h)) return;
     const L = Math.hypot(dx, dy);
     if (L < 4) return;
     if (this.send) { this.send({ k: 'throw', h: h.i, dx, dy }); return; }
@@ -392,15 +455,18 @@ export class Game {
     this.onChange();
   }
 
-  /** An ability works through the discs thrown after it, so it needs a disc still in hand, and it goes on once a turn. */
+  /**
+   * An ability works through the discs thrown after it, so it needs a disc still in hand and a hero still throwing,
+   * and it goes on once a turn on the hero's own sparks.
+   */
   canUseAbility(h = this.hero) {
-    return this.S.phase === 'throw' && h.hp > 0 && h.hand > 0 && !h.boost && this.bank.sparks >= AB_COST && this.liveMobs().length > 0;
+    return this.S.phase === 'throw' && h.hp > 0 && h.hand > 0 && !h.boost && !this.ended(h) && h.sparks >= AB_COST && this.liveMobs().length > 0;
   }
 
   useAbility(h = this.hero) {
     if (!this.canUseAbility(h)) return;
     if (this.send) { this.send({ k: 'ability', h: h.i }); return; }
-    this.bank.sparks -= AB_COST;
+    h.sparks -= AB_COST;
     h.boost = true;
     const p = this.spot(h);
     if (p) {
@@ -437,6 +503,7 @@ export class Game {
     else if (a.k === 'up') this.upgrade(a.stat, h);
     else if (a.k === 'ability') this.useAbility(h);
     else if (a.k === 'ready') this.startFight(h);
+    else if (a.k === 'end') { if (a.on) this.endTurn(h); else this.cancelEndTurn(h); }
   }
 
   // ------------------------------------------------------------ intents
@@ -470,6 +537,39 @@ export class Game {
   acted(m: Mob) {
     const S = this.S, k = S.mobs.indexOf(m);
     return S.phase === 'enemy' && (k < S.actor || (k === S.actor && S.attacked));
+  }
+
+  /**
+   * The special move a mob makes next and in how many enemy turns, 0 for the coming one (or the one under way, until the
+   * mob has moved), by the rules that pick its intents: summons, heals, slams and heat on their turns, a bomber's fuse on
+   * odd ones. Null for a mob without one. A turn to come counts if the move can happen as things stand: a summoner with
+   * its risen at their limit has no summon coming until one falls, a healer left alone has nobody to mend.
+   */
+  specialIn(m: Mob): { name: string; turns: number } | null {
+    const S = this.S, d = MOBS[m.k], it = m.intent;
+    if (m.hp <= 0 || S.phase === 'over' || (!d.acts && !d.charge)) return null;
+    // the move picked for this turn, unless it is made already or has come to nothing (the one to heal has fallen)
+    if (it && it.t !== 'hit' && it.t !== 'move' && !this.acted(m) && !this.idle(m)) return { name: specialName(it.t, it.chill), turns: 0 };
+    for (let k = 1; k <= 6; k++) {
+      const t = S.turn + k, a = d.acts?.find(o => t % o.every === o.at && this.able(m, o));
+      if (a) return { name: specialName(a.k, a.chill), turns: k };
+      if (d.charge && t % 2 === 1) return { name: SPECIAL.charge, turns: k };
+    }
+    return null;
+  }
+
+  /** Whether a mob could make its special act now: room and a limit left to summon, someone else standing to heal. */
+  private able(m: Mob, a: MobAct) {
+    if (a.k === 'summon') return this.risen(m, a) > 0;
+    if (a.k === 'heal') return this.liveMobs().some(o => o !== m);
+    return true;
+  }
+
+  /** How many mobs a summon raises now: fewer for a smaller party, never past the summoner's limit or a crowded room. */
+  private risen(m: Mob, a: MobAct) {
+    const S = this.S, mi = S.mobs.indexOf(m), k = partyScale(S.spec).mobs;
+    const mine = S.mobs.filter(o => o.hp > 0 && o.owner === mi).length;
+    return Math.min(Math.max(1, Math.round((a.n ?? 1) * k)), Math.max(1, Math.round((a.cap ?? 3) * k)) - mine, 9 - this.liveMobs().length);
   }
 
   pickIntents() {
@@ -525,7 +625,7 @@ export class Game {
 
   /** The intent for a mob's special act this turn, or null when it can't do it (nobody to heal, no room to summon). */
   private special(m: Mob, a: MobAct, hs: HeroState[], taken: { x: number; y: number }[]): Intent | null {
-    const S = this.S, mi = S.mobs.indexOf(m);
+    const S = this.S;
     if (a.k === 'slam') return { t: 'slam', hero: -1, dmg: Math.ceil(m.dmg * (a.chill ? 0.5 : 0.6)), chill: a.chill };
     if (a.k === 'heal') {
       const hurt = this.liveMobs().filter(o => o !== m && o.hp < o.max).sort((p, q) => p.hp / p.max - q.hp / q.max)[0];
@@ -534,8 +634,7 @@ export class Game {
     }
     if (a.k === 'summon') {
       // a smaller party faces fewer risen mobs, like it faces fewer enemies from the start
-      const mine = S.mobs.filter(o => o.hp > 0 && o.owner === mi).length, k = partyScale(S.spec).mobs;
-      const n = Math.min(Math.max(1, Math.round((a.n ?? 1) * k)), Math.max(1, Math.round((a.cap ?? 3) * k)) - mine, 9 - this.liveMobs().length);
+      const n = this.risen(m, a);
       if (n <= 0) return null;
       const spots: { x: number; y: number }[] = [];
       // circles on the cells right around the summoner, the side facing the runes first, so the risen mob plainly comes from it
@@ -666,10 +765,27 @@ export class Game {
     m.burn = 0;
   }
 
-  /** Damage a hero; `from` is where the blow came from, so the figure rocks away from it. */
+  /** A line in the enemy-turn journal. */
+  private note(txt: string) {
+    const L = this.S.log;
+    L.push({ turn: this.S.turn, txt });
+    if (L.length > LOG_MAX) L.splice(0, L.length - LOG_MAX);
+  }
+
+  /** Journal a blow on a hero: the line, what the shield took of it, and the hero falling to it. */
+  private noteBlow(txt: string, h: HeroState, blk: number) {
+    this.note(blk ? `${txt}, щит принял ${blk}` : txt);
+    this.noteFall(h);
+  }
+
+  private noteFall(h: HeroState) {
+    if (h.hp <= 0) this.note(`${h.def.name} ${did(h.def, 'пал')}`);
+  }
+
+  /** Damage a hero; `from` is where the blow came from, so the figure rocks away from it. Returns what the shield took. */
   hurtHero(h: HeroState, n: number, why = '', from?: Pt) {
     const S = this.S;
-    if (h.hp <= 0) return;
+    if (h.hp <= 0) return 0;
     const p = this.spot(h) ?? { x: S.Wx - 20, y: S.Wy - 20 };
     const blk = Math.min(h.shield, n);
     h.shield -= blk;
@@ -683,6 +799,7 @@ export class Game {
     this.float(p.x, p.y, dmg ? `-${dmg}${why ? ' ' + why : ''}` : 'блок', dmg ? '#ff4d6a' : '#3fc4b6');
     if (dmg) { this.burst(p.x, p.y, '#ff4d6a', 10); S.shake = 0.2; }
     if (h.hp <= 0) { this.float(p.x, p.y - 6, 'пал', '#ff4d6a'); h.hand = 0; }
+    return blk;
   }
 
   // ------------------------------------------------------------ physics
@@ -787,7 +904,8 @@ export class Game {
         n.left--;
         n.hit = 0.2;
         if (n.k === 'ore') { this.bank.ore += q; this.float(n.x, n.y, `+${q} руда`, '#ffb070'); }
-        if (n.k === 'spk') { this.bank.sparks += q; this.float(n.x, n.y, `+${q} искр${q > 1 ? 'ы' : 'а'}`, '#c9a8ff'); }
+        // sparks go to the hero who threw the disc, up to what one ability costs
+        if (n.k === 'spk') { const got = Math.min(q, AB_COST - h.sparks); h.sparks += got; this.float(n.x, n.y, got ? `+${got} искр${got > 1 ? 'ы' : 'а'}` : 'искры полны', '#c9a8ff'); }
         if (n.k === 'herb') { const hl = Math.min(h.max - h.hp, 1 + 2 * q); h.hp += hl; this.float(n.x, n.y, hl ? `+${hl} HP` : 'HP полное', '#7be39a'); }
         this.chips(n.k, n.x, n.y, n.r, d, q);
         if (n.left <= 0) this.float(n.x, n.y - 6, 'истощено', '#c7cbe0');
@@ -844,12 +962,18 @@ export class Game {
     return this.bodies().some(d => Math.hypot(d.vx, d.vy) > 2) || this.S.discs.some(d => d.fall && !d.gone);
   }
 
+  /** Every living hero has thrown all its discs; the turn still waits for the players to end it. */
   allThrown() { return this.alive().every(h => h.hand === 0); }
+
+  /** Every living hero's player has pressed «Конец хода»; the fallen never hold the turn up. */
+  allDone() { return this.alive().every(h => this.ended(h)); }
 
   // ------------------------------------------------------------ turn flow
 
   private resolve() {
     const S = this.S;
+    // discs still in hand are lost: the hand fills again next turn
+    for (const h of S.heroes) h.hand = 0;
     for (const d of S.discs) {
       d.vx = d.vy = 0;
       if (d.gone || d.fall || d.hero.hp <= 0) continue;
@@ -928,7 +1052,12 @@ export class Game {
   /** The enemy turn begins: burning heroes smoulder, then the enemies take their moves one at a time. */
   private mobsStart() {
     const S = this.S;
-    for (const h of this.alive()) if (h.fire > 0) { h.fire--; this.hurtHero(h, 2, 'горит'); }
+    for (const h of this.alive()) {
+      if (h.fire <= 0) continue;
+      h.fire--;
+      const blk = this.hurtHero(h, 2, 'горит');
+      this.noteBlow(blk < 2 ? `${h.def.name} горит: −${2 - blk}` : `${h.def.name} горит`, h, blk);
+    }
     for (const m of S.mobs) { m.fx = m.tx = m.x; m.fy = m.ty = m.y; m.walk = undefined; m.hop = 0; }
     S.actor = -1;
     S.clock = 0;
@@ -950,7 +1079,12 @@ export class Game {
       S.attacked = false;
       const burnt = m.burn > 0;
       // fire takes as many HP as it has, through armour, and dies down by one
-      if (burnt) { const fire = m.burn--; this.hurtMob(m, fire, '#ff7a3d', true); }
+      if (burnt) {
+        const fire = m.burn--;
+        this.hurtMob(m, fire, '#ff7a3d', true);
+        this.note(`${m.name} горит: −${fire}`);
+        if (m.hp <= 0) this.note(`${m.name} ${did(MOBS[m.k], 'сгорел')}`);
+      }
       this.planWalk(m);
       if (burnt || (m.hp > 0 && !this.idle(m))) return true;
     }
@@ -1122,7 +1256,13 @@ export class Game {
     if (it.t === 'slam') {
       m.flash = 0.12; S.shake = 0.3;
       this.float(m.x, m.y - 10, it.chill ? 'МЕТЕЛЬ' : 'УДАР ОБ ПОЛ', it.chill ? '#bfe6ff' : '#ffd34d');
-      for (const h of this.alive()) { this.hurtHero(h, it.dmg, '', m); if (it.chill) this.chillHero(h); }
+      this.note(`${m.name}: ${it.chill ? 'метель' : 'удар'} по всем на ${it.dmg}`);
+      for (const h of this.alive()) {
+        const blk = this.hurtHero(h, it.dmg, '', m);
+        if (blk) this.note(`${h.def.name}: щит принял ${blk}`);
+        this.noteFall(h);
+        if (it.chill) this.chillHero(h);
+      }
       this.tremor(m.x, m.y, 1, m);
     } else if (it.t === 'heal') {
       const o = S.mobs[it.mob!];
@@ -1130,9 +1270,11 @@ export class Game {
       const hl = Math.min(o.max - o.hp, it.dmg);
       o.hp += hl;
       this.float(o.x, o.y, `+${hl}`, '#7be39a'); this.burst(o.x, o.y, '#9fe3ff', 12);
+      this.note(`${m.name} ${did(d, 'подлечил')} ${MOBS[o.k].acc} на ${hl}`);
     } else if (it.t === 'summon') {
-      const kind = d.acts!.find(a => a.k === 'summon')!.kind!, mi = S.mobs.indexOf(m);
+      const kind = d.acts!.find(a => a.k === 'summon')!.kind!, mi = S.mobs.indexOf(m), n = it.spots?.length ?? 0;
       this.float(m.x, m.y - 10, 'призыв!', '#c9a8ff');
+      this.note(`${m.name} ${did(d, 'призвал')} ${MOBS[kind].acc.toLowerCase()}${n > 1 ? ' ×' + n : ''}`);
       for (const p of it.spots ?? []) {
         // a disc may have come to rest on the circle; the mob still rises, the disc is long gone by then
         const o = newMob(kind, p.x, p.y, S.hpMul, S.dmgAdd, S.dmgMul);
@@ -1142,9 +1284,14 @@ export class Game {
       }
     } else if (it.t === 'heat') {
       this.float(m.x, m.y - 10, 'РАСКАЛЯЕТ ПОЛ', '#ff7a3d');
+      this.note(`${m.name} ${did(d, 'раскалил')} пол`);
       for (const p of it.spots ?? []) { S.haz.add(hazKey(Math.floor(p.x / TILE), Math.floor(p.y / TILE))); this.burst(p.x, p.y, '#ff7a3d', 10); }
     } else if (it.t === 'charge') {
       this.float(m.x, m.y - 10, 'фитиль горит', '#ffb070');
+      this.note(`${m.name} ${did(d, 'поджёг', 'подожгла')} фитиль`);
+    } else if (it.t === 'move') {
+      // walled off, it stayed put: nothing to tell
+      if (m.walk) this.note(`${m.name} идёт к ${this.heroOf(it.hero).def.dat}`);
     } else if (it.t === 'hit') {
       const h = this.heroOf(it.hero);
       const p = this.spot(h);
@@ -1153,10 +1300,15 @@ export class Game {
         // up close the enemy lunges at the hero; a shooter rocks back from its shot
         if (isRanged(m.k)) this.knock(m, m.x, m.y, p.x, p.y, 0.3);
         else this.knock(m, p.x, p.y, m.x, m.y, 0.5);
-        this.hurtHero(h, it.dmg, '', m); m.flash = 0.12;
+        const blk = this.hurtHero(h, it.dmg, '', m); m.flash = 0.12;
+        const how = !isRanged(m.k) ? `${did(d, 'ударил')} ${h.def.acc}` : d.charge ? `${did(d, 'бросил')} бомбу в ${h.def.acc}` : `${did(d, 'выстрелил')} в ${h.def.acc}`;
+        this.noteBlow(`${m.name} ${how} на ${it.dmg}`, h, blk);
         if (d.chill && h.hp > 0) this.chillHero(h);
         if (d.fire && h.hp > 0) { h.fire = 1; this.float(p.x, p.y - 8, 'горит!', '#ff7a3d'); }
-      } else this.float(m.x, m.y, 'не достал', '#c7cbe0');
+      } else {
+        this.float(m.x, m.y, 'не достал', '#c7cbe0');
+        this.note(`${m.name} не ${did(d, 'достал')} ${h.def.acc}`);
+      }
     }
   }
 
@@ -1173,6 +1325,7 @@ export class Game {
     if (!this.alive().length || !this.liveMobs().length) { this.finish(); return; }
     S.turn++;
     S.discs = [];
+    S.done = [];
     for (const h of S.heroes) { h.shield = 0; h.thrown = false; h.boost = false; h.hand = h.hp > 0 ? h.discs : 0; if (h.chill > 0) h.chill--; }
     S.phase = 'throw';
     this.pickActive();
@@ -1194,7 +1347,8 @@ export class Game {
     while (this.acc >= STEP) { this.step(STEP); this.acc -= STEP; }
     // the last enemy down ends the fight at once, whatever throws are left
     if ((S.phase === 'throw' || S.phase === 'resolve' || S.phase === 'enemy') && !this.liveMobs().length) this.finish();
-    else if (S.phase === 'throw' && this.allThrown() && !this.moving()) {
+    // the heroes' turn ends by the players' word only, once the discs have stopped
+    else if (S.phase === 'throw' && this.allDone() && !this.moving()) {
       S.phase = 'resolve'; S.timer = 0.9; this.resolve(); this.onChange();
     } else if (S.phase === 'resolve' && (S.timer -= dt) <= 0) {
       S.phase = 'enemy'; this.mobsStart(); this.onChange();

@@ -1,8 +1,8 @@
 // Online play: the host's game state as plain data, and applying it on a client.
 // Rooms are rebuilt from their spec (generation is seeded), so only what changes travels.
 
-import { HEROES } from './data';
-import type { Bank, Disc, Float, Game, HeroState, Phase, Spark } from './game';
+import { AB_COST, HEROES } from './data';
+import type { Bank, Disc, Float, Game, HeroState, Phase, Spark, State } from './game';
 import type { Mob, RoomSpec } from './room';
 import type { Run, Votes } from './run';
 
@@ -18,6 +18,9 @@ export interface Snapshot {
   clock?: number;
   attacked: boolean;
   ready: number[];
+  /** Saves from before ending the turn by hand have none, nor the enemy-turn journal. */
+  done?: number[];
+  log?: State['log'];
   shake: number;
   heroes: HeroSnap[];
   mobs: Mob[];
@@ -27,7 +30,8 @@ export interface Snapshot {
   discs: (Omit<Disc, 'hero'> & { hero: number })[];
   floats: Float[];
   sparks: Spark[];
-  bank: Bank;
+  /** Saves from before sparks were each hero's own hold the party's pool here, and their heroes have none. */
+  bank: Bank & { sparks?: number };
   /** Hazard tiles change mid-fight: lava from slimes and the forge boss. */
   haz: string[];
   /** Depth of the blacksmith's the party is at, 0 elsewhere: everyone upgrades their own hero's discs there. */
@@ -38,7 +42,7 @@ export function snapshot(g: Game): Snapshot {
   const S = g.S;
   return {
     spec: S.spec, turn: S.turn, phase: S.phase, timer: S.timer, actor: S.actor, clock: S.clock, attacked: S.attacked,
-    ready: S.ready, shake: S.shake,
+    ready: S.ready, done: S.done, log: S.log, shake: S.shake,
     heroes: g.party.map(({ def: _def, ...h }) => h),
     mobs: S.mobs,
     nodes: S.nodes.map(n => [n.left, n.hit]),
@@ -68,24 +72,33 @@ const sameSpec = (a: RoomSpec, b: RoomSpec) => a.seed === b.seed && a.depth === 
 /** Make the client's game match the host's. Returns true when the party or the room changed (the HUD and camera need a rebuild). */
 export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boolean } {
   let party = false, room = false;
-  if (g.party.length !== s.heroes.length || g.party.some((h, k) => h.i !== s.heroes[k].i)) {
-    g.party = s.heroes.map(h => ({ ...h, def: HEROES[h.i] }));
+  // a save from before sparks were each hero's own: the party's pool is shared out hero by hero, as much as each can hold
+  const { sparks: old = 0, ...bank } = s.bank;
+  let pool = old;
+  const heroes = s.heroes.map(h => {
+    if ((h as Partial<HeroSnap>).sparks !== undefined) return h;
+    const n = Math.min(AB_COST, pool);
+    pool -= n;
+    return { ...h, sparks: n };
+  });
+  if (g.party.length !== heroes.length || g.party.some((h, k) => h.i !== heroes[k].i)) {
+    g.party = heroes.map(h => ({ ...h, def: HEROES[h.i] }));
     party = true;
   } else {
     // keep the same objects so discs and the HUD can hold on to them
-    g.party.forEach((h, k) => Object.assign(h, s.heroes[k]));
+    g.party.forEach((h, k) => Object.assign(h, heroes[k]));
   }
   if (!g.S || !sameSpec(g.S.spec, s.spec)) { g.showRoom(s.spec); room = true; }
   const S = g.S;
   S.heroes = g.party;
   Object.assign(S, {
     turn: s.turn, phase: s.phase, timer: s.timer, actor: s.actor ?? -1, clock: s.clock ?? 0, attacked: s.attacked,
-    ready: s.ready, shake: s.shake, mobs: s.mobs, floats: s.floats, sparks: s.sparks,
+    ready: s.ready, done: s.done ?? [], log: s.log ?? [], shake: s.shake, mobs: s.mobs, floats: s.floats, sparks: s.sparks,
   });
   S.nodes.forEach((n, k) => { if (s.nodes[k]) [n.left, n.hit] = s.nodes[k]; });
   if (s.ice) S.blocks.filter(b => b.ice).forEach((b, k) => { if (s.ice![k] !== undefined) b.hp = s.ice![k]; });
   S.discs = s.discs.map(d => ({ ...d, hero: g.heroOf(d.hero) }));
-  Object.assign(g.bank, s.bank);
+  Object.assign(g.bank, bank);
   if (s.haz) S.haz = new Set(s.haz);
   g.forge = s.forge ?? 0;
   g.pickActive();

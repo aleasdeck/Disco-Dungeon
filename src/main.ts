@@ -35,11 +35,15 @@ let view = { w: 0, h: 0, dpr: 1 };
 
 // ------------------------------------------------------------ camera
 
-/** Screen rectangle not covered by the top bar and the hero frame. */
+/**
+ * Screen rectangle the room is fitted into and held to: below the top bar, with a little margin all round. A panel across
+ * most of the bottom (the hero frame on a narrow screen) is kept clear too; one in a corner only covers a corner of the room.
+ */
 function playRect() {
-  const top = 50, fr = $('frame').getBoundingClientRect();
-  const bottom = Math.max(0, view.h - fr.top) + 6;
-  return { x: 0, y: top, w: view.w, h: Math.max(120, view.h - top - bottom) };
+  const m = 10, top = (document.querySelector('header')?.getBoundingClientRect().bottom ?? 50) + m;
+  const fr = document.getElementById('frame')?.getBoundingClientRect();
+  const bottom = fr && fr.height && fr.width > view.w / 2 ? Math.max(0, view.h - fr.top) + m : m;
+  return { x: m, y: top, w: Math.max(120, view.w - 2 * m), h: Math.max(120, view.h - top - bottom) };
 }
 
 let anim: { from: number; to: number; t: number; cx: number; cy: number } | null = null;
@@ -97,12 +101,6 @@ function resize() {
 }
 
 const input = new Input(cv, cam, game, controls);
-
-$('zoomIn').addEventListener('click', () => controls.zoomBy(1.25));
-$('zoomOut').addEventListener('click', () => controls.zoomBy(0.8));
-$('rotL').addEventListener('click', () => controls.rotateBy(-Math.PI / 4));
-$('rotR').addEventListener('click', () => controls.rotateBy(Math.PI / 4));
-$('camFit').addEventListener('click', () => controls.fit());
 
 // ------------------------------------------------------------ run flow
 
