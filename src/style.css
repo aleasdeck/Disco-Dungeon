@@ -790,7 +790,7 @@ i.ico { display: inline-block; font-style: normal; }
 .art-btn_gem .ability.on { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px var(--ab)); }
 .art-btn_gem .ability b { padding: 2px 5px; background: rgba(18, 12, 9, 0.6); }
 /* the ability's own picture fills the gem instead of its name */
-.ability .ab-ico { position: absolute; inset: 28%; z-index: 1; pointer-events: none; }
+.ability .ab-ico { position: absolute; inset: 31%; z-index: 1; pointer-events: none; }
 .ability .ab-ico:empty { display: none; }
 .ability:has(.ab-ico img) b { display: none; }
 
@@ -850,22 +850,22 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 @media (prefers-reduced-motion: reduce) { #map .mnode.art.reach .mart { animation: none; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 3px var(--gold)) drop-shadow(0 0 8px var(--gold)); } }
 
 /* the HP bar and the sparks as cardboard: a die-cut wedge with the health printed into its groove, and three crystal shards */
-/* health is a jagged blade with no plate under it (hp_empty, hp_full, hp_shield: one shape, stretched whole). The red runs
-   from x 17 to 993 of 1024, so .track is that span and the fills stay plain percentages of it; each fill shows the same
+/* health is a blocky, lopsided slab with no plate under it (hp_empty, hp_full, hp_shield: one shape, stretched whole). The red
+   runs from x 26 to 1004 of 1024, so .track is that span and the fills stay plain percentages of it; each fill shows the same
    picture at the blade's full size (cqw/cqh of the track), shifted by where the fill starts (--x, set with it) */
-.art-hp_empty.art-hp_full .corner .hpbar { height: auto; aspect-ratio: 1024 / 176; background: var(--ui-hp_empty) center / 100% 100% no-repeat; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
-.art-hp_empty.art-hp_full .corner .hpbar .track { inset: 0 3.03% 0 1.66%; clip-path: none; background: none; container-type: size; }
+.art-hp_empty.art-hp_full .corner .hpbar { height: auto; aspect-ratio: 1024 / 194; background: var(--ui-hp_empty) center / 100% 100% no-repeat; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
+.art-hp_empty.art-hp_full .corner .hpbar .track { inset: 0 1.95% 0 2.54%; clip-path: none; background: none; container-type: size; }
 .art-hp_empty.art-hp_full .corner .hpbar.shielded .track { box-shadow: none; }
-.art-hp_empty.art-hp_full .corner .track > * { background: var(--ui-hp_full) calc(-1.742cqw - var(--x, 0) * 1cqw) 0 / 104.92cqw 100cqh no-repeat; }
+.art-hp_empty.art-hp_full .corner .track > * { background: var(--ui-hp_full) calc(-2.658cqw - var(--x, 0) * 1cqw) 0 / 104.70cqw 100cqh no-repeat; }
 .art-hp_empty.art-hp_full .corner .track s { background-image: var(--ui-hp_shield); }
 .art-hp_empty.art-hp_full .corner .track s.risk, .art-hp_empty.art-hp_full .corner .track em { filter: brightness(1.7) saturate(0.5); }
-/* the number sits in the blade's thick middle; the shield badge hangs off its thin left point */
-.art-hp_empty.art-hp_full .corner .hp-num { inset: 12% 20% 22% 20%; }
-.art-hp_empty.art-hp_full .corner .sh-badge { left: -20px; top: 40%; }
+/* the number sits in the slab's middle; the shield badge hangs off its left end */
+.art-hp_empty.art-hp_full .corner .hp-num { inset: 18% 12% 12% 12%; }
+.art-hp_empty.art-hp_full .corner .sh-badge { left: -18px; top: 52%; }
 .art-ico_shield .sh-badge { clip-path: none; background: var(--ui-ico_shield) center / contain no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); text-shadow: 1px 1px 0 #120c09, -1px -1px 0 #120c09, 1px -1px 0 #120c09, -1px 1px 0 #120c09; }
-.art-spk_1_on .spk { background: none; clip-path: none; box-shadow: none; padding: 0; gap: 0; height: 28px; margin: -4px 18px 0 4px; }
-.art-spk_1_on .spk i { flex: 1; margin-right: -6px; background: center / 100% 100% no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
-/* three different shards, lit and dark in the same shape */
+.art-spk_1_on .spk { background: none; clip-path: none; box-shadow: none; padding: 0; gap: 4px; height: 32px; margin: -4px 18px 0 4px; }
+.art-spk_1_on .spk i { flex: 1; background: center / contain no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
+/* three different shards, lit and dark in the same shape; each sits whole in its cell, so they differ in size too */
 .art-spk_1_off .spk i:nth-child(1) { background-image: var(--ui-spk_1_off); }
 .art-spk_2_off .spk i:nth-child(2) { background-image: var(--ui-spk_2_off); }
 .art-spk_3_off .spk i:nth-child(3) { background-image: var(--ui-spk_3_off); }
@@ -873,8 +873,8 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .art-spk_2_on .spk i.on:nth-child(2) { background-image: var(--ui-spk_2_on); }
 .art-spk_3_on .spk i.on:nth-child(3) { background-image: var(--ui-spk_3_on); }
 .art-spk_1_on .spk.full i { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 6px #c9a8ff); }
-@media (max-height: 520px) and (orientation: landscape) { .art-spk_1_on .spk { height: 17px; margin-right: 12px; } }
-@media (orientation: portrait) and (max-width: 700px) { .art-spk_1_on .spk { height: 18px; margin-right: 6px; } }
+@media (max-height: 520px) and (orientation: landscape) { .art-spk_1_on .spk { height: 22px; margin-right: 12px; } }
+@media (orientation: portrait) and (max-width: 700px) { .art-spk_1_on .spk { height: 24px; margin-right: 6px; } }
 
 /* the menus stand on a painted disco dungeon instead of the dimmed room */
 .art-menu_bg .overlay.solid { background: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_bg) center / cover no-repeat; }
