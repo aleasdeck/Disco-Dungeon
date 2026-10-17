@@ -15,6 +15,7 @@ export interface BoardStyle {
 export const BOARD_STYLES: Record<string, BoardStyle> = {
   thin: { thick: 0.03, border: 0, flute: 0 },
   flute: { thick: 0.055, border: 0, flute: 1 },
+  slim: { thick: 0.04, border: 0, flute: 1 },
   diecut: { thick: 0.055, border: 0.02, flute: 1 },
   double: { thick: 0.085, border: 0, flute: 2 },
 };
