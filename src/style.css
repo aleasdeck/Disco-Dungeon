@@ -878,7 +878,7 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
   .art-hp_empty.art-hp_full .corner .hp-num { font-size: 17px; }
   /* the painted bar and crystal are taller than the drawn ones and grow with the screen (the bars are 100vw - 208px wide,
      about 0.43 of that tall without the bar's transparent top), so the blade above them rises with them */
-  .art-hp_empty.art-hp_full .turn-btn { bottom: calc(14px + var(--safe-b) + (100vw - 208px) * 0.425); }
+  .art-hp_empty.art-hp_full .turn-btn { bottom: calc(26px + var(--safe-b) + (100vw - 208px) * 0.425); }
 }
 
 /* the menus stand on a painted disco dungeon instead of the dimmed room */
