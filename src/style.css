@@ -184,6 +184,7 @@ button { font: inherit; color: inherit; }
 .m-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .m-hp { position: relative; height: 12px; background: #2a1f18; border-radius: 4px; overflow: hidden; }
 .m-hp i { display: block; height: 100%; background: #d9434f; }
+.m-hp em { position: absolute; top: 0; bottom: 0; background: #ff8a3d; }
 .m-hp b { position: absolute; inset: 0; font: 600 10px/12px Oswald, sans-serif; text-align: center; color: #fff; }
 .m-act { display: flex; align-items: center; gap: 4px; }
 .m-hit {
@@ -279,6 +280,9 @@ button { font: inherit; color: inherit; }
 }
 .ability:not(:disabled):hover { background: linear-gradient(#4b3d66, #332a45); }
 .ability:disabled { opacity: 0.55; cursor: default; }
+/* switched on for this turn: lit in the hero's ability colour until the turn ends */
+.ability.on { opacity: 1; border-color: var(--ab); box-shadow: 0 0 0 2px var(--ab), 0 0 14px var(--ab); }
+.ability.on .ab-head b { color: var(--ab); }
 .ab-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
 .ab-head b { font: 600 16px Oswald, sans-serif; color: var(--spark); }
 .ability small { color: var(--muted); font-size: 12px; line-height: 1.3; }
