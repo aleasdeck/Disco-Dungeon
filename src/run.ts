@@ -103,28 +103,29 @@ export function minutes(run: Run) {
   return { done, total: done + est };
 }
 
-/** Rooms without a fight resolve at once; returns what happened. */
+/** Rooms without a fight resolve at once; returns what happened, worded for a lone hero or a party. */
 export function restRoom(type: RoomType, party: HeroState[], bank: Bank, seed: number): string {
+  const solo = party.length === 1;
   if (type === 'camp') {
     for (const h of party) h.hp = h.hp <= 0 ? Math.ceil(h.max / 2) : Math.min(h.max, h.hp + 8);
-    return 'Костёр: отряд подлечился на 8 HP, павшие встали с половиной здоровья.';
+    return solo ? 'Костёр: герой подлечился на 8 HP.' : 'Костёр: отряд подлечился на 8 HP, павшие встали с половиной здоровья.';
   }
   if (type === 'forge') {
     bank.ore += FORGE_ORE;
-    return `Кузнец дал отряду ${FORGE_ORE} руды. Прокачать диски можно только у него, руда общая на всех.`;
+    return solo ? `Кузнец дал ${FORGE_ORE} руды. Прокачать диски можно только у него.` : `Кузнец дал отряду ${FORGE_ORE} руды. Прокачать диски можно только у него, руда общая на всех.`;
   }
   const R = makeRng(seed);
   const roll = R.int(0, 2);
   if (roll === 0) {
     // sparks burn out between fights, so the altar's gift waits for the next one
     bank.boon = (bank.boon ?? 0) + 4;
-    return 'Алтарь искр: следующий бой отряд начнёт с 4 искрами.';
+    return 'Алтарь искр: следующий бой начнётся с 4 искрами.';
   }
   if (roll === 1) {
     for (const h of party) if (h.hp > 0) h.hp = Math.max(1, h.hp - 3);
     bank.ore += 4;
-    return 'Ловушка в сундуке: −3 HP каждому, зато внутри 4 руды.';
+    return `Ловушка в сундуке: −3 HP${solo ? '' : ' каждому'}, зато внутри 4 руды.`;
   }
   for (const h of party) { h.max += 2; if (h.hp > 0) h.hp += 2; }
-  return 'Бродячий лекарь: +2 к максимуму здоровья всему отряду.';
+  return `Бродячий лекарь: +2 к максимуму здоровья ${solo ? 'герою' : 'всему отряду'}.`;
 }

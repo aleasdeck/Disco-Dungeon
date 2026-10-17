@@ -115,6 +115,16 @@
     </div>
   </section>
 
+  <section id="heroSelect" class="overlay solid" hidden>
+    <div class="panel lobby-panel">
+      <div class="panel-head"><h2>Кампания</h2><button class="btn" id="heroBack">Назад</button></div>
+      <p class="hero-lead">Выбери героя: весь забег ты ведёшь его одного. Комнаты подстроены под одиночку: врагов меньше, и они слабее, чем против отряда.</p>
+      <div id="heroPicks" class="pick-heroes"></div>
+      <p id="heroInfo" class="hero-info"></p>
+      <div class="lobby-foot"><span></span><button class="btn big" id="heroGo">В путь</button></div>
+    </div>
+  </section>
+
   <section id="lobby" class="overlay solid" hidden>
     <div class="panel lobby-panel">
       <div class="panel-head"><h2>Сетевая игра</h2><button class="btn" id="lobbyBack">Назад</button></div>
@@ -201,7 +211,7 @@
         <li><b>Бросок.</b> Потяни свою фигурку назад, как рогатку, и отпусти. Чем длиннее натяжка, тем сильнее.</li>
         <li><b>Камера.</b> Перетаскивай пустой пол, чтобы двигать комнату. Колесо или щипок двумя пальцами приближает.</li>
         <li><b>Поворот.</b> Поверни двумя пальцами, правой кнопкой мыши, Shift+колесо или клавишами Q и E. Кнопка ⌂ возвращает вид.</li>
-        <li><b>Отряд.</b> В кампании ты ведёшь всех героев: переключайся карточками слева или тапом по фигурке. В сетевой игре у каждого свой герой, а бой начинается, когда все нажали «Готов».</li>
+        <li><b>Герои.</b> В кампании ты ведёшь одного героя, которого выбрал перед забегом. В сетевой игре у каждого свой герой, а бой начинается, когда все нажали «Готов». Чем меньше героев, тем меньше в комнатах врагов и тем они слабее.</li>
       </ul>
       <button class="btn big" id="helpClose">Понятно</button>
     </div>

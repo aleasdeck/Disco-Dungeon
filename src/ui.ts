@@ -152,9 +152,9 @@ export class Hud {
 
     const left = g.alive().filter(o => o.hand > 0).length;
     const side: Side = S.phase === 'place' || S.phase === 'over' ? S.phase : S.phase === 'enemy' ? 'enemies' : 'heroes';
-    const sideName = { place: 'Расстановка', heroes: 'Ваш ход', enemies: 'Ход врагов', over: g.alive().length ? 'Победа' : 'Отряд пал' }[side];
+    const sideName = { place: 'Расстановка', heroes: 'Ваш ход', enemies: 'Ход врагов', over: g.alive().length ? 'Победа' : g.party.length > 1 ? 'Отряд пал' : 'Герой пал' }[side];
     const detail = {
-      place: g.online ? 'поставь героя и нажми «Готов»' : 'поставь героев на руны',
+      place: g.online ? 'поставь героя и нажми «Готов»' : g.party.length > 1 ? 'поставь героев на руны' : 'поставь героя на руну',
       throw: left ? `бросают: ${left}` : 'диски катятся',
       resolve: 'подсчёт',
       enemy: S.mobs[S.actor]?.hp > 0 ? S.mobs[S.actor].name : 'враги ходят по одному',

@@ -2,7 +2,7 @@
 // Rendering and input live elsewhere; this module only changes state.
 
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, CRIT_COS, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
-import { cellAt, cellCentre, generate, hazKey, isFloor, muAt, newMob, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
+import { cellAt, cellCentre, generate, hazKey, isFloor, muAt, newMob, partyScale, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
 
@@ -150,7 +150,9 @@ export class Game {
   forge = 0;
   private acc = 0;
 
+  /** Start a fight in a new room; unless the spec says otherwise, the room is built for the party's size. */
   loadRoom(spec: RoomSpec) {
+    spec = { ...spec, heroes: spec.heroes ?? this.party.length };
     const L = generate(spec);
     this.forge = 0;
     for (const h of this.party) Object.assign(h, { pad: null, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0, chill: 0, fire: 0, boost: false });
@@ -467,11 +469,13 @@ export class Game {
     if (a.k === 'slam') return { t: 'slam', hero: -1, dmg: Math.ceil(m.dmg * (a.chill ? 0.5 : 0.6)), chill: a.chill };
     if (a.k === 'heal') {
       const hurt = this.liveMobs().filter(o => o !== m && o.hp < o.max).sort((p, q) => p.hp / p.max - q.hp / q.max)[0];
-      return hurt ? { t: 'heal', hero: -1, dmg: a.amt ?? 6, mob: S.mobs.indexOf(hurt) } : null;
+      // enemies of a smaller party have less HP, so they mend for less too
+      return hurt ? { t: 'heal', hero: -1, dmg: Math.max(1, Math.round((a.amt ?? 6) * partyScale(S.spec).hp)), mob: S.mobs.indexOf(hurt) } : null;
     }
     if (a.k === 'summon') {
-      const mine = S.mobs.filter(o => o.hp > 0 && o.owner === mi).length;
-      const n = Math.min(a.n ?? 1, (a.cap ?? 3) - mine, 9 - this.liveMobs().length);
+      // a smaller party faces fewer risen mobs, like it faces fewer enemies from the start
+      const mine = S.mobs.filter(o => o.hp > 0 && o.owner === mi).length, k = partyScale(S.spec).mobs;
+      const n = Math.min(Math.max(1, Math.round((a.n ?? 1) * k)), Math.max(1, Math.round((a.cap ?? 3) * k)) - mine, 9 - this.liveMobs().length);
       if (n <= 0) return null;
       const spots: { x: number; y: number }[] = [];
       // circles on the cells right around the summoner, the side facing the runes first, so the risen mob plainly comes from it
@@ -534,7 +538,10 @@ export class Game {
     m.flash = 0.15;
     this.float(m.x, m.y, '-' + n, col);
     const d = MOBS[m.k];
-    if (d.rage && !m.rage && m.hp > 0 && m.hp <= m.max / 2) { m.rage = true; m.dmg += 3; this.float(m.x, m.y - 12, 'ЯРОСТЬ +3', '#ff7a3d'); this.burst(m.x, m.y, '#ff7a3d', 18); }
+    if (d.rage && !m.rage && m.hp > 0 && m.hp <= m.max / 2) {
+      const up = Math.max(1, Math.round(3 * this.S.dmgMul));
+      m.rage = true; m.dmg += up; this.float(m.x, m.y - 12, `ЯРОСТЬ +${up}`, '#ff7a3d'); this.burst(m.x, m.y, '#ff7a3d', 18);
+    }
     if (m.hp <= 0) {
       m.dead = 0.001; this.burst(m.x, m.y, '#ffd34d', 22); this.float(m.x, m.y - 6, 'повержен', '#ffd34d');
       if (m.burn > 0) this.spreadFire(m);
@@ -945,7 +952,7 @@ export class Game {
       this.float(m.x, m.y - 10, 'призыв!', '#c9a8ff');
       for (const p of it.spots ?? []) {
         // a disc may have come to rest on the circle; the mob still rises, the disc is long gone by then
-        const o = newMob(kind, p.x, p.y, S.hpMul, S.dmgAdd);
+        const o = newMob(kind, p.x, p.y, S.hpMul, S.dmgAdd, S.dmgMul);
         o.owner = mi; o.born = 1;
         S.mobs.push(o);
         this.burst(p.x, p.y, '#b893ff', 16);
