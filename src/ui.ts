@@ -104,11 +104,12 @@ export class Hud {
     const phase = $('phase');
     phase.className = 'phase ' + S.phase;
     phase.textContent = {
-      place: g.online ? 'Расстановка: поставь своего героя на руну и нажми «Готов»' : 'Расстановка: поставь героев на руны и нажми «В бой!»',
+      place: g.online ? 'Расстановка: поставь своего героя на руну и нажми «Готов»'
+        : g.party.length > 1 ? 'Расстановка: поставь героев на руны и нажми «В бой!»' : 'Расстановка: поставь героя на руну и нажми «В бой!»',
       throw: left ? `Броски · ждём ${left}` : 'Диски катятся',
       resolve: 'Подсчёт',
       enemy: S.mobs[S.actor]?.hp > 0 ? `Ход мобов · ${S.mobs[S.actor].name}` : 'Ход мобов',
-      over: g.alive().length ? 'Комната зачищена' : 'Отряд пал',
+      over: g.alive().length ? 'Комната зачищена' : g.party.length > 1 ? 'Отряд пал' : 'Герой пал',
     }[S.phase];
 
     for (const o of g.party) {

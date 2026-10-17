@@ -7,7 +7,7 @@ import type { Player } from './net';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-const SCREENS = ['menu', 'lobby', 'collection', 'settingsScreen', 'pause'] as const;
+const SCREENS = ['menu', 'heroSelect', 'lobby', 'collection', 'settingsScreen', 'pause'] as const;
 export type Screen = (typeof SCREENS)[number];
 
 /** Show one menu screen (or none). */
@@ -47,6 +47,31 @@ export function renderCollection(tab: 'heroes' | 'mobs') {
       grid.appendChild(card);
     });
   }
+}
+
+// ------------------------------------------------------------ campaign hero
+
+/** The campaign's hero cards: the picked one is marked, and below them what it does. */
+export function renderHeroSelect(picked: number, onPick: (hero: number) => void) {
+  const box = $('heroPicks');
+  box.innerHTML = '';
+  HEROES.forEach((def, i) => {
+    const b = document.createElement('button');
+    b.className = 'pick' + (picked === i ? ' mine' : '');
+    b.style.setProperty('--c', def.col);
+    b.setAttribute('aria-pressed', String(picked === i));
+    const cv = document.createElement('canvas');
+    drawPortrait(cv, { i, def });
+    b.append(cv);
+    const label = document.createElement('span');
+    label.innerHTML = `${def.name}<em>${HERO_ROLES[i] ?? ''}</em>`;
+    b.append(label);
+    b.addEventListener('click', () => onPick(i));
+    box.appendChild(b);
+  });
+  const def = HEROES[picked];
+  $('heroInfo').innerHTML = `<b style="color:${def.col}">${def.name}</b>. ${HERO_ROLES[picked] ?? ''}. Урон ${fullHit(def.m, def.pw)}, скорость ${Math.round(def.pw * 100)}%, отскок ${Math.round(def.e * 100)}%. `
+    + `Способность «${def.ab}»: ${def.abTxt}`;
 }
 
 // ------------------------------------------------------------ settings
@@ -103,7 +128,7 @@ export function renderLobby(o: { code: string; players: Player[]; me: string; ho
   $('lobbyStartBtn').hidden = !o.host;
   $<HTMLButtonElement>('lobbyStartBtn').disabled = !allPicked;
   $('lobbyHint').textContent = o.host
-    ? (allPicked ? `Игроков: ${o.players.length}. Можно начинать.` : 'Начать можно, когда все выбрали героя.')
+    ? (allPicked ? `Игроков: ${o.players.length}. Можно начинать: враги подстроятся под число героев.` : 'Начать можно, когда все выбрали героя.')
     : 'Игру начнёт хозяин комнаты.';
 }
 

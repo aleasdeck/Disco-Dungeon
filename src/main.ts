@@ -5,7 +5,7 @@ import { Game, newBank, newParty } from './game';
 import { Net, type Player } from './net';
 import { applySnapshot, snapshot } from './sync';
 import { saveSettings, settings } from './settings';
-import { bindSettings, lobbyStatus, renderCollection, renderLobby, resetLobby, show } from './menu';
+import { bindSettings, lobbyStatus, renderCollection, renderHeroSelect, renderLobby, resetLobby, show } from './menu';
 import { Input } from './input';
 import { Hud } from './ui';
 import { MapView } from './mapview';
@@ -182,11 +182,18 @@ function startRun(picks?: number[]) {
   screen('Выбор комнаты', 'Хозяин комнаты смотрит на карту забега.');
 }
 
-function startCampaign() {
+/** The campaign: one hero, picked on its own screen, goes through the whole run. */
+function openHeroSelect() {
+  const pick = (i: number) => { settings.hero = i; saveSettings(); renderHeroSelect(i, pick); };
+  pick(HEROES[settings.hero] ? settings.hero : 0);
+  show('heroSelect');
+}
+
+function startCampaign(hero: number) {
   leaveOnline();
   setOnline('solo');
   show(null);
-  startRun();
+  startRun([hero]);
 }
 
 mapView.onChoose = id => {
@@ -213,11 +220,12 @@ game.onRoomEnd = win => {
   const S = game.S, boss = S.spec.type === 'boss';
   const last = boss && run.floor === FLOORS - 1;
   setTimeout(() => {
-    if (!win) return showEnd({ title: 'Отряд пал', text: `Забег окончен на этаже ${run.floor + 1}, сложность ${S.spec.depth}.`, kind: 'again' });
+    if (!win) return showEnd({ title: game.party.length > 1 ? 'Отряд пал' : 'Герой пал', text: `Забег окончен на этаже ${run.floor + 1}, сложность ${S.spec.depth}.`, kind: 'again' });
     if (last) {
       const left = game.alive().map(h => h.def.name).join(', ');
       return showEnd({ title: 'Вы победили!', kind: 'win',
-        text: `Владыка кузни повержен, все три этажа позади. Комнат пройдено: ${run.path.reduce((a, p) => a + p.length, 0)}. Дошли до конца: ${left}.` });
+        text: `Владыка кузни повержен, все три этажа позади. Комнат пройдено: ${run.path.reduce((a, p) => a + p.length, 0)}.`
+          + (game.party.length > 1 ? ` Дошли до конца: ${left}.` : '') });
     }
     if (boss) run.floor++;
     choosing = true;
@@ -236,7 +244,7 @@ function showEnd(e: NonNullable<HostSave['ending']>) {
   $('endBtn').textContent = e.kind === 'map' ? 'К карте' : mode === 'host' ? 'В лобби' : 'Новый забег';
   $('endBtn').onclick = e.kind === 'map'
     ? () => { hideEnd(); showMap(true); screen('Выбор комнаты', 'Хозяин комнаты смотрит на карту забега.'); }
-    : mode === 'host' ? backToLobby : () => startRun();
+    : mode === 'host' ? backToLobby : openHeroSelect;
   screen(e.title, e.text, e.kind === 'win');
 }
 
@@ -261,7 +269,7 @@ function hideEnd() {
 
 $('btnMap').addEventListener('click', () => showMap(true));
 $('mapClose').addEventListener('click', () => showMap(false));
-$('newRun').addEventListener('click', () => startRun(mode === 'host' ? game.party.map(h => h.i) : undefined));
+$('newRun').addEventListener('click', () => (mode === 'host' ? startRun(game.party.map(h => h.i)) : openHeroSelect()));
 $('helpClose').addEventListener('click', () => { $('help').hidden = true; });
 
 // ------------------------------------------------------------ menu
@@ -272,7 +280,9 @@ function openMenu() {
 }
 
 $('mContinue').addEventListener('click', () => show(null));
-$('mCampaign').addEventListener('click', startCampaign);
+$('mCampaign').addEventListener('click', openHeroSelect);
+$('heroBack').addEventListener('click', openMenu);
+$('heroGo').addEventListener('click', () => startCampaign(settings.hero));
 $('mOnline').addEventListener('click', () => { $<HTMLInputElement>('lobbyName').value = settings.name; resetLobby(); show('lobby'); });
 $('mCollection').addEventListener('click', () => { renderCollection('heroes'); show('collection'); });
 $('mSettings').addEventListener('click', () => { syncSettings(); show('settingsScreen'); });

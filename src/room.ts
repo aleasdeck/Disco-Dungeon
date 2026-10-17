@@ -9,6 +9,8 @@ export interface RoomSpec {
   depth: number;
   floor: number;
   type: RoomType;
+  /** Heroes in the party the room is built for, 1..3; rooms from before this was kept were built for three. */
+  heroes?: number;
 }
 
 export interface Pad { x: number; y: number }
@@ -127,14 +129,15 @@ export interface Layout {
   ice: Uint8Array;
   hpMul: number;
   dmgAdd: number;
+  dmgMul: number;
 }
 
-export function newMob(k: MobKind, x: number, y: number, hpMul = 1, dmgAdd = 0): Mob {
+export function newMob(k: MobKind, x: number, y: number, hpMul = 1, dmgAdd = 0, dmgMul = 1): Mob {
   const d = MOBS[k];
   const hp = Math.round(d.hp * hpMul);
   return {
     k, name: d.name, r: d.r, speed: d.speed, reach: d.reach, armor: d.armor,
-    hp, max: hp, dmg: d.dmg + dmgAdd, x, y, flash: 0, dead: 0, burn: 0, intent: null,
+    hp, max: hp, dmg: Math.max(1, Math.round((d.dmg + dmgAdd) * dmgMul)), x, y, flash: 0, dead: 0, burn: 0, intent: null,
     fx: x, fy: y, tx: x, ty: y, hop: 0, owner: -1, born: 0,
   };
 }
@@ -367,6 +370,20 @@ export const HP_STEP = 0.065;
 export const firstFloorExtra = (f: number, t: number) =>
   f > 0 ? { blocks: 0, haz: 0, mobs: 0 } : { blocks: 1, haz: t > 0 ? 1 : 0, mobs: t >= 2 ? 1 : 0 };
 
+/**
+ * Rooms are made for a party of three. A smaller party meets fewer enemies (summons included), with less HP and softer hits,
+ * and its ore veins hold fewer charges, so mining costs it as many turns as it costs three heroes and each hero earns
+ * about as much ore. Tuned with the bot so one, two and three heroes get about as far through a run: a lone hero has
+ * one throw a turn and nobody to stand in for it, so it gets the biggest cut.
+ */
+export const PARTY_SCALE: Record<number, { mobs: number; hp: number; dmg: number; ch: Partial<Record<NodeKind, number>> }> = {
+  1: { mobs: 0.4, hp: 0.4, dmg: 0.5, ch: { ore: 1, spk: 2 } },
+  2: { mobs: 0.7, hp: 0.8, dmg: 0.8, ch: { ore: 2 } },
+  3: { mobs: 1, hp: 1, dmg: 1, ch: {} },
+};
+
+export const partyScale = (spec: Pick<RoomSpec, 'heroes'>) => PARTY_SCALE[Math.max(1, Math.min(3, spec.heroes ?? 3))];
+
 /** Past the first floor rooms hold fewer enemies than they used to, so each one there is tougher: this much more HP (on top of MOB_HP_MUL) and one more damage. */
 export const LATER_HP = 1.2;
 
@@ -460,7 +477,14 @@ export function generate(spec: RoomSpec): Layout {
     if (clearOfRock(geo, d0.x, d0.y, 5)) decals.push(d0);
   }
 
-  const hpMul = MOB_HP_MUL * (1 + HP_STEP * (d - 1)) * (f > 0 ? LATER_HP : 1), dmgAdd = dmgBonus(f, t);
+  const sc = partyScale(spec);
+  const hpMul = MOB_HP_MUL * (1 + HP_STEP * (d - 1)) * (f > 0 ? LATER_HP : 1) * sc.hp, dmgAdd = dmgBonus(f, t), dmgMul = sc.dmg;
+  // a share of n enemies for a smaller party; a fraction left over is one more enemy that often
+  const fewer = (n: number, min: number) => {
+    if (sc.mobs === 1) return n;
+    const x = n * sc.mobs, k = Math.floor(x);
+    return Math.max(min, k + (R.next() < x - k ? 1 : 0));
+  };
   const pool = mobPool(f, t), cast = CASTS[Math.min(f, CASTS.length - 1)];
   const solo = (k: MobKind) => SOLO.includes(k) || (t === 0 && isRanged(k));
   const draw = (n: number, has: MobKind[] = []) => {
@@ -478,24 +502,24 @@ export function generate(spec: RoomSpec): Layout {
   };
   const count = Math.min(roll(tier.mobs) + f + extra.mobs, MOB_CAP);
   let mk: MobKind[];
-  if (type === 'treasure') mk = cast.early.filter((k, i, a) => a.indexOf(k) === i).slice(0, 2);
-  else if (type === 'boss') mk = [cast.boss, ...draw(1 + f + extra.mobs, SOLO)];
-  else if (type === 'elite') mk = [cast.elite, ...draw(count - 1, [cast.elite])];
-  else mk = draw(count);
+  if (type === 'treasure') mk = cast.early.filter((k, i, a) => a.indexOf(k) === i).slice(0, fewer(2, 1));
+  else if (type === 'boss') mk = [cast.boss, ...draw(fewer(1 + f + extra.mobs, 0), SOLO)];
+  else if (type === 'elite') mk = [cast.elite, ...draw(fewer(count - 1, 0), [cast.elite])];
+  else mk = draw(fewer(count, 1));
   const mobs: Mob[] = [];
   for (const k of mk) {
     // a cut corner can eat the far half, so a mob that finds no room there stands anywhere short of the runes
     const sz = mobSize(k), r = MOBS[k].r;
     const short = (x: number, y: number) => x / Wx + y / Wy < 1.25;
     const q = placeCell(sz, r, far) ?? placeCell(sz, r, short) ?? placeCell(sz, r, far, true) ?? placeCell(sz, r, short, true) ?? placeCell(sz, r, any, true);
-    if (q) { mobs.push(newMob(k, q[0], q[1], hpMul, dmgAdd)); objs.push({ x: q[0], y: q[1], r: MOBS[k].r }); }
+    if (q) { mobs.push(newMob(k, q[0], q[1], hpMul, dmgAdd, dmgMul)); objs.push({ x: q[0], y: q[1], r: MOBS[k].r }); }
   }
 
   const nodes: ResNode[] = [];
   const kinds = NODE_SETS[type] ?? NODE_SETS.fight!;
   for (const k of kinds) {
     const q = placeCell(1, NODES[k].r, type === 'treasure' ? any : flank) ?? placeCell(1, NODES[k].r, mid) ?? placeCell(1, NODES[k].r, any) ?? placeCell(1, NODES[k].r, any, true);
-    if (q) { nodes.push({ k, ...NODES[k], x: q[0], y: q[1], left: NODES[k].ch, hit: 0 }); objs.push({ x: q[0], y: q[1], r: NODES[k].r }); }
+    if (q) { const ch = sc.ch[k] ?? NODES[k].ch; nodes.push({ k, ...NODES[k], ch, x: q[0], y: q[1], left: ch, hit: 0 }); objs.push({ x: q[0], y: q[1], r: NODES[k].r }); }
   }
 
   const haz = new Set<string>();
@@ -521,5 +545,5 @@ export function generate(spec: RoomSpec): Layout {
   }
   // its own stream, so freezing the floor doesn't reshuffle anything above
   const ice = biome.iceMu !== undefined ? freeze(gw, gh, floor, makeRng(spec.seed * 31 + spec.depth + 7919)) : new Uint8Array(gw * gh);
-  return { gw, gh, shape, floor, edges, rock, Wx, Wy, biome, pads, pits, blocks, decals, nodes, mobs, haz, ice, hpMul, dmgAdd };
+  return { gw, gh, shape, floor, edges, rock, Wx, Wy, biome, pads, pits, blocks, decals, nodes, mobs, haz, ice, hpMul, dmgAdd, dmgMul };
 }

@@ -48,7 +48,7 @@ export function snapshot(g: Game): Snapshot {
   };
 }
 
-const sameSpec = (a: RoomSpec, b: RoomSpec) => a.seed === b.seed && a.depth === b.depth && a.floor === b.floor && a.type === b.type;
+const sameSpec = (a: RoomSpec, b: RoomSpec) => a.seed === b.seed && a.depth === b.depth && a.floor === b.floor && a.type === b.type && (a.heroes ?? 3) === (b.heroes ?? 3);
 
 /** Make the client's game match the host's. Returns true when the party or the room changed (the HUD and camera need a rebuild). */
 export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boolean } {

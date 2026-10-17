@@ -6,10 +6,12 @@ export interface Settings {
   quality: 'auto' | 'high' | 'low';
   /** The aim line while pulling a hero back. */
   aimLine: boolean;
+  /** The hero last picked for the campaign, an index into HEROES. */
+  hero: number;
 }
 
 const KEY = 'discodungeon.settings';
-const defaults: Settings = { name: '', quality: 'auto', aimLine: true };
+const defaults: Settings = { name: '', quality: 'auto', aimLine: true, hero: 0 };
 
 function load(): Settings {
   try {

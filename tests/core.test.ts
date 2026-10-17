@@ -3,7 +3,7 @@ import { Camera } from '../src/camera';
 import { CRIT, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, mobSize } from '../src/data';
 import { Game, newParty, stepsOf, wayLen, type Action } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { MOB_CAP, cellAt, cellCentre, clearOfRock, floorAt, generate, isFloor, muAt, newMob, tierOf } from '../src/room';
+import { MOB_CAP, PARTY_SCALE, cellAt, cellCentre, clearOfRock, floorAt, generate, isFloor, muAt, newMob, tierOf } from '../src/room';
 import { FLOORS, LAYERS, genFloor, newRun, restRoom } from '../src/run';
 
 /** Put every living hero on its own rune, as players do before the fight. */
@@ -107,6 +107,58 @@ describe('difficulty along a floor', () => {
     expect(room(0, LAYERS - 2, 3).dmgAdd).toBe(1);
     expect(room(1, 0, 3).dmgAdd).toBe(2);
     expect(room(2, 0, 3).dmgAdd).toBe(3);
+  });
+});
+
+describe('party size', () => {
+  const kinds = ['fight', 'elite', 'treasure', 'boss'] as const;
+  const specs = Array.from({ length: 120 }, (_, k) => {
+    const f = k % FLOORS, type = kinds[k % kinds.length];
+    return { seed: 300 + k, depth: f * LAYERS + (type === 'boss' ? LAYERS : 1 + (k % (LAYERS - 1))), floor: f, type };
+  });
+  const sum = (n: number[]) => n.reduce((a, b) => a + b, 0);
+
+  it('builds rooms for three heroes unless told otherwise', () => {
+    for (const spec of specs.slice(0, 20)) {
+      const a = generate(spec), b = generate({ ...spec, heroes: 3 });
+      expect(JSON.stringify({ ...a, haz: [...a.haz] })).toBe(JSON.stringify({ ...b, haz: [...b.haz] }));
+    }
+  });
+
+  it('gives a smaller party fewer, weaker enemies and leaner ore veins, never an empty room', () => {
+    const at = (heroes: number) => specs.map(spec => generate({ ...spec, heroes }));
+    const [one, two, three] = [at(1), at(2), at(3)];
+    const count = (rs: typeof one) => sum(rs.map(L => L.mobs.length));
+    const hp = (rs: typeof one) => sum(rs.map(L => sum(L.mobs.map(m => m.max))));
+    const dmg = (rs: typeof one) => sum(rs.map(L => sum(L.mobs.map(m => m.dmg))));
+    expect(count(one)).toBeLessThan(count(two));
+    expect(count(two)).toBeLessThan(count(three));
+    expect(hp(one)).toBeLessThan(hp(two));
+    expect(dmg(one)).toBeLessThan(dmg(two));
+    one.forEach((L, k) => {
+      expect(L.mobs.length).toBeGreaterThan(0);
+      expect(L.mobs.length).toBeLessThanOrEqual(three[k].mobs.length);
+      // the boss and the elite stay whatever the party
+      if (specs[k].type === 'boss') expect(L.mobs.filter(m => MOBS[m.k].boss)).toHaveLength(1);
+      for (const n of L.nodes) expect(n.left).toBe(PARTY_SCALE[1].ch[n.k] ?? n.ch);
+    });
+    expect(sum(one.map(L => sum(L.nodes.filter(n => n.k === 'ore').map(n => n.left))))).toBeLessThan(sum(three.map(L => sum(L.nodes.filter(n => n.k === 'ore').map(n => n.left)))));
+  });
+
+  it('builds each room for the party that enters it, and the summoners raise fewer mobs for a lone hero', () => {
+    const g = new Game();
+    g.party = newParty([1]);
+    g.loadRoom({ seed: 99, depth: LAYERS * 2, floor: 1, type: 'boss' });
+    expect(g.S.spec.heroes).toBe(1);
+    expect(g.S.mobs).toEqual(generate({ seed: 99, depth: LAYERS * 2, floor: 1, type: 'boss', heroes: 1 }).mobs);
+    g.S.mobs = [newMob('lich', 120, 40, 1, 0)];
+    placeAll(g); g.startFight();
+    // the lich summons on its second turn: a party of three faces two ghouls, a lone hero one
+    for (const h of g.party) h.hand = 0;
+    for (let k = 0; k < 900 && g.S.turn === 1; k++) g.update(1 / 60);
+    expect(g.S.turn).toBe(2);
+    expect(g.S.mobs[0].intent!.t).toBe('summon');
+    expect(g.S.mobs[0].intent!.spots).toHaveLength(1);
   });
 });
 
