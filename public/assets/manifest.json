@@ -101,12 +101,12 @@
     "wall_prison": "env/wall_prison.webp"
   },
   "ui": {
-    "bar_track": "ui/bar_track.webp",
+    "bar_hp": "ui/bar_hp.webp",
     "btn_dark": "ui/btn_dark.webp",
     "btn_gem": "ui/btn_gem.webp",
     "btn_main": "ui/btn_main.webp",
-    "btn_red": "ui/btn_red.webp",
     "btn_tile": "ui/btn_tile.webp",
+    "btn_turn": "ui/btn_turn.webp",
     "ev_altar": "ui/ev_altar.webp",
     "ev_healer": "ui/ev_healer.webp",
     "ev_trap": "ui/ev_trap.webp",

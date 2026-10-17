@@ -743,23 +743,34 @@ i.ico { display: inline-block; font-style: normal; }
 }
 
 /* ---------- painted cardboard plates and icons (public/assets/ui): each takes over from the drawn one once its picture loads */
-.art-btn_main .tb-plate { clip-path: none; background: var(--ui-btn_main) center / 100% 100% no-repeat; transition: filter 0.2s; }
-.art-btn_main .tb-plate::before, .art-btn_main .tb-plate::after { display: none; }
-.art-btn_main .turn-btn { filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)); }
-.art-btn_main .turn-btn b { transform: rotate(-1.5deg); }
-.art-btn_main .turn-btn.idle .tb-plate { filter: saturate(0.45) brightness(0.7); }
-.art-btn_main .turn-btn.idle b { color: #1c120a; }
-.art-btn_main .turn-btn.lit { filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 16px rgba(255, 200, 80, 0.8)); animation: lit-art 1.6s ease-in-out infinite; }
-.art-btn_main .turn-btn.confirm .tb-plate { filter: hue-rotate(-16deg) saturate(1.5); }
-.art-btn_main .turn-btn.wait .tb-plate { filter: grayscale(0.75) brightness(0.62); }
-.art-btn_red .turn-btn.enemy .tb-plate { background-image: var(--ui-btn_red); filter: none; }
+/* the turn button is a mustard blade (btn_turn): low on the left, its top edge rising to a sharp corner on the right; the box is
+   taller and the words sit low and left, in the blade's body, tilted along the rising edge */
+.art-btn_turn .turn-btn { height: 100px; width: 380px; padding: 24px 74px 4px 26px; filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)); }
+.art-btn_turn .tb-plate { clip-path: none; background: var(--ui-btn_turn) center / 100% 100% no-repeat; transition: filter 0.2s; }
+.art-btn_turn .tb-plate::before, .art-btn_turn .tb-plate::after { display: none; }
+.art-btn_turn .turn-btn b, .art-btn_turn .turn-btn small { transform: rotate(-3deg); }
+.art-btn_turn .turn-btn.idle .tb-plate { filter: saturate(0.45) brightness(0.7); }
+.art-btn_turn .turn-btn.idle b { color: #1c120a; }
+.art-btn_turn .turn-btn.lit { filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 16px rgba(255, 200, 80, 0.8)); animation: lit-art 1.6s ease-in-out infinite; }
+.art-btn_turn .turn-btn.confirm .tb-plate { filter: hue-rotate(-16deg) saturate(1.5); }
+.art-btn_turn .turn-btn.wait .tb-plate { filter: grayscale(0.75) brightness(0.62); }
+.art-btn_turn .turn-btn.enemy .tb-plate { filter: hue-rotate(-45deg) saturate(1.9) brightness(0.9); }
+.art-btn_turn .tb-who { top: 10px; }
 @keyframes lit-art { 50% { filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 28px rgba(255, 210, 90, 1)); } }
-@media (prefers-reduced-motion: reduce) { .art-btn_main .turn-btn.lit { animation: none; } }
-/* the upright phone keeps the step round the ability: the card is cut there, and the ink edge follows the cut */
+@media (prefers-reduced-motion: reduce) { .art-btn_turn .turn-btn.lit { animation: none; } }
+@media (max-height: 520px) and (orientation: landscape) {
+  .art-btn_turn .turn-btn { width: 232px; height: 62px; padding: 14px 44px 2px 14px; }
+  .art-btn_turn .tb-who { top: 4px; }
+}
+/* the upright phone: the blade runs above the health and is cut round the ability gem; the ink edge follows the cut */
 @media (orientation: portrait) and (max-width: 700px) {
-  .art-btn_main .tb-plate { clip-path: var(--plate); }
-  .art-btn_main .turn-btn { filter: var(--outline) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); }
-  .art-btn_main .turn-btn.lit { filter: var(--outline) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px rgba(255, 200, 80, 0.8)); animation: none; }
+  .art-btn_turn .turn-btn {
+    width: auto; height: 68px; padding: 18px 86px 8px 18px; filter: var(--outline) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5));
+    --plate: polygon(0 0, 100% 0, 100% calc(100% - 40px), calc(100% - 9px) calc(100% - 37px), calc(100% - 90px) calc(100% - 31px), calc(100% - 104px) 100%, 0 100%);
+  }
+  .art-btn_turn .tb-plate { clip-path: var(--plate); }
+  .art-btn_turn .turn-btn.lit { filter: var(--outline) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px rgba(255, 200, 80, 0.8)); animation: none; }
+  .art-btn_turn .tb-who { top: 4px; }
 }
 
 .art-btn_tile .top-btns { filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
@@ -832,19 +843,22 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 }
 @media (prefers-reduced-motion: reduce) { #map .mnode.art.reach .mart { animation: none; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 3px var(--gold)) drop-shadow(0 0 8px var(--gold)); } }
 
-/* the HP bar and the sparks as cardboard: a die-cut slot with the health printed into its groove, and three crystal shards */
-/* the slot is sliced in nine round its groove: the ends keep their cut and the groove grows tall enough for the numbers */
-.art-bar_track .corner .hpbar {
-  --bts: 0.22; height: 38px; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5));
-  border-image: var(--ui-bar_track) 60 139 41 160 fill / calc(60px * var(--bts)) calc(139px * var(--bts)) calc(41px * var(--bts)) calc(160px * var(--bts)) stretch;
+/* the HP bar and the sparks as cardboard: a die-cut wedge with the health printed into its groove, and three crystal shards */
+/* the health plate is a hand-cut wedge (art/ui/bar_hp.py) stretched whole: low on the left, sweeping up to its right corner;
+   the fill is clipped to its groove, so the box of .track is the groove's bounding box and the widths stay plain percentages */
+.art-bar_hp .corner .hpbar { height: auto; aspect-ratio: 1024 / 220; background: var(--ui-bar_hp) center / 100% 100% no-repeat; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
+.art-bar_hp .corner .hpbar .track {
+  inset: 16% 3.8% 11.2% 8.5%; background: #2a2117;
+  clip-path: polygon(0 58.4%, 53% 55.6%, 61.6% 49.5%, 70.1% 39.8%, 81.5% 25.4%, 89.5% 13%, 97.3% 0, 100% 68.7%, 98.1% 77.6%, 84.9% 83.1%, 70.1% 90.9%, 58.7% 96.4%, 41.6% 98.9%, 0 100%);
 }
-.art-bar_track .corner .hpbar .track, .art-bar_track .corner .hp-num { inset: calc(60px * var(--bts)) calc(137px * var(--bts)) calc(41px * var(--bts)) calc(152px * var(--bts)); }
-.art-bar_track .corner .hpbar .track { clip-path: none; background: #2a2117; border-radius: 2px; }
-.art-bar_track .corner .hpbar.shielded .track { box-shadow: inset 0 0 0 2px #7fb6dc; }
-@media (max-height: 520px) and (orientation: landscape) { .art-bar_track .corner .hpbar { --bts: 0.15; height: 27px; } }
-@media (orientation: portrait) and (max-width: 700px) { .art-bar_track .corner .hpbar { --bts: 0.17; height: 30px; } }
-.art-bar_track .track i { background: radial-gradient(rgba(0, 0, 0, 0.16) 0.8px, transparent 1.3px) 0 0 / 4px 4px, linear-gradient(#e0414f 0 58%, #a82634 58%); }
-.art-bar_track .track s:not(.risk) { background: radial-gradient(rgba(0, 0, 0, 0.12) 0.8px, transparent 1.3px) 0 0 / 4px 4px, linear-gradient(#a9d6f3 0 58%, #5f9fcb 58%); }
+.art-bar_hp .corner .hpbar.shielded .track { box-shadow: none; }
+/* the number sits in the groove's low run, the shield on the plate's left end */
+.art-bar_hp .corner .hp-num { inset: 58.5% 3.8% 11.2% 8.5%; }
+.art-bar_hp .corner .sh-badge { top: 73%; }
+/* the wedge's top edge climbs where the hit note used to sit: lift the note over it */
+.art-bar_hp .hit-info { bottom: 94px; }
+.art-bar_hp .track i { background: radial-gradient(rgba(0, 0, 0, 0.16) 0.8px, transparent 1.3px) 0 0 / 4px 4px, linear-gradient(#e0414f 0 78%, #a82634 78%); }
+.art-bar_hp .track s:not(.risk) { background: radial-gradient(rgba(0, 0, 0, 0.12) 0.8px, transparent 1.3px) 0 0 / 4px 4px, linear-gradient(#a9d6f3 0 78%, #5f9fcb 78%); }
 .art-ico_shield .sh-badge { clip-path: none; background: var(--ui-ico_shield) center / contain no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); text-shadow: 1px 1px 0 #120c09, -1px -1px 0 #120c09, 1px -1px 0 #120c09, -1px 1px 0 #120c09; }
 .art-spk_on.art-spk_off .spk { background: none; clip-path: none; box-shadow: none; padding: 0; gap: 0; height: 24px; margin: -4px -14px 0 4px; }
 .art-spk_on.art-spk_off .spk i { flex: 1; margin-right: -6px; background: var(--ui-spk_off) center / 100% 100% no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
