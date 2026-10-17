@@ -15,55 +15,52 @@
   <div class="vignette" aria-hidden="true"></div>
   <div class="turn-glow" aria-hidden="true"></div>
 
-  <header class="hud-top">
-    <div class="chip loc">
+  <header class="hud-top" id="hudTop">
+    <div class="party" id="allies" aria-label="Отряд"></div>
+    <div class="ore-chip" title="Руда, общая на отряд"><i class="ico ico-ore" aria-hidden="true"></i><b id="hOre">0</b></div>
+    <div class="where">
       <b id="locName">DiscoDungeon</b>
-      <span id="locSub"></span>
+      <span class="where-sub"><span id="hTurn"></span><span id="hSide" class="side"></span><span id="hRage" class="rage" hidden></span></span>
     </div>
-    <div class="chip stats">
-      <span>Ход <b id="hTurn">1</b></span>
-      <span id="hSide" class="side"></span>
-      <span class="mobs-n">Мобов <b id="hMobs">0</b></span>
-      <span id="hRage" class="rage" hidden></span>
-    </div>
+    <ol class="queue" id="queue" aria-label="Очередь врагов: кто левее, тот ходит раньше"></ol>
     <div class="top-btns">
-      <button class="btn" id="btnMap">Карта</button>
-      <button class="btn round" id="btnMenu" aria-label="Меню">☰</button>
+      <button class="ibtn" id="btnMap" aria-label="Карта" title="Карта"><i class="ico ico-map" aria-hidden="true"></i></button>
+      <button class="ibtn" id="btnLog" aria-label="Журнал хода врагов" title="Журнал хода врагов" aria-expanded="false"><i class="ico ico-log" aria-hidden="true"></i></button>
+      <button class="ibtn" id="btnMenu" aria-label="Меню" title="Меню"><i class="ico ico-menu" aria-hidden="true"></i></button>
     </div>
   </header>
 
+  <div id="bossBar" class="boss-bar" hidden><canvas width="64" height="64"></canvas><div><b></b><span class="bb-hp"><i></i><em></em><u></u></span></div></div>
+  <div id="mobCard" class="mob-card" role="tooltip" hidden></div>
+  <div id="logPanel" class="log-panel" hidden><h3>Ход врагов</h3><ol id="logList"></ol></div>
+
   <div id="turnBanner" class="turn-banner" aria-hidden="true"><b></b><span></span></div>
-  <button id="fightBtn" class="btn big fight" hidden>В бой!</button>
-  <aside id="allies" class="allies" aria-label="Отряд"></aside>
-  <aside id="mobs" class="mobs" aria-label="Враги и их намерения"><ul id="mobList"></ul></aside>
 
-  <div class="camctl" id="camctl">
-    <button class="btn round" id="zoomIn" aria-label="Приблизить">+</button>
-    <button class="btn round" id="zoomOut" aria-label="Отдалить">−</button>
-    <button class="btn round" id="rotL" aria-label="Повернуть против часовой">⟲</button>
-    <button class="btn round" id="rotR" aria-label="Повернуть по часовой">⟳</button>
-    <button class="btn round" id="camFit" aria-label="Вернуть вид">⌂</button>
-  </div>
-
-  <footer id="frame" class="frame">
-    <div class="pf-wrap"><canvas id="pf" width="192" height="192"></canvas></div>
-    <div class="who">
-      <div class="name-row"><b id="fName"></b><span id="fState" class="state"></span></div>
-      <div class="hpbar" id="fHpWrap"><i id="fHpBar"></i><em id="fRisk"></em><span id="fHp"></span></div>
-      <div class="res">
-        <span class="r shield" title="Щит"><svg viewBox="0 0 16 16"><path d="M8 1l6 2v4c0 4-3 6.5-6 8-3-1.5-6-4-6-8V3z"/></svg><b id="fShield">0</b></span>
-        <span class="r ore" title="Руда, общая на отряд"><svg viewBox="0 0 16 16"><path d="M8 1l6 6-6 8-6-8z"/></svg><b id="fOre">0</b></span>
-        <span class="r spk" title="Искры на способности, общие на отряд. Каждый бой начинается без искр"><svg viewBox="0 0 16 16"><path d="M8 0l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></svg><b id="fSpk">0</b></span>
-        <span class="r hand" id="fHandBox"><svg viewBox="0 0 16 16"><path d="M1 7v2.5c0 2.2 3.1 4 7 4s7-1.8 7-4V7"/><ellipse cx="8" cy="7" rx="7" ry="4"/></svg><b id="fHand">0</b></span>
-      </div>
-    </div>
-    <button class="ability" id="abBtn">
-      <span class="ab-head"><b id="abName"></b><span id="abCost" class="pips"></span></span>
-      <small id="abTxt"></small>
+  <footer id="frame" class="corner">
+    <button class="portrait" id="pfBtn" aria-expanded="false">
+      <canvas id="pf" width="192" height="192"></canvas>
+      <b class="pname" id="fName"></b>
+      <span class="statuses" id="fStatus"></span>
     </button>
-    <button class="btn ups-toggle" id="upsToggle" aria-expanded="false">Прокачка</button>
-    <div class="ups" id="ups"></div>
+    <div class="discs" id="fDiscs"></div>
+    <div class="hit-info" id="fHit"></div>
+    <div class="bars">
+      <div class="hpbar" id="fHpWrap">
+        <span class="sh-badge" id="fShBadge" title="Щит: снимается первым"><b id="fShield">0</b></span>
+        <span class="track"><i id="fHpBar"></i><s id="fShBar"></s><em id="fRisk"></em></span>
+        <span class="hp-num" id="fHp"></span>
+      </div>
+      <div class="spk" id="fSpk" aria-hidden="true"><i></i><i></i><i></i></div>
+    </div>
+    <button class="ability" id="abBtn"><b id="abName"></b><span id="abCost" class="pips"></span></button>
+    <div class="ups hero-card" id="ups" hidden></div>
   </footer>
+
+  <button id="turnBtn" class="turn-btn" type="button"><span class="tb-plate" aria-hidden="true"></span><b id="turnTxt"></b><small id="turnSub"></small></button>
+
+  <div class="camctl" id="camctl" hidden>
+    <button id="zoomIn"></button><button id="zoomOut"></button><button id="rotL"></button><button id="rotR"></button><button id="camFit"></button>
+  </div>
 
   <section id="mapScreen" class="overlay" hidden>
     <div class="panel map-panel">
@@ -205,12 +202,13 @@
       <h2>Управление</h2>
       <ul>
         <li><b>Расстановка.</b> В комнате четыре руны, все свободны. Выбери героя и тапни руну, чтобы поставить его, или перетащи фигурку на другую руну (на занятой герои поменяются местами). Когда все стоят, нажми «В бой!». После этого героев больше не переставить.</li>
-        <li><b>Ресурсы.</b> Руда и искры общие на весь отряд: кто бы ни добыл, тратить может любой герой. Руда копится весь забег, а искры только на этот бой: каждый бой начинается без них.</li>
-        <li><b>Враги.</b> Справа список мобов в комнате. Число в красном щитке значит удар на столько, стрелка значит моб идёт, а точка показывает цвет героя, на которого он нацелился.</li>
+        <li><b>Ресурсы.</b> Руда общая на весь отряд и копится весь забег. Искры у каждого героя свои: их даёт кристалл, в который попал твой диск. Больше трёх не набрать, это ровно на одно умение, и каждый бой начинается без них.</li>
+        <li><b>Враги.</b> Сверху очередь врагов: кто левее, тот ходит раньше. Значок на иконке в цвете героя-цели: число значит удар на столько, пустое кольцо значит моб идёт к нему, разноцветный бьёт всех, фиолетовый готовит особый приём. Наведи или тапни иконку, чтобы увидеть подробности и подсветить фигурку. Свиток рядом с меню открывает журнал хода врагов.</li>
         <li><b>Прокачка.</b> Руда тратится только у кузнеца: это комната с наковальней на карте, на каждом этаже хотя бы один к середине пути. «Диски за ход»: на старте один диск, второй и третий самые дорогие и самые сильные. «Урон»: +25% к удару за уровень. «Скорость»: диск летит быстрее и дальше и от этого тоже бьёт сильнее. «Отскок»: диск меньше теряет скорость о стены и камни. Руды на всё не хватит, выбирай.</li>
         <li><b>Бросок.</b> Потяни свою фигурку назад, как рогатку, и отпусти. Чем длиннее натяжка, тем сильнее.</li>
+        <li><b>Конец хода.</b> Когда все диски брошены, кнопка «Конец хода» загорается. Враги ходят, только когда её нажали все игроки. Нажал раньше времени, нажми ещё раз, чтобы отменить.</li>
         <li><b>Камера.</b> Перетаскивай пустой пол, чтобы двигать комнату. Колесо или щипок двумя пальцами приближает.</li>
-        <li><b>Поворот.</b> Поверни двумя пальцами, правой кнопкой мыши, Shift+колесо или клавишами Q и E. Кнопка ⌂ возвращает вид.</li>
+        <li><b>Поворот.</b> Поверни двумя пальцами, правой кнопкой мыши, Shift+колесо или клавишами Q и E. Комната не уезжает за край экрана.</li>
         <li><b>Герои.</b> В кампании ты ведёшь одного героя, которого выбрал перед забегом. В сетевой игре у каждого свой герой, а бой начинается, когда все нажали «Готов». Чем меньше героев, тем меньше в комнатах врагов и тем они слабее.</li>
       </ul>
       <button class="btn big" id="helpClose">Понятно</button>

@@ -12,7 +12,6 @@
   --teal: #3fc4b6;
   --spark: #c9a8ff;
   --ore: #e8b44a;
-  --frame-h: 128px;
   --safe-b: env(safe-area-inset-bottom, 0px);
 }
 
@@ -76,43 +75,350 @@ button { font: inherit; color: inherit; }
   backdrop-filter: blur(4px);
 }
 
-/* ---------- top bar */
+/* ---------- the HUD: angular, uneven plates with a thick ink edge, kept to the screen's strips and corners */
+:root {
+  --outline: drop-shadow(2px 0 0 #120c09) drop-shadow(-2px 0 0 #120c09) drop-shadow(0 2px 0 #120c09) drop-shadow(0 -2px 0 #120c09);
+  --cut-slab: polygon(1.5% 12%, 34% 0, 97% 5%, 100% 64%, 95.5% 100%, 7% 95%, 0 66%);
+  --cut-tile: polygon(12% 0, 100% 7%, 93% 88%, 70% 100%, 0 93%, 5% 24%);
+  --cut-face: polygon(9% 3%, 88% 0, 100% 16%, 96% 92%, 78% 100%, 4% 96%, 0 18%);
+  --cut-gem: polygon(28% 2%, 76% 0, 100% 30%, 96% 74%, 66% 100%, 22% 97%, 0 66%, 5% 24%);
+  --cut-bar: polygon(1.2% 0, 100% 0, 98.6% 100%, 0 100%);
+  --gold-1: #ffd864; --gold-2: #e3a42e; --gold-3: #a8640f;
+}
+.ico { display: block; width: 100%; height: 100%; }
+i.ico { display: inline-block; font-style: normal; }
+
+/* ---------- top strip */
 .hud-top {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  padding: max(10px, env(safe-area-inset-top)) 12px 0;
-  pointer-events: none;
   z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: max(7px, env(safe-area-inset-top)) 12px 7px;
+  background: linear-gradient(rgba(20, 14, 10, 0.94), rgba(20, 14, 10, 0.8));
+  border-bottom: 3px solid #120c09;
+  box-shadow: 0 2px 0 rgba(92, 74, 57, 0.7), 0 8px 18px rgba(0, 0, 0, 0.4);
 }
-.hud-top > * { pointer-events: auto; }
-.loc { display: flex; flex-direction: column; min-width: 0; }
-.loc b { font: 600 16px Oswald, sans-serif; letter-spacing: 0.02em; color: var(--gold); white-space: nowrap; }
-.loc span { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.stats { display: flex; gap: 14px; align-items: center; align-self: stretch; color: var(--muted); font-size: 13px; }
-.stats span { white-space: nowrap; }
-.stats b { color: var(--text); font-family: Oswald, sans-serif; font-weight: 600; }
-.top-btns { margin-left: auto; display: flex; gap: 8px; }
+.party { display: flex; gap: 7px; }
+.head { position: relative; width: 48px; height: 52px; padding: 0; border: 0; background: none; cursor: pointer; filter: var(--outline); }
+.head canvas { display: block; width: 48px; height: 44px; clip-path: var(--cut-face); background: var(--c); }
+.head::before { content: ''; position: absolute; inset: -3px -3px 5px; clip-path: var(--cut-face); background: var(--c); z-index: -1; }
+.head.me::before { background: var(--gold-1); }
+.head .a-hp { position: absolute; left: 3px; right: 3px; bottom: 0; height: 6px; background: #241a14; clip-path: var(--cut-bar); }
+.head .a-hp i { position: absolute; inset: 0 auto 0 0; background: var(--hp); }
+.head .a-hp s { position: absolute; top: 0; bottom: 0; background: #8fc6ea; }
+.head .a-hp em { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(-45deg, #ffd34d 0 2px, #8a1f2a 2px 4px); animation: risk 0.9s ease-in-out infinite; }
+.head .tick { position: absolute; right: -6px; top: -5px; width: 20px; height: 20px; display: none; }
+.head.done .tick { display: block; }
+.head.dead { filter: var(--outline) grayscale(1) brightness(0.55); }
+.head.lethal { animation: lethal-f 0.9s ease-in-out infinite; }
+.head:disabled { cursor: default; }
+.ore-chip { display: flex; align-items: center; gap: 6px; padding: 3px 14px 3px 8px; background: #2c2119; clip-path: var(--cut-slab); font: 700 20px/1 Oswald, sans-serif; color: #f3e6c8; }
+.ore-chip .ico { width: 28px; height: 28px; }
+.where { display: flex; flex-direction: column; align-items: center; min-width: 0; margin: 0 auto; text-align: center; }
+.where b { font: 700 19px/1.1 Oswald, sans-serif; letter-spacing: 0.03em; color: #f3e6c8; white-space: nowrap; }
+.where-sub { display: flex; gap: 8px; justify-content: center; font: 500 13px/1.3 Oswald, sans-serif; color: var(--gold); white-space: nowrap; }
+.where-sub .side.enemies { color: #ff6b7d; }
+.where-sub .side.over { color: var(--gold-1); }
+.where-sub .rage { color: #ff6b7d; }
+.where-sub .rage.soon { color: #ffb070; }
 
-/* ---------- whose turn: the heroes throw, then the enemies go */
-/* the turn in the top bar, next to the turn number */
-.stats .side {
-  padding: 1px 9px;
-  border: 1.5px solid var(--ink);
-  border-radius: 99px;
-  font: 600 13px/18px Oswald, sans-serif;
-  letter-spacing: 0.03em;
-  color: #fff;
-  background: #2f6f68;
-  transition: background-color 0.3s;
+/* the enemy queue: whoever is further left goes first */
+.queue { list-style: none; margin: 0 0 0 auto; padding: 0; display: flex; align-items: flex-start; gap: 4px; }
+.queue li { position: relative; display: flex; flex-direction: column; align-items: center; transition: opacity 0.2s; }
+.queue li + li { margin-left: 18px; }
+.queue li + li::before {
+  content: ''; position: absolute; left: -17px; top: 17px; width: 11px; height: 14px; background: var(--gold-2);
+  clip-path: polygon(0 0, 45% 0, 100% 50%, 45% 100%, 0 100%, 52% 50%);
 }
-.stats .side.enemies { background: var(--red); }
-.stats .side.place { background: #5a4a7a; }
-.stats .side.over { background: #a67812; }
+.qb { position: relative; width: 48px; height: 48px; padding: 0; border: 0; background: none; cursor: pointer; filter: var(--outline); }
+.qb img { display: block; width: 100%; height: 100%; clip-path: var(--cut-tile); background: var(--red); }
+.queue li.boss .qb { width: 56px; height: 56px; margin-top: -4px; }
+.queue li.now .qb { transform: scale(1.12); }
+.queue li.now .qb::after { content: ''; position: absolute; inset: -5px; border: 3px solid var(--gold-1); clip-path: var(--cut-tile); }
+.queue li.done { opacity: 0.4; }
+.qi { position: absolute; right: -9px; bottom: -7px; }
+.cd { font: 600 10px/1 Oswald, sans-serif; color: #c9a8ff; margin-top: 3px; white-space: nowrap; }
+.cd:empty { display: none; }
+/* a badge in the colour of the hero it is after: a number for a blow, a hollow ring for walking up, every colour for a blow on all */
+.ib {
+  display: grid; place-items: center; min-width: 24px; height: 24px; padding: 0 4px;
+  font: 700 14px/1 Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #120c09;
+  background: var(--c); border: 2px solid #120c09; clip-path: var(--cut-gem); border-radius: 0;
+}
+.ib.go { background: #120c09; color: #fff; box-shadow: inset 0 0 0 4px var(--c); font-size: 12px; }
+.ib.all { background: var(--pie); }
+.ib.sp { background: #6b4fa8; padding: 3px; }
+.ib.sp .ico { width: 16px; height: 16px; }
+
+.top-btns { display: flex; gap: 8px; }
+.ibtn {
+  position: relative; width: 44px; height: 44px; padding: 7px; border: 0; cursor: pointer;
+  background: linear-gradient(#4d3c2d, #2b2018); clip-path: var(--cut-tile);
+}
+.ibtn:hover { background: linear-gradient(#5d4934, #33271d); }
+.ibtn:active { transform: translateY(1px); }
+.top-btns { filter: var(--outline); }
+.ibtn.new::after { content: ''; position: absolute; right: 5px; top: 6px; width: 9px; height: 9px; background: var(--gold-1); clip-path: var(--cut-gem); }
+
+/* a boss: a wide bar under the strip with its health and how soon it hits everyone */
+.boss-bar {
+  position: fixed; top: 76px; left: 50%; transform: translateX(-50%); z-index: 4;
+  display: flex; align-items: center; gap: 8px; width: min(520px, calc(100% - 24px)); padding: 6px 14px 6px 8px;
+  background: rgba(40, 14, 22, 0.9); clip-path: var(--cut-slab);
+}
+.boss-bar canvas { width: 40px; height: 40px; clip-path: var(--cut-tile); flex: none; }
+.boss-bar > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.boss-bar b { font: 600 14px/1.1 Oswald, sans-serif; color: #f3e6c8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bb-hp, .mc-hp { position: relative; display: block; height: 14px; background: #241a14; clip-path: var(--cut-bar); }
+.bb-hp i, .mc-hp i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(#e85b66, #a52a35); }
+.bb-hp em, .mc-hp em { position: absolute; top: 0; bottom: 0; background: #ff8a3d; }
+.bb-hp u, .mc-hp u { position: absolute; inset: 0; text-decoration: none; text-align: center; font: 600 11px/14px Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #000; }
+
+/* an enemy's card from the queue */
+.mob-card {
+  position: fixed; z-index: 8; width: 250px; padding: 10px 12px 12px;
+  background: #2a211b; border: 2px solid #120c09; outline: 2px solid var(--edge); outline-offset: -6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6); pointer-events: none;
+}
+.mc-head { display: flex; gap: 8px; align-items: center; }
+.mc-head img { width: 44px; height: 44px; clip-path: var(--cut-tile); }
+.mc-head > div { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.mc-head b { font: 600 16px/1.1 Oswald, sans-serif; }
+.mc-act { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; font-size: 13px; }
+.mc-cd { margin: 4px 0 0; color: #c9a8ff; font-size: 12px; }
+.mc-st { display: flex; gap: 6px; margin-top: 6px; }
+.mc-st:empty { display: none; }
+.mc-txt { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+.st { position: relative; display: inline-block; width: 24px; height: 24px; }
+.st b { position: absolute; right: -4px; bottom: -3px; font: 700 11px/1 Oswald, sans-serif; color: #fff; text-shadow: 1px 1px 0 #120c09, -1px -1px 0 #120c09, 1px -1px 0 #120c09, -1px 1px 0 #120c09; }
+
+/* the enemy turn's journal under the scroll */
+.log-panel {
+  position: fixed; top: 70px; right: 12px; z-index: 8; width: min(320px, calc(100% - 24px)); max-height: 50vh; overflow: auto;
+  padding: 10px 14px; background: #2a211b; border: 2px solid #120c09; outline: 2px solid var(--edge); outline-offset: -6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+.log-panel h3 { margin: 0 0 6px; font: 600 16px Oswald, sans-serif; color: var(--gold); }
+.log-panel ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.log-panel li.old { color: var(--muted); }
+.log-panel small { color: var(--muted); font-size: 11px; margin-right: 4px; }
+
+/* ---------- my hero's corner: portrait, discs, health with the shield, sparks running into the ability */
+.corner {
+  position: fixed; left: 16px; bottom: calc(16px + var(--safe-b)); z-index: 5;
+  width: 560px; height: 196px; pointer-events: none;
+  --pf-w: 156px; --pf-h: 184px;
+  transition: filter 0.35s;
+}
+.corner > * { position: absolute; pointer-events: auto; }
+[data-turn='enemies'] .corner { filter: saturate(0.4) brightness(0.8); }
+.portrait { left: 0; bottom: 0; width: var(--pf-w); height: var(--pf-h); padding: 0; border: 0; background: none; cursor: pointer; filter: var(--outline); }
+.portrait::before { content: ''; position: absolute; inset: 0; background: var(--c); clip-path: var(--cut-face); }
+.portrait canvas { position: absolute; inset: 5px; width: calc(100% - 10px); height: calc(100% - 10px); clip-path: var(--cut-face); }
+.pname {
+  position: absolute; left: 8px; right: 8px; bottom: 8px; padding: 2px 4px 3px;
+  font: 700 20px/1 Oswald, sans-serif; color: #fff; text-align: center; letter-spacing: 0.02em;
+  background: rgba(18, 12, 9, 0.62); clip-path: var(--cut-bar);
+}
+.statuses { position: absolute; right: 6px; top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.statuses .st { width: 30px; height: 30px; padding: 3px; background: rgba(18, 12, 9, 0.7); clip-path: var(--cut-gem); }
+.statuses .st b { font-size: 12px; right: 1px; bottom: 0; }
+.corner.dead .portrait { filter: var(--outline) grayscale(1) brightness(0.6); }
+
+/* the discs of this turn as a stack: in hand in the hero's colour, thrown ones dark */
+.discs { left: calc(var(--pf-w) + 14px); bottom: 70px; display: flex; flex-direction: column-reverse; }
+.discs i {
+  display: block; width: 44px; height: 15px; margin-top: -4px; border-radius: 50%;
+  background: linear-gradient(#3a2f28, #241c17); border: 2px solid #120c09; box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.35);
+}
+.discs i.on { background: linear-gradient(color-mix(in srgb, var(--c) 70%, #fff), var(--c) 60%, var(--dk)); }
+.hit-info { left: calc(var(--pf-w) + 70px); bottom: 74px; font: 500 13px/1.2 Oswald, sans-serif; color: var(--muted); white-space: nowrap; }
+
+.bars { left: calc(var(--pf-w) + 10px); bottom: 10px; width: 300px; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+.hpbar { position: relative; height: 28px; margin-right: 18px; pointer-events: auto; }
+.track { position: absolute; inset: 0; background: #241a14; clip-path: var(--cut-bar); }
+.corner .hpbar { filter: var(--outline); }
+.hpbar.shielded .track { box-shadow: inset 0 0 0 3px #7fb6dc; }
+.track i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(#ef6b75, #c13340 55%, #8d1e2a); transition: width 0.25s; }
+.track s { position: absolute; top: 0; bottom: 0; background: linear-gradient(#c5e6fb, #8fc6ea 55%, #5a9cc8); transition: width 0.25s, left 0.25s; }
+.track s.risk { background: repeating-linear-gradient(-45deg, #ffd34d 0 3px, #5a9cc8 3px 6px); animation: risk 0.9s ease-in-out infinite; }
+.track em { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(-45deg, #ffd34d 0 3px, #8a1f2a 3px 6px); animation: risk 0.9s ease-in-out infinite; }
+.hpbar.lethal { animation: lethal-f 0.9s ease-in-out infinite; }
+.hp-num { position: absolute; inset: 0; display: grid; place-items: center; font: 700 15px/1 Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #000, 0 0 3px #000; }
+.sh-badge {
+  position: absolute; left: -14px; top: 50%; z-index: 1; width: 34px; height: 38px; transform: translateY(-50%);
+  display: grid; place-items: center; background: linear-gradient(#8fc0e4, #4f86b3);
+  clip-path: polygon(0 4%, 50% 0, 100% 4%, 100% 52%, 50% 100%, 0 52%);
+  font: 700 16px/1 Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #120c09;
+}
+@keyframes risk { 50% { opacity: 0.45; } }
+@keyframes lethal-f { 50% { filter: var(--outline) drop-shadow(0 0 6px #ff4d6a); } }
+
+/* the sparks bar: three cells that run into the ability button; full, both shine like the lit turn button */
+.spk { position: relative; display: flex; gap: 3px; height: 12px; margin-right: -24px; padding: 2px 26px 2px 3px; background: #241a33; clip-path: var(--cut-bar); }
+.spk i { flex: 1; background: #3a2c55; }
+.spk i.on { background: linear-gradient(#a98bf0, #6b4cc0); }
+.spk.full { background: #d9c8ff; box-shadow: 0 0 12px #c9a8ff; }
+.spk.full i { background: linear-gradient(#f1e8ff, #b896ff); animation: shine 1.4s ease-in-out infinite; }
+@keyframes shine { 50% { filter: brightness(1.25); } }
+
+.ability {
+  left: calc(var(--pf-w) + 300px); bottom: 0; width: 104px; height: 112px; padding: 10px 6px 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  border: 0; cursor: pointer; background: none; filter: var(--outline);
+}
+.ability::before { content: ''; position: absolute; inset: 0; clip-path: var(--cut-gem); background: linear-gradient(#5a3f99, #2f2050); }
+.ability::after { content: ''; position: absolute; inset: 7px; clip-path: var(--cut-gem); background: linear-gradient(160deg, #8f6fe0, #5a3aa8 60%, #3d2875); }
+.ability > * { position: relative; z-index: 1; }
+.ability b { font: 700 15px/1 Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #120c09; }
+.ability:disabled { cursor: default; }
+.ability:disabled::after { filter: saturate(0.45) brightness(0.7); }
+.ability.full::after { background: linear-gradient(160deg, #c7b0ff, #8f6fe0 55%, #5a3aa8); }
+.ability.full { filter: var(--outline) drop-shadow(0 0 10px #c9a8ff); }
+.ability.on { filter: var(--outline) drop-shadow(0 0 12px var(--ab)); }
+.ability.on::before { background: var(--ab); }
+.ability:not(:disabled):active { transform: translateY(2px); }
+.pips { display: inline-flex; gap: 4px; }
+.pips i { width: 10px; height: 10px; transform: rotate(45deg); border: 2px solid #120c09; background: #2b2140; }
+.pips i.on { background: #e4d6ff; }
+
+/* the hero's card from the portrait */
+.hero-card {
+  left: 0; bottom: calc(var(--pf-h) + 10px); width: min(340px, calc(100vw - 32px)); padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 6px;
+  background: #2a211b; border: 2px solid #120c09; outline: 2px solid var(--edge); outline-offset: -6px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+.hero-card h3 { margin: 0; font: 700 18px Oswald, sans-serif; }
+.hc-hit { margin: 0; color: var(--gold); font-size: 13px; }
+.hc-ab { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.hc-ab b { color: #c9a8ff; }
+.hero-card .up { grid-template-columns: minmax(0, 1fr) auto 44px; }
+.hero-card .up-name { white-space: normal; }
+.hero-card .up-name small { display: block; color: var(--muted); font-size: 11px; line-height: 1.25; margin-top: 1px; }
+
+/* ---------- the one big turn button: «В бой!», «Конец хода», «Ждём…», «Ход врагов» */
+.turn-btn {
+  position: fixed; right: 20px; bottom: calc(20px + var(--safe-b)); z-index: 6;
+  width: 360px; height: 96px; padding: 0 20px; border: 0; background: none; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  filter: var(--outline) drop-shadow(0 5px 0 rgba(0, 0, 0, 0.55));
+  --p1: #b39253; --p2: #8a6b36; --p3: #5c4422; --tc: #2a1a0c;
+  --plate: var(--cut-slab);
+  transition: filter 0.2s;
+}
+.tb-plate { position: absolute; inset: 0; clip-path: var(--plate); background: linear-gradient(var(--p1), var(--p2) 55%, var(--p3)); }
+.tb-plate::before { content: ''; position: absolute; inset: 0; clip-path: var(--plate); background: linear-gradient(rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 38%); }
+.tb-plate::after { content: ''; position: absolute; left: 4%; right: 4%; bottom: 0; height: 18%; background: rgba(0, 0, 0, 0.22); clip-path: polygon(0 0, 100% 0, 96% 100%, 3% 100%); }
+.turn-btn b { position: relative; font: 700 38px/1 Oswald, sans-serif; text-transform: uppercase; letter-spacing: 0.03em; color: var(--tc); }
+.turn-btn small { position: relative; font: 600 13px/1 Oswald, sans-serif; color: var(--tc); opacity: 0.8; }
+.turn-btn.lit { --p1: var(--gold-1); --p2: var(--gold-2); --p3: var(--gold-3); filter: var(--outline) drop-shadow(0 5px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 16px rgba(255, 200, 80, 0.75)); animation: lit 1.6s ease-in-out infinite; }
+.turn-btn.confirm { --p1: #ffb86b; --p2: #e07a2e; --p3: #9a4112; }
+.turn-btn.wait { --p1: #8a7a5c; --p2: #6b5b40; --p3: #46392a; --tc: #f3e6c8; }
+.turn-btn.wait b { animation: wait 1.4s ease-in-out infinite; }
+.turn-btn.enemy { --p1: #e2525e; --p2: #b8323f; --p3: #6e1520; --tc: #fff; cursor: default; }
+.turn-btn:not(:disabled):active { transform: translateY(3px); }
+.turn-btn:disabled:not(.enemy):not(.wait) { cursor: default; }
+@keyframes lit { 50% { filter: var(--outline) drop-shadow(0 5px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 26px rgba(255, 210, 90, 0.95)); } }
+@keyframes wait { 50% { opacity: 0.6; } }
+@media (prefers-reduced-motion: reduce) { .turn-btn.lit, .turn-btn.wait b, .spk.full i { animation: none; } }
+
+/* ---------- a phone on its side: the same corners, smaller */
+@media (max-height: 520px) and (orientation: landscape) {
+  .hud-top { gap: 8px; padding: max(4px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 4px max(8px, env(safe-area-inset-left)); }
+  .head { width: 34px; height: 38px; }
+  .head canvas { width: 34px; height: 31px; }
+  .head .a-hp { height: 4px; }
+  .ore-chip { font-size: 15px; padding: 2px 10px 2px 6px; }
+  .ore-chip .ico { width: 20px; height: 20px; }
+  .where b { font-size: 14px; }
+  .where-sub { font-size: 11px; }
+  .qb { width: 34px; height: 34px; }
+  .queue li.boss .qb { width: 40px; height: 40px; margin-top: -3px; }
+  .queue li + li { margin-left: 13px; }
+  .queue li + li::before { left: -12px; top: 11px; width: 8px; height: 11px; }
+  .ib { min-width: 18px; height: 18px; font-size: 11px; padding: 0 3px; }
+  .ib.sp .ico { width: 12px; height: 12px; }
+  .qi { right: -7px; bottom: -6px; }
+  .ibtn { width: 34px; height: 34px; padding: 5px; }
+  .boss-bar { top: 52px; padding: 4px 10px 4px 6px; }
+  .boss-bar canvas { width: 30px; height: 30px; }
+  .log-panel { top: 50px; }
+  .corner { left: max(8px, env(safe-area-inset-left)); bottom: calc(8px + var(--safe-b)); width: 330px; height: 118px; --pf-w: 84px; --pf-h: 104px; }
+  .pname { font-size: 13px; left: 5px; right: 5px; bottom: 5px; }
+  .statuses .st { width: 22px; height: 22px; padding: 2px; }
+  .discs { bottom: 44px; left: calc(var(--pf-w) + 10px); }
+  .discs i { width: 30px; height: 11px; margin-top: -3px; border-width: 1.5px; }
+  .hit-info { display: none; }
+  .bars { left: calc(var(--pf-w) + 8px); bottom: 6px; width: 176px; gap: 4px; }
+  .hpbar { height: 19px; margin-right: 12px; }
+  .hp-num { font-size: 11px; }
+  .sh-badge { width: 24px; height: 27px; left: -10px; font-size: 12px; }
+  .spk { height: 9px; margin-right: -16px; padding-right: 18px; }
+  .ability { left: calc(var(--pf-w) + 176px); width: 68px; height: 74px; padding-top: 6px; gap: 3px; }
+  .ability b { font-size: 10px; }
+  .pips i { width: 7px; height: 7px; border-width: 1.5px; }
+  .turn-btn { right: max(10px, env(safe-area-inset-right)); bottom: calc(8px + var(--safe-b)); width: 210px; height: 58px; }
+  .turn-btn b { font-size: 22px; }
+  .turn-btn small { font-size: 10px; }
+}
+
+/* ---------- a phone held upright: the strip wraps the queue onto its own row, my hero gets a board along the bottom,
+   and the turn button sits on the board above the health, its lower edge stepping round the ability */
+@media (orientation: portrait) and (max-width: 700px) {
+  .hud-top { flex-wrap: wrap; gap: 6px 8px; padding: max(6px, env(safe-area-inset-top)) 8px 6px; }
+  .head { width: 34px; height: 38px; }
+  .head canvas { width: 34px; height: 31px; }
+  .head .a-hp { height: 4px; }
+  .party { gap: 5px; }
+  .ore-chip { font-size: 15px; padding: 2px 10px 2px 6px; }
+  .ore-chip .ico { width: 20px; height: 20px; }
+  .where b { font-size: 14px; }
+  .where-sub { font-size: 11px; gap: 6px; }
+  .top-btns { gap: 5px; }
+  .ibtn { width: 34px; height: 34px; padding: 5px; }
+  .queue { order: 5; flex-basis: 100%; justify-content: center; margin: 2px 0 0; }
+  .qb { width: 38px; height: 38px; }
+  .queue li.boss .qb { width: 44px; height: 44px; margin-top: -3px; }
+  .queue li + li { margin-left: 14px; }
+  .queue li + li::before { left: -13px; top: 13px; width: 9px; height: 12px; }
+  .ib { min-width: 19px; height: 19px; font-size: 11px; padding: 0 3px; }
+  .ib.sp .ico { width: 12px; height: 12px; }
+  .qi { right: -7px; bottom: -6px; }
+  .boss-bar { top: 104px; }
+  .log-panel { top: 52px; }
+  .corner { left: 6px; right: 6px; bottom: calc(6px + var(--safe-b)); width: auto; height: 136px; --pf-w: 94px; --pf-h: 128px; }
+  .corner::before {
+    content: ''; position: absolute; inset: 14px -6px -14px; z-index: -1; pointer-events: none;
+    background: linear-gradient(color-mix(in srgb, var(--dk) 70%, #120c09), #19120e);
+    clip-path: polygon(0 10px, 22% 0, 100% 6px, 100% 100%, 0 100%); border-top: 3px solid var(--c);
+  }
+  .pname { font-size: 15px; left: 6px; right: 6px; bottom: 6px; }
+  .statuses .st { width: 24px; height: 24px; padding: 2px; }
+  .discs { left: calc(var(--pf-w) + 8px); top: 22px; bottom: auto; }
+  .discs i { width: 32px; height: 12px; margin-top: -3px; border-width: 1.5px; }
+  .hit-info { display: none; }
+  .bars { left: calc(var(--pf-w) + 10px); right: 92px; bottom: 6px; width: auto; gap: 5px; }
+  .hpbar { height: 22px; margin-right: 6px; }
+  .hp-num { font-size: 13px; }
+  .sh-badge { width: 27px; height: 30px; left: -11px; font-size: 13px; }
+  .spk { height: 10px; margin-right: -22px; padding-right: 24px; }
+  .ability { left: auto; right: 0; bottom: 0; width: 90px; height: 96px; padding-top: 8px; gap: 4px; }
+  .ability b { font-size: 12px; }
+  .pips i { width: 8px; height: 8px; }
+  .hero-card { bottom: calc(100% + 8px); }
+  .turn-btn {
+    left: 146px; right: 10px; bottom: calc(6px + var(--safe-b) + 68px); width: auto; height: 58px; padding: 0 100px 6px 12px;
+    --plate: polygon(0 10px, 40% 0, calc(100% - 6px) 3px, 100% 16px, 100% calc(100% - 36px), calc(100% - 9px) calc(100% - 33px),
+      calc(100% - 90px) calc(100% - 29px), calc(100% - 104px) 100%, 7px calc(100% - 3px), 0 62%);
+  }
+  .turn-btn b { font-size: 24px; }
+  .turn-btn small { font-size: 10px; }
+}
 
 /* a band across the room for a moment when the turn passes */
 .turn-banner {
@@ -158,178 +464,6 @@ button { font: inherit; color: inherit; }
   box-shadow: inset 0 0 0 3px rgba(194, 54, 79, 0.85), inset 0 0 90px rgba(184, 50, 63, 0.55);
 }
 [data-turn='enemies'] .turn-glow { opacity: 1; }
-.frame { transition: filter 0.35s; }
-[data-turn='enemies'] .frame { filter: saturate(0.35) brightness(0.75); }
-.fight {
-  position: fixed;
-  left: 50%;
-  bottom: calc(var(--frame-h) + 26px + var(--safe-b));
-  transform: translateX(-50%);
-  z-index: 5;
-  padding: 10px 34px;
-  font-size: 20px;
-  background: #c2364f;
-  color: #fff;
-  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.5), 0 0 24px rgba(194, 54, 79, 0.45);
-}
-.fight[hidden] { display: none; }
-
-/* ---------- allies */
-.allies {
-  position: fixed;
-  left: 12px;
-  top: 76px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  z-index: 4;
-}
-.ally {
-  position: relative;
-  width: 64px;
-  padding: 0;
-  border: 2px solid var(--c);
-  border-radius: 10px;
-  overflow: hidden;
-  background: var(--panel);
-  cursor: pointer;
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
-}
-.ally canvas { display: block; width: 100%; aspect-ratio: 1; }
-.ally .a-hp { position: absolute; left: 4px; right: 4px; bottom: 16px; height: 5px; background: #2a1f18; border-radius: 3px; overflow: hidden; }
-.ally .a-hp i { position: absolute; inset: 0 auto 0 0; background: var(--hp); }
-.ally .a-hp em { position: absolute; top: 0; bottom: 0; }
-.ally .a-res { display: block; font-size: 10px; text-align: center; padding: 1px 0 2px; background: rgba(0, 0, 0, 0.55); color: var(--text); }
-.ally.dead { filter: grayscale(1) brightness(0.6); }
-
-/* ---------- enemies and their intents */
-.mobs {
-  position: fixed;
-  right: 12px;
-  top: 76px;
-  z-index: 4;
-  max-height: calc(100dvh - var(--frame-h) - 330px);
-  overflow-y: auto;
-  padding: 6px;
-  background: rgba(27, 22, 18, 0.82);
-  border: 2px solid var(--ink);
-  border-radius: 10px;
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
-}
-.mobs[hidden] { display: none; }
-.mobs ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.mobs li { display: grid; grid-template-columns: 30px 82px 44px 40px; align-items: center; gap: 6px; font-size: 12px; border-radius: 6px; transition: background-color 0.15s, opacity 0.15s; }
-/* enemy turn: the enemy moving now is lit, the ones that have moved fade back */
-.mobs li.now { background: rgba(217, 178, 74, 0.28); box-shadow: inset 0 0 0 1.5px var(--gold); }
-.mobs li.done { opacity: 0.45; }
-.mobs img { width: 30px; height: 30px; display: block; }
-.m-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.m-hp { position: relative; height: 12px; background: #2a1f18; border-radius: 4px; overflow: hidden; }
-.m-hp i { display: block; height: 100%; background: #d9434f; }
-.m-hp em { position: absolute; top: 0; bottom: 0; background: #ff8a3d; }
-.m-hp b { position: absolute; inset: 0; font: 600 10px/12px Oswald, sans-serif; text-align: center; color: #fff; }
-.m-act { display: flex; align-items: center; gap: 4px; }
-.m-hit {
-  min-width: 18px; height: 18px; padding: 0 3px;
-  font: 600 12px/18px Oswald, sans-serif; text-align: center; color: #fff;
-  background: #b8323f; border: 1.5px solid var(--ink); border-radius: 4px 4px 9px 9px;
-}
-.m-go { min-width: 18px; text-align: center; font-weight: 700; color: #d6cfbd; }
-.m-sp { font: 600 11px/16px Oswald, sans-serif; color: #fff; background: #6b4fa8; border: 1.5px solid var(--ink); border-radius: 4px; padding: 0 4px; white-space: nowrap; }
-.m-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--c); border: 1.5px solid var(--ink); flex: none; }
-
-/* ---------- camera controls */
-.camctl {
-  position: fixed;
-  right: 12px;
-  bottom: calc(var(--frame-h) + 24px + var(--safe-b));
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  z-index: 4;
-}
-
-/* ---------- hero frame */
-.frame {
-  position: fixed;
-  left: 50%;
-  bottom: calc(10px + var(--safe-b));
-  transform: translateX(-50%);
-  width: min(1000px, calc(100% - 20px));
-  height: var(--frame-h);
-  display: grid;
-  grid-template-columns: auto minmax(170px, 1fr) minmax(170px, 230px) minmax(250px, 300px);
-  gap: 12px;
-  align-items: stretch;
-  padding: 10px;
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.15)),
-    var(--panel);
-  border: 2px solid var(--ink);
-  outline: 2px solid var(--edge);
-  outline-offset: -5px;
-  border-radius: 14px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
-  z-index: 5;
-}
-.frame > * { min-width: 0; min-height: 0; }
-.pf-wrap {
-  width: calc(var(--frame-h) - 24px);
-  height: calc(var(--frame-h) - 24px);
-  border-radius: 10px;
-  overflow: hidden;
-  border: 2px solid var(--ink);
-}
-.pf-wrap canvas { width: 100%; height: 100%; display: block; }
-.who { display: flex; flex-direction: column; justify-content: center; gap: 6px; min-width: 0; }
-.name-row { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-.name-row b { font: 700 20px Oswald, sans-serif; letter-spacing: 0.02em; }
-.state { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hpbar { position: relative; height: 16px; background: #1d1611; border: 1.5px solid var(--ink); border-radius: 8px; overflow: hidden; }
-.hpbar i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(#e85b66, #a52a35); transition: width 0.25s; }
-/* the part of the health that the coming enemy turn will take, unless someone stops it */
-.hpbar em, .ally .a-hp em { background: repeating-linear-gradient(-45deg, #ffd34d 0 3px, #8a1f2a 3px 6px); animation: risk 0.9s ease-in-out infinite; }
-.hpbar em { position: absolute; top: 0; bottom: 0; }
-.hpbar.lethal { border-color: #ff4d6a; box-shadow: 0 0 0 2px rgba(255, 77, 106, 0.45); animation: lethal 0.9s ease-in-out infinite; }
-.ally.lethal { animation: lethal 0.9s ease-in-out infinite; }
-@keyframes risk { 50% { opacity: 0.45; } }
-@keyframes lethal { 50% { box-shadow: 0 0 0 3px rgba(255, 77, 106, 0.85); } }
-.stats .rage { color: #ff6b7d; font-weight: 600; }
-.stats .rage.soon { color: #ffb070; font-weight: 400; }
-.hpbar span { position: relative; display: block; text-align: center; font: 600 12px/13px Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #000; }
-.res { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-.r { display: inline-flex; align-items: center; gap: 4px; font: 600 15px Oswald, sans-serif; }
-.r svg { width: 15px; height: 15px; stroke: var(--ink); stroke-width: 1.2; }
-.r.shield svg { fill: var(--teal); }
-.r.ore svg { fill: var(--ore); }
-.r.spk svg { fill: var(--spark); }
-.r.hand svg { fill: var(--c); }
-.r.hand.out b { color: var(--muted); }
-
-.ability {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  text-align: left;
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 2px solid var(--ink);
-  background: linear-gradient(#3f3354, #2a2238);
-  cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 2px 0 rgba(0, 0, 0, 0.45);
-  min-width: 0;
-}
-.ability:not(:disabled):hover { background: linear-gradient(#4b3d66, #332a45); }
-.ability:disabled { opacity: 0.55; cursor: default; }
-/* switched on for this turn: lit in the hero's ability colour until the turn ends */
-.ability.on { opacity: 1; border-color: var(--ab); box-shadow: 0 0 0 2px var(--ab), 0 0 14px var(--ab); }
-.ability.on .ab-head b { color: var(--ab); }
-.ab-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
-.ab-head b { font: 600 16px Oswald, sans-serif; color: var(--spark); }
-.ability small { color: var(--muted); font-size: 12px; line-height: 1.3; }
-.pips { display: inline-flex; gap: 3px; }
-.pips i { width: 9px; height: 9px; transform: rotate(45deg); border: 1.5px solid var(--ink); background: #2a1f18; }
-.pips i.on { background: var(--spark); }
 
 .ups { display: flex; flex-direction: column; justify-content: center; gap: 4px; }
 .up { display: grid; grid-template-columns: minmax(0, 1fr) auto 40px auto; align-items: center; gap: 8px; font-size: 13px; }
@@ -340,10 +474,7 @@ button { font: inherit; color: inherit; }
 .up .lvl i.on { background: var(--gold); }
 .up b { font-family: Oswald, sans-serif; font-weight: 600; text-align: right; }
 .up .btn { justify-self: end; white-space: nowrap; }
-.ups-toggle { display: none; }
 .ups-note { color: var(--muted); font-size: 11px; }
-/* in the hero frame the upgrades are only shown: no buy buttons there */
-.frame .up { grid-template-columns: minmax(0, 1fr) auto 44px; }
 
 /* ---------- the blacksmith's: every hero's upgrades for sale */
 .forge-panel { width: min(980px, 100%); }
@@ -487,92 +618,16 @@ button { font: inherit; color: inherit; }
 .map-info b { color: var(--text); }
 .map-votes { color: var(--gold); }
 
-/* ---------- small screens: compact frame, upgrades in a pull-up sheet */
+/* ---------- small screens */
 @media (max-width: 820px), (max-height: 520px) {
-  :root { --frame-h: 84px; }
-  .frame {
-    grid-template-columns: auto 1fr minmax(118px, 34%) auto;
-    gap: 8px;
-    padding: 7px;
-    bottom: calc(6px + var(--safe-b));
-    width: calc(100% - 12px);
-  }
-  .name-row b { font-size: 16px; }
-  .state { display: none; }
-  .who { gap: 4px; }
-  .hpbar { height: 14px; }
-  .hpbar span { font-size: 11px; line-height: 11px; }
-  .res { gap: 7px; flex-wrap: nowrap; }
-  .ability, .ups-toggle { overflow: hidden; }
-  .r { font-size: 13px; }
-  .ability { padding: 5px 7px; gap: 2px; }
-  .ability small { display: none; }
-  .ab-head { flex-direction: column; align-items: flex-start; }
-  .ab-head b { font-size: 14px; }
-  .ups-toggle { display: block; padding: 6px 9px; }
-  .frame .ups {
-    display: none;
-    position: absolute;
-    right: 0;
-    bottom: calc(100% + 8px);
-    width: min(330px, 100%);
-    padding: 10px;
-    background: var(--panel);
-    border: 2px solid var(--ink);
-    border-radius: 12px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
-  }
-  .frame.ups-open .ups { display: flex; gap: 8px; }
-  .up-name { white-space: normal; }
-  .up-name small { display: block; color: var(--muted); font-size: 11px; line-height: 1.25; margin-top: 1px; }
-  .pf-wrap { width: calc(var(--frame-h) - 18px); height: calc(var(--frame-h) - 18px); }
   .panel { padding: 14px; }
   .chip { padding: 5px 9px; }
-  .loc b { font-size: 14px; }
-  .stats { gap: 9px; font-size: 12px; }
-  .allies { left: 8px; top: 66px; gap: 6px; }
-  .ally { width: 48px; }
-  .ally .a-hp { bottom: 14px; height: 4px; }
-  .ally .a-res { font-size: 9px; }
-  .camctl { right: 8px; bottom: calc(var(--frame-h) + 16px + var(--safe-b)); gap: 6px; }
-  .mobs { right: 8px; top: 66px; padding: 4px; }
   .pick-heroes { gap: 6px; }
   .pick span { font-size: 13px; }
   .pick em { display: none; }
-  .mobs li { grid-template-columns: 24px 34px 38px; gap: 4px; }
-  .mobs img { width: 24px; height: 24px; }
-  .m-name { display: none; }
-  .btn.round { width: 36px; height: 36px; font-size: 16px; }
-  .turn-banner b { font-size: 32px; }
-  .turn-banner span { font-size: 12px; }
-  .stats .side { font-size: 12px; padding: 0 7px; }
-  .fight { bottom: calc(var(--frame-h) + 18px + var(--safe-b)); padding: 8px 26px; font-size: 18px; }
+  .up-name { white-space: normal; }
+  .up-name small { display: block; color: var(--muted); font-size: 11px; line-height: 1.25; margin-top: 1px; }
 }
-@media (max-width: 560px) {
-  .stats .mobs-n { display: none; }
-  .loc span { max-width: 40vw; }
-  .top-btns .btn:not(.round) { padding: 6px 9px; }
-}
-/* a phone held upright has no room in the counters row: the discs sit on the portrait's bottom corner */
-@media (max-width: 480px) {
-  .r.hand {
-    position: absolute;
-    left: calc(5px + var(--frame-h) - 18px);
-    bottom: 9px;
-    transform: translateX(-100%);
-    padding: 1px 5px 1px 4px;
-    background: rgba(26, 18, 16, 0.85);
-    border-radius: 8px 0 8px 0;
-  }
-}
-@media (max-height: 520px) and (orientation: landscape) {
-  .camctl { flex-direction: row; bottom: calc(var(--frame-h) + 14px); }
-  .fight { left: auto; right: 8px; transform: none; bottom: calc(var(--frame-h) + 62px); }
-  .allies { top: 58px; }
-  .ally { width: 42px; }
-  .mobs { top: 58px; max-height: calc(100dvh - var(--frame-h) - 140px); }
-}
-.ally:disabled { cursor: default; }
 
 /* ---------- victory banner: the result screen after the last boss */
 .win-deco { display: none; }
