@@ -842,21 +842,26 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 }
 @media (prefers-reduced-motion: reduce) { #map .mnode.art.reach .mart { animation: none; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 3px var(--gold)) drop-shadow(0 0 8px var(--gold)); } }
 
-/* the HP bar and the sparks as cardboard: a die-cut wedge with the health printed into its groove, and three crystal shards */
-/* health is an angular bar in the spirit of the end-turn blade, pointed on the left and cut at a slant on the right, with no
-   plate under it (hp_empty, hp_full, hp_shield: one shape, stretched whole). The red runs from x 29 to 989 of 1024, so .track is that span and the fills stay plain percentages of it; each fill shows the same
-   picture at the blade's full size (cqw/cqh of the track), shifted by where the fill starts (--x, set with it) */
-.art-hp_empty.art-hp_full .corner .hpbar { height: auto; aspect-ratio: 1024 / 189; background: var(--ui-hp_empty) center / 100% 100% no-repeat; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
-.art-hp_empty.art-hp_full .corner .hpbar .track { inset: 0 3.418% 0 2.832%; clip-path: none; background: none; container-type: size; }
+/* the HP bar and the sparks as die-cut cardboard (art/ui/draw_hp_spk.py draws both from the shapes Vladislav picked) */
+/* health «Мягкий перехват», after his sketch: a tall left end, a dip with a step on top, a pinched waist and a slanted right
+   end, with no plate under it (hp_empty, hp_full, hp_shield: one shape, stretched whole). The red runs from x 42 to 975 of
+   1024, so .track is that span and the fills stay plain percentages of it; each fill shows the same picture at the bar's
+   full size (cqw/cqh of the track), shifted by where the fill starts (--x, set with it) */
+.art-hp_empty.art-hp_full .corner .hpbar { height: auto; aspect-ratio: 1024 / 319; background: var(--ui-hp_empty) center / 100% 100% no-repeat; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
+.art-hp_empty.art-hp_full .corner .hpbar .track { inset: 0 4.785% 0 4.102%; clip-path: none; background: none; container-type: size; }
 .art-hp_empty.art-hp_full .corner .hpbar.shielded .track { box-shadow: none; }
-.art-hp_empty.art-hp_full .corner .track > * { background: var(--ui-hp_full) calc(-3.021cqw - var(--x, 0) * 1cqw) 0 / 106.67cqw 100cqh no-repeat; }
+.art-hp_empty.art-hp_full .corner .track > * { background: var(--ui-hp_full) calc(-4.502cqw - var(--x, 0) * 1cqw) 0 / 109.75cqw 100cqh no-repeat; }
 .art-hp_empty.art-hp_full .corner .track s { background-image: var(--ui-hp_shield); }
 .art-hp_empty.art-hp_full .corner .track s.risk, .art-hp_empty.art-hp_full .corner .track em { filter: brightness(1.7) saturate(0.5); }
-/* the number sits in the bar's middle */
-.art-hp_empty.art-hp_full .corner .hp-num { inset: 18% 12% 12% 12%; }
-.art-spk_1_on .spk { background: none; clip-path: none; box-shadow: none; padding: 0; gap: 4px; height: 32px; margin: -4px 18px 0 4px; }
-.art-spk_1_on .spk i { flex: 1; background: center / contain no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
-/* three different shards, lit and dark in the same shape; each sits whole in its cell, so they differ in size too */
+/* the number sits in the bar's wide right part, past the waist */
+.art-hp_empty.art-hp_full .corner .hp-num { inset: 20% 12% 30% 44%; font-size: 20px; }
+/* the sparks are one long crystal (its point at the ability gem) split in three: each piece keeps its own width and the
+   pieces overlap by their margins (14 of 856 px), so the cracks line up with a hair of a gap */
+.art-spk_1_on .spk { background: none; clip-path: none; box-shadow: none; padding: 0; gap: 0; height: auto; align-items: flex-start; margin: -2px 18px 0 4px; }
+.art-spk_1_on .spk i { flex: none; background: center / 100% 100% no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
+.art-spk_1_on .spk i:nth-child(1) { width: 33.18%; aspect-ratio: 284 / 124; }
+.art-spk_1_on .spk i:nth-child(2) { width: 36.21%; aspect-ratio: 310 / 124; margin-left: -1.64%; }
+.art-spk_1_on .spk i:nth-child(3) { width: 33.88%; aspect-ratio: 290 / 124; margin-left: -1.64%; }
 .art-spk_1_off .spk i:nth-child(1) { background-image: var(--ui-spk_1_off); }
 .art-spk_2_off .spk i:nth-child(2) { background-image: var(--ui-spk_2_off); }
 .art-spk_3_off .spk i:nth-child(3) { background-image: var(--ui-spk_3_off); }
@@ -864,8 +869,17 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .art-spk_2_on .spk i.on:nth-child(2) { background-image: var(--ui-spk_2_on); }
 .art-spk_3_on .spk i.on:nth-child(3) { background-image: var(--ui-spk_3_on); }
 .art-spk_1_on .spk.full i { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 6px #c9a8ff); }
-@media (max-height: 520px) and (orientation: landscape) { .art-spk_1_on .spk { height: 22px; margin-right: 12px; } }
-@media (orientation: portrait) and (max-width: 700px) { .art-spk_1_on .spk { height: 24px; margin-right: 6px; } }
+@media (max-height: 520px) and (orientation: landscape) {
+  .art-spk_1_on .spk { margin-right: 12px; }
+  .art-hp_empty.art-hp_full .corner .hp-num { font-size: 15px; }
+}
+@media (orientation: portrait) and (max-width: 700px) {
+  .art-spk_1_on .spk { margin-right: 6px; }
+  .art-hp_empty.art-hp_full .corner .hp-num { font-size: 17px; }
+  /* the painted bar and crystal are taller than the drawn ones and grow with the screen (the bars are 100vw - 208px wide,
+     about 0.43 of that tall without the bar's transparent top), so the blade above them rises with them */
+  .art-hp_empty.art-hp_full .turn-btn { bottom: calc(14px + var(--safe-b) + (100vw - 208px) * 0.425); }
+}
 
 /* the menus stand on a painted disco dungeon instead of the dimmed room */
 .art-menu_bg .overlay.solid { background: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_bg) center / cover no-repeat; }
