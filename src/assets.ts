@@ -1,10 +1,15 @@
 // Art loader. public/assets/manifest.json lists the pictures that exist;
 // anything missing falls back to the code-drawn placeholder.
 
+import { ENEMY_BASE, HEROES, HERO_FIG, MOBS, type MobKind } from './data';
+import { makeStandee, type Standee } from './draw/standee';
+
 export interface Sprite {
   img: HTMLImageElement;
   /** Which way the figure looks in the picture; used to turn it toward its target. */
   facing: 'left' | 'right';
+  /** The picture as a sticker on a plastic plate in the colour of the figure's stand: what the game draws. */
+  standee: Standee;
 }
 
 interface ManifestEntry { file: string; facing?: 'left' | 'right' }
@@ -33,7 +38,11 @@ export async function loadSprites(onLoad: () => void): Promise<void> {
     img.src = `${base}assets/${file}`;
   });
   await Promise.all([
-    ...Object.entries(figures).map(([key, e]) => load(e.file, img => sprites.set(key, { img, facing: e.facing ?? 'right' }))),
+    ...Object.entries(figures).map(([key, e]) => load(e.file, img => {
+      const facing = e.facing ?? 'right', fig = MOBS[key as MobKind]?.fig ?? HERO_FIG;
+      const tint = HEROES.find(h => h.key === key)?.col ?? ENEMY_BASE;
+      sprites.set(key, { img, facing, standee: makeStandee(img, facing, fig / HERO_FIG, tint) });
+    })),
     ...Object.entries(env).map(([key, file]) => load(file, img => envArt.set(key, img))),
   ]);
 }
