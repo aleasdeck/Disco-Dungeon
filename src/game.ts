@@ -976,7 +976,7 @@ export class Game {
     };
     for (const b of standing(S.blocks)) mark(Math.floor(b.x0 / TILE), Math.floor(b.y0 / TILE));
     for (const n of S.nodes) if (n.left > 0) mark(Math.floor(n.x / TILE), Math.floor(n.y / TILE));
-    for (const p of S.pits) mark(p.i, p.j, p.s);
+    for (const p of S.pits) for (const [i, j] of p.cells) mark(i, j);
     if (mobs) for (const o of S.mobs) {
       if (o === self || o.hp <= 0) continue;
       mark(...cellAt(o.tx, o.ty, mobSize(o.k)), mobSize(o.k));

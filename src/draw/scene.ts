@@ -4,7 +4,7 @@
 import { WALL_WORDS, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize } from '../data';
 import type { Camera, Vec } from '../camera';
 import { type Disc, type Game, type HeroState } from '../game';
-import { cellAt, floorAt, hazKey, isFloor, pitAt, type Block, type Decal, type Edge, type Mob, type Pit, type ResNode } from '../room';
+import { cellAt, floorAt, hazKey, inPit, isFloor, pitAt, type Block, type Decal, type Edge, type Mob, type Pit, type ResNode } from '../room';
 import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure } from './figures';
 import { circ, ell, fs, mix, pth, rr, type Ctx, type Pt } from './util';
 import { GRAFFITI_FONTS, envArt } from '../assets';
@@ -764,32 +764,37 @@ export class SceneRenderer {
     });
   }
 
-  /** The opening of a hole in the floor, on screen. */
-  private mouth(p: Pit): Pt[] {
-    const P = this.P, x0 = p.i * TILE, y0 = p.j * TILE, x1 = x0 + p.s * TILE, y1 = y0 + p.s * TILE;
-    return [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)];
+  /** The opening of a hole in the floor as the current path: its cells, one square each, which fill and clip as one shape. */
+  private mouth(p: Pit) {
+    const { c, P } = this;
+    c.beginPath();
+    for (const [i, j] of p.cells) {
+      const x0 = i * TILE, y0 = j * TILE, x1 = x0 + TILE, y1 = y0 + TILE;
+      c.moveTo(...P(x0, y0)); c.lineTo(...P(x1, y0)); c.lineTo(...P(x1, y1)); c.lineTo(...P(x0, y1)); c.closePath();
+    }
   }
 
   /**
-   * A square hole in the floor: the far walls of the shaft, in the room's own masonry, sink into the dark in flat bands,
-   * and the opening is inked like the edge of the room. A bigger hole shows more of the black below.
+   * A hole in the floor, any shape of cells: the far walls of the shaft, in the room's own masonry, sink into the dark in
+   * flat bands, and the opening is inked like the edge of the room. A bigger hole shows more of the black below.
    */
   private drawPit(p: Pit) {
     const { c, P, cam } = this;
-    const B = this.g.S.biome, D = PIT_D, mouth = this.mouth(p), wt = env(`wall_${this.bk}`);
-    const x0 = p.i * TILE, y0 = p.j * TILE, x1 = x0 + p.s * TILE, y1 = y0 + p.s * TILE;
+    const B = this.g.S.biome, D = PIT_D, wt = env(`wall_${this.bk}`);
+    // the rim: every cell side with floor beyond it; its face, turned into the hole, shows when it looks at the viewer
+    const rim: { a: Vec; b: Vec; n: Vec }[] = [];
+    for (const [i, j] of p.cells) for (const [di, dj, ax, ay, bx, by] of SIDES) {
+      if (!inPit(p, i + di, j + dj)) rim.push({ a: [(i + ax) * TILE, (j + ay) * TILE], b: [(i + bx) * TILE, (j + by) * TILE], n: [-di, -dj] });
+    }
+    const mid = (f: { a: Vec; b: Vec }) => cam.depth((f.a[0] + f.b[0]) / 2, (f.a[1] + f.b[1]) / 2);
+    const walls = rim.filter(f => cam.facing(f.n[0], f.n[1]) > 1e-6).sort((f, g) => mid(f) - mid(g));
     c.save();
-    pth(c, mouth);
+    this.mouth(p);
     c.fillStyle = '#070403';
     c.fill();
     c.clip();
-    // each side's face, turned into the hole; only the ones looking at the viewer show
-    const all: { a: Vec; b: Vec; n: Vec }[] = [
-      { a: [x0, y0], b: [x1, y0], n: [0, 1] }, { a: [x1, y0], b: [x1, y1], n: [-1, 0] },
-      { a: [x0, y1], b: [x1, y1], n: [0, -1] }, { a: [x0, y0], b: [x0, y1], n: [1, 0] },
-    ];
-    const sides = all.filter(f => cam.facing(f.n[0], f.n[1]) > 1e-6);
-    for (const f of sides) {
+    // far walls first, so a nearer one that juts into the hole hides what is behind it
+    for (const f of walls) {
       const alongX = f.n[1] !== 0, u0 = alongX ? f.a[0] : f.a[1], u1 = alongX ? f.b[0] : f.b[1];
       const face: Pt[] = [P(...f.a), P(...f.b), P(...f.b, -D), P(...f.a, -D)];
       const at = (u: number, h: number) => (alongX ? P(u, f.a[1], h - D) : P(f.a[0], u, h - D));
@@ -802,16 +807,24 @@ export class SceneRenderer {
         c.fill();
       }
     }
-    // the far corner where two walls meet, inked down into the dark
-    const ends = sides.flatMap(f => [f.a, f.b]), corner = ends.find((v, k) => ends.findIndex(o => o[0] === v[0] && o[1] === v[1]) !== k);
-    if (corner) {
-      c.beginPath(); c.moveTo(...P(...corner)); c.lineTo(...P(...corner, -12));
-      c.strokeStyle = INK; c.lineWidth = DL; c.stroke();
+    // corners where a wall turns, inked down into the dark: the far ones and the ones a corner of floor juts into the hole
+    const same = (u: Vec, v: Vec) => u[0] === v[0] && u[1] === v[1];
+    c.beginPath();
+    const inked: Vec[] = [];
+    for (const f of walls) for (const v of [f.a, f.b]) {
+      if (inked.some(o => same(o, v)) || walls.some(g => g !== f && g.n[0] === f.n[0] && g.n[1] === f.n[1] && (same(g.a, v) || same(g.b, v)))) continue;
+      inked.push(v);
+      c.moveTo(...P(...v)); c.lineTo(...P(...v, -12));
     }
+    c.strokeStyle = INK;
+    c.lineWidth = DL;
+    c.stroke();
     c.restore();
-    pth(c, mouth);
+    c.beginPath();
+    for (const f of rim) { c.moveTo(...P(...f.a)); c.lineTo(...P(...f.b)); }
     c.strokeStyle = INK;
     c.lineWidth = OL;
+    c.lineCap = 'round';
     c.stroke();
   }
 
@@ -1054,7 +1067,7 @@ export class SceneRenderer {
     if (!hole) return this.drawPuck(d);
     // a disc going down a hole sinks behind its near rim
     this.c.save();
-    pth(this.c, this.mouth(hole));
+    this.mouth(hole);
     this.c.clip();
     this.drawPuck(d);
     this.c.restore();
