@@ -572,7 +572,7 @@ i.ico { display: inline-block; font-style: normal; }
 .menu-panel { text-align: center; width: min(420px, 100%); justify-self: center; }
 .logo { margin: 0; font: 700 clamp(44px, 12vw, 72px)/1 Oswald, sans-serif; letter-spacing: 0.02em; color: #f0e5d0; text-shadow: 0 4px 0 #120d0a; transform: rotate(-2deg); }
 .logo span { color: #d9733a; }
-.tagline { margin: 10px 0 26px; color: #b2a38c; }
+.menu-panel .logo { margin-bottom: 26px; }
 .menu-btns { display: grid; gap: 12px; }
 
 /* ---------- loading screen, over everything until the art and fonts are in */
