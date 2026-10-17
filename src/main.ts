@@ -12,6 +12,8 @@ import { hl } from './hl';
 import { MapView, type MapParty, type MapVotes } from './mapview';
 import { SceneRenderer } from './draw/scene';
 import { loadAll } from './assets';
+import { fillIcons } from './icons';
+import { sound, type Track } from './sound';
 import { clearSeat, loadHost, loadSeat, newKey, saveHost, saveSeat, type Ending, type HostSave } from './resume';
 import { FLOORS, LAYERS, agreed, depthOf, eventOf, newRun, nodeById, reachable, restRoom, type Run, type Votes } from './run';
 
@@ -304,6 +306,7 @@ function mapVotes(): MapVotes | undefined {
 }
 
 game.onChange = () => { hud.refresh(); dirty = true; stale = true; };
+game.onSound = (ev, p) => sound.play(ev, p);
 // online every party head says whose hero it is
 hud.nameOf = i => (game.online ? players.find(p => p.hero === i)?.name ?? null : null);
 hl.changed = () => { dirty = true; };
@@ -390,6 +393,16 @@ $('setBack').addEventListener('click', openMenu);
 const syncSettings = bindSettings(() => { applyQuality(); sizeCanvas(); });
 
 $('btnMenu').addEventListener('click', () => show('pause'));
+/** The speaker in the top bar: all sound on or off, remembered. */
+function soundBtn() {
+  const b = $('btnSound'), i = b.querySelector('i')!;
+  b.setAttribute('aria-pressed', String(!sound.muted));
+  b.title = sound.muted ? 'Включить звук' : 'Выключить звук';
+  i.className = `ico ico-${sound.muted ? 'mute' : 'sound'}`;
+  fillIcons(b);
+}
+$('btnSound').addEventListener('click', () => { sound.setMuted(!sound.muted); soundBtn(); });
+soundBtn();
 $('pResume').addEventListener('click', () => show(null));
 $('pHelp').addEventListener('click', () => { show(null); $('help').hidden = false; });
 $('pMenu').addEventListener('click', () => {
@@ -638,7 +651,7 @@ function shareState(now: number) {
   if (mode !== 'host' || !started || !game.S) return;
   const busy = game.moving() || game.S.phase === 'resolve' || game.S.phase === 'enemy';
   if (!(dirty || busy) || now - lastSnap < 50) return;
-  net.broadcast({ t: 'snap', s: snapshot(game) });
+  net.broadcast({ t: 'snap', s: { ...snapshot(game), cues: game.recentCues() } });
   dirty = false;
   lastSnap = now;
 }
@@ -699,6 +712,18 @@ async function reopen(code: string) {
   else if (!game.liveMobs().length || !game.alive().length) game.onRoomEnd(game.alive().length > 0);
 }
 
+/** The main menu and its screens. */
+const MENU_SCREENS = ['menu', 'heroSelect', 'lobby', 'collection', 'settingsScreen'];
+
+/** What plays now: the funk in the main menu, a floor's fight tune in a fight, the lounge everywhere else. */
+function track(): Track | null {
+  if (!booted) return null;
+  if (MENU_SCREENS.some(id => !$(id).hidden)) return 'menu';
+  const S = game.S;
+  if (mode !== 'menu' && !choosing && COMBAT_ROOMS.includes(S.spec.type) && S.phase !== 'over') return `fight${Math.min(2, S.spec.floor)}`;
+  return 'calm';
+}
+
 function applyQuality() {
   dprCap = settings.quality === 'low' ? 1 : 2;
 }
@@ -724,6 +749,9 @@ function frame(now: number) {
     if (anim.t >= 1) anim = null;
   }
   game.update(dt);
+  const t = track();
+  sound.music(t);
+  sound.muffle(t?.startsWith('fight') === true && game.S.phase === 'enemy');
   shareState(now);
   keepSeat(now);
   const camKey = `${cam.panX},${cam.panY},${cam.zoom},${cam.rot}`;
@@ -810,4 +838,4 @@ $('waitLeave').addEventListener('click', () => { leaveOnline(); hideEnd(); showM
 requestAnimationFrame(frame);
 
 // handle for automated checks
-Object.assign(window, { __dd: { game, cam, hud, scene, ctx, net, get view() { return view; }, get run() { return run; }, get mode() { return mode; } } });
+Object.assign(window, { __dd: { game, cam, hud, scene, ctx, net, sound, get view() { return view; }, get run() { return run; }, get mode() { return mode; } } });

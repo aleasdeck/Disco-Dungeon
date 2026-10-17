@@ -26,6 +26,8 @@ const SHAPES: Record<string, [string, string][]> = {
   hit: [['M4 20l9-9M13 11l7-7v4l-5 5', '#c9ced8'], ['M3 17l4 4M2 21l2-2', 'none']],
   plug: [['M8 2v5M14 2v5M5 7h12v4a6 6 0 0 1-12 0z', '#c7cbe0'], ['M11 17v5', 'none'], ['M3 21L21 3', 'none']],
   check: [['M3 13l6 6L21 6l-3-3-9 10-3-3z', '#5fd068']],
+  sound: [['M3 9h4l5-4v14l-5-4H3z', '#d9b24a'], ['M15 9a4 4 0 0 1 0 6M17.5 6a8 8 0 0 1 0 12', 'none']],
+  mute: [['M3 9h4l5-4v14l-5-4H3z', '#948a74'], ['M15 9l6 6M21 9l-6 6', 'none']],
   disc: [['M3 10c0-3 4-5 9-5s9 2 9 5v4c0 3-4 5-9 5s-9-2-9-5z', 'currentColor'], ['M3 10c0 3 4 5 9 5s9-2 9-5', 'none']],
 };
 

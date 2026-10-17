@@ -589,6 +589,8 @@ i.ico { display: inline-block; font-style: normal; }
 .field { display: grid; gap: 6px; margin: 14px 0; font-weight: 500; border: 0; padding: 0; }
 .field legend { padding: 0; margin-bottom: 6px; }
 .field label, .check { display: flex; gap: 8px; align-items: center; font-weight: 400; margin: 4px 0; }
+.field .vol { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); }
+.vol input { width: 100%; margin: 0; accent-color: var(--gold); height: 28px; }
 .field input:not([type]), .join-row input {
   font: 500 16px Rubik, sans-serif; color: inherit; background: #1d1611; border: 1.5px solid var(--ink); border-radius: 9px; padding: 9px 12px; min-width: 0;
 }

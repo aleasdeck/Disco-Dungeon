@@ -901,6 +901,41 @@ describe('online play', () => {
     expect(pos(cli)).toBe(at.get(t0 + 210));
   });
 
+  it('plays each sound once on every screen: the physics on each, the rest from the host', () => {
+    const { host, cli } = pair();
+    let ms = 0;
+    cli.clock = () => ms;
+    const heard = (g: Game) => { const out: string[] = []; g.onSound = ev => out.push(`${g.tick} ${ev}`); return out; };
+    const onHost = heard(host), onCli = heard(cli);
+    const snap = () => JSON.parse(JSON.stringify({ ...snapshot(host), cues: host.recentCues() }));
+    host.startFight(host.heroOf(0));
+    host.startFight(host.heroOf(2));
+    host.throwDisc(host.heroOf(0), 40, -45);
+    host.throwDisc(host.heroOf(2), -50, -30);
+    const snaps = new Map<number, ReturnType<typeof snap>>();
+    for (let k = 0; k < 400; k++) { host.step(1 / 120); snaps.set(host.tick, snap()); }
+    const t0 = host.tick - 400;
+    applySnapshot(cli, snaps.get(t0 + 3)!);
+    // hero 0 put on its rune, the turn starting and hero 0's throw come from the host; hero 2 is this player's own, heard on the spot
+    expect(onCli).toEqual([`${t0 + 3} step`, `${t0 + 3} yourTurn`, `${t0 + 3} launch`]);
+    for (let k = 1; k <= 200; k++) { ms = (k * 1000) / 120; cli.update(1 / 120); }
+    // a late snapshot is played on to where the client was without a sound, its sounds from the host already heard
+    applySnapshot(cli, snaps.get(t0 + 150)!);
+    ms += 1000 / 120;
+    applySnapshot(cli, snaps.get(t0 + 210)!);
+    const physics = (out: string[]) => out.filter(e => { const t = Number(e.split(' ')[0]); return t > t0 + 3 && t <= t0 + 210; });
+    expect(physics(onHost).length).toBeGreaterThan(2);
+    expect(physics(onCli)).toEqual(physics(onHost));
+    expect(onCli.length).toBe(physics(onCli).length + 3);
+    // the enemies' turn: a sound only the host makes reaches the client once, however many snapshots carry it
+    endAll(host);
+    for (let k = 0; k < 2000 && host.S.phase !== 'enemy'; k++) host.update(1 / 60);
+    const s = snap();
+    applySnapshot(cli, s);
+    applySnapshot(cli, JSON.parse(JSON.stringify(s)));
+    expect(onCli.filter(e => e.endsWith('enemyTurn')).length).toBe(1);
+  });
+
   it('lets a client control only its own hero', () => {
     const { cli } = pair();
     cli.select(0);

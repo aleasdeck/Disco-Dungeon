@@ -1,5 +1,5 @@
-// Loader of the art and fonts, all of it before the main menu. public/assets/manifest.json lists the pictures that exist;
-// anything missing falls back to the code-drawn placeholder.
+// Loader of the art, the music and the fonts, all of it before the main menu. public/assets/manifest.json lists the
+// pictures and tracks that exist; a missing picture falls back to the code-drawn placeholder.
 
 import { ENEMY_BASE, HEROES, HERO_FIG, MOBS, type MobKind } from './data';
 import { makeStandee, type Standee } from './draw/standee';
@@ -19,6 +19,8 @@ export const sprites = new Map<string, Sprite>();
 export const envArt = new Map<string, HTMLImageElement>();
 /** Interface art by key: plates (`btn_…`, `panel…`), icons (`ico_…`) and the stickers of rooms, upgrades and menus, see the README. */
 export const uiArt = new Map<string, HTMLImageElement>();
+/** The music by key (`menu`, `calm`, `fight0`…`fight2`): the file's bytes, decoded when first played, and the loop's length. */
+export const music = new Map<string, { data: ArrayBuffer; loop: number }>();
 /** Hand-drawn faces with Latin and Cyrillic for words scratched and chalked on the walls (Google Fonts, linked in index.html). */
 export const GRAFFITI_FONTS = ['700 20px "Amatic SC"', '700 20px "Caveat"', '400 20px "Neucha"'];
 
@@ -40,11 +42,12 @@ const UI_FONTS = ['500 16px Oswald', '600 16px Oswald', '700 16px Oswald', '700 
 const FONT_WAIT = 12000;
 
 /**
- * Load every picture and font the game uses, decoded and ready to draw. `onProgress` gets the part loaded so far, 0 to 1,
- * by size; whatever fails to load is counted in too and left to the code-drawn fallback.
+ * Load every picture, track and font the game uses, the pictures decoded and ready to draw. `onProgress` gets the part
+ * loaded so far, 0 to 1, by size; whatever fails to load is counted in too and left to the code-drawn fallback.
  */
 export async function loadAll(onProgress: (part: number) => void): Promise<void> {
   let figures: Record<string, ManifestEntry> = {}, env: Record<string, string> = {}, ui: Record<string, string> = {};
+  let tracks: Record<string, { file: string; loop: number }> = {};
   try {
     const res = await fetch(assetUrl('manifest.json'), { cache: 'no-cache' });
     if (res.ok) {
@@ -52,12 +55,13 @@ export async function loadAll(onProgress: (part: number) => void): Promise<void>
       figures = m.figures ?? {};
       env = m.env ?? {};
       ui = m.ui ?? {};
+      tracks = m.music ?? {};
     }
   } catch {
     // no manifest, no pictures: the fonts still load
   }
   const fonts = document.fonts ? [...UI_FONTS, ...GRAFFITI_FONTS] : [];
-  const files = [...Object.values(figures).map(e => e.file), ...Object.values(env), ...Object.values(ui)];
+  const files = [...Object.values(figures).map(e => e.file), ...Object.values(env), ...Object.values(ui), ...Object.values(tracks).map(t => t.file)];
   const total = files.reduce((t, f) => t + weightOf(f), 0) + fonts.length * weightOf();
   let done = 0;
   const tick = (file?: string) => onProgress((done += weightOf(file)) / total);
@@ -82,6 +86,12 @@ export async function loadAll(onProgress: (part: number) => void): Promise<void>
       root.style.setProperty('--ui-' + key, `url("${img.src}")`);
       root.classList.add('art-' + key);
     })),
+    // the music comes whole before the game starts, so a track never waits on the network mid-fight
+    ...Object.entries(tracks).map(([key, t]) => fetch(assetUrl(t.file))
+      .then(res => (res.ok ? res.arrayBuffer() : null))
+      .then(data => { if (data) music.set(key, { data, loop: t.loop }); })
+      .catch(() => {})
+      .then(() => tick(t.file))),
     // Latin and Cyrillic letters both, the graffiti on the walls among them
     ...fonts.map(f => Promise.race([document.fonts.load(f, 'WTF ЖОПА 0'), new Promise(r => setTimeout(r, FONT_WAIT))]).catch(() => {}).then(() => tick())),
   ]);
