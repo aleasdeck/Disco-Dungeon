@@ -3,6 +3,7 @@
 
 import { HEROES, INK, type MobKind } from '../data';
 import { sprites } from '../assets';
+import type { Pose } from '../fx';
 import { brow, circ, ell, eye, fs, lg, mix, pth, rg, rr, type Ctx, type Pt } from './util';
 
 export const BASE_TH = 2.5;
@@ -26,6 +27,8 @@ export interface MiniatureOpts {
   alpha: number;
   /** Current and maximum health, shown on the stand; left out for icons. */
   hp?: { now: number; max: number };
+  /** Rocking after a knock, or toppling over. */
+  pose?: Pose;
   placeholder: (c: Ctx, x: number, y: number, flash: boolean) => void;
 }
 
@@ -87,11 +90,25 @@ export function drawMiniature(c: Ctx, o: MiniatureOpts) {
   ell(c, o.x + 1.2, o.y + 1, r * 1.27 + 1.2, r * 0.64 + 0.8);
   c.fillStyle = 'rgba(15,8,4,.38)';
   c.fill();
-  const y = o.y - o.hop;
+  const ps = o.pose, y = o.y - o.hop - (ps ? ps.lift : 0);
+  if (ps && ps.rot) {
+    // the whole miniature tips over on the rim of its stand
+    const px = o.x + ps.px, py = y + ps.py;
+    c.translate(px, py);
+    c.rotate(ps.rot);
+    c.translate(-px, -py);
+  }
+  if (ps) c.translate(ps.jx, ps.jy);
   drawBase(c, o.x, y, r, o.baseCol, o.hp);
   const feet = y - BASE_TH;
   const sp = sprites.get(o.key);
   c.save();
+  if (ps && (ps.sy !== 1 || ps.sh)) {
+    // the figure on the stand stretches, squashes and leans about its feet
+    c.translate(o.x, feet);
+    c.transform(1, 0, -ps.sh, ps.sy, 0, 0);
+    c.translate(-o.x, -feet);
+  }
   const nativeRight = sp ? sp.facing === 'right' : true;
   if (o.faceRight !== nativeRight) {
     c.translate(o.x, 0);

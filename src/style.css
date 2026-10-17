@@ -305,6 +305,13 @@ button { font: inherit; color: inherit; }
 .r.spk svg { fill: var(--spark); }
 .r.hand svg { fill: var(--c); }
 .r.hand.out b { color: var(--muted); }
+.r.bump, .hpbar.bump { animation: bump 0.28s ease-out; }
+.flyer { position: fixed; left: 0; top: 0; width: 22px; height: 22px; margin: -11px 0 0 -11px; filter: drop-shadow(0 0 4px rgba(255, 230, 160, 0.7)); pointer-events: none; z-index: 60; }
+.flyer svg { display: block; width: 100%; height: 100%; stroke: var(--ink); stroke-width: 1.2; }
+.flyer.ore svg { fill: var(--ore); }
+.flyer.spk svg { fill: var(--spark); }
+.flyer.hp svg { fill: #e85b66; }
+@keyframes bump { 40% { transform: scale(1.35); filter: brightness(1.6); } }
 
 .ability {
   display: flex;
