@@ -658,6 +658,51 @@ describe('ending the turn', () => {
     host.loadRoom({ seed: 8, depth: 3, floor: 0, type: 'fight' });
     expect(host.S.done).toEqual([]);
   });
+
+  it('online, a player who dropped out holds nobody up, and every screen sees who is away', () => {
+    const host = arena([0, 1, 2]), cli = new Game(), [a, b, c] = host.party;
+    host.online = true;
+    host.endTurn(a);
+    host.endTurn(b);
+    run(host, 5);
+    expect(host.S.phase).toBe('throw');
+    host.setAway([c.i]);
+    expect(host.here(c)).toBe(false);
+    run(host, 1);
+    expect(host.S.phase).toBe('resolve');
+    cli.online = true;
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    expect(cli.S.away).toEqual([c.i]);
+    expect(cli.here(cli.heroOf(c.i))).toBe(false);
+    // the next room still knows, until the player comes back
+    host.loadRoom({ seed: 8, depth: 3, floor: 0, type: 'fight' });
+    expect(host.S.away).toEqual([c.i]);
+    host.setAway([]);
+    expect(host.here(c)).toBe(true);
+  });
+
+  it('online, placement ends without a player who dropped out: their hero takes a free rune', () => {
+    const g = new Game();
+    g.party = newParty([0, 1, 2]);
+    g.online = true;
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    const [a, b, c] = g.party;
+    g.movePad(a, 0); g.startFight(a);
+    g.movePad(b, 1); g.startFight(b);
+    expect(g.S.phase).toBe('place');
+    g.setAway([c.i]);
+    expect(g.S.phase).toBe('throw');
+    expect(c.pad).not.toBeNull();
+    expect(new Set(g.party.map(h => h.pad)).size).toBe(3);
+  });
+
+  it('alone, nobody is ever away', () => {
+    const g = arena([1]), h = g.hero;
+    g.S.away = [h.i];
+    run(g, 5);
+    expect(g.S.phase).toBe('throw');
+    expect(g.here(h)).toBe(true);
+  });
 });
 
 describe('discs and aiming', () => {

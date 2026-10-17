@@ -20,6 +20,8 @@ export interface Snapshot {
   ready: number[];
   /** Saves from before ending the turn by hand have none, nor the enemy-turn journal. */
   done?: number[];
+  /** Heroes whose players dropped out; older saves have none. */
+  away?: number[];
   log?: State['log'];
   shake: number;
   heroes: HeroSnap[];
@@ -42,7 +44,7 @@ export function snapshot(g: Game): Snapshot {
   const S = g.S;
   return {
     spec: S.spec, turn: S.turn, phase: S.phase, timer: S.timer, actor: S.actor, clock: S.clock, attacked: S.attacked,
-    ready: S.ready, done: S.done, log: S.log, shake: S.shake,
+    ready: S.ready, done: S.done, away: S.away, log: S.log, shake: S.shake,
     heroes: g.party.map(({ def: _def, ...h }) => h),
     mobs: S.mobs,
     nodes: S.nodes.map(n => [n.left, n.hit]),
@@ -93,7 +95,7 @@ export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boo
   S.heroes = g.party;
   Object.assign(S, {
     turn: s.turn, phase: s.phase, timer: s.timer, actor: s.actor ?? -1, clock: s.clock ?? 0, attacked: s.attacked,
-    ready: s.ready, done: s.done ?? [], log: s.log ?? [], shake: s.shake, mobs: s.mobs, floats: s.floats, sparks: s.sparks,
+    ready: s.ready, done: s.done ?? [], away: s.away ?? [], log: s.log ?? [], shake: s.shake, mobs: s.mobs, floats: s.floats, sparks: s.sparks,
   });
   S.nodes.forEach((n, k) => { if (s.nodes[k]) [n.left, n.hit] = s.nodes[k]; });
   if (s.ice) S.blocks.filter(b => b.ice).forEach((b, k) => { if (s.ice![k] !== undefined) b.hp = s.ice![k]; });

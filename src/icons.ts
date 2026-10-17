@@ -22,6 +22,9 @@ const SHAPES: Record<string, [string, string][]> = {
   summon: [['M6 20c0-5 2-8 6-8s6 3 6 8z', '#b9a6e6'], ['M12 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8z', '#e8e0cc']],
   heat: [['M12 3c3 5 7 8 7 12a7 7 0 0 1-14 0c0-4 4-7 7-12z', '#ff7a2e']],
   slam: [['M4 18h16', 'none'], ['M9 4h6v8H9z', '#a08470'], ['M6 12h12v3H6z', '#7d6553'], ['M3 21l2-2M21 21l-2-2M12 22v-3', 'none']],
+  move: [['M7 2h6v9l6 3c2 1 2.5 2.5 2.5 4.5V20H3.5v-4l2-5z', '#9a6a44'], ['M3.5 20h18M7 6h6', 'none']],
+  hit: [['M4 20l9-9M13 11l7-7v4l-5 5', '#c9ced8'], ['M3 17l4 4M2 21l2-2', 'none']],
+  plug: [['M8 2v5M14 2v5M5 7h12v4a6 6 0 0 1-12 0z', '#c7cbe0'], ['M11 17v5', 'none'], ['M3 21L21 3', 'none']],
   check: [['M3 13l6 6L21 6l-3-3-9 10-3-3z', '#5fd068']],
   disc: [['M3 10c0-3 4-5 9-5s9 2 9 5v4c0 3-4 5-9 5s-9-2-9-5z', 'currentColor'], ['M3 10c0 3 4 5 9 5s9-2 9-5', 'none']],
 };

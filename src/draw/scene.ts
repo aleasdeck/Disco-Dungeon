@@ -1164,9 +1164,9 @@ export class SceneRenderer {
       placeholder: (cc, x, y, fl) => drawHeroFigure(cc, h.i, x, y, 0.8, fl, this.t),
     });
     if (dead || carried) return;
-    const top = sy - BASE_TH - HERO_FIG - 6;
-    if (g.hero === h && S.phase !== 'over') {
-      const yy = top - 7 - (reduce ? 0 : Math.sin(this.t * 6) * 1.2);
+    // with friends on the field a small gold arrow just over the head says which figure is yours
+    if (g.hero === h && g.party.length > 1 && S.phase !== 'over') {
+      const yy = sy - BASE_TH - HERO_FIG - 4 - (reduce ? 0 : Math.sin(this.t * 6) * 1.2);
       pth(c, [[sx - 3, yy - 3], [sx + 3, yy - 3], [sx, yy + 1]]);
       fs(c, '#ffd34d', 0.8);
     }

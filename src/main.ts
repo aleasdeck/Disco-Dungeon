@@ -138,6 +138,12 @@ let reconnecting = 0;
 
 const playerName = () => settings.name || 'Игрок';
 const ownerOf = (i: number) => players.find(p => p.hero === i)?.id ?? 'host';
+
+/** Host: tell the game whose players are not at the table right now, so nobody waits for them. */
+function seatAway() {
+  if (mode !== 'host' || !started || !game.S) return;
+  game.setAway(players.filter(p => p.hero !== null && p.id !== 'host' && !net.has(p.id)).map(p => p.hero!).sort());
+}
 const myHero = () => players.find(p => p.id === net.id)?.hero ?? null;
 /** The players as the clients see them: without anyone's rejoin key. */
 const pub = () => players.map(({ key: _key, ...p }) => p);
@@ -288,6 +294,8 @@ function mapVotes(): MapVotes | undefined {
 }
 
 game.onChange = () => { hud.refresh(); dirty = true; stale = true; };
+// online every party head says whose hero it is
+hud.nameOf = i => (game.online ? players.find(p => p.hero === i)?.name ?? null : null);
 hl.changed = () => { dirty = true; };
 game.onRoomEnd = win => {
   const S = game.S, boss = S.spec.type === 'boss';
@@ -540,6 +548,7 @@ function welcome(id: string, name: string, key: string) {
       if (ending?.kind === 'map') net.sendTo(id, { t: 'end', e: ending });
       game.float(game.S.Wx / 2, 20, `${name} вернулся`, '#c7cbe0');
       setOnline('host');
+      seatAway();
       hud.buildAllies();
       hud.refresh();
       dirty = true;
@@ -566,6 +575,7 @@ net.onLeave = id => {
   if (!p) return;
   game.float(game.S.Wx / 2, 20, `${p.name} отключился`, '#c7cbe0');
   setOnline('host');
+  seatAway();
   hud.buildAllies();
   hud.refresh();
   // the vote goes on without them: the others may already agree
@@ -672,6 +682,8 @@ async function reopen(code: string) {
   wait('');
   dirty = true;
   if (!started || !s.snap) { lobbyView(); show('lobby'); return; }
+  // players get a moment to find their seats again; whoever is still missing after it stops holding the others up
+  setTimeout(seatAway, 15_000);
   if (s.ending) showEnd(s.ending);
   else if (choosing) showMap(true);
   else if (!game.liveMobs().length || !game.alive().length) game.onRoomEnd(game.alive().length > 0);

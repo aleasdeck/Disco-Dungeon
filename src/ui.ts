@@ -124,6 +124,8 @@ export class Hud {
   /** The enemy whose card is open, and whether a tap pinned it (a hover card goes when the pointer leaves). */
   private card = -1;
   private pinned = false;
+  /** Online: the name of the player whose hero this is. */
+  nameOf: (i: number) => string | null = () => null;
   /** The first press of «Конец хода» with discs still in hand only asks «ТОЧНО?»; a second press within a moment ends. */
   private confirmUntil = 0;
   private act: TurnAct = 'none';
@@ -193,7 +195,7 @@ export class Hud {
       b.id = 'ally' + h.i;
       b.style.setProperty('--c', h.def.col);
       b.setAttribute('aria-label', h.def.name);
-      b.innerHTML = `<canvas></canvas><span class="a-hp"><i></i><s></s><em></em></span><span class="tick">${icon('check')}</span>`;
+      b.innerHTML = `<canvas></canvas><b class="who"></b><span class="a-hp"><i></i><s></s><em></em></span><span class="tick">${icon('check')}</span><span class="off">${icon('plug')}</span>`;
       drawPortrait(b.querySelector('canvas')!, h);
       b.addEventListener('click', () => this.g.select(h.i));
       b.disabled = !this.g.canControl(h);
@@ -247,6 +249,10 @@ export class Hud {
       if (!t) continue;
       t.classList.toggle('me', o === g.hero);
       t.classList.toggle('dead', o.hp <= 0);
+      // online: the player's name on their hero, greyed with a pulled plug while they are disconnected
+      const who = this.nameOf(o.i), away = !g.here(o);
+      t.querySelector('.who')!.textContent = who ?? '';
+      t.classList.toggle('away', away);
       const tot = Math.max(o.max, o.hp + o.shield), inc = g.incoming(o);
       const hpPct = (Math.max(0, o.hp) / tot) * 100, risk = (Math.min(inc, Math.max(0, o.hp)) / tot) * 100;
       (t.querySelector('.a-hp i') as HTMLElement).style.width = hpPct + '%';
@@ -260,7 +266,8 @@ export class Hud {
       // a tick: placed and ready (online placement), or done with the turn
       const done = S.phase === 'place' ? g.online && S.ready.includes(o.i) : S.phase === 'throw' && g.ended(o);
       t.classList.toggle('done', done);
-      t.title = `${o.def.name}: ${Math.max(0, o.hp)}/${o.max}` + (o.shield ? `, щит ${o.shield}` : '') + (o.hp <= 0 ? ', пал' : done ? (S.phase === 'place' ? ', готов' : ', закончил ход') : '');
+      t.title = (who ? `${who}, ` : '') + `${o.def.name}: ${Math.max(0, o.hp)}/${o.max}` + (o.shield ? `, щит ${o.shield}` : '')
+        + (o.hp <= 0 ? ', пал' : done ? (S.phase === 'place' ? ', готов' : ', закончил ход') : '') + (away ? '. Нет связи: пока играет хозяин комнаты, ход его не ждёт' : '');
     }
   }
 
@@ -272,7 +279,7 @@ export class Hud {
     if (it.t === 'hit') return { badge: `<span class="ib hit" style="--c:${tgt!.def.col}">${it.dmg}</span>`, txt: `Ударит ${ACC[key] ?? tgt!.def.name} на ${it.dmg}` };
     if (it.t === 'move') {
       return {
-        badge: `<span class="ib go" style="--c:${tgt!.def.col}">${it.eta ?? ''}</span>`,
+        badge: `<span class="ib go" style="--c:${tgt!.def.col}">${it.eta ?? icon('move')}</span>`,
         txt: `Идёт к ${DAT[key] ?? tgt!.def.name}` + (it.eta ? `, ударит через ${turns(it.eta)}` : ''),
       };
     }
@@ -299,7 +306,7 @@ export class Hud {
   private queue() {
     const g = this.g, S = g.S, live = g.liveMobs(), box = $('queue');
     box.hidden = S.phase === 'over' || !live.length;
-    const key = live.map(m => S.mobs.indexOf(m) + (sprites.has(m.k) ? '+' : '')).join();
+    const key = live.map(m => S.mobs.indexOf(m) + m.k + (sprites.has(m.k) ? '+' : '')).join();
     if (key !== this.queueKey) {
       this.queueKey = key;
       box.innerHTML = live.map(m => `<li data-m="${S.mobs.indexOf(m)}"><button type="button" class="qb"><img src="${mobFace(m.k)}" alt=""><span class="qi"></span></button><small class="cd"></small></li>`).join('');
@@ -444,7 +451,8 @@ export class Hud {
   private turnButton() {
     const g = this.g, S = g.S, h = g.hero, b = $<HTMLButtonElement>('turnBtn');
     let txt = '', sub = '', cls = 'idle', act: TurnAct = 'none';
-    const alive = g.alive().length;
+    // «готовы N из M» counts the players at the table: the ones who dropped out hold nobody up
+    const here = g.alive().filter(o => g.here(o)).map(o => o.i), alive = here.length;
     if (S.phase === 'over' || h.hp <= 0 && S.phase !== 'enemy' && S.phase !== 'resolve') {
       b.hidden = true;
       this.act = 'none';
@@ -452,11 +460,11 @@ export class Hud {
     }
     if (S.phase === 'place') {
       const ready = S.ready.includes(h.i);
-      if (g.online && ready) { txt = 'Ждём'; sub = `готовы ${S.ready.length} из ${alive}`; cls = 'wait'; }
+      if (g.online && ready) { txt = 'Ждём'; sub = `готовы ${S.ready.filter(i => here.includes(i)).length} из ${alive}`; cls = 'wait'; }
       else if (g.online ? g.placed(h) : g.placed()) { txt = g.online ? 'Готов' : 'В бой!'; cls = 'lit'; act = 'fight'; }
       else { txt = g.party.length > 1 && !g.online ? 'Поставь героев' : 'Поставь героя'; }
     } else if (S.phase === 'throw') {
-      const done = S.done.length;
+      const done = S.done.filter(i => here.includes(i)).length;
       if (g.ended(h)) { txt = 'Ждём…'; sub = alive > 1 ? `готовы ${done} из ${alive}` : ''; cls = 'wait'; act = 'cancel'; }
       else if (h.hand > 0 && performance.now() < this.confirmUntil) { txt = 'Точно?'; sub = `не брошено: ${h.hand}`; cls = 'confirm'; act = 'end'; }
       else { txt = 'Конец хода'; cls = h.hand > 0 ? 'idle' : 'lit'; act = g.canEndTurn(h) ? 'end' : 'none'; sub = alive > 1 && done ? `готовы ${done} из ${alive}` : ''; }
@@ -465,7 +473,7 @@ export class Hud {
       cls = 'enemy';
     }
     b.hidden = false;
-    b.className = 'turn-btn ' + cls;
+    b.className = 'turn-btn ' + cls + (txt.length > 11 ? ' long' : '');
     b.disabled = act === 'none';
     $('turnTxt').textContent = txt;
     $('turnSub').textContent = sub;

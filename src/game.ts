@@ -88,6 +88,8 @@ export interface State extends Layout {
   shake: number;
   /** Heroes (by `i`) whose players pressed "ready" during placement in an online game. */
   ready: number[];
+  /** Online: heroes whose players dropped out. They hold nobody up; the host may still play them. */
+  away: number[];
   /** Heroes (by `i`) whose players pressed «Конец хода» this turn: the enemies go once every living hero is here. */
   done: number[];
   /** The enemy-turn journal, oldest first: a line for each thing the enemies did, the room's last LOG_MAX of them. */
@@ -198,7 +200,7 @@ export class Game {
     const boon = Math.min(AB_COST, this.bank.boon ?? 0);
     for (const h of this.party) Object.assign(h, { pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0, chill: 0, fire: 0, boost: false, sparks: boon });
     this.bank.boon = 0;
-    this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [] };
+    this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [], away: this.online ? this.S?.away ?? [] : [] };
     // every rune starts empty: the players put their heroes on them before the fight
     this.pickActive();
     this.pickIntents();
@@ -208,7 +210,7 @@ export class Game {
 
   /** Online client: rebuild a room from its spec (rooms are generated from the seed), state comes from the host. */
   showRoom(spec: RoomSpec) {
-    this.S = { ...generate(spec), spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [] };
+    this.S = { ...generate(spec), spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [], away: [] };
     this.pickActive();
   }
 
@@ -303,11 +305,53 @@ export class Game {
     if (this.send) { this.send({ k: 'ready', h: h.i }); return; }
     if (this.online) {
       if (!S.ready.includes(h.i)) S.ready.push(h.i);
-      if (!this.alive().every(o => S.ready.includes(o.i))) { this.onChange(); return; }
+      if (!this.everyoneReady()) { this.onChange(); return; }
+      this.seatAway();
     }
     S.phase = 'throw';
     this.pickIntents();
     this.onChange();
+  }
+
+  /** Online placement is over once every player at the table is ready; one who dropped out holds nobody up. */
+  private everyoneReady() {
+    const S = this.S;
+    return this.alive().every(o => S.ready.includes(o.i) || S.away.includes(o.i));
+  }
+
+  /** The heroes of players who dropped out take a free rune if they have none yet, and count as ready. */
+  private seatAway() {
+    const S = this.S;
+    for (const o of this.alive()) {
+      if (S.ready.includes(o.i)) continue;
+      if (o.pad === null) {
+        const k = S.pads.findIndex((_, k) => !S.heroes.some(x => x.pad === k && x.hp > 0));
+        if (k < 0) continue;
+        o.pad = k;
+      }
+      S.ready.push(o.i);
+    }
+  }
+
+  /**
+   * Host: the heroes whose players dropped out. Nobody waits for them: placement ends and the enemies go once the
+   * players still here are done, though the host may move and throw for them until then.
+   */
+  setAway(list: number[]) {
+    const S = this.S;
+    if (!S || S.away.join() === list.join()) return;
+    S.away = list;
+    if (S.phase === 'place' && this.online && S.ready.length && this.everyoneReady()) {
+      this.seatAway();
+      S.phase = 'throw';
+      this.pickIntents();
+    }
+    this.onChange();
+  }
+
+  /** Online: this hero's player is at the table. */
+  here(h: HeroState) {
+    return !this.online || !this.S.away.includes(h.i);
   }
 
   /** This hero's player has pressed «Конец хода» this turn. */
@@ -954,8 +998,8 @@ export class Game {
   /** Every living hero has thrown all its discs; the turn still waits for the players to end it. */
   allThrown() { return this.alive().every(h => h.hand === 0); }
 
-  /** Every living hero's player has pressed «Конец хода»; the fallen never hold the turn up. */
-  allDone() { return this.alive().every(h => this.ended(h)); }
+  /** Every living hero's player has pressed «Конец хода»; the fallen and the players who dropped out never hold the turn up. */
+  allDone() { return this.alive().every(h => this.ended(h) || !this.here(h)); }
 
   // ------------------------------------------------------------ turn flow
 
