@@ -248,9 +248,11 @@ i.ico { display: inline-block; font-style: normal; }
 .portrait canvas { position: absolute; inset: 5px; width: calc(100% - 10px); height: calc(100% - 10px); clip-path: var(--cut-face); }
 .pname {
   position: absolute; left: 8px; right: 8px; bottom: 8px; padding: 2px 4px 3px;
-  font: 700 20px/1 Oswald, sans-serif; color: #fff; text-align: center; letter-spacing: 0.02em;
+  --pn: 22px; font: var(--pn)/1 var(--hand); color: #fff; text-align: center; white-space: nowrap;
   background: rgba(18, 12, 9, 0.62); clip-path: var(--cut-bar);
 }
+/* the handwriting runs wide: a long name like «Пепельница» is written smaller */
+.pname.long { font-size: calc(var(--pn) * 0.8); }
 .statuses { position: absolute; right: 6px; top: 6px; display: flex; flex-direction: column; gap: 4px; }
 .statuses .st { width: 30px; height: 30px; padding: 3px; background: rgba(18, 12, 9, 0.7); clip-path: var(--cut-gem); }
 .statuses .st b { font-size: 12px; right: 1px; bottom: 0; }
@@ -263,7 +265,6 @@ i.ico { display: inline-block; font-style: normal; }
   background: linear-gradient(#3a2f28, #241c17); border: 2px solid #120c09; box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.35);
 }
 .discs i.on { background: linear-gradient(color-mix(in srgb, var(--c) 70%, #fff), var(--c) 60%, var(--dk)); }
-.hit-info { left: calc(var(--pf-w) + 70px); bottom: 74px; font: 16px/1.2 var(--hand); color: #ffd06a; white-space: nowrap; }
 
 .bars { left: calc(var(--pf-w) + 10px); bottom: 10px; width: 300px; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
 .hpbar { position: relative; height: 28px; margin-right: 18px; pointer-events: auto; }
@@ -285,8 +286,8 @@ i.ico { display: inline-block; font-style: normal; }
 @keyframes risk { 50% { opacity: 0.45; } }
 @keyframes lethal-f { 50% { filter: var(--outline) drop-shadow(0 0 6px #ff4d6a); } }
 
-/* the sparks bar: three cells that run into the ability button; full, both shine like the lit turn button */
-.spk { position: relative; display: flex; gap: 3px; height: 12px; margin-right: -24px; padding: 2px 26px 2px 3px; background: #241a33; clip-path: var(--cut-bar); }
+/* the sparks bar: three cells that stop short of the ability button; full, both shine like the lit turn button */
+.spk { position: relative; display: flex; gap: 3px; height: 12px; margin-right: 18px; padding: 2px 3px; background: #241a33; clip-path: var(--cut-bar); }
 .spk i { flex: 1; background: #3a2c55; }
 .spk i.on { background: linear-gradient(#a98bf0, #6b4cc0); }
 .spk.full { background: #d9c8ff; box-shadow: 0 0 12px #c9a8ff; }
@@ -374,16 +375,15 @@ i.ico { display: inline-block; font-style: normal; }
   .boss-bar canvas { width: 30px; height: 30px; }
   .log-panel { top: 50px; }
   .corner { left: max(8px, env(safe-area-inset-left)); bottom: calc(8px + var(--safe-b)); width: 330px; height: 118px; --pf-w: 84px; --pf-h: 104px; }
-  .pname { font-size: 13px; left: 5px; right: 5px; bottom: 5px; }
+  .pname { --pn: 14px; left: 5px; right: 5px; bottom: 5px; }
   .statuses .st { width: 22px; height: 22px; padding: 2px; }
   .discs { bottom: 44px; left: calc(var(--pf-w) + 10px); }
   .discs i { width: 30px; height: 11px; margin-top: -3px; border-width: 1.5px; }
-  .hit-info { display: none; }
   .bars { left: calc(var(--pf-w) + 8px); bottom: 6px; width: 176px; gap: 4px; }
   .hpbar { height: 19px; margin-right: 12px; }
   .hp-num { font-size: 11px; }
   .sh-badge { width: 24px; height: 27px; left: -10px; font-size: 12px; }
-  .spk { height: 9px; margin-right: -16px; padding-right: 18px; }
+  .spk { height: 9px; margin-right: 12px; }
   .ability { left: calc(var(--pf-w) + 176px); width: 68px; height: 74px; padding-top: 6px; gap: 3px; }
   .ability b { font-size: 10px; }
   .turn-btn { right: max(10px, env(safe-area-inset-right)); bottom: calc(8px + var(--safe-b)); width: 210px; height: 58px; }
@@ -422,16 +422,15 @@ i.ico { display: inline-block; font-style: normal; }
     background: linear-gradient(color-mix(in srgb, var(--dk) 70%, #120c09), #19120e);
     clip-path: polygon(0 10px, 22% 0, 100% 6px, 100% 100%, 0 100%); border-top: 3px solid var(--c);
   }
-  .pname { font-size: 15px; left: 6px; right: 6px; bottom: 6px; }
+  .pname { --pn: 16px; left: 6px; right: 6px; bottom: 6px; }
   .statuses .st { width: 24px; height: 24px; padding: 2px; }
   .discs { left: calc(var(--pf-w) + 8px); top: 22px; bottom: auto; }
   .discs i { width: 32px; height: 12px; margin-top: -3px; border-width: 1.5px; }
-  .hit-info { display: none; }
   .bars { left: calc(var(--pf-w) + 10px); right: 92px; bottom: 6px; width: auto; gap: 5px; }
   .hpbar { height: 22px; margin-right: 6px; }
   .hp-num { font-size: 13px; }
   .sh-badge { width: 27px; height: 30px; left: -11px; font-size: 13px; }
-  .spk { height: 10px; margin-right: -22px; padding-right: 24px; }
+  .spk { height: 10px; margin-right: 6px; }
   .ability { left: auto; right: 0; bottom: 0; width: 90px; height: 96px; padding-top: 8px; gap: 4px; }
   .ability b { font-size: 12px; }
   .hero-card { bottom: calc(100% + 8px); }
@@ -755,12 +754,12 @@ i.ico { display: inline-block; font-style: normal; }
 .art-btn_turn .turn-btn.confirm .tb-plate { filter: hue-rotate(-16deg) saturate(1.5); }
 .art-btn_turn .turn-btn.wait .tb-plate { filter: grayscale(0.75) brightness(0.62); }
 .art-btn_turn .turn-btn.enemy .tb-plate { filter: hue-rotate(-45deg) saturate(1.9) brightness(0.9); }
-.art-btn_turn .tb-who { top: 10px; }
+.art-btn_turn .tb-who { top: -6px; right: 15%; }
 @keyframes lit-art { 50% { filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 28px rgba(255, 210, 90, 1)); } }
 @media (prefers-reduced-motion: reduce) { .art-btn_turn .turn-btn.lit { animation: none; } }
 @media (max-height: 520px) and (orientation: landscape) {
   .art-btn_turn .turn-btn { width: 232px; height: 62px; padding: 14px 44px 2px 14px; }
-  .art-btn_turn .tb-who { top: 4px; }
+  .art-btn_turn .tb-who { top: -8px; right: 14%; }
 }
 /* the upright phone: the blade runs above the health and is cut round the ability gem; the ink edge follows the cut */
 @media (orientation: portrait) and (max-width: 700px) {
@@ -771,7 +770,7 @@ i.ico { display: inline-block; font-style: normal; }
   .art-btn_turn .tb-plate { clip-path: var(--plate); }
   .art-btn_turn .turn-btn.long b { font-size: 15px; }
   .art-btn_turn .turn-btn.lit { filter: var(--outline) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px rgba(255, 200, 80, 0.8)); animation: none; }
-  .art-btn_turn .tb-who { top: 4px; }
+  .art-btn_turn .tb-who { top: -8px; right: 12px; }
 }
 
 .art-btn_tile .top-btns { filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
@@ -788,6 +787,10 @@ i.ico { display: inline-block; font-style: normal; }
 @keyframes ab-full-art { 50% { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 26px #e2d4ff) brightness(1.22); } }
 .art-btn_gem .ability.on { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px var(--ab)); }
 .art-btn_gem .ability b { padding: 2px 5px; background: rgba(18, 12, 9, 0.6); }
+/* the ability's own picture fills the gem instead of its name */
+.ability .ab-ico { position: absolute; inset: 16%; z-index: 1; pointer-events: none; }
+.ability .ab-ico:empty { display: none; }
+.ability:has(.ab-ico img) b { display: none; }
 
 /* panels: the map stands tall, everything else lies wide */
 /* sliced in nine, so the taped corners keep their size on a wide or a tall panel */
@@ -856,26 +859,25 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 /* the number sits in the groove's low run, the shield on the plate's left end */
 .art-bar_hp .corner .hp-num { inset: 58.5% 3.8% 11.2% 8.5%; }
 .art-bar_hp .corner .sh-badge { top: 73%; }
-/* the wedge's top edge climbs where the hit note used to sit: lift the note over it */
-.art-bar_hp .hit-info { bottom: 94px; }
 .art-bar_hp .track i { background: radial-gradient(rgba(0, 0, 0, 0.16) 0.8px, transparent 1.3px) 0 0 / 4px 4px, linear-gradient(#e0414f 0 78%, #a82634 78%); }
 .art-bar_hp .track s:not(.risk) { background: radial-gradient(rgba(0, 0, 0, 0.12) 0.8px, transparent 1.3px) 0 0 / 4px 4px, linear-gradient(#a9d6f3 0 78%, #5f9fcb 78%); }
 .art-ico_shield .sh-badge { clip-path: none; background: var(--ui-ico_shield) center / contain no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); text-shadow: 1px 1px 0 #120c09, -1px -1px 0 #120c09, 1px -1px 0 #120c09, -1px 1px 0 #120c09; }
-.art-spk_on.art-spk_off .spk { background: none; clip-path: none; box-shadow: none; padding: 0; gap: 0; height: 28px; margin: -4px -14px 0 4px; }
+.art-spk_on.art-spk_off .spk { background: none; clip-path: none; box-shadow: none; padding: 0; gap: 0; height: 28px; margin: -4px 18px 0 4px; }
 .art-spk_on.art-spk_off .spk i { flex: 1; margin-right: -6px; background: var(--ui-spk_off) center / 100% 100% no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
 .art-spk_on.art-spk_off .spk i.on { background-image: var(--ui-spk_on); }
 .art-spk_on.art-spk_off .spk.full i { background-image: var(--ui-spk_on); filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 6px #c9a8ff); }
-@media (max-height: 520px) and (orientation: landscape) { .art-spk_on.art-spk_off .spk { height: 17px; margin-right: -10px; } }
-@media (orientation: portrait) and (max-width: 700px) { .art-spk_on.art-spk_off .spk { height: 18px; margin-right: -12px; } }
+@media (max-height: 520px) and (orientation: landscape) { .art-spk_on.art-spk_off .spk { height: 17px; margin-right: 12px; } }
+@media (orientation: portrait) and (max-width: 700px) { .art-spk_on.art-spk_off .spk { height: 18px; margin-right: 6px; } }
 
 /* the menus stand on a painted disco dungeon instead of the dimmed room */
 .art-menu_bg .overlay.solid { background: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_bg) center / cover no-repeat; }
 @media (orientation: portrait) { .art-menu_bg_tall .overlay.solid { background-image: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_bg_tall); } }
 
 /* who already pressed the turn button: their faces stuck on its top edge */
-.tb-who { position: absolute; top: -18px; left: 26px; z-index: 1; display: flex; gap: 3px; pointer-events: none; }
+/* on the right end, clear of the words */
+.tb-who { position: absolute; top: -18px; right: 30px; z-index: 1; display: flex; gap: 3px; pointer-events: none; }
 .tb-who:empty { display: none; }
 .tb-who img { width: 32px; height: 32px; border: 2px solid var(--c); outline: 2px solid #120c09; transform: rotate(-5deg); }
 .tb-who img:nth-child(2) { transform: rotate(4deg); }
-@media (max-height: 520px) and (orientation: landscape) { .tb-who { top: -14px; left: 16px; } .tb-who img { width: 24px; height: 24px; } }
-@media (orientation: portrait) and (max-width: 700px) { .tb-who { top: -15px; left: 12px; } .tb-who img { width: 24px; height: 24px; border-width: 1.5px; } }
+@media (max-height: 520px) and (orientation: landscape) { .tb-who { top: -14px; right: 20px; } .tb-who img { width: 24px; height: 24px; } }
+@media (orientation: portrait) and (max-width: 700px) { .tb-who { top: -15px; right: 12px; } .tb-who img { width: 24px; height: 24px; border-width: 1.5px; } }

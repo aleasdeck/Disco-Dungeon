@@ -399,6 +399,7 @@ export class Hud {
     const pk = h.def.key + (sprites.has(h.def.key) ? '+img' : '');
     if (this.lastPortrait !== pk) { drawPortrait($<HTMLCanvasElement>('pf'), h); this.lastPortrait = pk; }
     $('fName').textContent = h.def.name;
+    $('fName').classList.toggle('long', h.def.name.length > 8);
     $('pfBtn').setAttribute('aria-label', `${h.def.name}: прокачка и умение`);
 
     const st: Status[] = [];
@@ -410,9 +411,6 @@ export class Hud {
     const out = S.phase === 'throw' && g.ended(h) ? h.discs : h.discs - h.hand;
     $('fDiscs').innerHTML = Array.from({ length: h.discs }, (_, k) => `<i class="${k < h.discs - out ? 'on' : ''}"></i>`).join('');
     $('fDiscs').title = `Диски: ${h.hand} из ${h.discs} за ход`;
-    const hit = Math.round(fullHit(g.stat(h, 'm'), g.stat(h, 'pw')) * (h.chill > 0 ? 0.7 : 1));
-    $('fHit').textContent = `удар до ${hit}, в лоб ×${CRIT}`;
-    $('fHit').title = 'Сильнее всего диск бьёт на полной натяжке; прямо в лоб урон удваивается';
 
     // health and the shield on top of it: the bar holds both, squeezing when they add up to more than the most health
     const inc = g.incoming(h), dead = h.hp > 0 && inc >= h.hp, tot = Math.max(h.max, h.hp + h.shield);
@@ -432,11 +430,14 @@ export class Hud {
     wrap.classList.toggle('lethal', dead);
     wrap.title = inc ? `Враги в этот ход снимут ${inc} HP, если их не остановить.` : '';
 
-    // the sparks bar runs into the ability button: three cells, one per spark; full, both light up and the button pulses
+    // the sparks bar beside the ability button: three cells, one per spark; full, they light up and the button pulses
     const sp = Math.min(AB_COST, h.sparks), full = sp >= AB_COST;
     $('fSpk').querySelectorAll('i').forEach((c, k) => c.classList.toggle('on', k < sp));
     $('fSpk').classList.toggle('full', full);
     $('abName').textContent = h.def.ab;
+    // each hero's ability has its own picture in the gem (ab_<hero>); the name stays for when it has not loaded
+    const ico = $('abIco'), pic = 'ab_' + h.def.key;
+    if (ico.dataset.art !== pic) { ico.dataset.art = pic; fillIcons($('abBtn')); }
     const ab = $<HTMLButtonElement>('abBtn');
     ab.disabled = !g.canUseAbility();
     ab.classList.toggle('full', full);
@@ -453,8 +454,9 @@ export class Hud {
   }
 
   private fillCard() {
-    const g = this.g, h = g.hero;
-    $('ups').innerHTML = `<h3 style="color:${h.def.col}">${h.def.name}</h3><p class="hc-hit">${$('fHit').textContent}</p>`
+    const g = this.g, h = g.hero, hit = Math.round(fullHit(g.stat(h, 'm'), g.stat(h, 'pw')) * (h.chill > 0 ? 0.7 : 1));
+    $('ups').innerHTML = `<h3 style="color:${h.def.col}">${h.def.name}</h3>`
+      + `<p class="hc-hit" title="Сильнее всего диск бьёт на полной натяжке; прямо в лоб урон удваивается">удар до ${hit}, в лоб ×${CRIT}</p>`
       + upRows(g, h, false) + '<small class="ups-note">Прокачка у кузнеца на карте</small>'
       + `<p class="hc-ab"><b>${h.def.ab}.</b> ${h.def.abTxt} ${h.def.abMore}</p>`;
   }
