@@ -14,7 +14,14 @@ export interface RoomSpec {
 }
 
 export interface Pad { x: number; y: number }
-export interface Pit { x: number; y: number; r: number }
+/** A square hole in the floor, s × s cells (1, 2 or 3) with its top-left cell at (i, j): a disc that rolls onto it is lost. */
+export interface Pit { i: number; j: number; s: number }
+
+/** The hole under a world point, if there is one. */
+export const pitAt = (pits: Pit[], x: number, y: number) => {
+  const i = Math.floor(x / TILE), j = Math.floor(y / TILE);
+  return pits.find(p => i >= p.i && i < p.i + p.s && j >= p.j && j < p.j + p.s);
+};
 /**
  * A one-tile obstacle. `ice` marks an icicle growing from the floor: it collides exactly like a stone block,
  * but discs chip `hp` off it and it shatters at 0. `big` icicles take several hits, small ones one or two.
@@ -200,19 +207,24 @@ export interface Tier {
   /** How many block clusters, and which of BLOCK_SHAPES they may use (the first n). */
   blocks: Range;
   blockKinds: number;
+  /** How many holes, and the side of the biggest one; the holes in one room are all of different sizes. */
   pits: Range;
+  pitMax: number;
   haz: Range;
   mobs: Range;
 }
 
 export const TIERS: Tier[] = [
-  { gw: [10, 11], gh: [8, 9], shapes: ['rect'], blocks: [1, 1], blockKinds: 1, pits: [0, 0], haz: [0, 0], mobs: [2, 2] },
-  { gw: [11, 12], gh: [9, 9], shapes: ['rect', 'corner'], blocks: [1, 2], blockKinds: 3, pits: [0, 0], haz: [1, 1], mobs: [2, 3] },
-  { gw: [12, 13], gh: [10, 10], shapes: ['corner', 'alcove'], blocks: [1, 2], blockKinds: 4, pits: [0, 0], haz: [1, 2], mobs: [2, 3] },
-  { gw: [13, 14], gh: [10, 11], shapes: ['alcove', 'funnel', 'corner'], blocks: [2, 2], blockKinds: 4, pits: [0, 1], haz: [2, 3], mobs: [3, 3] },
-  { gw: [14, 15], gh: [11, 12], shapes: ['funnel', 'cross', 'alcove'], blocks: [2, 3], blockKinds: 5, pits: [1, 1], haz: [3, 3], mobs: [3, 4] },
+  { gw: [10, 11], gh: [8, 9], shapes: ['rect'], blocks: [1, 1], blockKinds: 1, pits: [0, 0], pitMax: 0, haz: [0, 0], mobs: [2, 2] },
+  { gw: [11, 12], gh: [9, 9], shapes: ['rect', 'corner'], blocks: [1, 2], blockKinds: 3, pits: [0, 0], pitMax: 0, haz: [1, 1], mobs: [2, 3] },
+  { gw: [12, 13], gh: [10, 10], shapes: ['corner', 'alcove'], blocks: [1, 2], blockKinds: 4, pits: [0, 1], pitMax: 1, haz: [1, 2], mobs: [2, 3] },
+  { gw: [13, 14], gh: [10, 11], shapes: ['alcove', 'funnel', 'corner'], blocks: [2, 2], blockKinds: 4, pits: [0, 1], pitMax: 2, haz: [2, 3], mobs: [3, 3] },
+  { gw: [14, 15], gh: [11, 12], shapes: ['funnel', 'cross', 'alcove'], blocks: [2, 3], blockKinds: 5, pits: [1, 2], pitMax: 3, haz: [3, 3], mobs: [3, 4] },
 ];
-export const BOSS_TIER: Tier = { gw: [14, 15], gh: [12, 12], shapes: ['rect', 'cross'], blocks: [1, 2], blockKinds: 3, pits: [0, 0], haz: [2, 3], mobs: [3, 3] };
+export const BOSS_TIER: Tier = { gw: [14, 15], gh: [12, 12], shapes: ['rect', 'cross'], blocks: [1, 2], blockKinds: 3, pits: [0, 0], pitMax: 0, haz: [2, 3], mobs: [3, 3] };
+
+/** Most floor cells the holes of one room take: next to a 3 × 3 hole there is room only for a 1 × 1. */
+export const PIT_CELLS = 10;
 
 /** Most enemies a room starts with: past this a room is a crowd, not a fight. */
 export const MOB_CAP = 5;
@@ -422,13 +434,6 @@ export function generate(spec: RoomSpec): Layout {
     }
     return null;
   };
-  const place = (r: number, test: (x: number, y: number) => boolean): [number, number] | null => {
-    for (let i = 0; i < 300; i++) {
-      const x = r + 8 + R.next() * (Wx - 2 * r - 16), y = r + 8 + R.next() * (Wy - 2 * r - 16);
-      if (test(x, y) && free(x, y, r) && clearOfRock(geo, x, y, r + 6)) return [x, y];
-    }
-    return null;
-  };
   // "far" is the half away from the throw runes; "mid" is the band between the two sides.
   const far = (x: number, y: number) => x / Wx + y / Wy < 0.95;
   const mid = (x: number, y: number) => { const s = x / Wx + y / Wy; return s > 0.55 && s < 1.45; };
@@ -440,9 +445,71 @@ export function generate(spec: RoomSpec): Layout {
   for (const p of pads) { objs.push({ x: p.x, y: p.y, r: 22 }); take(Math.floor(p.x / TILE), Math.floor(p.y / TILE)); }
 
   const pits: Pit[] = [];
-  for (let i = 0, n = roll(tier.pits); i < n; i++) {
-    const r = ri(10, 13), q = place(r, mid);
-    if (q) { pits.push({ x: q[0], y: q[1], r }); objs.push({ x: q[0], y: q[1], r }); }
+  const inHole = (i: number, j: number, extra?: Pit) => [...pits, ...(extra ? [extra] : [])].some(p => i >= p.i && i < p.i + p.s && j >= p.j && j < p.j + p.s);
+  /** Which piece of open floor each spot an s × s walker can stand on belongs to, with the holes (and `extra`) cut out; -1 where it can't stand. */
+  const parts = (s: number, extra?: Pit) => {
+    const id = new Int32Array(gw * gh).fill(-1);
+    const fits = (i: number, j: number) => {
+      if (i < 0 || j < 0 || i > gw - s || j > gh - s) return false;
+      for (let b = 0; b < s; b++) for (let a = 0; a < s; a++) if (!isFloor(geo, i + a, j + b) || inHole(i + a, j + b, extra)) return false;
+      return true;
+    };
+    for (let k = 0, n = 0; k < gw * gh; k++) {
+      if (id[k] >= 0 || !fits(k % gw, Math.floor(k / gw))) continue;
+      id[k] = n;
+      for (const stack = [k]; stack.length;) {
+        const c = stack.pop()!, i = c % gw, j = (c - i) / gw;
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const ni = i + di, nj = j + dj, nk = nj * gw + ni;
+          if (fits(ni, nj) && id[nk] < 0) { id[nk] = n; stack.push(nk); }
+        }
+      }
+      n++;
+    }
+    return id;
+  };
+  // a hole may swallow a dead end, but every piece of floor a walker could cross before stays one piece without it
+  const splits = (p: Pit) => [1, 2].some(s => {
+    const was = parts(s), now = parts(s, p), seen = new Map<number, number>();
+    for (let k = 0; k < gw * gh; k++) {
+      if (was[k] < 0 || now[k] < 0) continue;
+      if ((seen.get(was[k]) ?? now[k]) !== now[k]) return true;
+      seen.set(was[k], now[k]);
+    }
+    return false;
+  });
+  /**
+   * An s × s hole between the runes and the enemies. It keeps a ring of open floor around it, so no wall or rune touches
+   * it, stays two cells clear of the other holes, and never cuts off a way across the room, even for big 2 × 2 enemies.
+   */
+  const placePit = (s: number): Pit | null => {
+    for (let tr = 0; tr < 200; tr++) {
+      const i = ri(1, gw - s - 1), j = ri(1, gh - s - 1), c = cellCentre(i, j, s), p = { i, j, s };
+      let ok = mid(c.x, c.y) && pits.every(q => Math.max(q.i - i - s, i - q.i - q.s, q.j - j - s, j - q.j - q.s) >= 2);
+      for (let b = -1; b <= s && ok; b++) for (let a = -1; a <= s && ok; a++) ok = isFloor(geo, i + a, j + b) && !taken.has(hazKey(i + a, j + b));
+      if (ok && !splits(p)) return p;
+    }
+    return null;
+  };
+  const nPits = roll(tier.pits);
+  if (nPits) {
+    // sizes in a random order, so each hole in a room is a different one
+    const sizes = Array.from({ length: tier.pitMax }, (_, k) => k + 1);
+    for (let k = sizes.length - 1; k > 0; k--) { const m = ri(0, k); [sizes[k], sizes[m]] = [sizes[m], sizes[k]]; }
+    const room = (s: number) => pits.reduce((n, p) => n + p.s * p.s, s * s) <= PIT_CELLS;
+    while (pits.length < nPits && sizes.length) {
+      const s = sizes.shift()!;
+      let p = room(s) ? placePit(s) : null;
+      // a size that finds no room gives way to the biggest smaller one still unused
+      for (const o of sizes.filter(o => o < s && room(o)).sort((a, b) => b - a)) {
+        if (p) break;
+        if ((p = placePit(o))) sizes.splice(sizes.indexOf(o), 1);
+      }
+      if (!p) continue;
+      pits.push(p);
+      // the cells of a hole are taken, and blocks, enemies and resources keep clear of its edge
+      for (let b = 0; b < p.s; b++) for (let a = 0; a < p.s; a++) { take(p.i + a, p.j + b); objs.push({ ...cellCentre(p.i + a, p.j + b), r: 8 }); }
+    }
   }
 
   const blocks: Block[] = [];
@@ -474,7 +541,7 @@ export function generate(spec: RoomSpec): Layout {
   const decals: Decal[] = [];
   for (let i = 0, n = ri(3, 6); i < n; i++) {
     const d0 = { x: 8 + R.next() * (Wx - 16), y: 8 + R.next() * (Wy - 16), k: ri(0, 2), a: R.next() * 3 };
-    if (clearOfRock(geo, d0.x, d0.y, 5)) decals.push(d0);
+    if (clearOfRock(geo, d0.x, d0.y, 5) && !pitAt(pits, d0.x, d0.y)) decals.push(d0);
   }
 
   const sc = partyScale(spec);
