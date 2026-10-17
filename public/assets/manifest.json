@@ -186,6 +186,7 @@
     "seer": "events/seer.webp",
     "toilet": "events/toilet.webp",
     "ogre": "events/ogre.webp",
-    "goblin": "events/goblin.webp"
+    "goblin": "events/goblin.webp",
+    "dj": "events/dj.webp"
   }
 }

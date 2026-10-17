@@ -168,9 +168,10 @@ export function pointAt(w: Pt[], d: number): Pt {
  * Ore belongs to the whole party: any hero's hit fills the pool, any hero spends from it, and it lasts the whole run.
  * Sparks are each hero's own to spend (`HeroState.sparks`), though a crystal fills everyone's, and last one fight; every hero
  * starts the next one with `boon` of them (the altar's gift, usually none). An event may also leave the next fight a `shield`
- * for every hero or `rage`: that much harder blows from its enemies.
+ * for every hero, `rage`: that much harder blows from its enemies, or a curse that room's spec carries: `smoke` over the
+ * floor, a `strobe` that hides the aiming line.
  */
-export interface Bank { ore: number; boon?: number; shield?: number; rage?: number }
+export interface Bank { ore: number; boon?: number; shield?: number; rage?: number; smoke?: boolean; strobe?: boolean }
 
 export function newBank(): Bank {
   return { ore: 0, boon: 0 };
@@ -239,6 +240,9 @@ export class Game {
   /** Start a fight in a new room; unless the spec says otherwise, the room is built for the party's size. */
   loadRoom(spec: RoomSpec) {
     spec = { ...spec, heroes: spec.heroes ?? this.party.length };
+    // an event's curse on the fight goes with the room, so every screen and a reloaded game have it too
+    if (this.bank.smoke) spec.smoke = true;
+    if (this.bank.strobe) spec.strobe = true;
     const L = generate(spec);
     this.forge = 0;
     this.pickup.clear();
@@ -252,6 +256,8 @@ export class Game {
     this.bank.boon = 0;
     delete this.bank.shield;
     delete this.bank.rage;
+    delete this.bank.smoke;
+    delete this.bank.strobe;
     this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [], away: this.online ? this.S?.away ?? [] : [] };
     // every rune starts empty: the players put their heroes on them before the fight
     this.pickActive();

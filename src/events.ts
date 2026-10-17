@@ -20,6 +20,10 @@ export type Fx =
   | { k: 'shield'; n: number }
   /** The next fight's enemies hit this much harder. */
   | { k: 'rage'; n: number }
+  /** «Дым-машина»: the next fight is in smoke, seen only a few steps around the heroes. */
+  | { k: 'smoke' }
+  /** «Стробоскоп»: the next fight has no aiming line. */
+  | { k: 'strobe' }
   /** A free level of a disc stat; without `stat`, a level of whatever each hero can still grow, picked at random. */
   | { k: 'up'; stat?: StatKey }
   /** One more disc a turn. */
@@ -58,7 +62,7 @@ export const EVENTS: EventDef[] = [
       {
         label: 'Выпить залпом', odds: 0.5,
         win: { fx: [{ k: 'hp', n: 10 }], txt: 'Горло обожгло до пяток, зато раны затянулись сами. Скелет одобрительно цокает челюстью.' },
-        lose: { fx: [{ k: 'hp', n: -5 }], txt: 'Зонтик оказался живым и полез обратно. Остаток вечера помнят только скелеты.' },
+        lose: { fx: [{ k: 'hp', n: -3 }, { k: 'strobe' }], txt: 'Зонтик оказался живым и полез обратно. Перед глазами всё мигает, как под стробоскопом: прицел в следующем бою не поймать.' },
       },
       {
         label: 'Фирменное с закуской', pay: 4,
@@ -141,7 +145,7 @@ export const EVENTS: EventDef[] = [
       {
         label: 'Гадать бесплатно', odds: 0.5,
         win: { fx: [{ k: 'up' }], txt: 'Бабка нагадала удачу и, на удивление, попала.' },
-        lose: { fx: [{ k: 'max', n: -3 }], txt: 'Бабка нагадала венец безбрачия и порчу на здоровье. Порча сработала, венец проверить не успели.' },
+        lose: { fx: [{ k: 'max', n: -2 }, { k: 'smoke' }], txt: 'Бабка нагадала порчу на здоровье и дунула в шар, а оттуда повалил дым. Порча сработала, дым увязался за вами до конца следующего боя.' },
       },
       { label: 'Не верю', win: { fx: [], txt: 'Шар мигнул и показал вашу будущую лысину. Лучше бы не смотрели.' } },
     ],
@@ -188,6 +192,25 @@ export const EVENTS: EventDef[] = [
       },
     ],
   },
+  {
+    key: 'dj', title: 'Будка диджея',
+    txt: 'В нише гремит пульт: скелет-диджей в огромных наушниках уснул прямо на вертушках. Рядом пыхтит дым-машина и мигает стробоскоп, а в банке для чаевых блестит руда.',
+    choices: [
+      {
+        label: 'Заказать хит', pay: 3,
+        win: { fx: [{ k: 'sparks' }], txt: 'Скелет проснулся, поймал руду зубами и поставил такое, что кости сами пустились в пляс. Искры гудят в пальцах до самого боя.' },
+      },
+      {
+        label: 'Покрутить ручки', odds: 0.5,
+        win: { fx: [{ k: 'shield', n: 8 }], txt: 'Бас качнул так, что доспехи сами подтянулись. Следующий бой начнёте под защитой басов.' },
+        lose: { fx: [{ k: 'smoke' }], txt: 'Не та ручка. Дым-машина выплюнула облако размером с огра, и оно поплыло за вами в следующий бой.' },
+      },
+      {
+        label: 'Стащить чаевые',
+        win: { fx: [{ k: 'ore', n: 7 }, { k: 'strobe' }], txt: 'Банку унесли, но скелет проснулся и врубил стробоскоп вам в глаза. Мигает до сих пор, прицел в следующем бою не поймать.' },
+      },
+    ],
+  },
 ];
 
 export const eventDef = (key: string) => EVENTS.find(e => e.key === key) ?? EVENTS[0];
@@ -216,6 +239,8 @@ export function applyFx(fx: Fx[], party: HeroState[], bank: Bank, seed: number) 
     else if (f.k === 'sparks') bank.boon = AB_COST;
     else if (f.k === 'shield') bank.shield = (bank.shield ?? 0) + f.n;
     else if (f.k === 'rage') bank.rage = (bank.rage ?? 0) + f.n;
+    else if (f.k === 'smoke') bank.smoke = true;
+    else if (f.k === 'strobe') bank.strobe = true;
     else for (const h of party) {
       if (f.k === 'heal') h.hp = h.max;
       else if (f.k === 'hp' && h.hp > 0) h.hp = f.n > 0 ? Math.min(h.max, h.hp + f.n) : Math.max(1, h.hp + f.n);
@@ -242,6 +267,8 @@ export function fxParts(fx: Fx[], solo: boolean): { t: string; good: boolean }[]
     if (f.k === 'sparks') return { t: 'Полные искры в следующем бою', good: true };
     if (f.k === 'shield') return { t: `Щит ${f.n}${each} в начале следующего боя`, good: true };
     if (f.k === 'rage') return { t: `Враги следующего боя бьют на ${f.n} сильнее`, good: false };
+    if (f.k === 'smoke') return { t: 'Дым-машина: следующий бой в дыму', good: false };
+    if (f.k === 'strobe') return { t: 'Стробоскоп: следующий бой без прицела', good: false };
     if (f.k === 'disc') return { t: `+1 диск за ход${each}`, good: true };
     const u = f.stat && UPS.find(o => o.k === f.stat);
     return { t: u ? `+1 уровень «${u.name}»${each}` : `+1 уровень случайного улучшения${each}`, good: true };
