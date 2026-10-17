@@ -87,6 +87,8 @@ let moving = false, movedAt = -1;
 const BUSY_GAP = 9.5, IDLE_GAP = 29;
 /** `cleared`: the canvas was resized and is blank, draw right away; `stale`: the game changed, draw soon. */
 let cleared = true, stale = true, drawnAt = -Infinity, drawnCam = '', drawnRoom: unknown = null;
+/** A full-screen menu or map is up: the HUD's pulses under it stand still (see `.covered` in style.css). */
+let covering = false;
 
 function sizeCanvas() {
   const dpr = moving ? 1 : Math.min(window.devicePixelRatio || 1, dprCap);
@@ -727,6 +729,7 @@ function frame(now: number) {
   const camKey = `${cam.panX},${cam.panY},${cam.zoom},${cam.rot}`;
   const changed = stale || camKey !== drawnCam || game.S !== drawnRoom || busy();
   const covered = document.querySelector('.overlay:not([hidden])') !== null;
+  if (covered !== covering) { covering = covered; document.documentElement.classList.toggle('covered', covered); }
   const gap = covered ? (changed ? IDLE_GAP : Infinity) : changed ? BUSY_GAP : IDLE_GAP;
   if (cleared || now - drawnAt >= gap) {
     scene.draw(ctx, cam, game, T, view, input.aim, input.carry);
