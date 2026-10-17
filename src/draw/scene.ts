@@ -784,7 +784,6 @@ export class SceneRenderer {
       c.quadraticCurveTo(bx + 2.5, by + 2.5, bx, by + 3.5); c.quadraticCurveTo(bx - 2.5, by + 2.5, bx - 2.5, by); c.closePath();
       fs(c, '#3fc4b6', 0.8);
     }
-    for (let k = 0; k < h.hand; k++) { ell(c, sx - 13 - k * 5, sy - 1, 3, 1.6); fs(c, h.def.col, 0.7); }
     if (h.chill > 0 || h.fire > 0) {
       c.font = '600 6.5px Oswald, sans-serif'; c.textAlign = 'right';
       c.fillStyle = h.chill > 0 ? '#bfe6ff' : '#ff9a5c';
