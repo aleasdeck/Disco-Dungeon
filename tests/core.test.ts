@@ -1245,8 +1245,8 @@ describe('pressure in a fight', () => {
     expect(straight.dmg).toBe(Math.ceil(banked.dmg * CRIT));
   });
 
-  it('a spark crystal fills the sparks of the hero who threw the disc, never past the cost of the ability', () => {
-    const g = arena(['archer']), [a, b] = g.party;
+  it('a spark crystal fills the sparks of every hero still standing, whoever threw, never past the cost of the ability', () => {
+    const g = arena(['archer']), [a, b, c] = g.party;
     const n = { k: 'spk' as const, name: 'Кристалл искр', r: 6, ch: 3, x: 88, y: 88, left: 9, hit: 0 };
     g.S.nodes = [n];
     const hit = (h: HeroState) => {
@@ -1255,17 +1255,56 @@ describe('pressure in a fight', () => {
       g.step(1 / 60);
       return g.S.floats.map(f => f.txt);
     };
-    // a hard hit chips off two, the next only what is still missing
-    expect(hit(b)).toContain('+2 искры');
-    expect(hit(b)).toContain('+1 искра');
-    expect(b.sparks).toBe(AB_COST);
+    // a fallen hero gets none; one nearly full gets only what is still missing
+    c.hp = 0;
+    a.sparks = 2;
+    // a hard hit chips off two, for everyone
+    expect(hit(b)).toContain('+2 искры всем');
+    expect([a.sparks, b.sparks, c.sparks]).toEqual([AB_COST, 2, 0]);
+    // a full hero's disc still fills the others
+    expect(hit(a)).toContain('+1 искра всем');
+    expect([a.sparks, b.sparks, c.sparks]).toEqual([AB_COST, AB_COST, 0]);
     expect(hit(b)).toContain('искры полны');
-    expect(b.sparks).toBe(AB_COST);
-    expect(a.sparks).toBe(0);
-    expect(g.canUseAbility(a)).toBe(false);
-    expect(g.canUseAbility(b)).toBe(true);
-    // the crystal still gives one charge less for the hit that found the hero full
+    expect([a.sparks, b.sparks]).toEqual([AB_COST, AB_COST]);
+    // the crystal still gives one charge less for the hit that found everyone full
     expect(n.left).toBe(6);
+    // each spends only its own
+    expect(g.canUseAbility(a)).toBe(true);
+    g.useAbility(a);
+    expect([a.sparks, b.sparks]).toEqual([0, AB_COST]);
+    expect(g.canUseAbility(b)).toBe(true);
+  });
+
+  it('online, a crystal one player hits fills the sparks on every screen', () => {
+    const host = new Game(), cli = new Game();
+    host.party = newParty([0, 2]);
+    host.online = true;
+    host.loadRoom({ seed: 21, depth: 2, floor: 0, type: 'fight' });
+    placeAll(host);
+    host.startFight(host.heroOf(0)); host.startFight(host.heroOf(2));
+    const n = { k: 'spk' as const, name: 'Кристалл искр', r: 6, ch: 3, x: 88, y: 88, left: 3, hit: 0 };
+    host.S.nodes = [n]; host.S.blocks = [];
+    host.S.discs = [{ ...disc(host, n.x, n.y + n.r + 6.5, 0, -200), hero: host.heroOf(2) }];
+    host.step(1 / 60);
+    cli.online = true;
+    cli.canControl = o => o.i === 0;
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    expect([cli.heroOf(0).sparks, cli.heroOf(2).sparks]).toEqual([2, 2]);
+  });
+
+  it('a lone hero\'s spark crystal says nothing about the others', () => {
+    const g = new Game();
+    g.party = newParty([1]);
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    g.S.mobs = [newMob('archer', 40, 30, 1, 0)];
+    g.S.nodes = []; g.S.blocks = [];
+    placeAll(g); g.startFight();
+    const n = { k: 'spk' as const, name: 'Кристалл искр', r: 6, ch: 3, x: 88, y: 88, left: 3, hit: 0 };
+    g.S.nodes = [n];
+    g.S.discs = [{ ...disc(g, n.x, n.y + n.r + 6.5, 0, -200), hero: g.party[0] }];
+    g.step(1 / 60);
+    expect(g.S.floats.map(f => f.txt)).toContain('+2 искры');
+    expect(g.party[0].sparks).toBe(2);
   });
 
   it('a resource soaks up the disc, so collecting costs the throw', () => {
