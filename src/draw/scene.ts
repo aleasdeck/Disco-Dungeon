@@ -28,8 +28,20 @@ const OL = 2.1, DL = 1.1;
 const PIT_D = 30;
 /** Ink on stone blocks: thinner than the room's silhouette, so a block doesn't look cut out of the floor. */
 const BL = 1.2;
-/** Whether the graffiti fonts have loaded; words drawn before that use a fallback face and are drawn again. */
-const fontsReady = () => typeof document === 'undefined' || !document.fonts || GRAFFITI_FONTS.every(f => document.fonts.check(f, 'WЖ'));
+/**
+ * Whether the graffiti fonts have loaded; words drawn before that use a fallback face and are drawn again.
+ * Asked by every piece of wall every frame, while document.fonts.check itself is slow (a few of them a frame were
+ * most of the frame on a phone), so the answer is looked up at most a few times a second and kept once it's yes.
+ */
+let fontsOk = typeof document === 'undefined' || !document.fonts, fontsAt = -Infinity;
+if (!fontsOk) document.fonts.addEventListener('loadingdone', () => { fontsAt = -Infinity; });
+const fontsReady = () => {
+  if (fontsOk) return true;
+  const now = performance.now();
+  if (now - fontsAt < 250) return false;
+  fontsAt = now;
+  return (fontsOk = GRAFFITI_FONTS.every(f => document.fonts.check(f, 'WЖ')));
+};
 /** At most this many gags on the walls of one room, so each stays a find rather than wallpaper. */
 const MAX_GAGS = 4;
 /** Chalk white, for words and doodles on the walls. */
