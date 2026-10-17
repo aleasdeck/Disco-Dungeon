@@ -2,12 +2,12 @@
 // menu: one for the main menu, one for the map, the events and everything else outside a fight, and a fight tune for each
 // floor; they cross-fade into each other. The sound effects are synthesized on the spot.
 // Nothing sounds before the player's first tap (browsers allow sound only after one), and the whole audio engine sleeps
-// while the sound is off or the page is hidden, so it costs a phone nothing then.
+// while both volumes are down to zero or the page is hidden, so it costs a phone nothing then.
 
 import { music as musicFiles } from './assets';
 import { playSfx, type Sfx } from './audio/sfx';
 import type { Band } from './audio/synth';
-import { saveSettings, settings } from './settings';
+import { settings } from './settings';
 
 export type { Sfx } from './audio/sfx';
 /** The main menu's tune, the one outside fights, and the fight tune of floor 0, 1 or 2. */
@@ -78,9 +78,9 @@ class Sound {
     if (this.want) { const w = this.want; this.want = null; this.music(w); }
   }
 
-  /** Whether the engine should run: sound on and the page in view. */
+  /** Whether the engine should run: something to hear and the page in view. */
   private awake() {
-    return !settings.muted && document.visibilityState !== 'hidden';
+    return (settings.music > 0 || settings.sfx > 0) && document.visibilityState !== 'hidden';
   }
 
   private lfo(name: string, rate: number, depth: number) {
@@ -95,31 +95,22 @@ class Sound {
     return g;
   }
 
-  /** Apply the volumes and the mute from the settings. */
+  /** Apply the volumes from the settings. */
   volumes() {
     const ctx = this.ctx;
     if (!ctx) return;
     const now = ctx.currentTime;
     this.musicBus.gain.setTargetAtTime(level(settings.music), now, 0.05);
     this.fxBus.gain.setTargetAtTime(level(settings.sfx) * 1.1, now, 0.05);
-    this.master.gain.setTargetAtTime(settings.muted ? 0 : 1, now, 0.03);
     if (this.awake() && ctx.state === 'suspended') ctx.resume().catch(() => {});
     // the fade out has time to finish before the engine stops
     else if (!this.awake() && ctx.state === 'running') setTimeout(() => { if (!this.awake()) ctx.suspend().catch(() => {}); }, 150);
   }
 
-  get muted() { return settings.muted; }
-
-  setMuted(on: boolean) {
-    settings.muted = on;
-    saveSettings();
-    this.volumes();
-  }
-
-  /** Play a sound now; p is how hard (a soft bounce, a hard one). Quiet before the first tap, with the sound off, and for repeats too close together. */
+  /** Play a sound now; p is how hard (a soft bounce, a hard one). Quiet before the first tap, with the sounds down to zero, and for repeats too close together. */
   play(ev: Sfx, p = 0.7) {
     const ctx = this.ctx;
-    if (!ctx || ctx.state !== 'running' || settings.muted || settings.sfx <= 0) return;
+    if (!ctx || ctx.state !== 'running' || settings.sfx <= 0) return;
     const now = ctx.currentTime, gap = GAP[ev] ?? 0.02;
     if (now - (this.last.get(ev) ?? -1) < gap) return;
     this.last.set(ev, now);

@@ -11,12 +11,10 @@ export interface Settings {
   /** Music and sound effect volumes, 0 to 1. */
   music: number;
   sfx: number;
-  /** All sound off, by the top bar's speaker button. */
-  muted: boolean;
 }
 
 const KEY = 'discodungeon.settings';
-const defaults: Settings = { name: '', quality: 'auto', aimLine: true, hero: 0, music: 0.7, sfx: 0.85, muted: false };
+const defaults: Settings = { name: '', quality: 'auto', aimLine: true, hero: 0, music: 0.7, sfx: 0.85 };
 
 function load(): Settings {
   try {

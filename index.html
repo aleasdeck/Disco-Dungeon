@@ -20,13 +20,12 @@
     <div class="ore-chip" title="Руда, общая на отряд"><i class="ico ico-ore" aria-hidden="true"></i><b id="hOre">0</b></div>
     <div class="where">
       <b id="locName">DiscoDungeon</b>
-      <span class="where-sub"><span id="hTurn"></span><span id="hSide" class="side"></span><span id="hRage" class="rage" hidden></span></span>
+      <span class="where-sub"><span id="hTurn"></span><span id="hSide" class="side"></span><span id="hRage" class="rage" hidden></span><span id="hCurse" class="curse" hidden></span></span>
     </div>
     <ol class="queue" id="queue" aria-label="Очередь врагов: кто левее, тот ходит раньше"></ol>
     <div class="top-btns">
       <button class="ibtn" id="btnMap" aria-label="Карта" title="Карта"><i class="ico ico-map" aria-hidden="true"></i></button>
       <button class="ibtn" id="btnLog" aria-label="Журнал хода врагов" title="Журнал хода врагов" aria-expanded="false"><i class="ico ico-log" aria-hidden="true"></i></button>
-      <button class="ibtn" id="btnSound" aria-label="Звук" title="Звук" aria-pressed="true"><i class="ico ico-sound" aria-hidden="true"></i></button>
       <button class="ibtn" id="btnMenu" aria-label="Меню" title="Меню"><i class="ico ico-menu" aria-hidden="true"></i></button>
     </div>
   </header>
@@ -206,6 +205,7 @@
       <h2>Пауза</h2>
       <div class="menu-btns">
         <button class="btn big" id="pResume"><i data-art="m_continue" aria-hidden="true"></i>Продолжить</button>
+        <button class="btn big" id="pSettings"><i data-art="m_settings" aria-hidden="true"></i>Настройки</button>
         <button class="btn big" id="pHelp"><i data-art="m_help" aria-hidden="true"></i>Как играть</button>
         <button class="btn big" id="pMenu"><i data-art="m_home" aria-hidden="true"></i>Главное меню</button>
       </div>
@@ -231,7 +231,7 @@
         <li><b>Ресурсы.</b> Руда общая на весь отряд и копится весь забег. Искры у каждого героя свои: их даёт кристалл, в который попал твой диск. Больше трёх не набрать, это ровно на одно умение, и каждый бой начинается без них.</li>
         <li><b>Враги.</b> Сверху очередь врагов: кто левее, тот ходит раньше. Значок на иконке в цвете героя-цели: число значит удар на столько, пустое кольцо значит моб идёт к нему, разноцветный бьёт всех, фиолетовый готовит особый приём. Наведи или тапни иконку, чтобы увидеть подробности и подсветить фигурку. Свиток рядом с меню открывает журнал хода врагов.</li>
         <li><b>Прокачка.</b> Руда тратится только у кузнеца: это комната с наковальней на карте, на каждом этаже хотя бы один к середине пути. «Диски за ход»: на старте один диск, второй и третий самые дорогие и самые сильные. «Урон»: +25% к удару за уровень. «Скорость»: диск летит быстрее и дальше и от этого тоже бьёт сильнее. «Отскок»: диск меньше теряет скорость о стены и камни. Руды на всё не хватит, выбирай.</li>
-        <li><b>События.</b> Комната со знаком вопроса на карте: сцена и несколько выборов. Хорошее написано зелёным, плохое красным, у рискованного выбора шанс и оба исхода. В сетевой игре выбор общий: отряд делает его, только когда все нажали один и тот же.</li>
+        <li><b>События.</b> Комната со знаком вопроса на карте: сцена и несколько выборов. Хорошее написано зелёным, плохое красным, у рискованного выбора шанс и оба исхода. Некоторые исходы насылают беду на следующий бой: «Дым-машина» затягивает комнату дымом, и видно только вокруг героев, а под «Стробоскопом» нет линии прицела. В сетевой игре выбор общий: отряд делает его, только когда все нажали один и тот же.</li>
         <li><b>Бросок.</b> Потяни свою фигурку назад, как рогатку, и отпусти. Чем длиннее натяжка, тем сильнее.</li>
         <li><b>Конец хода.</b> Когда все диски брошены, кнопка «Конец хода» загорается. Враги ходят, только когда её нажали все игроки. Нажал раньше времени, нажми ещё раз, чтобы отменить.</li>
         <li><b>Камера.</b> Перетаскивай пустой пол, чтобы двигать комнату. Колесо или щипок двумя пальцами приближает.</li>
@@ -247,8 +247,7 @@
     <div class="menu-panel">
       <h1 class="logo">Disco<span>Dungeon</span></h1>
       <div class="boot-bar" id="bootBar" role="progressbar" aria-label="Загрузка" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="bootFill"></i></div>
-      <p class="boot-note">Раскладываем подземелье: картинки и шрифты грузятся один раз, дальше игра берёт их с устройства.</p>
-      <button class="btn" id="bootSkip" hidden>Не ждать</button>
+      <p class="boot-note" id="bootGag"></p>
     </div>
   </section>
 
