@@ -107,6 +107,8 @@ $('camFit').addEventListener('click', () => controls.fit());
 // ------------------------------------------------------------ run flow
 
 function showMap(open: boolean) {
+  // the blacksmith's screen stands in for the map until this player is done there
+  if (hud.atForge) open = false;
   const was = !$('mapScreen').hidden;
   $('mapScreen').hidden = !open;
   $('mapClose').hidden = choosing;
@@ -200,12 +202,21 @@ function choose(id: string) {
   const f = run.floor, n = nodeById(run, f, id), depth = depthOf(f, n);
   run.path[f].push(id);
   votes = {};
+  // the party walks on, so the blacksmith's shop closes
+  game.forge = 0;
   if (COMBAT_ROOMS.includes(n.type)) {
     choosing = false;
     mapView.info = '';
     game.loadRoom({ seed: run.seed + depth * 97 + n.i, depth, floor: f, type: n.type });
     controls.fit();
     showMap(false);
+  } else if (n.type === 'forge') {
+    // the blacksmith's: everyone upgrades their own discs and goes back to the map when done
+    restRoom(n.type, game.party, game.bank, run.seed + depth * 131);
+    mapView.info = '';
+    game.forge = depth;
+    showMap(false);
+    game.onChange();
   } else {
     mapView.info = `<b>${ROOM_TYPES[n.type].name}.</b> ${restRoom(n.type, game.party, game.bank, run.seed + depth * 131)}`;
     hud.buildAllies();
@@ -324,6 +335,10 @@ function hideEnd() {
   $('roomEnd').hidden = true;
 }
 
+$('forgeDone').addEventListener('click', () => {
+  hud.leaveForge();
+  showMap(true);
+});
 $('btnMap').addEventListener('click', () => showMap(true));
 $('mapClose').addEventListener('click', () => showMap(false));
 $('newRun').addEventListener('click', () => startRun(mode === 'host' ? game.party.map(h => h.i) : undefined));
@@ -361,6 +376,8 @@ $('pMenu').addEventListener('click', () => {
 
 function leaveOnline() {
   reconnecting++;
+  // a client thrown out of the blacksmith's would keep the shop on screen over the menu
+  if (game.forge) { game.forge = 0; hud.refresh(); }
   if (mode === 'host') net.broadcast({ t: 'bye' });
   if (net.active) net.close();
   clearSeat();
@@ -574,11 +591,14 @@ net.onMsg = (from, m) => {
     else if ((choosing && $('roomEnd').hidden) || !$('mapScreen').hidden) showMap(true);
   } else if (m.t === 'end') showEnd(m.e);
   else if (m.t === 'snap') {
+    const shop = hud.atForge;
     const ch = applySnapshot(game, m.s);
     stale = true;
     if (ch.party) hud.buildAllies();
     if (ch.room) controls.fit();
     hud.refresh();
+    // the party walked into the blacksmith's: the shop takes the map's place
+    if (!shop && hud.atForge) showMap(false);
   } else if (m.t === 'screen') screen(m.title, m.text, m.win);
   else if (m.t === 'lobbyBack') { started = false; wait(''); hideEnd(); showMap(false); lobbyView(); show('lobby'); }
 };

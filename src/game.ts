@@ -142,10 +142,16 @@ export class Game {
   online = false;
   /** Online client: actions go to the host through this instead of changing local state. */
   send: ((a: Action) => void) | null = null;
+  /**
+   * Depth of the blacksmith's room the party stands in between rooms, 0 anywhere else. Only there are extra discs and stat
+   * levels for sale; the depth tells one visit from the next when two blacksmiths come in a row.
+   */
+  forge = 0;
   private acc = 0;
 
   loadRoom(spec: RoomSpec) {
     const L = generate(spec);
+    this.forge = 0;
     for (const h of this.party) Object.assign(h, { pad: null, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0, chill: 0, fire: 0, boost: false });
     // sparks don't carry over: every fight starts afresh
     this.bank.sparks = this.bank.boon ?? 0;
@@ -324,18 +330,11 @@ export class Game {
   }
 
   buyDisc(h = this.hero) {
-    const S = this.S, c = this.discCost(h);
-    if (!c || this.bank.ore < c || h.hp <= 0 || S.phase === 'over') return;
+    const c = this.discCost(h);
+    if (!this.forge || !c || this.bank.ore < c) return;
     if (this.send) { this.send({ k: 'disc', h: h.i }); return; }
     this.bank.ore -= c;
     h.discs++;
-    // the new disc can be thrown this very turn
-    if (S.phase === 'throw' || S.phase === 'place') h.hand++;
-    if (h.pad !== null) {
-      const p = S.pads[h.pad];
-      this.float(p.x, p.y, '+1 диск', h.def.col);
-      this.burst(p.x, p.y, h.def.col, 10);
-    }
     this.onChange();
   }
 
@@ -346,16 +345,11 @@ export class Game {
   }
 
   upgrade(k: StatKey, h = this.hero) {
-    const S = this.S, c = this.upCost(h, k);
-    if (!c || this.bank.ore < c || h.hp <= 0 || S.phase === 'over') return;
+    const c = this.upCost(h, k);
+    if (!this.forge || !c || this.bank.ore < c) return;
     if (this.send) { this.send({ k: 'up', h: h.i, stat: k }); return; }
     this.bank.ore -= c;
     h.up[k]++;
-    if (h.pad !== null) {
-      const p = S.pads[h.pad];
-      this.float(p.x, p.y, UPS.find(u => u.k === k)!.next, h.def.col);
-      this.burst(p.x, p.y, h.def.col, 10);
-    }
     this.onChange();
   }
 
