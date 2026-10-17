@@ -7,7 +7,7 @@ import { applySnapshot, snapshot, type MapState } from './sync';
 import { saveSettings, settings } from './settings';
 import { bindSettings, lobbyStatus, renderCollection, renderHeroSelect, renderLobby, resetLobby, show } from './menu';
 import { Input } from './input';
-import { Hud } from './ui';
+import { Hud, faceUrl } from './ui';
 import { hl } from './hl';
 import { MapView, type MapParty, type MapVotes } from './mapview';
 import { SceneRenderer } from './draw/scene';
@@ -295,7 +295,7 @@ function mapVotes(): MapVotes | undefined {
   const me = myHero();
   const nameOf = (h: number) => players.find(p => p.hero === h)?.name ?? HEROES[h].name;
   const pips: MapVotes['pips'] = {};
-  for (const h of table) if (votes[h]) (pips[votes[h]] ??= []).push({ col: HEROES[h].col, name: nameOf(h) });
+  for (const h of table) if (votes[h]) (pips[votes[h]] ??= []).push({ hero: h, col: HEROES[h].col, name: nameOf(h), face: faceUrl(game.party.find(o => o.i === h) ?? { i: h, def: HEROES[h] }) });
   const idle = table.filter(h => !votes[h]).map(h => (h === me ? 'ты' : nameOf(h)));
   const note = idle.length === table.length ? 'Идём, когда все нажмут одну и ту же комнату.'
     : idle.length ? `Ещё не выбрали: ${idle.join(', ')}.`
