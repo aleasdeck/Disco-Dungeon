@@ -426,12 +426,11 @@ export class Hud {
     $('fRisk').style.width = risk + '%';
     $('fRisk').style.setProperty('--x', String(hpPct - risk));
     $('fHp').textContent = `${Math.max(0, h.hp)}/${h.max}`;
-    $('fShBadge').hidden = h.shield <= 0;
-    $('fShield').textContent = String(h.shield);
     const wrap = $('fHpWrap');
     wrap.classList.toggle('shielded', h.shield > 0);
     wrap.classList.toggle('lethal', dead);
-    wrap.title = inc ? `Враги в этот ход снимут ${inc} HP, если их не остановить.` : '';
+    // the shield has no badge of its own: the blue chunk shows it, the number is in the hint
+    wrap.title = [h.shield > 0 ? `Щит ${h.shield}: снимается первым.` : '', inc ? `Враги в этот ход снимут ${inc} HP, если их не остановить.` : ''].filter(Boolean).join(' ');
 
     // the sparks bar beside the ability button: three cells, one per spark; full, they light up and the button pulses
     const sp = Math.min(AB_COST, h.sparks), full = sp >= AB_COST;

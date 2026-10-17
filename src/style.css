@@ -277,12 +277,6 @@ i.ico { display: inline-block; font-style: normal; }
 .track em { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(-45deg, #ffd34d 0 3px, #8a1f2a 3px 6px); animation: risk 0.9s ease-in-out infinite; }
 .hpbar.lethal { animation: lethal-f 0.9s ease-in-out infinite; }
 .hp-num { position: absolute; inset: 0; display: grid; place-items: center; font: 700 15px/1 Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #000, 0 0 3px #000; }
-.sh-badge {
-  position: absolute; left: -14px; top: 50%; z-index: 1; width: 34px; height: 38px; transform: translateY(-50%);
-  display: grid; place-items: center; background: linear-gradient(#8fc0e4, #4f86b3);
-  clip-path: polygon(0 4%, 50% 0, 100% 4%, 100% 52%, 50% 100%, 0 52%);
-  font: 700 16px/1 Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #120c09;
-}
 @keyframes risk { 50% { opacity: 0.45; } }
 @keyframes lethal-f { 50% { filter: var(--outline) drop-shadow(0 0 6px #ff4d6a); } }
 
@@ -382,7 +376,6 @@ i.ico { display: inline-block; font-style: normal; }
   .bars { left: calc(var(--pf-w) + 8px); bottom: 6px; width: 176px; gap: 4px; }
   .hpbar { height: 19px; margin-right: 12px; }
   .hp-num { font-size: 11px; }
-  .sh-badge { width: 24px; height: 27px; left: -10px; font-size: 12px; }
   .spk { height: 9px; margin-right: 12px; }
   .ability { left: calc(var(--pf-w) + 176px); width: 68px; height: 74px; padding-top: 6px; gap: 3px; }
   .ability b { font-size: 10px; }
@@ -429,7 +422,6 @@ i.ico { display: inline-block; font-style: normal; }
   .bars { left: calc(var(--pf-w) + 10px); right: 92px; bottom: 6px; width: auto; gap: 5px; }
   .hpbar { height: 22px; margin-right: 6px; }
   .hp-num { font-size: 13px; }
-  .sh-badge { width: 27px; height: 30px; left: -11px; font-size: 13px; }
   .spk { height: 10px; margin-right: 6px; }
   .ability { left: auto; right: 0; bottom: 0; width: 90px; height: 96px; padding-top: 8px; gap: 4px; }
   .ability b { font-size: 12px; }
@@ -747,8 +739,9 @@ i.ico { display: inline-block; font-style: normal; }
 .art-btn_turn .turn-btn { height: 115px; width: 360px; padding: 34px 70px 6px 26px; filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)); }
 .art-btn_turn .tb-plate { clip-path: none; background: var(--ui-btn_turn) center / 100% 100% no-repeat; transition: filter 0.2s; }
 .art-btn_turn .tb-plate::before, .art-btn_turn .tb-plate::after { display: none; }
-/* the words climb with the blade's top edge */
-.art-btn_turn .turn-btn b, .art-btn_turn .turn-btn small { transform: rotate(-7deg); }
+/* the words climb with the blade's top edge, lifted a little off its bottom */
+.art-btn_turn .turn-btn { --lift: -9px; }
+.art-btn_turn .turn-btn b, .art-btn_turn .turn-btn small { transform: translateY(var(--lift)) rotate(-7deg); }
 .art-btn_turn .turn-btn.idle .tb-plate { filter: saturate(0.45) brightness(0.7); }
 .art-btn_turn .turn-btn.idle b { color: #1c120a; }
 .art-btn_turn .turn-btn.lit { filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 16px rgba(255, 200, 80, 0.8)); animation: lit-art 1.6s ease-in-out infinite; }
@@ -759,13 +752,13 @@ i.ico { display: inline-block; font-style: normal; }
 @keyframes lit-art { 50% { filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 28px rgba(255, 210, 90, 1)); } }
 @media (prefers-reduced-motion: reduce) { .art-btn_turn .turn-btn.lit { animation: none; } }
 @media (max-height: 520px) and (orientation: landscape) {
-  .art-btn_turn .turn-btn { width: 220px; height: 70px; padding: 20px 42px 2px 14px; }
+  .art-btn_turn .turn-btn { width: 220px; height: 70px; padding: 20px 42px 2px 14px; --lift: -5px; }
   .art-btn_turn .tb-who { top: -8px; right: 14%; }
 }
 /* the upright phone: the blade runs above the health and is cut round the ability gem; the ink edge follows the cut */
 @media (orientation: portrait) and (max-width: 700px) {
   .art-btn_turn .turn-btn {
-    width: auto; height: 76px; padding: 24px 86px 6px 22px; filter: var(--outline) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5));
+    width: auto; height: 76px; padding: 24px 86px 6px 22px; filter: var(--outline) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); --lift: -5px;
     --plate: polygon(0 0, 100% 0, 100% calc(100% - 40px), calc(100% - 9px) calc(100% - 37px), calc(100% - 90px) calc(100% - 31px), calc(100% - 104px) 100%, 0 100%);
   }
   .art-btn_turn .tb-plate { clip-path: var(--plate); }
@@ -859,10 +852,8 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .art-hp_empty.art-hp_full .corner .track > * { background: var(--ui-hp_full) calc(-3.021cqw - var(--x, 0) * 1cqw) 0 / 106.67cqw 100cqh no-repeat; }
 .art-hp_empty.art-hp_full .corner .track s { background-image: var(--ui-hp_shield); }
 .art-hp_empty.art-hp_full .corner .track s.risk, .art-hp_empty.art-hp_full .corner .track em { filter: brightness(1.7) saturate(0.5); }
-/* the number sits in the bar's middle; the shield badge hangs off its left point */
+/* the number sits in the bar's middle */
 .art-hp_empty.art-hp_full .corner .hp-num { inset: 18% 12% 12% 12%; }
-.art-hp_empty.art-hp_full .corner .sh-badge { left: -18px; top: 52%; }
-.art-ico_shield .sh-badge { clip-path: none; background: var(--ui-ico_shield) center / contain no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); text-shadow: 1px 1px 0 #120c09, -1px -1px 0 #120c09, 1px -1px 0 #120c09, -1px 1px 0 #120c09; }
 .art-spk_1_on .spk { background: none; clip-path: none; box-shadow: none; padding: 0; gap: 4px; height: 32px; margin: -4px 18px 0 4px; }
 .art-spk_1_on .spk i { flex: 1; background: center / contain no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
 /* three different shards, lit and dark in the same shape; each sits whole in its cell, so they differ in size too */
