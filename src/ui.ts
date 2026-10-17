@@ -161,6 +161,9 @@ export class Hud {
 
   constructor(private g: Game) {
     fillIcons();
+    // the strip's height for the boss's bar under it: the strip grows with the boss's countdown, and upright with a second row
+    const top = $('hudTop');
+    new ResizeObserver(() => document.documentElement.style.setProperty('--top-h', top.offsetHeight + 'px')).observe(top);
     $('abBtn').addEventListener('click', () => g.useAbility());
     $('turnBtn').addEventListener('click', () => this.pressTurn());
     $('pfBtn').addEventListener('click', e => { e.stopPropagation(); this.toggleCard(); });
@@ -227,7 +230,8 @@ export class Hud {
   refresh() {
     const g = this.g, S = g.S;
     fillIcons();
-    $('locName').textContent = `Этаж ${S.spec.floor + 1} · ${ROOM_TYPES[S.spec.type].name}`;
+    // the floor is laid out after the room's name (style.css): where the strip is narrow the floor gives way, never the room
+    $('locName').innerHTML = `<span class="fl">Этаж ${S.spec.floor + 1} · </span><span>${ROOM_TYPES[S.spec.type].name}</span>`;
     $('hTurn').textContent = S.phase === 'place' ? 'Расстановка' : `Ход ${S.turn}`;
     $('hOre').textContent = String(g.bank.ore);
     // enemies grow angrier every turn once a fight drags on; warn a turn ahead

@@ -145,7 +145,9 @@ i.ico { display: inline-block; font-style: normal; }
 .ore-chip { display: flex; align-items: center; gap: 6px; padding: 3px 14px 3px 8px; background: #2c2119; clip-path: var(--cut-slab); font: 700 20px/1 Oswald, sans-serif; color: #f3e6c8; }
 .ore-chip .ico { width: 28px; height: 28px; }
 .where { display: flex; flex-direction: column; align-items: center; min-width: 0; margin: 0 auto; text-align: center; }
-.where b { font: 700 19px/1.1 Oswald, sans-serif; letter-spacing: 0.03em; color: #f3e6c8; white-space: nowrap; }
+.where b { display: flex; flex-direction: row-reverse; justify-content: center; font: 700 19px/1.1 Oswald, sans-serif; letter-spacing: 0.03em; color: #f3e6c8; white-space: nowrap; }
+/* the floor stands left of the room's name but comes after it in the row, so a line too short drops the floor */
+.where b .fl { order: 1; margin-right: 0.3em; }
 .where-sub { display: flex; gap: 8px; justify-content: center; font: 500 13px/1.3 Oswald, sans-serif; color: var(--gold); white-space: nowrap; }
 .where-sub .side.enemies { color: #ff6b7d; }
 .where-sub .side.over { color: var(--gold-1); }
@@ -193,7 +195,7 @@ i.ico { display: inline-block; font-style: normal; }
 
 /* a boss: a wide bar under the strip with its health and how soon it hits everyone */
 .boss-bar {
-  position: fixed; top: 76px; left: 50%; transform: translateX(-50%); z-index: 4;
+  position: fixed; top: calc(var(--top-h, 72px) + 4px); left: 50%; transform: translateX(-50%); z-index: 4;
   display: flex; align-items: center; gap: 8px; width: min(520px, calc(100% - 24px)); padding: 6px 14px 6px 8px;
   background: rgba(40, 14, 22, 0.9); clip-path: var(--cut-slab);
 }
@@ -365,7 +367,7 @@ i.ico { display: inline-block; font-style: normal; }
   .ib.sp .ico, .ib.go .ico { width: 12px; height: 12px; }
   .qi { right: -7px; bottom: -6px; }
   .ibtn { width: 34px; height: 34px; padding: 5px; }
-  .boss-bar { top: 52px; padding: 4px 10px 4px 6px; }
+  .boss-bar { padding: 4px 10px 4px 6px; }
   .boss-bar canvas { width: 30px; height: 30px; }
   .log-panel { top: 50px; }
   .corner { left: max(8px, env(safe-area-inset-left)); bottom: calc(8px + var(--safe-b)); width: 330px; height: 118px; --pf-w: 84px; --pf-h: 104px; }
@@ -385,10 +387,20 @@ i.ico { display: inline-block; font-style: normal; }
   .turn-btn small { font-size: 10px; }
 }
 
-/* ---------- a phone held upright: the strip wraps the queue onto its own row, my hero gets a board along the bottom,
-   and the turn button sits on the board above the health, its lower edge stepping round the ability */
+/* ---------- a phone held upright: the strip keeps the heroes, the room and the buttons in one row and puts the ore and
+   the queue on a row under it, my hero gets a board along the bottom, and the turn button sits on the board above the
+   health, its lower edge stepping round the ability */
 @media (orientation: portrait) and (max-width: 700px) {
   .hud-top { flex-wrap: wrap; gap: 6px 8px; padding: max(6px, env(safe-area-inset-top)) 8px 6px; }
+  /* a line break: the first row always holds the buttons, whatever the room's name and however many heroes */
+  .hud-top::after { content: ''; order: 4; flex-basis: 100%; margin-top: -6px; }
+  .where { order: 2; flex: 1 1 0; min-width: 0; margin: 0; }
+  .where-sub { max-width: 100%; overflow: hidden; }
+  /* the floor wraps onto a hidden second line when it doesn't fit beside the room's name */
+  .where b { flex-wrap: wrap; height: 1.1em; max-width: 100%; overflow: hidden; }
+  .where b > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .top-btns { order: 3; }
+  .ore-chip { order: 5; align-self: flex-start; margin-top: 7px; }
   .head { width: 34px; height: 38px; }
   .head canvas { width: 34px; height: 31px; }
   .head .a-hp { height: 4px; }
@@ -399,7 +411,13 @@ i.ico { display: inline-block; font-style: normal; }
   .where-sub { font-size: 11px; gap: 6px; }
   .top-btns { gap: 5px; }
   .ibtn { width: 34px; height: 34px; padding: 5px; }
-  .queue { order: 5; flex-basis: 100%; justify-content: center; margin: 2px 0 0; }
+  /* centred under the room's name: the right margin answers the ore on the left; a long queue runs on into that margin */
+  .queue { order: 6; flex: 1 1 0; min-width: 0; justify-content: center; justify-content: safe center; margin: 2px 68px 0 0; }
+  /* a crowd (summons too) takes smaller icons so it stays on the row beside the ore */
+  .queue:has(li:nth-child(6)) .qb { width: 32px; height: 32px; }
+  .queue:has(li:nth-child(6)) li.boss .qb { width: 38px; height: 38px; }
+  .queue:has(li:nth-child(6)) li + li { margin-left: 11px; }
+  .queue:has(li:nth-child(6)) li + li::before { left: -10px; top: 10px; width: 7px; height: 10px; }
   .qb { width: 38px; height: 38px; }
   .queue li.boss .qb { width: 44px; height: 44px; margin-top: -3px; }
   .queue li + li { margin-left: 14px; }
@@ -407,7 +425,6 @@ i.ico { display: inline-block; font-style: normal; }
   .ib { min-width: 19px; height: 19px; font-size: 11px; padding: 0 3px; }
   .ib.sp .ico, .ib.go .ico { width: 12px; height: 12px; }
   .qi { right: -7px; bottom: -6px; }
-  .boss-bar { top: 104px; }
   .log-panel { top: 52px; }
   .corner { left: 6px; right: 6px; bottom: calc(6px + var(--safe-b)); width: auto; height: 136px; --pf-w: 94px; --pf-h: 128px; }
   .corner::before {
@@ -618,9 +635,11 @@ i.ico { display: inline-block; font-style: normal; }
 @media (max-height: 520px) {
   #mapScreen { align-items: start; }
   .map-panel { max-height: none; }
-  #map { flex: none; height: 520px; }
+  #map { flex: none; height: 680px; }
 }
-#map .edge { fill: none; stroke: #5c4a39; stroke-width: 3; stroke-dasharray: 2 6; stroke-linecap: round; }
+/* the paths in chalk on the brown board, the ones the party can take now in gold */
+#map .edge { fill: none; stroke: #e9d7ae; stroke-width: 3; stroke-dasharray: 7 6; stroke-linecap: round; }
+#map .edge.next { stroke: var(--gold-1); stroke-width: 3.5; }
 #map .edge.walked { stroke: var(--gold-1); stroke-width: 4.5; stroke-dasharray: none; filter: drop-shadow(0 0 4px rgba(255, 210, 90, 0.7)); }
 #map .edge.past { opacity: 0.3; }
 #map .gate path { fill: #6b5a48; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; }
@@ -633,7 +652,6 @@ i.ico { display: inline-block; font-style: normal; }
 #map .mnode.visited .halo { stroke: var(--gold-2); stroke-width: 2.5; }
 #map .mnode.past { opacity: 0.32; }
 #map .mnode:not(.reach):not(.visited):not(.past) { opacity: 0.85; }
-#map .mnode.peek .halo { stroke: #fff; stroke-width: 3; animation: none; }
 #map .mnode .rim { fill: none; stroke: var(--ink); stroke-width: 2.5; }
 #map .mnode .crown { fill: var(--gold-1); stroke: var(--ink); stroke-width: 1.8; stroke-linejoin: round; }
 #map .token { pointer-events: none; animation: token 1.6s ease-in-out infinite; }
@@ -642,9 +660,8 @@ i.ico { display: inline-block; font-style: normal; }
 @keyframes token { 50% { transform: translateY(-2px); } }
 #map .mnode.reach:hover .disc, #map .mnode.reach:focus .disc { stroke: var(--gold); }
 #map .mnode.mine .halo { stroke: var(--text); stroke-width: 3.5; animation: none; }
-#map .pip circle { stroke: var(--ink); stroke-width: 2; }
-#map .pip text { fill: #f3ead8; font: 600 13px Oswald, sans-serif; text-anchor: middle; paint-order: stroke; stroke: var(--ink); stroke-width: 2.5px; stroke-linejoin: round; }
-#map .mlabel { fill: var(--muted); font: 13px var(--hand); text-anchor: middle; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
+#map .pip circle { stroke: var(--ink); stroke-width: 2.5; }
+#map .mlabel { fill: var(--muted); font: 14px var(--hand); text-anchor: middle; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
 @keyframes pulse { 50% { stroke-opacity: 0.3; } }
 .map-info { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
 .map-info b { color: var(--text); }
@@ -664,14 +681,6 @@ i.ico { display: inline-block; font-style: normal; }
 .mp-hero.dead { filter: var(--outline) grayscale(1) brightness(0.6); }
 .mp-ore { display: flex; align-items: center; gap: 4px; margin-left: auto; padding: 2px 12px 2px 6px; background: #2c2119; clip-path: var(--cut-slab); font: 700 17px/1 Oswald, sans-serif; color: #f3e6c8; }
 .mp-ore .ico { width: 22px; height: 22px; }
-/* what is in the room picked on the map */
-/* its place stays taken while it is closed: a map that jumped under the pointer would flicker the card on and off */
-.map-peek { flex: none; display: flex; align-items: center; gap: 10px; height: 78px; margin-top: 6px; padding: 6px 10px; background: rgba(0, 0, 0, 0.25); border: 1.5px solid var(--ink); border-radius: 8px; overflow: hidden; }
-.map-peek.off { visibility: hidden; }
-.map-peek p { margin: 0; flex: 1; font-size: 12.5px; line-height: 1.3; color: var(--muted); }
-.map-peek b { color: var(--text); }
-.map-peek .btn { flex: none; }
-.map-peek .btn.big { padding: 9px 18px 9px 14px; font-size: 16px; }
 
 /* ---------- small screens */
 @media (max-width: 820px), (max-height: 520px) {
@@ -832,13 +841,12 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .mob-card .st:has(> img) { filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5)); }
 .map-info:not([hidden]) { display: flex; align-items: center; gap: 10px; }
 .map-info > i[data-art] { width: 46px; height: 46px; transform: rotate(-5deg); }
-.map-peek > img.art { flex: none; width: 42px; height: 42px; }
 #map .mnode .hit { fill: transparent; }
 #map .mart { pointer-events: none; transform-box: fill-box; transform-origin: 50% 60%; transition: transform 0.15s; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)); }
 #map .mnode.art.reach .mart { animation: room-glow 1.2s ease-in-out infinite; }
 #map .mnode.art.reach:hover .mart, #map .mnode.art.reach:focus-visible .mart { transform: scale(1.1); }
 #map .mnode.art.visited .mart { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 4px var(--gold-2)); }
-#map .mnode.art.peek .mart, #map .mnode.art.mine .mart, #map .mnode.art:focus-visible .mart { animation: none; transform: scale(1.1); filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 3px #fff) drop-shadow(0 0 7px #fff); }
+#map .mnode.art.mine .mart, #map .mnode.art:focus-visible .mart { animation: none; transform: scale(1.1); filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 3px #fff) drop-shadow(0 0 7px #fff); }
 @keyframes room-glow {
   0%, 100% { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 3px var(--gold)) drop-shadow(0 0 8px var(--gold)); }
   50% { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 1px var(--gold)); }
