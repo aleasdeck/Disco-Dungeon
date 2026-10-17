@@ -29,6 +29,8 @@ export interface Snapshot {
   bank: Bank;
   /** Hazard tiles change mid-fight: lava from slimes and the forge boss. */
   haz: string[];
+  /** The party is at the blacksmith's: everyone upgrades their own hero's discs. */
+  forge?: boolean;
 }
 
 export function snapshot(g: Game): Snapshot {
@@ -45,6 +47,7 @@ export function snapshot(g: Game): Snapshot {
     sparks: S.sparks,
     bank: g.bank,
     haz: [...S.haz],
+    forge: g.forge,
   };
 }
 
@@ -72,6 +75,7 @@ export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boo
   S.discs = s.discs.map(d => ({ ...d, hero: g.heroOf(d.hero) }));
   Object.assign(g.bank, s.bank);
   if (s.haz) S.haz = new Set(s.haz);
+  g.forge = !!s.forge;
   g.pickActive();
   return { party, room };
 }

@@ -296,6 +296,30 @@ button { font: inherit; color: inherit; }
 .up b { font-family: Oswald, sans-serif; font-weight: 600; text-align: right; }
 .up .btn { justify-self: end; white-space: nowrap; }
 .ups-toggle { display: none; }
+.ups-note { color: var(--muted); font-size: 11px; }
+/* in the hero frame the upgrades are only shown: no buy buttons there */
+.frame .up { grid-template-columns: minmax(0, 1fr) auto 44px; }
+
+/* ---------- the blacksmith's: every hero's upgrades for sale */
+.forge-panel { width: min(980px, 100%); }
+.forge-ore { font-size: 22px; gap: 6px; }
+.forge-ore svg { width: 20px; height: 20px; }
+.forge-text { margin: 6px 0 12px; color: var(--muted); }
+.forge-heroes { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 12px; }
+.fcard { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px 10px; align-items: center; background: rgba(0, 0, 0, 0.22); border: 2px solid var(--ink); border-radius: 12px; padding: 10px; }
+.fcard.mine { border-color: var(--c); }
+.fcard canvas { width: 64px; height: 64px; border-radius: 10px; border: 1.5px solid var(--ink); }
+.fc-head { display: flex; flex-direction: column; gap: 2px; }
+.fc-head b { font: 700 19px Oswald, sans-serif; color: var(--c); }
+.fc-hp { color: var(--muted); font-size: 12px; }
+.fcard .ups { grid-column: 1 / -1; gap: 6px; }
+.fcard .up-name { white-space: normal; }
+.fcard .up-name small { display: block; color: var(--muted); font-size: 11px; line-height: 1.25; margin-top: 1px; }
+/* on a phone the cards scroll; the ore left and the way out stay in sight */
+.forge-panel .panel-head, .forge-foot { position: sticky; z-index: 1; background: var(--panel); }
+.forge-panel .panel-head { top: -16px; padding: 4px 0; }
+.forge-foot { bottom: -16px; display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 8px; padding: 8px 0; flex-wrap: wrap; }
+.forge-foot .muted { margin-right: auto; }
 
 /* ---------- overlays */
 .overlay {
@@ -435,7 +459,7 @@ button { font: inherit; color: inherit; }
   .ab-head { flex-direction: column; align-items: flex-start; }
   .ab-head b { font-size: 14px; }
   .ups-toggle { display: block; padding: 6px 9px; }
-  .ups {
+  .frame .ups {
     display: none;
     position: absolute;
     right: 0;

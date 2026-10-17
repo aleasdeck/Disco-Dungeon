@@ -219,7 +219,7 @@ export const UPS: Upgrade[] = [
 /** Damage of a full-strength throw that hits square on before the disc slows down (no precise-hit bonus). */
 export const fullHit = (m: number, pw: number) => Math.ceil((m * 270 * pw) / 120);
 
-/** Ore the blacksmith hands the party. */
+/** Ore the blacksmith hands the party on top of selling disc upgrades. */
 export const FORGE_ORE = 5;
 
 export type RoomType = 'fight' | 'elite' | 'treasure' | 'camp' | 'forge' | 'event' | 'boss';
@@ -229,7 +229,7 @@ export const ROOM_TYPES: Record<RoomType, { name: string; col: string; min: numb
   elite: { name: 'Элитный бой', col: '#7a1d33', min: 3, txt: 'Сильный враг этажа и свита. Две рудные жилы вместо одной.' },
   treasure: { name: 'Рудная пещера', col: '#d39612', min: 1.5, txt: 'Три рудные жилы и всего два моба.' },
   camp: { name: 'Костёр', col: '#e8642c', min: 0.5, txt: 'Отряд лечится на 8 HP. Павшие встают с половиной здоровья.' },
-  forge: { name: 'Кузнец', col: '#5d6488', min: 0.75, txt: `Отряд получает ${FORGE_ORE} руды на прокачку дисков.` },
+  forge: { name: 'Кузнец', col: '#5d6488', min: 1, txt: `Прокачка дисков за руду, только здесь. Кузнец ещё и даёт ${FORGE_ORE} руды. На каждом этаже хотя бы один к середине пути.` },
   event: { name: 'Событие', col: '#6b4fa8', min: 0.75, txt: 'Сцена с неожиданным исходом: алтарь, торговец, ловушка.' },
   boss: { name: 'Босс этажа', col: '#2a1a3a', min: 3.5, txt: 'Свой босс на каждом этаже, со свитой.' },
 };

@@ -199,6 +199,14 @@ mapView.onChoose = id => {
     controls.fit();
     showMap(false);
     screen('');
+  } else if (n.type === 'forge') {
+    // the blacksmith's: everyone upgrades their discs, then the party goes back to the map
+    restRoom(n.type, game.party, game.bank, run.seed + depth * 131);
+    mapView.info = '';
+    game.forge = true;
+    showMap(false);
+    screen('');
+    game.onChange();
   } else {
     mapView.info = `<b>${ROOM_TYPES[n.type].name}.</b> ${restRoom(n.type, game.party, game.bank, run.seed + depth * 131)}`;
     hud.buildAllies();
@@ -259,6 +267,12 @@ function hideEnd() {
   $('roomEnd').hidden = true;
 }
 
+$('forgeDone').addEventListener('click', () => {
+  game.forge = false;
+  game.onChange();
+  showMap(true);
+  screen('Выбор комнаты', 'Хозяин комнаты смотрит на карту забега.');
+});
 $('btnMap').addEventListener('click', () => showMap(true));
 $('mapClose').addEventListener('click', () => showMap(false));
 $('newRun').addEventListener('click', () => startRun(mode === 'host' ? game.party.map(h => h.i) : undefined));
@@ -296,6 +310,8 @@ $('pMenu').addEventListener('click', () => {
 
 function leaveOnline() {
   reconnecting++;
+  // a client thrown out of the blacksmith's would keep the shop on screen over the menu
+  if (game.forge) { game.forge = false; hud.refresh(); }
   if (mode === 'host') net.broadcast({ t: 'bye' });
   if (net.active) net.close();
   clearSeat();
@@ -563,6 +579,8 @@ async function reopen(code: string) {
   dirty = true;
   if (!started || !s.snap) { lobbyView(); show('lobby'); return; }
   if (s.ending) showEnd(s.ending);
+  // at the blacksmith's the shop came back with the game and is on screen already
+  else if (game.forge) hud.refresh();
   else if (choosing) showMap(true);
   else if (!game.liveMobs().length || !game.alive().length) game.onRoomEnd(game.alive().length > 0);
 }

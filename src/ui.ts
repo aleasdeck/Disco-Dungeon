@@ -1,6 +1,6 @@
 // DOM HUD: top bar, phase pill, ally cards, the enemy list and the hero frame at the bottom.
 
-import { AB_COST, ENEMY_BASE, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, type MobKind } from './data';
+import { AB_COST, ENEMY_BASE, FORGE_ORE, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, type MobKind, type StatKey } from './data';
 import { sprites } from './assets';
 import type { Game, HeroState } from './game';
 import { BASE_TH, drawHeroFigure, drawMiniature, drawMobFigure } from './draw/figures';
@@ -52,8 +52,31 @@ export function drawPortrait(cv: HTMLCanvasElement, h: Pick<HeroState, 'i' | 'de
   }
 }
 
+/**
+ * A hero's disc upgrades, one row each: level pips and where the stat stands. Each says what it does in a line
+ * under the name (the phone pop-up) or a tooltip (the desktop). At the blacksmith's (`shop`) a row also sells the next level.
+ */
+function upRows(g: Game, h: HeroState, shop: boolean) {
+  const canBuy = (c: number) => !!c && g.bank.ore >= c && g.canControl(h);
+  const row = (k: string, name: string, txt: string, pips: number, lv: number, val: string, cost: number, tip: string) =>
+    `<div class="up" title="${tip}"><span class="up-name">${name}<small>${txt}</small></span>`
+    + `<span class="lvl">${Array.from({ length: pips }, (_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('')}</span><b>${val}</b>`
+    + (shop ? `<button class="btn sm" data-h="${h.i}" data-k="${k}" ${canBuy(cost) ? '' : 'disabled'}>${cost ? '+ ' + cost + ' руды' : 'макс'}</button>` : '')
+    + '</div>';
+  const dc = g.discCost(h), discTxt = 'Больше бросков за ход. Самое сильное улучшение';
+  return row('n', 'Диски за ход', discTxt, HAND_MAX - HAND_START, h.discs - HAND_START, String(h.discs), dc,
+    `${discTxt}. ` + (dc ? `Следующий диск у кузнеца за ${dc} руды.` : 'Больше дисков не бывает.'))
+    + UPS.map(u => {
+      const lv = h.up[u.k], cost = g.upCost(h, u.k), v = g.stat(h, u.k);
+      return row(u.k, u.name, u.txt, UP_COST.length, lv, u.fmt(lv * u.step, v), cost,
+        `${u.txt}. ${u.now?.(v) ?? ''}` + (cost ? `Следующий уровень у кузнеца за ${cost} руды.` : 'Больше не прокачать.'));
+    }).join('');
+}
+
 export class Hud {
   private lastPortrait = '';
+  /** Whose cards the blacksmith's screen holds now; the cards are built once per visit, then only their rows change. */
+  private forgeCards = '';
 
   constructor(private g: Game) {
     $('abBtn').addEventListener('click', () => g.useAbility());
@@ -61,10 +84,11 @@ export class Hud {
       const open = $('frame').classList.toggle('ups-open');
       $('upsToggle').setAttribute('aria-expanded', String(open));
     });
-    $('ups').addEventListener('click', e => {
-      const b = (e.target as HTMLElement).closest('button');
-      if (b?.dataset.k === 'n') g.buyDisc();
-      else if (b?.dataset.k) g.upgrade(b.dataset.k as 'm' | 'pw' | 'e');
+    $('forgeHeroes').addEventListener('click', e => {
+      const b = (e.target as HTMLElement).closest('button'), h = b && g.party.find(o => o.i === Number(b.dataset.h));
+      if (!h || !g.canControl(h)) return;
+      if (b.dataset.k === 'n') g.buyDisc(h);
+      else g.upgrade(b.dataset.k as StatKey, h);
     });
     $('fightBtn').addEventListener('click', () => g.startFight());
   }
@@ -172,19 +196,41 @@ export class Hud {
     fb.hidden = S.phase !== 'place' || h.hp <= 0;
     fb.disabled = (g.online && isReady) || !(g.online ? g.placed(h) : g.placed());
     fb.textContent = !g.online ? 'В бой!' : isReady ? `Ждём остальных · ${S.ready.length}/${g.alive().length}` : 'Готов';
-    // each upgrade says what it does: a line under the name in the phone pop-up, a tooltip on the desktop
-    const canBuy = (c: number) => !!c && g.bank.ore >= c && h.hp > 0 && S.phase !== 'over';
-    const row = (k: string, name: string, txt: string, pips: number, lv: number, val: string, cost: number, tip: string) =>
-      `<div class="up" title="${tip}"><span class="up-name">${name}<small>${txt}</small></span>`
-      + `<span class="lvl">${Array.from({ length: pips }, (_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('')}</span>`
-      + `<b>${val}</b><button class="btn sm" data-k="${k}" ${canBuy(cost) ? '' : 'disabled'}>${cost ? '+ ' + cost + ' руды' : 'макс'}</button></div>`;
-    const dc = g.discCost(h), discTxt = 'Больше бросков за ход. Самое сильное улучшение';
-    $('ups').innerHTML = row('n', 'Диски за ход', discTxt, HAND_MAX - HAND_START, h.discs - HAND_START, String(h.discs), dc,
-      `${discTxt}. ` + (dc ? `Следующий диск за ${dc} руды.` : 'Больше дисков не бывает.'))
-      + UPS.map(u => {
-        const lv = h.up[u.k], cost = g.upCost(h, u.k), v = g.stat(h, u.k);
-        return row(u.k, u.name, u.txt, UP_COST.length, lv, u.fmt(lv * u.step, v), cost,
-          `${u.txt}. ${u.now?.(v) ?? ''}` + (cost ? `Следующий уровень за ${cost} руды.` : 'Больше не прокачать.'));
-      }).join('');
+    // the frame only shows the upgrades: they are bought at the blacksmith's, a room on the map
+    $('ups').innerHTML = '<small class="ups-note">Прокачка у кузнеца на карте</small>' + upRows(g, h, false);
+    this.forge();
+  }
+
+  /** The blacksmith's screen: every hero's upgrades with the next level for sale, paid from the party's shared ore. */
+  private forge() {
+    const g = this.g;
+    $('forgeScreen').hidden = !g.forge;
+    if (!g.forge) { this.forgeCards = ''; return; }
+    const key = g.party.map(h => h.i + (sprites.has(h.def.key) ? '+img' : '')).join();
+    if (this.forgeCards !== key) {
+      const box = $('forgeHeroes');
+      box.innerHTML = '';
+      for (const h of g.party) {
+        const c = document.createElement('div');
+        c.className = 'fcard';
+        c.id = 'fcard' + h.i;
+        c.style.setProperty('--c', h.def.col);
+        c.innerHTML = `<canvas></canvas><div class="fc-head"><b>${h.def.name}</b><span class="fc-hp"></span></div><div class="ups"></div>`;
+        drawPortrait(c.querySelector('canvas')!, h);
+        box.appendChild(c);
+      }
+      this.forgeCards = key;
+    }
+    $('forgeText').textContent = `Кузнец дал отряду ${FORGE_ORE} руды. Диски прокачиваются только здесь, а руда общая на всех: решайте, кому что.`;
+    $('forgeOre').textContent = String(g.bank.ore);
+    for (const h of g.party) {
+      const c = $('fcard' + h.i);
+      c.classList.toggle('mine', g.online && g.canControl(h));
+      c.querySelector('.fc-hp')!.textContent = h.hp > 0 ? `${h.hp}/${h.max} HP` : 'пал';
+      c.querySelector('.ups')!.innerHTML = upRows(g, h, true);
+    }
+    // online the host leads the party on, once the others are done
+    $('forgeDone').hidden = !!g.send;
+    $('forgeNote').textContent = g.send ? 'Прокачай своего героя. Дальше отряд поведёт хозяин комнаты.' : g.online ? 'Каждый прокачивает своего героя.' : '';
   }
 }

@@ -4,7 +4,7 @@ import { CRIT, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_HP_MUL,
 import { Game, newParty, stepsOf, wayLen, type Action } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { MOB_CAP, cellAt, cellCentre, clearOfRock, floorAt, generate, isFloor, muAt, newMob, tierOf } from '../src/room';
-import { FLOORS, LAYERS, genFloor, newRun, restRoom } from '../src/run';
+import { FLOORS, FORGE_ROWS, LAYERS, genFloor, newRun, restRoom } from '../src/run';
 
 /** Put every living hero on its own rune, as players do before the fight. */
 const placeAll = (g: Game) => g.alive().forEach((h, k) => g.movePad(h, k));
@@ -146,6 +146,8 @@ describe('run map', () => {
         expect(n).toBeGreaterThanOrEqual(12);
         expect(n).toBeLessThanOrEqual(16);
         for (const r of [3, 5]) expect(layers[r].some(m => m.type === 'camp' || m.type === 'forge')).toBe(true);
+        // discs are upgraded only at the blacksmith's, so every floor has one by its middle
+        expect(FORGE_ROWS.some(r => layers[r].some(m => m.type === 'forge'))).toBe(true);
         expect(layers[LAYERS - 1][0].type).toBe('boss');
         for (let l = 1; l < LAYERS; l++) {
           for (const n of layers[l]) expect(layers[l - 1].some(p => p.next.includes(n.id))).toBe(true);
@@ -190,8 +192,28 @@ describe('placement and discs', () => {
     expect(a.pad).toBe(1);
   });
 
+  it('sells disc upgrades only at the blacksmith\'s, between rooms', () => {
+    const g = fresh(), h = g.hero;
+    g.bank.ore = 100;
+    g.buyDisc();
+    g.upgrade('m');
+    expect([h.discs, h.up.m, g.bank.ore]).toEqual([HAND_START, 0, 100]);
+    g.forge = true;
+    g.buyDisc();
+    g.upgrade('m');
+    expect([h.discs, h.up.m]).toEqual([HAND_START + 1, 1]);
+    // the next room closes the shop, and the new disc is in hand there
+    g.loadRoom({ seed: 8, depth: 3, floor: 0, type: 'fight' });
+    expect(g.forge).toBe(false);
+    expect(h.hand).toBe(HAND_START + 1);
+    const ore = g.bank.ore;
+    g.upgrade('pw');
+    expect(g.bank.ore).toBe(ore);
+  });
+
   it('spends ore from one pool shared by the party', () => {
     const g = fresh();
+    g.forge = true;
     g.bank.ore = HAND_COST[0];
     g.select(1);
     g.buyDisc();
@@ -204,10 +226,10 @@ describe('placement and discs', () => {
 
   it('sells extra discs for ore up to the limit', () => {
     const g = fresh(), h = g.hero;
+    g.forge = true;
     g.bank.ore = 100;
-    while (g.discCost(h)) g.buyDisc();
+    for (let k = 0; k < 9 && g.discCost(h); k++) g.buyDisc();
     expect(h.discs).toBe(HAND_MAX);
-    expect(h.hand).toBe(HAND_MAX);
     expect(g.bank.ore).toBe(100 - HAND_COST[0] - HAND_COST[1]);
   });
 
@@ -217,6 +239,7 @@ describe('placement and discs', () => {
 
   it('grows damage and speed by the same share for every hero, and stops the bounce at its limit', () => {
     const g = fresh();
+    g.forge = true;
     g.bank.ore = 100;
     for (const h of g.party) {
       g.select(h.i);
@@ -348,6 +371,23 @@ describe('online play', () => {
     cli.S.mobs.forEach((m, i) => { if (i !== cli.S.actor) expect([m.x, m.y]).toEqual(still[i]); });
     expect(cli.S.mobs[cli.S.actor].x).toBeCloseTo(host.S.mobs[host.S.actor].x, 5);
     expect(cli.S.mobs[cli.S.actor].y).toBeCloseTo(host.S.mobs[host.S.actor].y, 5);
+  });
+
+  it('opens the blacksmith\'s on every screen, and a client buys through the host', () => {
+    const { host, cli, sent } = pair();
+    host.forge = true;
+    host.bank.ore = 20;
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    expect(cli.forge).toBe(true);
+    cli.buyDisc(cli.heroOf(2));
+    expect(sent).toEqual([{ k: 'disc', h: 2 }]);
+    host.perform(sent[0]);
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    expect(cli.heroOf(2).discs).toBe(HAND_START + 1);
+    expect(cli.bank.ore).toBe(20 - HAND_COST[0]);
+    host.forge = false;
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    expect(cli.forge).toBe(false);
   });
 
   it('lets a client control only its own hero', () => {
