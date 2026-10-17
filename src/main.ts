@@ -175,7 +175,6 @@ function setOnline(m: Mode) {
     : m === 'host' ? h => ownerOf(h.i) === 'host' || !net.has(ownerOf(h.i))
     : () => true;
   if (mine !== null) game.act = mine;
-  $('newRun').hidden = m === 'client';
 }
 
 function startRun(picks?: number[]) {
@@ -367,7 +366,6 @@ $('forgeDone').addEventListener('click', () => {
 });
 $('btnMap').addEventListener('click', () => showMap(true));
 $('mapClose').addEventListener('click', () => showMap(false));
-$('newRun').addEventListener('click', () => (mode === 'host' ? startRun(game.party.map(h => h.i)) : openHeroSelect()));
 $('helpClose').addEventListener('click', () => { $('help').hidden = true; });
 
 // ------------------------------------------------------------ menu
