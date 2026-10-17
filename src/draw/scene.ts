@@ -325,7 +325,7 @@ export class SceneRenderer {
 
     const items: [number, () => void][] = [];
     for (const d of S.discs) if (!d.gone) items.push([cam.depth(d.x, d.y), () => this.drawDisc(d)]);
-    for (const hs of S.heroes) if (hs.pad !== null) { const p = S.pads[hs.pad]; items.push([cam.depth(p.x, p.y) + 2, () => this.drawHero(hs)]); }
+    for (const hs of S.heroes) { const p = g.figureAt(hs); if (p) items.push([cam.depth(p.x, p.y) + 2, () => this.drawHero(hs)]); }
     const cr = this.carry;
     if (cr) {
       const [wx, wy] = cam.screenToWorld(cr.x, cr.y);
@@ -1046,16 +1046,19 @@ export class SceneRenderer {
     return this.P(toX, toY)[0] >= this.P(fromX, fromY)[0];
   }
 
-  /** Draw a hero on its rune, or lifted at `at` while it is being carried to another rune. */
+  /**
+   * Draw a hero where it stands (hopping over to its disc's cell after the throws), or lifted at `at`
+   * while it is being carried to another rune.
+   */
   private drawHero(h: HeroState, at?: { x: number; y: number }) {
     const { c, P, g } = this;
     const lifted = !!at, carried = !at && this.carry?.hero === h;
-    const S = g.S, p = at ?? S.pads[h.pad!], [sx, sy0] = P(p.x, p.y), sy = sy0 - (lifted ? 8 : 0), dead = h.hp <= 0;
+    const S = g.S, p = at ?? g.figureAt(h)!, [sx, sy0] = P(p.x, p.y), sy = sy0 - (lifted ? 8 : 0), dead = h.hp <= 0;
     const target = g.liveMobs()[0] ?? { x: S.Wx / 2, y: S.Wy / 2 };
     if (lifted) { ell(c, sx, sy0, HERO_BASE * 1.27, HERO_BASE * 0.64); c.fillStyle = 'rgba(0,0,0,.35)'; c.fill(); }
     drawMiniature(c, {
       key: h.def.key, x: sx, y: sy, baseR: HERO_BASE, baseCol: h.def.col, fig: HERO_FIG,
-      faceRight: this.faceRight(p.x, p.y, target.x, target.y), flash: h.flash > 0, hop: 0,
+      faceRight: this.faceRight(p.x, p.y, target.x, target.y), flash: h.flash > 0, hop: at ? 0 : g.figureAt(h)!.lift,
       alpha: dead ? 0.45 : carried ? 0.3 : lifted ? 0.85 : 1,
       hp: dead || carried ? undefined : { now: h.hp, max: h.max },
       placeholder: (cc, x, y, fl) => drawHeroFigure(cc, h.i, x, y, 0.8, fl, this.t),
@@ -1084,7 +1087,7 @@ export class SceneRenderer {
   private drawMob(m: Mob) {
     const { c, P, g } = this;
     const S = g.S, [x, y] = P(m.x, m.y);
-    const it = m.intent, th = it ? g.heroOf(it.hero) : null, tgt = th && th.pad !== null ? S.pads[th.pad] : { x: S.Wx, y: S.Wy };
+    const it = m.intent, th = it ? g.heroOf(it.hero) : null, tgt = (th && g.spot(th)) ?? { x: S.Wx, y: S.Wy };
     drawMiniature(c, {
       key: m.k, x, y, baseR: m.r, baseCol: ENEMY_BASE, fig: MOBS[m.k].fig,
       faceRight: this.faceRight(m.x, m.y, tgt.x, tgt.y), flash: m.flash > 0, hop: m.hop,
@@ -1117,8 +1120,8 @@ export class SceneRenderer {
   private drawAim(aim: Aim | null) {
     if (!aim) return;
     const { c, P, g } = this;
-    const h = aim.hero, p = g.S.pads[h.pad!], len = Math.hypot(aim.dx, aim.dy);
-    if (len < 4) return;
+    const h = aim.hero, p = g.spot(h), len = Math.hypot(aim.dx, aim.dy);
+    if (!p || len < 4) return;
     // one straight line up to the first wall, block or mob; ricochets are left for the player to judge
     const pr = g.predict(h, aim.dx, aim.dy, 0);
     if (pr.path.length < 2 || !settings.aimLine) return;

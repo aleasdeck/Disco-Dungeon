@@ -15,7 +15,13 @@ export interface HeroState {
   up: Record<StatKey, number>;
   /** Discs per turn; starts at 1 and grows through upgrades. */
   discs: number;
+  /** The rune the hero was put on before the fight: its starting cell. */
   pad: number | null;
+  /** Where the hero stands once the throws have moved it off its rune: the cell where its last disc stopped. */
+  at: Pt | null;
+  /** The hero hops over to `at` after the throws: where from, and how far along it is, 0 to 1. */
+  from: Pt | null;
+  leap: number;
   hand: number;
   thrown: boolean;
   flash: number;
@@ -91,6 +97,9 @@ const STEP = 1 / 120;
  */
 const LEAD = 1, CELL_T = 0.14, BEAT = 0.18, AFTER = 0.35;
 
+/** Seconds a hero takes to hop over to where its last disc stopped. */
+const HOP_T = 0.45;
+
 type Pt = { x: number; y: number };
 
 /** Cells a walker covers each enemy turn: its speed in cells, at least one. */
@@ -126,7 +135,7 @@ export function newParty(picks: number[] = HEROES.map((_, i) => i)): HeroState[]
 function heroStart() {
   return {
     hp: 22, max: 22, shield: 0, up: { m: 0, pw: 0, e: 0 }, discs: HAND_START,
-    pad: null as number | null, hand: HAND_START, thrown: false, flash: 0, chill: 0, fire: 0, boost: false,
+    pad: null as number | null, at: null as Pt | null, from: null as Pt | null, leap: 0, hand: HAND_START, thrown: false, flash: 0, chill: 0, fire: 0, boost: false,
   };
 }
 
@@ -149,13 +158,16 @@ export class Game {
    */
   forge = 0;
   private acc = 0;
+  /** Host: the disc each hero is hopping over to; it picks the disc up once it lands. */
+  private pickup = new Map<HeroState, Disc>();
 
   /** Start a fight in a new room; unless the spec says otherwise, the room is built for the party's size. */
   loadRoom(spec: RoomSpec) {
     spec = { ...spec, heroes: spec.heroes ?? this.party.length };
     const L = generate(spec);
     this.forge = 0;
-    for (const h of this.party) Object.assign(h, { pad: null, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0, chill: 0, fire: 0, boost: false });
+    this.pickup.clear();
+    for (const h of this.party) Object.assign(h, { pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0, chill: 0, fire: 0, boost: false });
     // sparks don't carry over: every fight starts afresh
     this.bank.sparks = this.bank.boon ?? 0;
     this.bank.boon = 0;
@@ -189,6 +201,20 @@ export class Game {
 
   heroOf(i: number) {
     return this.S.heroes.find(h => h.i === i) ?? this.S.heroes[0];
+  }
+
+  /** Where a hero stands: on its rune for the first throws, then where its last disc stopped; null before it is placed. */
+  spot(h: HeroState): Pt | null {
+    return h.at ?? (h.pad !== null ? this.S.pads[h.pad] : null);
+  }
+
+  /** Where a hero's figure is seen, and how high it is lifted: it hops over to its new cell for a moment after the throws. */
+  figureAt(h: HeroState): { x: number; y: number; lift: number } | null {
+    const p = this.spot(h), f = h.from;
+    if (!p) return null;
+    if (!f || h.leap >= 1) return { x: p.x, y: p.y, lift: 0 };
+    const u = Math.max(0, h.leap), e = u * u * (3 - 2 * u), L = Math.hypot(p.x - f.x, p.y - f.y);
+    return { x: f.x + (p.x - f.x) * e, y: f.y + (p.y - f.y) * e, lift: Math.sin(Math.PI * u) * Math.min(14, 4 + L / 6) };
   }
 
   alive = () => this.S.heroes.filter(h => h.hp > 0);
@@ -260,11 +286,12 @@ export class Game {
   /** Throw the hero's next disc. (dx, dy) is the pull-back vector in world units, up to 60. */
   throwDisc(h: HeroState, dx: number, dy: number) {
     const S = this.S;
-    if (S.phase !== 'throw' || h.hand <= 0 || h.pad === null || h.hp <= 0) return;
+    const p = this.spot(h);
+    if (S.phase !== 'throw' || h.hand <= 0 || !p || h.hp <= 0) return;
     const L = Math.hypot(dx, dy);
     if (L < 4) return;
     if (this.send) { this.send({ k: 'throw', h: h.i, dx, dy }); return; }
-    const p = S.pads[h.pad], s = this.power(h);
+    const s = this.power(h);
     S.discs.push({
       hero: h, x: p.x + (dx / L) * 6, y: p.y + (dy / L) * 6, vx: dx * s, vy: dy * s,
       r: h.def.r, m: this.stat(h, 'm'), e: this.stat(h, 'e'), fr: h.def.fr,
@@ -291,9 +318,9 @@ export class Game {
    * and the mob it would hit first. Stops after `maxBounces` bounces (the aim line uses 0: it ends at the first obstacle).
    */
   predict(h: HeroState, dx: number, dy: number, maxBounces = 2) {
-    const S = this.S, L = Math.hypot(dx, dy), path: [number, number][] = [], bounces: [number, number][] = [];
-    if (h.pad === null || L < 4) return { path, bounces, hit: null as Mob | null };
-    const p = S.pads[h.pad], s = this.power(h), dt = 1 / 60;
+    const S = this.S, L = Math.hypot(dx, dy), path: [number, number][] = [], bounces: [number, number][] = [], p = this.spot(h);
+    if (!p || L < 4) return { path, bounces, hit: null as Mob | null };
+    const s = this.power(h), dt = 1 / 60;
     const d = { x: p.x + (dx / L) * 6, y: p.y + (dy / L) * 6, vx: dx * s, vy: dy * s, r: h.def.r, e: this.stat(h, 'e') } as Disc;
     const boxes = standing(S.blocks).concat(S.rock);
     path.push([d.x, d.y]);
@@ -362,13 +389,12 @@ export class Game {
   }
 
   useAbility(h = this.hero) {
-    const S = this.S;
     if (!this.canUseAbility(h)) return;
     if (this.send) { this.send({ k: 'ability', h: h.i }); return; }
     this.bank.sparks -= AB_COST;
     h.boost = true;
-    if (h.pad !== null) {
-      const p = S.pads[h.pad];
+    const p = this.spot(h);
+    if (p) {
       this.float(p.x, p.y - 8, h.def.ab + '!', h.def.abCol);
       this.burst(p.x, p.y, h.def.abCol, 16);
     }
@@ -377,11 +403,12 @@ export class Game {
 
   /** A disc thrown with the ability on hits an enemy: Bastion's shields the whole party, Ash's stokes the enemy's fire. */
   private abilityHit(d: Disc, m: Mob) {
-    const S = this.S, k = d.hero.def.key;
+    const k = d.hero.def.key;
     if (k === 'bastion') {
       for (const o of this.alive()) {
         o.shield += AB_SHIELD;
-        if (o.pad !== null) this.float(S.pads[o.pad].x, S.pads[o.pad].y + 6, `+${AB_SHIELD} щит`, '#3fc4b6');
+        const p = this.spot(o);
+        if (p) this.float(p.x, p.y + 6, `+${AB_SHIELD} щит`, '#3fc4b6');
       }
       this.burst(d.x, d.y, '#3fc4b6', 10);
     } else if (k === 'ash') {
@@ -437,7 +464,7 @@ export class Game {
   }
 
   pickIntents() {
-    const S = this.S, hs = this.alive().filter(h => h.pad !== null), rage = this.rage();
+    const S = this.S, hs = this.alive().filter(h => this.spot(h)), rage = this.rage();
     if (!hs.length) return;
     const taken: { x: number; y: number }[] = [];
     this.liveMobs().forEach((m, i) => {
@@ -448,19 +475,43 @@ export class Game {
         if (it) { if (it.t === 'slam') it.dmg += rage; m.intent = it; return; }
       }
       if (d.charge && S.turn % 2 === 1) { m.intent = { t: 'charge', hero: hs[(S.turn + i) % hs.length].i, dmg: 0 }; return; }
-      const dmg = (d.charge ? m.dmg * 2 : m.dmg) + rage;
+      const dmg = this.blow(m);
       if (isRanged(m.k)) { m.intent = { t: 'hit', hero: hs[(S.turn + i) % hs.length].i, dmg }; return; }
       let best = hs[0], way: Pt[] | null = null, bd = Infinity;
       for (const h of hs) {
-        const w = this.route(m, S.pads[h.pad!]);
+        const w = this.route(m, this.spot(h)!);
         if (w && w.length < bd) { bd = w.length; best = h; way = w; }
       }
-      // walled off from every rune: it stays put
-      if (!way) { m.intent = { t: 'move', hero: best.i, dmg: 0 }; return; }
-      const n = way.length - 1, go = wayLen(way.slice(0, this.stopAt(m, way) + 1)), eta = Math.max(1, Math.ceil(n / stepsOf(m)));
-      way.push({ x: S.pads[best.pad!].x, y: S.pads[best.pad!].y });
-      m.intent = n <= stepsOf(m) ? { t: 'hit', hero: best.i, dmg, way, go, eta: 1 } : { t: 'move', hero: best.i, dmg: 0, way, go, eta };
+      m.intent = this.chase(m, best, way);
     });
+  }
+
+  /** What a walker or a shooter deals this turn: a bomber after lighting its fuse twice as much, plus the rage of a long fight. */
+  private blow(m: Mob) {
+    return (MOBS[m.k].charge ? m.dmg * 2 : m.dmg) + this.rage();
+  }
+
+  /** A walker going after hero h along `way`: it strikes this turn if its steps take it there, else it closes in. */
+  private chase(m: Mob, h: HeroState, way: Pt[] | null): Intent {
+    // walled off from the hero: it stays put
+    if (!way) return { t: 'move', hero: h.i, dmg: 0 };
+    const p = this.spot(h)!, n = way.length - 1, go = wayLen(way.slice(0, this.stopAt(m, way) + 1)), eta = Math.max(1, Math.ceil(n / stepsOf(m)));
+    way.push({ x: p.x, y: p.y });
+    return n <= stepsOf(m) ? { t: 'hit', hero: h.i, dmg: this.blow(m), way, go, eta: 1 } : { t: 'move', hero: h.i, dmg: 0, way, go, eta };
+  }
+
+  /**
+   * The heroes have moved to their discs: every walker still goes after the hero it was after, now to where that hero stands,
+   * so its route, its reach and the blows the heroes expect are right for the enemy turn.
+   */
+  private rechase() {
+    for (const m of this.liveMobs()) {
+      const it = m.intent;
+      if (!it || (it.t !== 'hit' && it.t !== 'move') || isRanged(m.k)) continue;
+      const h = this.heroOf(it.hero), p = this.spot(h);
+      if (h.hp <= 0 || !p) continue;
+      m.intent = this.chase(m, h, this.route(m, p));
+    }
   }
 
   /** The intent for a mob's special act this turn, or null when it can't do it (nobody to heal, no room to summon). */
@@ -494,17 +545,17 @@ export class Game {
       }
       return spots.length ? { t: 'summon', hero: -1, dmg: 0, spots } : null;
     }
-    // heat: tiles a little in front of each hero's rune turn to lava
-    const spots: { x: number; y: number }[] = [];
+    // heat: tiles a little in front of each hero turn to lava
+    const spots: { x: number; y: number }[] = [], stands = this.stands();
     for (const h of hs) {
-      const p = S.pads[h.pad!], dx = S.Wx / 2 - p.x, dy = S.Wy / 2 - p.y, L = Math.hypot(dx, dy) || 1;
+      const p = this.spot(h)!, dx = S.Wx / 2 - p.x, dy = S.Wy / 2 - p.y, L = Math.hypot(dx, dy) || 1;
       let got = 0;
       for (let k = 0; k < 10 && got < (a.n ?? 2); k++) {
         const dist = 26 + (k >> 1) * 8, side = k % 2 ? 1 : -1;
         const x = p.x + (dx / L) * dist - (dy / L) * side * 9 * (got ? 1 : 0.4), y = p.y + (dy / L) * dist + (dx / L) * side * 9 * (got ? 1 : 0.4);
         const i = Math.floor(x / TILE), j = Math.floor(y / TILE), cx = i * TILE + 8, cy = j * TILE + 8;
         if (!isFloor(S, i, j) || S.haz.has(hazKey(i, j)) || spots.some(o => o.x === cx && o.y === cy)) continue;
-        if (S.pads.some(q => Math.hypot(q.x - cx, q.y - cy) < 20) || standing(S.blocks).some(b => cx > b.x0 && cx < b.x1 && cy > b.y0 && cy < b.y1)) continue;
+        if (stands.some(q => Math.hypot(q.x - cx, q.y - cy) < 20) || standing(S.blocks).some(b => cx > b.x0 && cx < b.x1 && cy > b.y0 && cy < b.y1)) continue;
         spots.push({ x: cx, y: cy });
         got++;
       }
@@ -515,7 +566,7 @@ export class Game {
   /** Room for a summoned mob on the cell at (x, y): open floor no one stands on, off the runes and the circles already marked. */
   private spotFree(x: number, y: number, taken: { x: number; y: number }[]) {
     const [i, j] = cellAt(x, y);
-    return this.cellFree(i, j, this.occupied(null, true)) && !this.runeCells().has(hazKey(i, j)) && !taken.some(p => p.x === x && p.y === y);
+    return this.cellFree(i, j, this.occupied(null, true)) && !this.standCells().has(hazKey(i, j)) && !taken.some(p => p.x === x && p.y === y);
   }
 
   // ------------------------------------------------------------ damage & fx
@@ -547,7 +598,7 @@ export class Game {
       if (m.burn > 0) this.spreadFire(m);
       if (d.lava) {
         const S = this.S, i = Math.floor(m.x / TILE), j = Math.floor(m.y / TILE);
-        if (isFloor(S, i, j) && S.pads.every(p => Math.hypot(p.x - (i * TILE + 8), p.y - (j * TILE + 8)) > 20)) { S.haz.add(hazKey(i, j)); this.float(m.x, m.y + 4, 'лава!', '#ff7a3d'); }
+        if (isFloor(S, i, j) && this.stands().every(p => Math.hypot(p.x - (i * TILE + 8), p.y - (j * TILE + 8)) > 20)) { S.haz.add(hazKey(i, j)); this.float(m.x, m.y + 4, 'лава!', '#ff7a3d'); }
       }
     }
   }
@@ -566,7 +617,7 @@ export class Game {
   hurtHero(h: HeroState, n: number, why = '') {
     const S = this.S;
     if (h.hp <= 0) return;
-    const p = h.pad !== null ? S.pads[h.pad] : { x: S.Wx - 20, y: S.Wy - 20 };
+    const p = this.spot(h) ?? { x: S.Wx - 20, y: S.Wy - 20 };
     const blk = Math.min(h.shield, n);
     h.shield -= blk;
     const dmg = n - blk;
@@ -747,6 +798,70 @@ export class Game {
         this.hurtHero(d.hero, S.biome.hazDmg);
       }
     }
+    this.regroup();
+    this.rechase();
+  }
+
+  /**
+   * After the throws every living hero goes over to where its last disc stopped: to the cell holding most of that disc,
+   * or, when that cell is taken, the one holding the next most of it, else the free cell nearest the disc. When two heroes
+   * are after one cell, it goes to the one whose disc covers more of it. A hero whose last disc fell into a pit goes back
+   * to its rune, the cell it started the fight on.
+   */
+  private regroup() {
+    const S = this.S, gw = S.gw, taken = this.occupied(null, true);
+    const free = (i: number, j: number) => isFloor(S, i, j) && !taken[j * gw + i];
+    const put = (h: HeroState, i: number, j: number, d?: Disc) => {
+      taken[j * gw + i] = 1;
+      const to = cellCentre(i, j), now = this.spot(h)!;
+      h.at = to;
+      if (now.x !== to.x || now.y !== to.y) { h.from = { x: now.x, y: now.y }; h.leap = 0; if (d) this.pickup.set(h, d); }
+      // the disc stopped right under the hero: it picks it up where it stands
+      else if (d) d.gone = true;
+    };
+    const nearest = (h: HeroState, x: number, y: number, d?: Disc) => {
+      let best: [number, number] | null = null, bd = Infinity;
+      for (let j = 0; j < S.gh; j++) for (let i = 0; i < gw; i++) {
+        const c = cellCentre(i, j), far = Math.hypot(c.x - x, c.y - y);
+        if (far < bd && free(i, j)) { bd = far; best = [i, j]; }
+      }
+      if (best) put(h, ...best, d);
+    };
+    const home: HeroState[] = [], movers: [HeroState, Disc][] = [];
+    for (const h of S.heroes) {
+      const p = this.spot(h);
+      if (!p) continue;
+      const last = h.hp > 0 ? S.discs.filter(d => d.hero === h).pop() : undefined;
+      // a fallen hero lies where it fell
+      if (!last) taken[Math.floor(p.y / TILE) * gw + Math.floor(p.x / TILE)] = 1;
+      else if (last.fall) home.push(h);
+      else movers.push([h, last]);
+    }
+    // the way back to the rune goes first: nobody takes a hero's starting cell from it
+    for (const h of home) {
+      const r = h.pad !== null ? S.pads[h.pad] : this.spot(h)!, i = Math.floor(r.x / TILE), j = Math.floor(r.y / TILE);
+      if (free(i, j)) put(h, i, j);
+      else nearest(h, r.x, r.y);
+    }
+    const bids = movers.flatMap(([h, d]) => this.cover(d).map(([i, j, share]) => ({ h, d, i, j, share })));
+    bids.sort((a, b) => b.share - a.share);
+    const placed = new Set<HeroState>();
+    for (const b of bids) if (!placed.has(b.h) && free(b.i, b.j)) { put(b.h, b.i, b.j, b.d); placed.add(b.h); }
+    for (const [h, d] of movers) if (!placed.has(h)) nearest(h, d.x, d.y, d);
+  }
+
+  /** The cells a disc lies on and the share of it on each, most first. */
+  cover(d: { x: number; y: number; r: number }): [number, number, number][] {
+    const N = 12, n = new Map<number, number>(), gw = this.S.gw;
+    let all = 0;
+    for (let b = 0; b < N; b++) for (let a = 0; a < N; a++) {
+      const x = d.x - d.r + ((a + 0.5) * 2 * d.r) / N, y = d.y - d.r + ((b + 0.5) * 2 * d.r) / N;
+      if (Math.hypot(x - d.x, y - d.y) > d.r) continue;
+      const k = Math.floor(y / TILE) * gw + Math.floor(x / TILE);
+      n.set(k, (n.get(k) ?? 0) + 1);
+      all++;
+    }
+    return [...n].map(([k, c]): [number, number, number] => [k % gw, Math.floor(k / gw), c / all]).sort((p, q) => q[2] - p[2]);
   }
 
   /** The enemy turn begins: burning heroes smoulder, then the enemies take their moves one at a time. */
@@ -783,15 +898,15 @@ export class Game {
 
   /** Where a walker goes on its move: along its way to the hero it is after, as far as its steps take it. */
   private planWalk(m: Mob) {
-    const S = this.S, it = m.intent;
+    const it = m.intent;
     m.fx = m.tx = m.x;
     m.fy = m.ty = m.y;
     m.walk = undefined;
     if (m.hp <= 0 || !it || it.hero < 0 || m.speed === 0) return;
-    const h = this.heroOf(it.hero);
-    if (h.hp <= 0 || h.pad === null) return;
+    const h = this.heroOf(it.hero), p = this.spot(h);
+    if (h.hp <= 0 || !p) return;
     // the room has changed since the intent was picked: the enemies before it have moved, an icicle may have broken
-    const way = this.route(m, S.pads[h.pad]);
+    const way = this.route(m, p);
     if (!way) return;
     const walk = way.slice(0, this.stopAt(m, way) + 1);
     if (walk.length < 2) return;
@@ -804,7 +919,7 @@ export class Game {
   private idle(m: Mob) {
     const it = m.intent!;
     if (it.t === 'move') return !m.walk;
-    if (it.t === 'hit') { const h = this.heroOf(it.hero); return h.hp <= 0 || h.pad === null; }
+    if (it.t === 'hit') { const h = this.heroOf(it.hero); return h.hp <= 0 || !this.spot(h); }
     if (it.t === 'heal') { const o = this.S.mobs[it.mob!]; return !o || o.hp <= 0; }
     return false;
   }
@@ -822,22 +937,32 @@ export class Game {
 
   /**
    * The cell index along a route where a walker stops this enemy turn: as far as its steps take it,
-   * backing off cells that hold a rune or another enemy (a route that had to squeeze past them).
+   * backing off cells that hold a rune, a hero or another enemy (a route that had to squeeze past them).
    */
   private stopAt(m: Mob, cells: Pt[]) {
-    const sz = mobSize(m.k), taken = this.occupied(m, true), runes = this.runeCells();
+    const sz = mobSize(m.k), taken = this.occupied(m, true), stands = this.standCells();
     let k = Math.min(cells.length - 1, stepsOf(m));
     while (k > 0) {
       const [i, j] = cellAt(cells[k].x, cells[k].y, sz);
-      if (this.fits(i, j, sz, taken) && !this.onRune(i, j, sz, runes)) break;
+      if (this.fits(i, j, sz, taken) && !this.onStand(i, j, sz, stands)) break;
       k--;
     }
     return k;
   }
 
-  /** Cells under the room's runes. */
-  runeCells() {
-    return new Set(this.S.pads.map(p => hazKey(Math.floor(p.x / TILE), Math.floor(p.y / TILE))));
+  /**
+   * Where heroes stand or may come back to: the room's runes, and every hero who has moved off its rune
+   * (a fallen one too, its figure lies there). Enemies never stop here, lava never spreads here.
+   */
+  stands(): Pt[] {
+    const out: Pt[] = [...this.S.pads];
+    for (const h of this.S.heroes) if (h.at) out.push(h.at);
+    return out;
+  }
+
+  /** Cells under the runes and the heroes. */
+  standCells() {
+    return new Set(this.stands().map(p => hazKey(Math.floor(p.x / TILE), Math.floor(p.y / TILE))));
   }
 
   /**
@@ -875,8 +1000,8 @@ export class Game {
     return true;
   }
 
-  private onRune(i: number, j: number, sz: number, runes: Set<string>) {
-    for (let b = 0; b < sz; b++) for (let a = 0; a < sz; a++) if (runes.has(hazKey(i + a, j + b))) return true;
+  private onStand(i: number, j: number, sz: number, stands: Set<string>) {
+    for (let b = 0; b < sz; b++) for (let a = 0; a < sz; a++) if (stands.has(hazKey(i + a, j + b))) return true;
     return false;
   }
 
@@ -886,28 +1011,28 @@ export class Game {
     return !inside && ti >= i - 1 && ti <= i + sz && tj >= j - 1 && tj <= j + sz;
   }
 
-  /** Whether a mob stands next to the rune at p. */
-  private besideRune(m: Mob, p: Pt) {
+  /** Whether a mob stands next to the hero standing at p. */
+  private beside(m: Mob, p: Pt) {
     const sz = mobSize(m.k), [i, j] = cellAt(m.x, m.y, sz);
     return this.nextTo(i, j, sz, Math.floor(p.x / TILE), Math.floor(p.y / TILE));
   }
 
   /**
-   * A walker's way to the hero on the rune at `to`, cell by cell like a piece on a board: 8 directions, no corner cutting,
-   * around blocks, pits, resources and the other enemies, to the nearest cells next to the rune it can stand on.
+   * A walker's way to the hero standing at `to`, cell by cell like a piece on a board: 8 directions, no corner cutting,
+   * around blocks, pits, resources and the other enemies, to the nearest cells next to the hero it can stand on.
    * Big enemies move their whole 2 × 2 footprint. Returns the centres it steps through, starting where it stands,
-   * or null when nothing connects. Other enemies crowding the rune don't stop a walker from heading there.
+   * or null when nothing connects. Other enemies crowding the hero don't stop a walker from heading there.
    */
   route(m: Mob, to: Pt, mobs = true): Pt[] | null {
-    const S = this.S, gw = S.gw, gh = S.gh, sz = mobSize(m.k), taken = this.occupied(m, mobs), runes = this.runeCells();
+    const S = this.S, gw = S.gw, gh = S.gh, sz = mobSize(m.k), taken = this.occupied(m, mobs), stands = this.standCells();
     const ti = Math.floor(to.x / TILE), tj = Math.floor(to.y / TILE);
     const [si, sj] = cellAt(m.x, m.y, sz);
     const inRoom = (i: number, j: number) => i >= 0 && j >= 0 && i <= gw - sz && j <= gh - sz;
     if (!inRoom(si, sj)) return null;
     const start = sj * gw + si;
-    // a rune can sit in a one-cell corridor: walkers pass over runes, they just never stop on one
-    const open = (i: number, j: number) => inRoom(i, j) && !this.onRune(i, j, sz, new Set([hazKey(ti, tj)])) && ((i === si && j === sj) || this.fits(i, j, sz, taken));
-    const goal = (i: number, j: number) => this.nextTo(i, j, sz, ti, tj) && ((i === si && j === sj) || (this.fits(i, j, sz, taken) && !this.onRune(i, j, sz, runes)));
+    // a rune or a hero can sit in a one-cell corridor: walkers pass over them, they just never stop on one
+    const open = (i: number, j: number) => inRoom(i, j) && !this.onStand(i, j, sz, new Set([hazKey(ti, tj)])) && ((i === si && j === sj) || this.fits(i, j, sz, taken));
+    const goal = (i: number, j: number) => this.nextTo(i, j, sz, ti, tj) && ((i === si && j === sj) || (this.fits(i, j, sz, taken) && !this.onStand(i, j, sz, stands)));
     const dist = new Float64Array(gw * gh).fill(Infinity), from = new Int32Array(gw * gh).fill(-1), done = new Uint8Array(gw * gh);
     dist[start] = 0;
     let end = -1;
@@ -964,9 +1089,9 @@ export class Game {
       this.float(m.x, m.y - 10, 'фитиль горит', '#ffb070');
     } else if (it.t === 'hit') {
       const h = this.heroOf(it.hero);
-      if (h.hp <= 0 || h.pad === null) return;
-      const p = S.pads[h.pad];
-      if (isRanged(m.k) || this.besideRune(m, p)) {
+      const p = this.spot(h);
+      if (h.hp <= 0 || !p) return;
+      if (isRanged(m.k) || this.beside(m, p)) {
         this.hurtHero(h, it.dmg); m.flash = 0.12;
         if (d.chill && h.hp > 0) this.chillHero(h);
         if (d.fire && h.hp > 0) { h.fire = 1; this.float(p.x, p.y - 8, 'горит!', '#ff7a3d'); }
@@ -978,7 +1103,7 @@ export class Game {
   private chillHero(h: HeroState) {
     if (h.hp <= 0) return;
     h.chill = 2;
-    const p = h.pad !== null ? this.S.pads[h.pad] : null;
+    const p = this.spot(h);
     if (p) this.float(p.x, p.y - 8, 'озноб', '#bfe6ff');
   }
 
@@ -1074,7 +1199,17 @@ export class Game {
     const S = this.S;
     for (const d of S.discs) if (d.fall && !d.gone) { d.fall += dt; if (d.fall > 0.5) d.gone = true; }
     for (const m of S.mobs) { if (m.flash > 0) m.flash -= dt; if (m.dead) m.dead += dt; if (m.born > 0) m.born = Math.max(0, m.born - dt * 1.5); }
-    for (const h of S.heroes) if (h.flash > 0) h.flash -= dt;
+    for (const h of S.heroes) {
+      if (h.flash > 0) h.flash -= dt;
+      if (h.from && (h.leap += dt / HOP_T) >= 1) {
+        h.from = null;
+        h.leap = 0;
+        // landed on its disc: it picks the disc up
+        const d = this.pickup.get(h);
+        if (d) d.gone = true;
+        this.pickup.delete(h);
+      }
+    }
     for (const n of S.nodes) if (n.hit > 0) n.hit -= dt;
     if (S.shake > 0) S.shake -= dt;
     for (const p of S.sparks) { p.t += dt; p.x += p.vx * dt * 0.5; p.y += p.vy * dt * 0.5; p.vh -= 160 * dt; p.h = Math.max(0, p.h + p.vh * dt); }
