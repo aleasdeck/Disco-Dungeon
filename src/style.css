@@ -632,9 +632,11 @@ i.ico { display: inline-block; font-style: normal; }
 @media (max-height: 520px) {
   #mapScreen { align-items: start; }
   .map-panel { max-height: none; }
-  #map { flex: none; height: 600px; }
+  #map { flex: none; height: 680px; }
 }
-#map .edge { fill: none; stroke: #5c4a39; stroke-width: 3; stroke-dasharray: 2 6; stroke-linecap: round; }
+/* the paths in chalk on the brown board, the ones the party can take now in gold */
+#map .edge { fill: none; stroke: #e9d7ae; stroke-width: 3; stroke-dasharray: 7 6; stroke-linecap: round; }
+#map .edge.next { stroke: var(--gold-1); stroke-width: 3.5; }
 #map .edge.walked { stroke: var(--gold-1); stroke-width: 4.5; stroke-dasharray: none; filter: drop-shadow(0 0 4px rgba(255, 210, 90, 0.7)); }
 #map .edge.past { opacity: 0.3; }
 #map .gate path { fill: #6b5a48; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; }

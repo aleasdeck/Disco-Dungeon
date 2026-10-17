@@ -46,9 +46,9 @@ function icon(g: SVGGElement, type: RoomType, x: number, y: number) {
 }
 
 /** Map size in SVG units: tall, so a phone shows the whole floor without scrolling; the entrance sits under the first row. */
-const W = 320, H = 672;
-/** A painted room's radius in those units; the boss's face is a little bigger. */
-const R_ROOM = 28, R_BOSS = 30;
+const W = 320, H = 760;
+/** A painted room's radius in those units, the boss's face a little bigger: room enough between them for the paths to show. */
+const R_ROOM = 23, R_BOSS = 27;
 
 /** Online: each player's face on the room they point at, and a line on how the vote stands. */
 export interface MapVotes {
@@ -86,20 +86,29 @@ export class MapView {
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.innerHTML = '';
     // layer 0 at the bottom; rooms of a layer spread across, zigzagging a little so the paths read; a pair stands wider so its names don't touch
-    const pos: Record<string, [number, number]> = {};
+    const pos: Record<string, [number, number]> = {}, rad: Record<string, number> = {};
     layers.forEach((L, l) => L.forEach((n, i) => {
+      rad[n.id] = n.type === 'boss' ? R_BOSS : R_ROOM;
       pos[n.id] = [W / 2 + (i - (L.length - 1) / 2) * (L.length > 2 ? 104 : 124) + (l % 2 ? 8 : -8) * (L.length > 1 ? 1 : 0), H - 92 - l * ((H - 150) / (layers.length - 1))];
     }));
     const path = run.path[f], reach = canChoose ? reachable(run, f) : [], gate: [number, number] = [W / 2, H - 22];
     const gl = el(svg, 'g', {});
-    const edge = (a: [number, number], b: [number, number], cls: string) =>
-      el(gl, 'path', { d: `M${a[0]} ${a[1]}C${a[0]} ${(a[1] + b[1]) / 2} ${b[0]} ${(a[1] + b[1]) / 2} ${b[0]} ${b[1]}`, class: cls });
-    // from the stairs to the first row; the way the party came glows, the rooms it passed by fade
-    for (const n of layers[0]) edge(gate, pos[n.id], path[0] === n.id ? 'edge walked' : path.length ? 'edge past' : 'edge');
+    // a soft S: the ends lean towards each other, so a path across the row runs at a slant instead of flat
+    const edge = (a: [number, number], b: [number, number], cls: string) => {
+      const my = (a[1] + b[1]) / 2, dx = (b[0] - a[0]) * 0.3;
+      return el(gl, 'path', { d: `M${a[0]} ${a[1]}C${a[0] + dx} ${my} ${b[0] - dx} ${my} ${b[0]} ${b[1]}`, class: cls });
+    };
+    // a path leaves a room over its picture and comes into the next one under its name, so neither covers it
+    const top = (id: string): [number, number] => [pos[id][0], pos[id][1] - rad[id] - 4];
+    const foot = (id: string): [number, number] => [pos[id][0], pos[id][1] + rad[id] + 21];
+    // from the stairs to the first row; the way the party came glows, the ways it can take now shine, the rooms it passed by fade
+    for (const n of layers[0]) edge([gate[0], gate[1] - 7], foot(n.id), path[0] === n.id ? 'edge walked' : path.length ? 'edge past' : reach.includes(n.id) ? 'edge next' : 'edge');
     for (const n of layers.flat()) for (const id of n.next) {
       const walked = path.includes(n.id) && path.indexOf(id) === path.indexOf(n.id) + 1;
-      edge(pos[n.id], pos[id], walked ? 'edge walked' : n.l < path.length - 1 || (n.l === path.length - 1 && !path.includes(n.id)) ? 'edge past' : 'edge');
+      const next = path[path.length - 1] === n.id && reach.includes(id);
+      edge(top(n.id), foot(id), walked ? 'edge walked' : next ? 'edge next' : n.l < path.length - 1 || (n.l === path.length - 1 && !path.includes(n.id)) ? 'edge past' : 'edge');
     }
+    gl.append(...gl.querySelectorAll('.next'));
     const st = el(svg, 'g', { class: 'gate' });
     el(st, 'path', { d: `M${gate[0] - 15} ${gate[1] + 8}h30l-4-6h-22zM${gate[0] - 11} ${gate[1] + 2}h22l-4-6h-14z` });
     for (const n of layers.flat()) {
@@ -109,7 +118,7 @@ export class MapView {
       g.setAttribute('class', 'mnode' + (isR ? ' reach' : '') + (isV ? ' visited' : '') + (isCur ? ' cur' : '') + (past ? ' past' : '')
         + (isR && votes?.mine === n.id ? ' mine' : ''));
       g.dataset.id = n.id;
-      const boss = n.type === 'boss', r = boss ? R_BOSS : R_ROOM, pic = boss ? undefined : uiArt.get('room_' + n.type);
+      const boss = n.type === 'boss', r = rad[n.id], pic = boss ? undefined : uiArt.get('room_' + n.type);
       // what is in the room, for a mouse resting on it
       el(g, 'title', {}).textContent = `${t.name}. ${boss ? `${MOBS[CASTS[f].boss].name} со свитой.` : t.txt}`;
       if (pic) {
