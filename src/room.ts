@@ -15,13 +15,55 @@ export interface RoomSpec {
 }
 
 export interface Pad { x: number; y: number }
-/** A square hole in the floor, s × s cells (1, 2 or 3) with its top-left cell at (i, j): a disc that rolls onto it is lost. */
-export interface Pit { i: number; j: number; s: number }
+export type PitKind = '1x1' | '2x1' | '3x1' | 'L3' | '2x2' | 'L4' | 'L5' | '2x3' | '3x3';
+/**
+ * Shapes of holes in the floor, made of whole cells: squares, strips, a rectangle and corners from small to a full Г.
+ * Each is listed one way round; the generator turns and mirrors them.
+ */
+export const PIT_SHAPES: Record<PitKind, [number, number][]> = {
+  '1x1': [[0, 0]],
+  '2x1': [[0, 0], [1, 0]],
+  '3x1': [[0, 0], [1, 0], [2, 0]],
+  'L3': [[0, 0], [1, 0], [0, 1]],
+  '2x2': [[0, 0], [1, 0], [0, 1], [1, 1]],
+  'L4': [[0, 0], [1, 0], [0, 1], [0, 2]],
+  'L5': [[0, 0], [1, 0], [2, 0], [0, 1], [0, 2]],
+  '2x3': [[0, 0], [1, 0], [0, 1], [1, 1], [0, 2], [1, 2]],
+  '3x3': [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1], [0, 2], [1, 2], [2, 2]],
+};
+export const PIT_KINDS = Object.keys(PIT_SHAPES) as PitKind[];
+
+/** Every way a shape can lie on the grid: four turns, each also mirrored, the copies that come out the same dropped. */
+const turns = new Map<PitKind, [number, number][][]>();
+function pitTurns(k: PitKind) {
+  let out = turns.get(k);
+  if (out) return out;
+  const seen = new Set<string>();
+  out = [];
+  for (let m = 0; m < 8; m++) {
+    const c = PIT_SHAPES[k].map(([a, b]): [number, number] => {
+      const [x, y] = m & 4 ? [-a, b] : [a, b];
+      return m % 4 === 0 ? [x, y] : m % 4 === 1 ? [-y, x] : m % 4 === 2 ? [-x, -y] : [y, -x];
+    });
+    const a0 = Math.min(...c.map(q => q[0])), b0 = Math.min(...c.map(q => q[1]));
+    const n = c.map(([a, b]): [number, number] => [a - a0, b - b0]).sort((p, q) => p[1] - q[1] || p[0] - q[0]);
+    const key = n.join(';');
+    if (!seen.has(key)) { seen.add(key); out.push(n); }
+  }
+  turns.set(k, out);
+  return out;
+}
+
+/** A hole in the floor and the cells it covers: a disc that rolls onto any of them is lost. */
+export interface Pit { k: PitKind; cells: [number, number][] }
+
+/** Whether the hole covers the cell (i, j). */
+export const inPit = (p: Pit, i: number, j: number) => p.cells.some(c => c[0] === i && c[1] === j);
 
 /** The hole under a world point, if there is one. */
 export const pitAt = (pits: Pit[], x: number, y: number) => {
   const i = Math.floor(x / TILE), j = Math.floor(y / TILE);
-  return pits.find(p => i >= p.i && i < p.i + p.s && j >= p.j && j < p.j + p.s);
+  return pits.find(p => inPit(p, i, j));
 };
 /**
  * A one-tile obstacle. `ice` marks an icicle growing from the floor: it collides exactly like a stone block,
@@ -210,21 +252,21 @@ export interface Tier {
   /** How many block clusters, and which of BLOCK_SHAPES they may use (the first n). */
   blocks: Range;
   blockKinds: number;
-  /** How many holes, and the side of the biggest one; the holes in one room are all of different sizes. */
+  /** How many holes, and how many cells the biggest one may take; the holes in one room are all of different shapes. */
   pits: Range;
-  pitMax: number;
+  pitCells: number;
   haz: Range;
   mobs: Range;
 }
 
 export const TIERS: Tier[] = [
-  { gw: [10, 11], gh: [8, 9], shapes: ['rect'], blocks: [1, 1], blockKinds: 1, pits: [0, 0], pitMax: 0, haz: [0, 0], mobs: [2, 2] },
-  { gw: [11, 12], gh: [9, 9], shapes: ['rect', 'corner'], blocks: [1, 2], blockKinds: 3, pits: [0, 0], pitMax: 0, haz: [1, 1], mobs: [2, 3] },
-  { gw: [12, 13], gh: [10, 10], shapes: ['corner', 'alcove'], blocks: [1, 2], blockKinds: 4, pits: [0, 1], pitMax: 1, haz: [1, 2], mobs: [2, 3] },
-  { gw: [13, 14], gh: [10, 11], shapes: ['alcove', 'funnel', 'corner'], blocks: [2, 2], blockKinds: 4, pits: [0, 1], pitMax: 2, haz: [2, 3], mobs: [3, 3] },
-  { gw: [14, 15], gh: [11, 12], shapes: ['funnel', 'cross', 'alcove'], blocks: [2, 3], blockKinds: 5, pits: [1, 2], pitMax: 3, haz: [3, 3], mobs: [3, 4] },
+  { gw: [10, 11], gh: [8, 9], shapes: ['rect'], blocks: [1, 1], blockKinds: 1, pits: [0, 0], pitCells: 0, haz: [0, 0], mobs: [2, 2] },
+  { gw: [11, 12], gh: [9, 9], shapes: ['rect', 'corner'], blocks: [1, 2], blockKinds: 3, pits: [0, 0], pitCells: 0, haz: [1, 1], mobs: [2, 3] },
+  { gw: [12, 13], gh: [10, 10], shapes: ['corner', 'alcove'], blocks: [1, 2], blockKinds: 4, pits: [0, 1], pitCells: 2, haz: [1, 2], mobs: [2, 3] },
+  { gw: [13, 14], gh: [10, 11], shapes: ['alcove', 'funnel', 'corner'], blocks: [2, 2], blockKinds: 4, pits: [0, 1], pitCells: 4, haz: [2, 3], mobs: [3, 3] },
+  { gw: [14, 15], gh: [11, 12], shapes: ['funnel', 'cross', 'alcove'], blocks: [2, 3], blockKinds: 5, pits: [1, 2], pitCells: 9, haz: [3, 3], mobs: [3, 4] },
 ];
-export const BOSS_TIER: Tier = { gw: [14, 15], gh: [12, 12], shapes: ['rect', 'cross'], blocks: [1, 2], blockKinds: 3, pits: [0, 0], pitMax: 0, haz: [2, 3], mobs: [3, 3] };
+export const BOSS_TIER: Tier = { gw: [14, 15], gh: [12, 12], shapes: ['rect', 'cross'], blocks: [1, 2], blockKinds: 3, pits: [0, 0], pitCells: 0, haz: [2, 3], mobs: [3, 3] };
 
 /** Most floor cells the holes of one room take: next to a 3 × 3 hole there is room only for a 1 × 1. */
 export const PIT_CELLS = 10;
@@ -448,13 +490,16 @@ export function generate(spec: RoomSpec): Layout {
   for (const p of pads) { objs.push({ x: p.x, y: p.y, r: 22 }); take(Math.floor(p.x / TILE), Math.floor(p.y / TILE)); }
 
   const pits: Pit[] = [];
-  const inHole = (i: number, j: number, extra?: Pit) => [...pits, ...(extra ? [extra] : [])].some(p => i >= p.i && i < p.i + p.s && j >= p.j && j < p.j + p.s);
+  const holes = new Set<string>();
   /** Which piece of open floor each spot an s × s walker can stand on belongs to, with the holes (and `extra`) cut out; -1 where it can't stand. */
-  const parts = (s: number, extra?: Pit) => {
+  const parts = (s: number, extra?: Set<string>) => {
     const id = new Int32Array(gw * gh).fill(-1);
     const fits = (i: number, j: number) => {
       if (i < 0 || j < 0 || i > gw - s || j > gh - s) return false;
-      for (let b = 0; b < s; b++) for (let a = 0; a < s; a++) if (!isFloor(geo, i + a, j + b) || inHole(i + a, j + b, extra)) return false;
+      for (let b = 0; b < s; b++) for (let a = 0; a < s; a++) {
+        const k = hazKey(i + a, j + b);
+        if (!isFloor(geo, i + a, j + b) || holes.has(k) || extra?.has(k)) return false;
+      }
       return true;
     };
     for (let k = 0, n = 0; k < gw * gh; k++) {
@@ -472,8 +517,8 @@ export function generate(spec: RoomSpec): Layout {
     return id;
   };
   // a hole may swallow a dead end, but every piece of floor a walker could cross before stays one piece without it
-  const splits = (p: Pit) => [1, 2].some(s => {
-    const was = parts(s), now = parts(s, p), seen = new Map<number, number>();
+  const splits = (cells: Set<string>) => [1, 2].some(s => {
+    const was = parts(s), now = parts(s, cells), seen = new Map<number, number>();
     for (let k = 0; k < gw * gh; k++) {
       if (was[k] < 0 || now[k] < 0) continue;
       if ((seen.get(was[k]) ?? now[k]) !== now[k]) return true;
@@ -482,36 +527,41 @@ export function generate(spec: RoomSpec): Layout {
     return false;
   });
   /**
-   * An s × s hole between the runes and the enemies. It keeps a ring of open floor around it, so no wall or rune touches
-   * it, stays two cells clear of the other holes, and never cuts off a way across the room, even for big 2 × 2 enemies.
+   * A hole of the given shape, turned any way, between the runes and the enemies. It keeps a ring of open floor around it,
+   * so no wall or rune touches it, stays two cells clear of the other holes, and never cuts off a way across the room,
+   * even for big 2 × 2 enemies.
    */
-  const placePit = (s: number): Pit | null => {
+  const placePit = (k: PitKind): Pit | null => {
+    const ways = pitTurns(k);
     for (let tr = 0; tr < 200; tr++) {
-      const i = ri(1, gw - s - 1), j = ri(1, gh - s - 1), c = cellCentre(i, j, s), p = { i, j, s };
-      let ok = mid(c.x, c.y) && pits.every(q => Math.max(q.i - i - s, i - q.i - q.s, q.j - j - s, j - q.j - q.s) >= 2);
-      for (let b = -1; b <= s && ok; b++) for (let a = -1; a <= s && ok; a++) ok = isFloor(geo, i + a, j + b) && !taken.has(hazKey(i + a, j + b));
-      if (ok && !splits(p)) return p;
+      const way = ways[ri(0, ways.length - 1)], w = Math.max(...way.map(c => c[0])) + 1, h = Math.max(...way.map(c => c[1])) + 1;
+      const i0 = ri(1, gw - w - 1), j0 = ri(1, gh - h - 1), cells = way.map(([a, b]): [number, number] => [i0 + a, j0 + b]);
+      const cx = cells.reduce((n, c) => n + c[0] + 0.5, 0) / cells.length * TILE, cy = cells.reduce((n, c) => n + c[1] + 0.5, 0) / cells.length * TILE;
+      let ok = mid(cx, cy) && pits.every(q => q.cells.every(([a, b]) => cells.every(([i, j]) => Math.max(Math.abs(a - i), Math.abs(b - j)) >= 3)));
+      for (const [i, j] of cells) for (let b = -1; b <= 1 && ok; b++) for (let a = -1; a <= 1 && ok; a++) ok = isFloor(geo, i + a, j + b) && !taken.has(hazKey(i + a, j + b));
+      if (ok && !splits(new Set(cells.map(([i, j]) => hazKey(i, j))))) return { k, cells };
     }
     return null;
   };
   const nPits = roll(tier.pits);
   if (nPits) {
-    // sizes in a random order, so each hole in a room is a different one
-    const sizes = Array.from({ length: tier.pitMax }, (_, k) => k + 1);
-    for (let k = sizes.length - 1; k > 0; k--) { const m = ri(0, k); [sizes[k], sizes[m]] = [sizes[m], sizes[k]]; }
-    const room = (s: number) => pits.reduce((n, p) => n + p.s * p.s, s * s) <= PIT_CELLS;
-    while (pits.length < nPits && sizes.length) {
-      const s = sizes.shift()!;
-      let p = room(s) ? placePit(s) : null;
-      // a size that finds no room gives way to the biggest smaller one still unused
-      for (const o of sizes.filter(o => o < s && room(o)).sort((a, b) => b - a)) {
+    // shapes in a random order, so each hole in a room is a different one
+    const size = (k: PitKind) => PIT_SHAPES[k].length;
+    const kinds = PIT_KINDS.filter(k => size(k) <= tier.pitCells);
+    for (let k = kinds.length - 1; k > 0; k--) { const m = ri(0, k); [kinds[k], kinds[m]] = [kinds[m], kinds[k]]; }
+    const room = (k: PitKind) => pits.reduce((n, p) => n + p.cells.length, size(k)) <= PIT_CELLS;
+    while (pits.length < nPits && kinds.length) {
+      const k = kinds.shift()!;
+      let p = room(k) ? placePit(k) : null;
+      // a shape that finds no room gives way to a smaller one still unused, the biggest first
+      for (const o of kinds.filter(o => size(o) < size(k) && room(o)).sort((a, b) => size(b) - size(a))) {
         if (p) break;
-        if ((p = placePit(o))) sizes.splice(sizes.indexOf(o), 1);
+        if ((p = placePit(o))) kinds.splice(kinds.indexOf(o), 1);
       }
       if (!p) continue;
       pits.push(p);
       // the cells of a hole are taken, and blocks, enemies and resources keep clear of its edge
-      for (let b = 0; b < p.s; b++) for (let a = 0; a < p.s; a++) { take(p.i + a, p.j + b); objs.push({ ...cellCentre(p.i + a, p.j + b), r: 8 }); }
+      for (const [i, j] of p.cells) { holes.add(hazKey(i, j)); take(i, j); objs.push({ ...cellCentre(i, j), r: 8 }); }
     }
   }
 
