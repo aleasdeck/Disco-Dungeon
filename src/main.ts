@@ -8,6 +8,7 @@ import { saveSettings, settings } from './settings';
 import { bindSettings, lobbyStatus, renderCollection, renderHeroSelect, renderLobby, resetLobby, show } from './menu';
 import { Input } from './input';
 import { Hud } from './ui';
+import { hl } from './hl';
 import { MapView, type MapVotes } from './mapview';
 import { SceneRenderer } from './draw/scene';
 import { loadSprites } from './assets';
@@ -287,6 +288,7 @@ function mapVotes(): MapVotes | undefined {
 }
 
 game.onChange = () => { hud.refresh(); dirty = true; stale = true; };
+hl.changed = () => { dirty = true; };
 game.onRoomEnd = win => {
   const S = game.S, boss = S.spec.type === 'boss';
   const last = boss && run.floor === FLOORS - 1;

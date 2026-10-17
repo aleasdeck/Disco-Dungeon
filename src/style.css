@@ -264,7 +264,7 @@ i.ico { display: inline-block; font-style: normal; }
 .spk i { flex: 1; background: #3a2c55; }
 .spk i.on { background: linear-gradient(#a98bf0, #6b4cc0); }
 .spk.full { background: #d9c8ff; box-shadow: 0 0 12px #c9a8ff; }
-.spk.full i { background: linear-gradient(#f1e8ff, #b896ff); animation: shine 1.4s ease-in-out infinite; }
+.spk.full i { background: linear-gradient(#e2d4ff, #a07ef0); animation: shine 1.4s ease-in-out infinite; }
 @keyframes shine { 50% { filter: brightness(1.25); } }
 
 .ability {
@@ -412,11 +412,11 @@ i.ico { display: inline-block; font-style: normal; }
   .pips i { width: 8px; height: 8px; }
   .hero-card { bottom: calc(100% + 8px); }
   .turn-btn {
-    left: 146px; right: 10px; bottom: calc(6px + var(--safe-b) + 68px); width: auto; height: 58px; padding: 0 100px 6px 12px;
+    left: 146px; right: 10px; bottom: calc(6px + var(--safe-b) + 68px); width: auto; height: 58px; padding: 0 64px 10px 8px;
     --plate: polygon(0 10px, 40% 0, calc(100% - 6px) 3px, 100% 16px, 100% calc(100% - 36px), calc(100% - 9px) calc(100% - 33px),
       calc(100% - 90px) calc(100% - 29px), calc(100% - 104px) 100%, 7px calc(100% - 3px), 0 62%);
   }
-  .turn-btn b { font-size: 24px; }
+  .turn-btn b { font-size: 23px; white-space: nowrap; }
   .turn-btn small { font-size: 10px; }
 }
 

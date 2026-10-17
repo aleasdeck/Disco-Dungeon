@@ -170,9 +170,7 @@ export class Game {
   S!: State;
   act = 0;
   party: HeroState[] = newParty();
-  private kept = this.withSparks(newBank());
-  get bank(): Bank & { readonly sparks: number } { return this.kept; }
-  set bank(b: Bank) { this.kept = this.withSparks(b); }
+  bank: Bank = newBank();
   onChange: () => void = () => {};
   onRoomEnd: (win: boolean) => void = () => {};
   /** Which heroes this screen may move, aim and select (online: only the player's own). */
@@ -189,15 +187,6 @@ export class Game {
   private acc = 0;
   /** Host: the disc each hero is hopping over to; it picks the disc up once it lands. */
   private pickup = new Map<HeroState, Disc>();
-
-  /**
-   * Temporary, until the HUD reads sparks off the hero: `bank.sparks` gives the selected hero's own, where the party's pool
-   * used to be. Not enumerable, so snapshots and saves never carry it.
-   */
-  private withSparks(b: Bank) {
-    Object.defineProperty(b, 'sparks', { get: () => (this.S ? this.hero?.sparks ?? 0 : 0), configurable: true });
-    return b as Bank & { readonly sparks: number };
-  }
 
   /** Start a fight in a new room; unless the spec says otherwise, the room is built for the party's size. */
   loadRoom(spec: RoomSpec) {

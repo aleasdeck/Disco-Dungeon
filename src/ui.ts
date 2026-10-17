@@ -108,14 +108,6 @@ export type Side = 'place' | 'heroes' | 'enemies' | 'over';
 interface Status { k: string; n?: number; t: string }
 const statusHtml = (list: Status[]) => list.map(s => `<i class="st st-${s.k}" title="${s.t}">${icon(s.k)}${s.n ? `<b>${s.n}</b>` : ''}</i>`).join('');
 
-/** Screen strips the HUD keeps for itself, so the room is fitted between them. */
-export function hudInsets() {
-  const top = $('hudTop').getBoundingClientRect().bottom + 6;
-  // the hero's board spans the whole width only on a phone held upright; elsewhere it sits in a corner the room's corner leaves free
-  const fr = $('frame').getBoundingClientRect(), wide = fr.width > window.innerWidth * 0.8;
-  return { top, bottom: wide ? Math.max(0, window.innerHeight - fr.top) + 8 : 12 };
-}
-
 /** The turn button's job right now. */
 type TurnAct = 'fight' | 'end' | 'cancel' | 'none';
 
