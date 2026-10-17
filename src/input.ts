@@ -52,8 +52,9 @@ export class Input {
     const { cam, g } = this, S = g.S;
     let best: HeroState | null = null, bd = Infinity;
     for (const h of S.heroes) {
-      if (h.pad === null || h.hp <= 0) continue;
-      const p = S.pads[h.pad], [fx, fy] = cam.isoToScreen(...cam.iso(p.x, p.y, 16));
+      const p = g.figureAt(h);
+      if (!p || h.hp <= 0) continue;
+      const [fx, fy] = cam.isoToScreen(...cam.iso(p.x, p.y, 16 + p.lift));
       const rx = Math.max(20, 13 * cam.zoom), ry = Math.max(26, 22 * cam.zoom);
       const d = ((sx - fx) / rx) ** 2 + ((sy - fy) / ry) ** 2;
       if (d < 1 && d < bd) { bd = d; best = h; }
@@ -130,7 +131,7 @@ export class Input {
     this.pts.set(e.pointerId, [x, y]);
     const cam = this.cam;
     if (this.mode === 'aim' && this.aim) {
-      const p = this.g.S.pads[this.aim.hero.pad!], [wx, wy] = cam.screenToWorld(x, y);
+      const p = this.g.spot(this.aim.hero)!, [wx, wy] = cam.screenToWorld(x, y);
       let dx = p.x - wx, dy = p.y - wy;
       const L = Math.hypot(dx, dy);
       if (L > MAX_PULL) { dx *= MAX_PULL / L; dy *= MAX_PULL / L; }

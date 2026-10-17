@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Camera } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, mobSize } from '../src/data';
-import { Game, newParty, stepsOf, wayLen, type Action } from '../src/game';
+import { Game, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { MOB_CAP, PARTY_SCALE, cellAt, cellCentre, clearOfRock, floorAt, generate, isFloor, muAt, newMob, tierOf } from '../src/room';
 import { FLOORS, FORGE_ROWS, LAYERS, agreed, genFloor, newRun, restRoom } from '../src/run';
@@ -923,4 +923,120 @@ describe('enemy walking', () => {
       }
     }
   }, 20_000);
+});
+
+describe('heroes go where their last disc stopped', () => {
+  /** A floor 0 fight with one archer in the far corner, the floor otherwise bare, every hero on its rune. */
+  const arena = () => {
+    const g = new Game();
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    g.S.mobs = [newMob('archer', cellCentre(1, 1).x, cellCentre(1, 1).y, 1, 0)];
+    g.S.nodes = []; g.S.blocks = []; g.S.pits = []; g.S.haz = new Set();
+    placeAll(g); g.startFight();
+    for (const h of g.party) h.hp = h.max = 99;
+    return g;
+  };
+  /** A disc of hero h lying still at (x, y), as if thrown and stopped there. */
+  const lying = (g: Game, h: HeroState, x: number, y: number, fall = 0) =>
+    ({ hero: h, x, y, vx: 0, vy: 0, r: 5, m: 4, e: 0.6, fr: 1, fall, gone: false, charged: false, bounces: 0, spin: 0, hits: 0, ab: false, rico: 0 });
+  /** Every hero has thrown: play on until the throws are settled and the heroes have moved. */
+  const settle = (g: Game) => {
+    for (const h of g.party) { h.hand = 0; h.thrown = true; }
+    for (let k = 0; k < 100 && g.S.phase === 'throw'; k++) g.update(1 / 60);
+    expect(g.S.phase).toBe('resolve');
+  };
+  const cell = (g: Game, h: HeroState) => cellAt(g.spot(h)!.x, g.spot(h)!.y);
+
+  it('starts the next turn on the cell holding most of its last disc, and throws from there', () => {
+    const g = arena(), [a, b, c] = g.party;
+    for (const [i, j] of [[5, 4], [6, 4], [3, 5]]) expect(isFloor(g.S, i, j)).toBe(true);
+    // a's first disc is forgotten, its last one lies mostly on (5, 4) and a little on (6, 4)
+    g.S.discs = [lying(g, a, cellCentre(3, 5).x, cellCentre(3, 5).y), lying(g, b, cellCentre(3, 5).x + 2, cellCentre(3, 5).y), lying(g, a, 94, 72)];
+    settle(g);
+    expect(cell(g, a)).toEqual([5, 4]);
+    expect(g.spot(a)).toEqual(cellCentre(5, 4));
+    expect(cell(g, b)).toEqual([3, 5]);
+    // a hero who threw nothing stays where it stood
+    expect(g.spot(c)).toEqual(g.S.pads[c.pad!]);
+    // the figure hops over for a moment
+    g.update(0.2);
+    const mid = g.figureAt(a)!, from = g.S.pads[a.pad!];
+    expect(mid.lift).toBeGreaterThan(3);
+    expect(Math.hypot(mid.x - from.x, mid.y - from.y)).toBeGreaterThan(1);
+    expect(Math.hypot(mid.x - 88, mid.y - 72)).toBeGreaterThan(1);
+    // a hero that lands picks its last disc up; an earlier disc lies there till the turn ends
+    g.update(0.4);
+    expect(g.figureAt(a)).toEqual({ ...cellCentre(5, 4), lift: 0 });
+    expect(g.S.discs.map(d => d.gone)).toEqual([false, true, true]);
+    for (let k = 0; k < 2000 && g.S.phase !== 'throw'; k++) g.update(1 / 60);
+    expect(g.S.turn).toBe(2);
+    expect(g.figureAt(a)).toEqual({ ...cellCentre(5, 4), lift: 0 });
+    expect(g.spot(a)).toEqual(cellCentre(5, 4));
+    // the next throw leaves from the new cell
+    g.throwDisc(a, -30, 0);
+    const d = g.S.discs[g.S.discs.length - 1];
+    expect(Math.hypot(d.x - cellCentre(5, 4).x, d.y - cellCentre(5, 4).y)).toBeLessThan(8);
+    expect(g.predict(a, -30, 0).path[0]).toEqual([d.x, d.y]);
+  });
+
+  it('two heroes after one cell: the one whose disc covers more of it gets it, the other the cell next most of its disc lies on', () => {
+    const g = arena(), [a, b] = g.party;
+    g.S.discs = [lying(g, b, 93, 72), lying(g, a, 88, 72)];
+    settle(g);
+    expect(cell(g, a)).toEqual([5, 4]);
+    expect(cell(g, b)).toEqual([6, 4]);
+  });
+
+  it('a cell taken by an enemy or a block sends the hero to the next cell under its disc, else the nearest free one', () => {
+    const g = arena(), [a, b] = g.party;
+    g.S.mobs.push(newMob('skel', cellCentre(5, 4).x, cellCentre(5, 4).y, 1, 0));
+    g.S.blocks = [{ x0: 9 * 16, y0: 2 * 16, x1: 10 * 16, y1: 3 * 16, v: 0 }];
+    g.pickIntents();
+    g.S.discs = [lying(g, a, 94, 72), lying(g, b, 9 * 16 + 8, 3 * 16 + 5.5)];
+    settle(g);
+    expect(cell(g, a)).toEqual([6, 4]);
+    expect(cell(g, b)).toEqual([9, 3]);
+  });
+
+  it('a hero whose last disc fell into a pit goes back to its rune', () => {
+    const g = arena(), [a, b] = g.party;
+    a.at = cellCentre(5, 4);
+    // b's disc stopped on a's rune, but a's way back comes first
+    const r = g.S.pads[a.pad!];
+    g.S.discs = [lying(g, a, 60, 60), lying(g, b, r.x, r.y), lying(g, a, 120, 60, 0.3)];
+    settle(g);
+    expect(g.spot(a)).toEqual(r);
+    expect(g.spot(b)).not.toEqual(r);
+    expect(Math.hypot(g.spot(b)!.x - r.x, g.spot(b)!.y - r.y)).toBeLessThanOrEqual(TILE * Math.SQRT2);
+  });
+
+  it('walkers go after the hero where it now stands, and never stop on a hero', () => {
+    const g = arena(), [a] = g.party;
+    const sk = newMob('skel', cellCentre(2, 5).x, cellCentre(2, 5).y, 1, 0);
+    g.S.mobs = [sk];
+    for (const h of g.party) if (h !== a) h.hp = 0;
+    g.pickIntents();
+    expect(sk.intent!.hero).toBe(a.i);
+    // a's disc stops two cells off the skeleton
+    g.S.discs = [lying(g, a, cellCentre(4, 5).x, cellCentre(4, 5).y)];
+    settle(g);
+    expect(cell(g, a)).toEqual([4, 5]);
+    const it = sk.intent!;
+    expect(it.t).toBe('hit');
+    expect(it.way![it.way!.length - 1]).toEqual(cellCentre(4, 5));
+    const hp = a.hp;
+    for (let k = 0; k < 2000 && g.S.phase !== 'throw'; k++) g.update(1 / 60);
+    expect(a.hp).toBeLessThan(hp);
+    expect(cellAt(sk.x, sk.y)).not.toEqual([4, 5]);
+    expect(Math.max(...cellAt(sk.x, sk.y).map((v, k) => Math.abs(v - [4, 5][k])))).toBe(1);
+  });
+
+  it('shows a client the hero where the host moved it', () => {
+    const host = arena(), [a] = host.party;
+    host.S.discs = [lying(host, a, 94, 72)];
+    settle(host);
+    const client = new Game();
+    applySnapshot(client, JSON.parse(JSON.stringify(snapshot(host))));
+    expect(client.spot(client.heroOf(a.i))).toEqual(cellCentre(5, 4));
+  });
 });
