@@ -10,6 +10,8 @@ type HeroSnap = Omit<HeroState, 'def'>;
 
 export interface Snapshot {
   spec: RoomSpec;
+  /** The host's physics step this state is from: a client plays it on from there to where the host is by the time it arrives. */
+  tick?: number;
   turn: number;
   phase: Phase;
   timer: number;
@@ -26,6 +28,7 @@ export interface Snapshot {
   ice?: number[];
   discs: (Omit<Disc, 'hero'> & { hero: number })[];
   floats: Float[];
+  /** Only the sparks every screen can't make itself: the ones the discs' hits throw, each screen throws on its own. */
   sparks: Spark[];
   bank: Bank;
   /** Hazard tiles change mid-fight: lava from slimes and the forge boss. */
@@ -37,7 +40,7 @@ export interface Snapshot {
 export function snapshot(g: Game): Snapshot {
   const S = g.S;
   return {
-    spec: S.spec, turn: S.turn, phase: S.phase, timer: S.timer, actor: S.actor, clock: S.clock, attacked: S.attacked,
+    spec: S.spec, tick: g.tick, turn: S.turn, phase: S.phase, timer: S.timer, actor: S.actor, clock: S.clock, attacked: S.attacked,
     ready: S.ready, shake: S.shake,
     heroes: g.party.map(({ def: _def, ...h }) => h),
     mobs: S.mobs,
@@ -45,7 +48,7 @@ export function snapshot(g: Game): Snapshot {
     ice: S.blocks.filter(b => b.ice).map(b => b.hp!),
     discs: S.discs.filter(d => !d.gone).map(d => ({ ...d, hero: d.hero.i })),
     floats: S.floats,
-    sparks: S.sparks,
+    sparks: S.sparks.filter(p => p.b === undefined),
     bank: g.bank,
     haz: [...S.haz],
     forge: g.forge,
@@ -77,6 +80,8 @@ export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boo
   }
   if (!g.S || !sameSpec(g.S.spec, s.spec)) { g.showRoom(s.spec); room = true; }
   const S = g.S;
+  // the sparks of the hits this screen has played: they don't come with the snapshot
+  const own = S.sparks.filter(p => p.b !== undefined);
   S.heroes = g.party;
   Object.assign(S, {
     turn: s.turn, phase: s.phase, timer: s.timer, actor: s.actor ?? -1, clock: s.clock ?? 0, attacked: s.attacked,
@@ -89,5 +94,8 @@ export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boo
   if (s.haz) S.haz = new Set(s.haz);
   g.forge = s.forge ?? 0;
   g.pickActive();
+  // a client brings the host's state up to now; the host reopening its own saved game just carries on counting from it
+  if (g.send) g.synced(s.tick ?? g.tick, own);
+  else g.tick = s.tick ?? g.tick;
   return { party, room };
 }
