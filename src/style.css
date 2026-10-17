@@ -557,6 +557,13 @@ i.ico { display: inline-block; font-style: normal; }
 .logo span { color: #d9733a; }
 .tagline { margin: 10px 0 26px; color: #b2a38c; }
 .menu-btns { display: grid; gap: 12px; }
+
+/* ---------- loading screen, over everything until the art and fonts are in */
+.overlay.boot { z-index: 40; background: var(--bg); }
+.boot-bar { position: relative; height: 16px; width: min(300px, 100%); margin: 0 auto 14px; background: #241a14; clip-path: var(--cut-bar); }
+.boot-bar i { position: absolute; inset: 0 auto 0 0; width: 0; background: linear-gradient(#e8894a, #b4521f); transition: width 0.25s; }
+.boot-note { margin: 0 auto; max-width: 300px; color: var(--muted); }
+.boot .btn { margin-top: 18px; }
 .menu-btns .btn.big { font-size: 20px; padding: 13px 22px; }
 .end-panel .menu-btns { margin-top: 14px; }
 

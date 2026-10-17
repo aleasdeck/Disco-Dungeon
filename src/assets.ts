@@ -1,4 +1,4 @@
-// Art loader. public/assets/manifest.json lists the pictures that exist;
+// Loader of the art and fonts, all of it before the main menu. public/assets/manifest.json lists the pictures that exist;
 // anything missing falls back to the code-drawn placeholder.
 
 import { ENEMY_BASE, HEROES, HERO_FIG, MOBS, type MobKind } from './data';
@@ -22,11 +22,31 @@ export const uiArt = new Map<string, HTMLImageElement>();
 /** Hand-drawn faces with Latin and Cyrillic for words scratched and chalked on the walls (Google Fonts, linked in index.html). */
 export const GRAFFITI_FONTS = ['700 20px "Amatic SC"', '700 20px "Caveat"', '400 20px "Neucha"'];
 
-export async function loadSprites(onLoad: () => void): Promise<void> {
-  const base = import.meta.env.BASE_URL;
+/** Content hash and size of each file in public/assets, from the build (empty on the dev server). */
+declare const __ASSETS__: Record<string, [rev: string, bytes: number]>;
+const ASSETS = __ASSETS__;
+
+/** Address of a file in public/assets: with its content hash, so the cache keeps it until the file changes. */
+function assetUrl(file: string) {
+  const rev = ASSETS[file]?.[0];
+  return `${import.meta.env.BASE_URL}assets/${file}${rev ? '?v=' + rev : ''}`;
+}
+/** What a file weighs on the loading bar: its size, or about that of a small picture or a font when unknown. */
+const weightOf = (file?: string) => (file && ASSETS[file]?.[1]) || 30000;
+
+/** The interface's own faces: Oswald on labels and numbers, Caveat (as Hand) in the notes, Rubik in the inputs and for signs Hand lacks. */
+const UI_FONTS = ['500 16px Oswald', '600 16px Oswald', '700 16px Oswald', '700 16px Hand', '400 16px Rubik', '500 16px Rubik'];
+/** A font that hasn't come by then is left to come later, so a dead font server doesn't hold the game. */
+const FONT_WAIT = 12000;
+
+/**
+ * Load every picture and font the game uses, decoded and ready to draw. `onProgress` gets the part loaded so far, 0 to 1,
+ * by size; whatever fails to load is counted in too and left to the code-drawn fallback.
+ */
+export async function loadAll(onProgress: (part: number) => void): Promise<void> {
   let figures: Record<string, ManifestEntry> = {}, env: Record<string, string> = {}, ui: Record<string, string> = {};
   try {
-    const res = await fetch(`${base}assets/manifest.json`, { cache: 'no-cache' });
+    const res = await fetch(assetUrl('manifest.json'), { cache: 'no-cache' });
     if (res.ok) {
       const m = await res.json();
       figures = m.figures ?? {};
@@ -34,13 +54,19 @@ export async function loadSprites(onLoad: () => void): Promise<void> {
       ui = m.ui ?? {};
     }
   } catch {
-    return;
+    // no manifest, no pictures: the fonts still load
   }
-  const load = (file: string, keep: (img: HTMLImageElement) => void) => new Promise<void>(done => {
+  const fonts = document.fonts ? [...UI_FONTS, ...GRAFFITI_FONTS] : [];
+  const files = [...Object.values(figures).map(e => e.file), ...Object.values(env), ...Object.values(ui)];
+  const total = files.reduce((t, f) => t + weightOf(f), 0) + fonts.length * weightOf();
+  let done = 0;
+  const tick = (file?: string) => onProgress((done += weightOf(file)) / total);
+  onProgress(0);
+  const load = (file: string, keep: (img: HTMLImageElement) => void) => new Promise<void>(ok => {
     const img = new Image();
-    img.onload = () => { keep(img); onLoad(); done(); };
-    img.onerror = () => done();
-    img.src = `${base}assets/${file}`;
+    img.onload = () => img.decode().catch(() => {}).then(() => { keep(img); tick(file); ok(); });
+    img.onerror = () => { tick(file); ok(); };
+    img.src = assetUrl(file);
   });
   await Promise.all([
     ...Object.entries(figures).map(([key, e]) => load(e.file, img => {
@@ -56,7 +82,7 @@ export async function loadSprites(onLoad: () => void): Promise<void> {
       root.style.setProperty('--ui-' + key, `url("${img.src}")`);
       root.classList.add('art-' + key);
     })),
-    // the wall graffiti fonts, Latin and Cyrillic letters both, before the room is drawn with them
-    ...GRAFFITI_FONTS.map(f => document.fonts?.load(f, 'WTF ЖОПА').then(onLoad, () => {})),
+    // Latin and Cyrillic letters both, the graffiti on the walls among them
+    ...fonts.map(f => Promise.race([document.fonts.load(f, 'WTF ЖОПА 0'), new Promise(r => setTimeout(r, FONT_WAIT))]).catch(() => {}).then(() => tick())),
   ]);
 }

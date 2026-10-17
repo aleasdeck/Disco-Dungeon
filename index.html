@@ -212,6 +212,17 @@
     </div>
   </section>
 
+  <!-- up from the first paint until every picture and font is in -->
+  <section id="boot" class="overlay solid boot">
+    <div class="menu-panel">
+      <h1 class="logo">Disco<span>Dungeon</span></h1>
+      <p class="tagline">Кооперативный рогалик, где вместо кубиков диски</p>
+      <div class="boot-bar" id="bootBar" role="progressbar" aria-label="Загрузка" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="bootFill"></i></div>
+      <p class="boot-note">Раскладываем подземелье: картинки и шрифты грузятся один раз, дальше игра берёт их с устройства.</p>
+      <button class="btn" id="bootSkip" hidden>Не ждать</button>
+    </div>
+  </section>
+
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
