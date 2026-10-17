@@ -747,7 +747,8 @@ i.ico { display: inline-block; font-style: normal; }
 .art-btn_turn .turn-btn { height: 115px; width: 360px; padding: 34px 70px 6px 26px; filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)); }
 .art-btn_turn .tb-plate { clip-path: none; background: var(--ui-btn_turn) center / 100% 100% no-repeat; transition: filter 0.2s; }
 .art-btn_turn .tb-plate::before, .art-btn_turn .tb-plate::after { display: none; }
-.art-btn_turn .turn-btn b, .art-btn_turn .turn-btn small { transform: rotate(-3deg); }
+/* the words climb with the blade's top edge */
+.art-btn_turn .turn-btn b, .art-btn_turn .turn-btn small { transform: rotate(-7deg); }
 .art-btn_turn .turn-btn.idle .tb-plate { filter: saturate(0.45) brightness(0.7); }
 .art-btn_turn .turn-btn.idle b { color: #1c120a; }
 .art-btn_turn .turn-btn.lit { filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 16px rgba(255, 200, 80, 0.8)); animation: lit-art 1.6s ease-in-out infinite; }
@@ -789,7 +790,7 @@ i.ico { display: inline-block; font-style: normal; }
 .art-btn_gem .ability.on { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px var(--ab)); }
 .art-btn_gem .ability b { padding: 2px 5px; background: rgba(18, 12, 9, 0.6); }
 /* the ability's own picture fills the gem instead of its name */
-.ability .ab-ico { position: absolute; inset: 17%; z-index: 1; pointer-events: none; }
+.ability .ab-ico { position: absolute; inset: 28%; z-index: 1; pointer-events: none; }
 .ability .ab-ico:empty { display: none; }
 .ability:has(.ab-ico img) b { display: none; }
 
