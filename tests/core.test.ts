@@ -3,7 +3,7 @@ import { Camera } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, mobSize } from '../src/data';
 import { Game, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { MOB_CAP, PARTY_SCALE, PIT_CELLS, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, isFloor, muAt, newMob, pitAt, tierOf, type Layout } from '../src/room';
+import { MOB_CAP, PARTY_SCALE, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Layout } from '../src/room';
 import { FLOORS, FORGE_ROWS, LAYERS, agreed, genFloor, newRun, restRoom } from '../src/run';
 
 /** Put every living hero on its own rune, as players do before the fight. */
@@ -112,36 +112,56 @@ describe('difficulty along a floor', () => {
 
 describe('holes in the floor', () => {
   /** Rooms from the second half of every floor, where the holes are. */
-  const rooms = Array.from({ length: 240 }, (_, k) => {
+  const rooms = Array.from({ length: 300 }, (_, k) => {
     const f = k % FLOORS, row = 2 + (k % (LAYERS - 3));
     return generate({ seed: 500 + k, depth: f * LAYERS + row + 1, floor: f, type: k % 5 ? 'fight' : 'elite' });
   });
-  const inHole = (L: Layout, i: number, j: number) => L.pits.some(p => i >= p.i && i < p.i + p.s && j >= p.j && j < p.j + p.s);
+  const inHole = (L: Layout, i: number, j: number) => L.pits.some(p => inPit(p, i, j));
+  /** A shape's cells moved so its top-left corner is at 0, 0, in reading order, to compare shapes however they lie. */
+  const norm = (cells: [number, number][]) => {
+    const a0 = Math.min(...cells.map(c => c[0])), b0 = Math.min(...cells.map(c => c[1]));
+    return cells.map(([a, b]) => [a - a0, b - b0]).sort((p, q) => p[1] - q[1] || p[0] - q[0]).join(';');
+  };
 
-  it('comes in 1 × 1, 2 × 2 and 3 × 3, each hole in a room a different size, the big ones only late', () => {
-    const sizes = new Set(rooms.flatMap(L => L.pits.map(p => p.s)));
-    expect([...sizes].sort()).toEqual([1, 2, 3]);
+  it('comes in squares, strips, a 2 × 3 and Г shapes, turned every way, each hole in a room a different shape', () => {
+    expect(new Set(rooms.flatMap(L => L.pits.map(p => p.k)))).toEqual(new Set(PIT_KINDS));
+    const ways = (k: string) => new Set(rooms.flatMap(L => L.pits.filter(p => p.k === k).map(p => norm(p.cells)))).size;
+    expect(ways('L3')).toBe(4);
+    expect(ways('3x1')).toBe(2);
+    expect(ways('2x3')).toBe(2);
     for (const L of rooms) {
-      const s = L.pits.map(p => p.s);
-      expect(new Set(s).size).toBe(s.length);
-      expect(s.reduce((n, k) => n + k * k, 0)).toBeLessThanOrEqual(PIT_CELLS);
+      const kinds = L.pits.map(p => p.k);
+      expect(new Set(kinds).size).toBe(kinds.length);
+      expect(L.pits.reduce((n, p) => n + p.cells.length, 0)).toBeLessThanOrEqual(PIT_CELLS);
+      for (const p of L.pits) {
+        expect(p.cells).toHaveLength(PIT_SHAPES[p.k].length);
+        // the cells hang together
+        const seen = new Set([0]);
+        for (let grew = true; grew;) {
+          grew = false;
+          p.cells.forEach(([i, j], k) => {
+            if (!seen.has(k) && p.cells.some(([a, b], m) => seen.has(m) && Math.abs(a - i) + Math.abs(b - j) === 1)) { seen.add(k); grew = true; }
+          });
+        }
+        expect(seen.size).toBe(p.cells.length);
+      }
     }
+    // the first rows get only small ones, the boss fights on whole floor
     for (let seed = 1; seed < 40; seed++) {
-      expect(generate({ seed, depth: 3, floor: 0, type: 'fight' }).pits.every(p => p.s === 1)).toBe(true);
+      expect(generate({ seed, depth: 3, floor: 0, type: 'fight' }).pits.every(p => p.cells.length <= 2)).toBe(true);
       expect(generate({ seed, depth: LAYERS, floor: 0, type: 'boss' }).pits).toHaveLength(0);
     }
   });
 
   it('opens on plain floor with a ring of floor around it, and nothing stands in it', () => {
     for (const L of rooms) for (const p of L.pits) {
-      for (let j = p.j - 1; j <= p.j + p.s; j++) for (let i = p.i - 1; i <= p.i + p.s; i++) expect(isFloor(L, i, j)).toBe(true);
-      for (const q of L.pads) {
-        const qi = Math.floor(q.x / TILE), qj = Math.floor(q.y / TILE);
-        expect(Math.max(qi - p.i - p.s, p.i - 1 - qi, qj - p.j - p.s, p.j - 1 - qj)).toBeGreaterThanOrEqual(1);
+      for (const [i, j] of p.cells) for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) {
+        expect(isFloor(L, i + a, j + b)).toBe(true);
+        expect(L.pads.some(q => Math.floor(q.x / TILE) === i + a && Math.floor(q.y / TILE) === j + b)).toBe(false);
       }
       for (const b of L.blocks) expect(inHole(L, b.x0 / TILE, b.y0 / TILE)).toBe(false);
       for (const o of [...L.mobs, ...L.nodes, ...L.decals]) expect(pitAt(L.pits, o.x, o.y)).toBeUndefined();
-      for (let j = p.j; j < p.j + p.s; j++) for (let i = p.i; i < p.i + p.s; i++) expect(L.haz.has(hazKey(i, j))).toBe(false);
+      for (const [i, j] of p.cells) expect(L.haz.has(hazKey(i, j))).toBe(false);
     }
   });
 
@@ -178,10 +198,12 @@ describe('holes in the floor', () => {
     g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
     g.S.mobs = [newMob('skel', cellCentre(1, 1).x, cellCentre(1, 1).y)];
     g.S.nodes = []; g.S.blocks = [];
-    g.S.pits = [{ i: 4, j: 3, s: 2 }];
+    // a small Г: cells (4, 3), (5, 3) and (4, 4), with floor in the notch at (5, 4)
+    g.S.pits = [{ k: 'L3', cells: [[4, 3], [5, 3], [4, 4]] }];
     placeAll(g); g.startFight();
     const h = g.party[0], hp = h.hp;
     const roll = (x: number, y: number, vx: number) => {
+      g.S.discs = [];
       const d = { hero: h, x, y, vx, vy: 0, r: 5, m: 4, e: 0.6, fr: 1, fall: 0, gone: false, charged: false, bounces: 0, spin: 0, hits: 0, ab: false, rico: 0 };
       g.S.discs = [d];
       for (let k = 0; k < 120 && !d.fall; k++) g.step(1 / 120);
@@ -189,11 +211,16 @@ describe('holes in the floor', () => {
     };
     // skimming past the top edge, centre outside the hole: rolls on
     expect(roll(TILE, 3 * TILE - 1, 300).fall).toBe(0);
-    const d = roll(2 * TILE, 4 * TILE, 300);
+    const d = roll(2 * TILE, 3.5 * TILE, 300);
     expect(d.fall).toBeGreaterThan(0);
     expect(d.x).toBeGreaterThan(4 * TILE);
     expect(d.x).toBeLessThan(4 * TILE + 4);
     expect(h.hp).toBe(hp - 2);
+    // in from the right along the lower row: over the notch, which is floor, then down at the edge of (4, 4)
+    const e = roll(8 * TILE, 4.5 * TILE, -300);
+    expect(e.fall).toBeGreaterThan(0);
+    expect(e.x).toBeLessThan(5 * TILE);
+    expect(e.x).toBeGreaterThan(5 * TILE - 4);
   });
 });
 
