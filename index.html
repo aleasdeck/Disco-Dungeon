@@ -64,7 +64,7 @@
         <h2 id="mapFloor"></h2>
         <div class="panel-btns">
           <button class="btn" id="newRun">Новый забег</button>
-          <button class="btn" id="mapClose">Закрыть</button>
+          <button class="btn" id="mapClose"><i data-art="m_close" aria-hidden="true"></i>Закрыть</button>
         </div>
       </div>
       <div id="mapParty" class="map-party"></div>
@@ -79,17 +79,18 @@
     <div class="panel forge-panel">
       <div class="panel-head">
         <h2>Кузнец</h2>
-        <span class="r ore forge-ore" title="Руда, общая на отряд"><svg viewBox="0 0 16 16"><path d="M8 1l6 6-6 8-6-8z"/></svg><b id="forgeOre">0</b></span>
+        <span class="forge-ore" title="Руда, общая на отряд"><i class="ico ico-ore" aria-hidden="true"></i><b id="forgeOre">0</b></span>
       </div>
       <p id="forgeText" class="forge-text"></p>
       <div id="forgeHeroes" class="forge-heroes"></div>
-      <div class="forge-foot"><span id="forgeNote" class="muted"></span><button class="btn big" id="forgeDone">К карте</button></div>
+      <div class="forge-foot"><span id="forgeNote" class="muted"></span><button class="btn big" id="forgeDone"><i data-art="ico_map" aria-hidden="true"></i>К карте</button></div>
     </div>
   </section>
 
   <section id="roomEnd" class="overlay dim" hidden>
     <div class="panel end-panel">
       <div class="win-deco" aria-hidden="true"><div class="win-ball"></div><div class="win-ribbon">Подземелье пройдено</div></div>
+      <i class="end-art" data-art="lose" aria-hidden="true"></i>
       <h2 id="endTitle"></h2>
       <p id="endText"></p>
       <button class="btn big" id="endBtn"></button>
@@ -98,21 +99,21 @@
 
   <section id="menu" class="overlay solid" hidden>
     <div class="menu-panel">
-      <h1 class="logo">Disco<span>Dungeon</span></h1>
+      <h1 class="logo"><i class="logo-art" data-art="logo" aria-hidden="true"></i>Disco<span>Dungeon</span></h1>
       <p class="tagline">Кооперативный рогалик, где вместо кубиков диски</p>
       <nav class="menu-btns">
-        <button class="btn big" id="mContinue" hidden>Продолжить</button>
-        <button class="btn big" id="mCampaign">Кампания</button>
-        <button class="btn big" id="mOnline">Сетевая игра</button>
-        <button class="btn big" id="mCollection">Коллекция</button>
-        <button class="btn big" id="mSettings">Настройки</button>
+        <button class="btn big" id="mContinue" hidden><i data-art="m_continue" aria-hidden="true"></i>Продолжить</button>
+        <button class="btn big" id="mCampaign"><i data-art="m_campaign" aria-hidden="true"></i>Кампания</button>
+        <button class="btn big" id="mOnline"><i data-art="m_online" aria-hidden="true"></i>Сетевая игра</button>
+        <button class="btn big" id="mCollection"><i data-art="m_collection" aria-hidden="true"></i>Коллекция</button>
+        <button class="btn big" id="mSettings"><i data-art="m_settings" aria-hidden="true"></i>Настройки</button>
       </nav>
     </div>
   </section>
 
   <section id="heroSelect" class="overlay solid" hidden>
     <div class="panel lobby-panel">
-      <div class="panel-head"><h2>Кампания</h2><button class="btn" id="heroBack">Назад</button></div>
+      <div class="panel-head"><h2>Кампания</h2><button class="btn" id="heroBack"><i data-art="m_back" aria-hidden="true"></i>Назад</button></div>
       <p class="hero-lead">Выбери героя: весь забег ты ведёшь его одного. Комнаты подстроены под одиночку: врагов меньше, и они слабее, чем против отряда.</p>
       <div id="heroPicks" class="pick-heroes"></div>
       <p id="heroInfo" class="hero-info"></p>
@@ -122,14 +123,14 @@
 
   <section id="lobby" class="overlay solid" hidden>
     <div class="panel lobby-panel">
-      <div class="panel-head"><h2>Сетевая игра</h2><button class="btn" id="lobbyBack">Назад</button></div>
+      <div class="panel-head"><h2>Сетевая игра</h2><button class="btn" id="lobbyBack"><i data-art="m_back" aria-hidden="true"></i>Назад</button></div>
       <div id="lobbyStart" class="lobby-start">
         <label class="field">Твоё имя <input id="lobbyName" maxlength="16" autocomplete="nickname" placeholder="Игрок" /></label>
         <div class="lobby-ways">
           <div class="way">
             <h3>Собрать отряд</h3>
             <p>Создай комнату и отправь друзьям код или ссылку.</p>
-            <button class="btn big" id="lobbyHost">Создать комнату</button>
+            <button class="btn big" id="lobbyHost"><i data-art="m_host" aria-hidden="true"></i>Создать комнату</button>
           </div>
           <div class="way">
             <h3>Присоединиться</h3>
@@ -139,7 +140,7 @@
         </div>
       </div>
       <div id="lobbyRoom" class="lobby-room" hidden>
-        <div class="room-code">Код комнаты <b id="lobbyRoomCode"></b> <button class="btn sm" id="lobbyCopy">Скопировать ссылку</button></div>
+        <div class="room-code">Код комнаты <b id="lobbyRoomCode"></b> <button class="btn sm" id="lobbyCopy"><i data-art="m_link" aria-hidden="true"></i>Скопировать ссылку</button></div>
         <h3>Выбери героя</h3>
         <div id="lobbyHeroes" class="pick-heroes"></div>
         <h3>Игроки</h3>
@@ -154,7 +155,7 @@
     <div class="panel collection-panel">
       <div class="panel-head">
         <h2>Коллекция</h2>
-        <div class="panel-btns"><button class="btn tab on" data-tab="heroes">Герои</button><button class="btn tab" data-tab="mobs">Враги</button><button class="btn" id="colBack">Назад</button></div>
+        <div class="panel-btns"><button class="btn tab on" data-tab="heroes">Герои</button><button class="btn tab" data-tab="mobs">Враги</button><button class="btn" id="colBack"><i data-art="m_back" aria-hidden="true"></i>Назад</button></div>
       </div>
       <div id="colGrid" class="col-grid"></div>
     </div>
@@ -162,7 +163,7 @@
 
   <section id="settingsScreen" class="overlay solid" hidden>
     <div class="panel settings-panel">
-      <div class="panel-head"><h2>Настройки</h2><button class="btn" id="setBack">Назад</button></div>
+      <div class="panel-head"><h2>Настройки</h2><button class="btn" id="setBack"><i data-art="m_back" aria-hidden="true"></i>Назад</button></div>
       <label class="field">Имя в сетевой игре <input id="setName" maxlength="16" placeholder="Игрок" /></label>
       <fieldset class="field">
         <legend>Качество графики</legend>
@@ -178,9 +179,9 @@
     <div class="panel end-panel">
       <h2>Пауза</h2>
       <div class="menu-btns">
-        <button class="btn big" id="pResume">Продолжить</button>
-        <button class="btn big" id="pHelp">Как играть</button>
-        <button class="btn big" id="pMenu">Главное меню</button>
+        <button class="btn big" id="pResume"><i data-art="m_continue" aria-hidden="true"></i>Продолжить</button>
+        <button class="btn big" id="pHelp"><i data-art="m_help" aria-hidden="true"></i>Как играть</button>
+        <button class="btn big" id="pMenu"><i data-art="m_home" aria-hidden="true"></i>Главное меню</button>
       </div>
     </div>
   </section>
@@ -188,10 +189,11 @@
   <section id="waitScreen" class="overlay dim" hidden>
     <div class="panel end-panel">
       <div class="win-deco" aria-hidden="true"><div class="win-ball"></div><div class="win-ribbon">Подземелье пройдено</div></div>
+      <i class="end-art" data-art="lose" aria-hidden="true"></i>
       <h2 id="waitTitle"></h2>
       <p id="waitText"></p>
       <p class="muted" id="waitNote">Хозяин комнаты вернёт всех в лобби.</p>
-      <button class="btn" id="waitLeave" hidden>Выйти в меню</button>
+      <button class="btn" id="waitLeave" hidden><i data-art="m_home" aria-hidden="true"></i>Выйти в меню</button>
     </div>
   </section>
 

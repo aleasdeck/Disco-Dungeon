@@ -304,8 +304,7 @@ i.ico { display: inline-block; font-style: normal; }
 .hc-ab { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
 .hc-ab b { color: #c9a8ff; }
 .hero-card .up { grid-template-columns: minmax(0, 1fr) auto 44px; }
-.hero-card .up-name { white-space: normal; }
-.hero-card .up-name small { display: block; color: var(--muted); font-size: 11px; line-height: 1.25; margin-top: 1px; }
+.hero-card .up-txt { display: block; }
 
 /* ---------- the one big turn button: «В бой!», «Конец хода», «Ждём…», «Ход врагов» */
 .turn-btn {
@@ -475,9 +474,10 @@ i.ico { display: inline-block; font-style: normal; }
 [data-turn='enemies'] .turn-glow { opacity: 1; }
 
 .ups { display: flex; flex-direction: column; justify-content: center; gap: 4px; }
-.up { display: grid; grid-template-columns: minmax(0, 1fr) auto 40px auto; align-items: center; gap: 8px; font-size: 13px; }
+.up { display: grid; grid-template-columns: minmax(0, 1fr) auto 40px auto; align-items: center; gap: 1px 8px; font-size: 13px; }
 .up-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.up-name small { display: none; }
+/* what the upgrade does: a line under the row, where there is room for it */
+.up-txt { display: none; grid-column: 1 / -1; color: var(--muted); font-size: 11px; line-height: 1.25; }
 .up .lvl { display: inline-flex; gap: 3px; }
 .up .lvl i { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--ink); background: #2a1f18; }
 .up .lvl i.on { background: var(--gold); }
@@ -499,7 +499,7 @@ i.ico { display: inline-block; font-style: normal; }
 .fc-hp { color: var(--muted); font-size: 12px; }
 .fcard .ups { grid-column: 1 / -1; gap: 6px; }
 .fcard .up-name { white-space: normal; }
-.fcard .up-name small { display: block; color: var(--muted); font-size: 11px; line-height: 1.25; margin-top: 1px; }
+.fcard .up-txt { display: block; }
 /* on a phone the cards scroll; the ore left and the way out stay in sight */
 .forge-panel .panel-head, .forge-foot { position: sticky; z-index: 1; background: var(--panel); }
 .forge-panel .panel-head { top: -16px; padding: 4px 0; }
@@ -668,8 +668,7 @@ i.ico { display: inline-block; font-style: normal; }
   .pick-heroes { gap: 6px; }
   .pick span { font-size: 13px; }
   .pick em { display: none; }
-  .up-name { white-space: normal; }
-  .up-name small { display: block; color: var(--muted); font-size: 11px; line-height: 1.25; margin-top: 1px; }
+  .up-txt { display: block; }
 }
 
 /* ---------- victory banner: the result screen after the last boss */
@@ -726,7 +725,7 @@ i.ico { display: inline-block; font-style: normal; }
 }
 
 /* ---------- painted cardboard plates and icons (public/assets/ui): each takes over from the drawn one once its picture loads */
-.art-btn_main .tb-plate { clip-path: none; background: var(--btn_main) center / 100% 100% no-repeat; transition: filter 0.2s; }
+.art-btn_main .tb-plate { clip-path: none; background: var(--ui-btn_main) center / 100% 100% no-repeat; transition: filter 0.2s; }
 .art-btn_main .tb-plate::before, .art-btn_main .tb-plate::after { display: none; }
 .art-btn_main .turn-btn { filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)); }
 .art-btn_main .turn-btn b { transform: rotate(-1.5deg); }
@@ -735,7 +734,7 @@ i.ico { display: inline-block; font-style: normal; }
 .art-btn_main .turn-btn.lit { filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 16px rgba(255, 200, 80, 0.8)); animation: lit-art 1.6s ease-in-out infinite; }
 .art-btn_main .turn-btn.confirm .tb-plate { filter: hue-rotate(-16deg) saturate(1.5); }
 .art-btn_main .turn-btn.wait .tb-plate { filter: grayscale(0.75) brightness(0.62); }
-.art-btn_red .turn-btn.enemy .tb-plate { background-image: var(--btn_red); filter: none; }
+.art-btn_red .turn-btn.enemy .tb-plate { background-image: var(--ui-btn_red); filter: none; }
 @keyframes lit-art { 50% { filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 28px rgba(255, 210, 90, 1)); } }
 @media (prefers-reduced-motion: reduce) { .art-btn_main .turn-btn.lit { animation: none; } }
 /* the upright phone keeps the step round the ability: the card is cut there, and the ink edge follows the cut */
@@ -746,12 +745,12 @@ i.ico { display: inline-block; font-style: normal; }
 }
 
 .art-btn_tile .top-btns { filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
-.art-btn_tile .ibtn { clip-path: none; background: var(--btn_tile) center / 100% 100% no-repeat; padding: 5px; }
-.art-btn_tile .ibtn:hover { background: var(--btn_tile) center / 100% 100% no-repeat; filter: brightness(1.18); }
+.art-btn_tile .ibtn { clip-path: none; background: var(--ui-btn_tile) center / 100% 100% no-repeat; padding: 5px; }
+.art-btn_tile .ibtn:hover { background: var(--ui-btn_tile) center / 100% 100% no-repeat; filter: brightness(1.18); }
 
-.art-btn_dark .ore-chip { clip-path: none; background: var(--btn_dark) center / 100% 100% no-repeat; padding: 4px 18px 4px 10px; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
+.art-btn_dark .ore-chip { clip-path: none; background: var(--ui-btn_dark) center / 100% 100% no-repeat; padding: 4px 18px 4px 10px; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
 
-.art-btn_gem .ability { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); background: var(--btn_gem) center / contain no-repeat; }
+.art-btn_gem .ability { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); background: var(--ui-btn_gem) center / contain no-repeat; }
 .art-btn_gem .ability::before, .art-btn_gem .ability::after { display: none; }
 .art-btn_gem .ability:disabled { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) saturate(0.4) brightness(0.65); }
 .art-btn_gem .ability.full { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 12px #c9a8ff); }
@@ -759,9 +758,46 @@ i.ico { display: inline-block; font-style: normal; }
 .art-btn_gem .ability b { padding: 2px 5px; background: rgba(18, 12, 9, 0.6); }
 
 /* panels: the map stands tall, everything else lies wide */
-.art-panel .panel { background: var(--panel) center / 100% 100% no-repeat; border: 0; outline: 0; border-radius: 0; box-shadow: none; filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.6)); padding: 30px 34px; }
-.art-panel_tall .panel.map-panel { background-image: var(--panel_tall); padding: 26px 26px 22px; }
-.art-btn_dark .btn:not(.round) { background: var(--btn_dark) center / 100% 100% no-repeat; border: 0; border-radius: 0; box-shadow: none; padding: 8px 16px; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
+/* sliced in nine, so the taped corners keep their size on a wide or a tall panel */
+.art-panel .panel { background: none; border: 0; outline: 0; border-radius: 0; box-shadow: none; border-image: var(--ui-panel) 190 130 fill / 58px 40px stretch; filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.6)); padding: 30px 34px; }
+.art-panel .forge-panel .panel-head, .art-panel .forge-foot { background: #513a2b; }
+.art-panel_tall .panel.map-panel { border-image: var(--ui-panel_tall) 130 fill / 40px stretch; padding: 26px 26px 22px; }
+.art-btn_dark .btn:not(.round) { background: var(--ui-btn_dark) center / 100% 100% no-repeat; border: 0; border-radius: 0; box-shadow: none; padding: 8px 16px; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
+.art-btn_dark .btn.sm { padding: 5px 11px; }
 .art-btn_dark .btn:not(.round):hover { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)) brightness(1.2); }
-.art-btn_main .btn.big { background: var(--btn_main) center / 100% 100% no-repeat; border: 0; border-radius: 0; box-shadow: none; color: #1c120a; padding: 12px 28px; }
-.art-btn_main .tab.on { background: var(--btn_main) center / 100% 100% no-repeat; color: #1c120a; }
+.art-btn_main .btn.big { background: var(--ui-btn_main) center / 100% 100% no-repeat; border: 0; border-radius: 0; box-shadow: none; color: #1c120a; padding: 12px 28px; }
+.art-btn_main .tab.on { background: var(--ui-btn_main) center / 100% 100% no-repeat; color: #1c120a; }
+
+/* painted stickers: rooms, upgrades, menu buttons; an empty slot (picture not in yet) takes no room */
+i[data-art] { display: inline-block; flex: none; font-style: normal; }
+i[data-art]:empty { display: none; }
+img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.btn > i[data-art] { width: 22px; height: 22px; margin: -4px 7px -4px -4px; vertical-align: middle; }
+.btn.sm > i[data-art] { width: 16px; height: 16px; margin: -3px 5px -3px -2px; }
+/* on the big plates the sticker sits slapped over the left end */
+.btn.big { position: relative; }
+.btn.big > i[data-art] { position: absolute; left: -12px; top: 50%; width: 44px; height: 44px; margin: 0; transform: translateY(-50%) rotate(-7deg); filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45)); }
+.btn.big:has(> i[data-art]:not(:empty)) { padding-left: 40px; }
+.menu-panel .menu-btns { padding-left: 12px; }
+.menu-btns .btn.big > i[data-art] { width: 52px; height: 52px; left: -18px; }
+.forge-foot .btn.big > i[data-art] { width: 36px; height: 36px; }
+/* the disco ball hangs over the name on its chain */
+.logo-art { display: block !important; width: 76px; height: 76px; margin: 0 auto 2px; filter: drop-shadow(0 4px 0 #120d0a); animation: logo-swing 4s ease-in-out infinite; transform-origin: 50% 0; }
+.logo-art:empty { display: none !important; }
+@keyframes logo-swing { 50% { transform: rotate(6deg); } }
+@media (prefers-reduced-motion: reduce) { .logo-art { animation: none; } }
+.end-art { display: none !important; }
+.overlay.lose .end-art:not(:empty) { display: block !important; width: 96px; height: 96px; margin: -6px auto 4px; transform: rotate(-4deg); filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); }
+.forge-ore { display: flex; align-items: center; gap: 6px; font: 700 22px/1 Oswald, sans-serif; }
+.forge-ore .ico { width: 30px; height: 30px; }
+.up > img.up-ico { width: 30px; height: 30px; grid-row: span 2; align-self: start; }
+.up:has(> .up-ico) .up-txt { grid-column: 2 / -1; }
+.up:has(> .up-ico) { grid-template-columns: 30px minmax(0, 1fr) auto 40px auto; }
+.hero-card .up:has(> .up-ico) { grid-template-columns: 30px minmax(0, 1fr) auto 44px; }
+/* statuses printed as stickers need no dark backing */
+.statuses .st:has(> img) { background: none; clip-path: none; padding: 0; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
+.mob-card .st:has(> img) { filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5)); }
+.map-info:not([hidden]) { display: flex; align-items: center; gap: 10px; }
+.map-info > i[data-art] { width: 46px; height: 46px; transform: rotate(-5deg); }
+.map-peek > img.art { flex: none; width: 46px; height: 46px; }
+#map .mart { pointer-events: none; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)); }

@@ -13,7 +13,7 @@ import { MapView, type MapParty, type MapVotes } from './mapview';
 import { SceneRenderer } from './draw/scene';
 import { loadSprites, sprites } from './assets';
 import { clearSeat, loadHost, loadSeat, newKey, saveHost, saveSeat, type Ending, type HostSave } from './resume';
-import { FLOORS, LAYERS, agreed, depthOf, newRun, nodeById, reachable, restRoom, type Run, type Votes } from './run';
+import { FLOORS, LAYERS, agreed, depthOf, eventOf, newRun, nodeById, reachable, restRoom, type Run, type Votes } from './run';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -150,15 +150,16 @@ const myHero = () => players.find(p => p.id === net.id)?.hero ?? null;
 const pub = () => players.map(({ key: _key, ...p }) => p);
 
 /** The waiting screen online clients see while the host is on the map or reading a room's result. */
-function screen(title: string, text = '', win = false) {
-  if (mode === 'host') { lastScreen = { title, text, win }; net.broadcast({ t: 'screen', title, text, win }); }
-  if (mode === 'client') wait(title, text, false, win);
+function screen(title: string, text = '', win = false, lose = false) {
+  if (mode === 'host') { lastScreen = { title, text, win, lose }; net.broadcast({ t: 'screen', title, text, win, lose }); }
+  if (mode === 'client') wait(title, text, false, win, lose);
 }
 
 /** Show or hide the waiting screen on this browser; `away` is for a lost connection, which the player may give up on. */
-function wait(title: string, text = '', away = false, win = false) {
+function wait(title: string, text = '', away = false, win = false, lose = false) {
   $('waitScreen').hidden = !title;
   victory($('waitScreen'), win && !!title);
+  $('waitScreen').classList.toggle('lose', lose);
   $('waitTitle').textContent = title;
   $('waitText').innerHTML = text;
   $('waitNote').hidden = away || mode !== 'client';
@@ -231,7 +232,9 @@ function choose(id: string) {
     showMap(false);
     game.onChange();
   } else {
-    mapView.info = `<b>${ROOM_TYPES[n.type].name}.</b> ${restRoom(n.type, game.party, game.bank, run.seed + depth * 131)}`;
+    // the room's picture rides along in the shared text: every screen fills it in from its own art
+    const seed = run.seed + depth * 131, pic = n.type === 'event' ? 'ev_' + eventOf(seed) : 'room_' + n.type;
+    mapView.info = `<i data-art="${pic}" aria-hidden="true"></i><span><b>${ROOM_TYPES[n.type].name}.</b> ${restRoom(n.type, game.party, game.bank, seed)}</span>`;
     hud.buildAllies();
     hud.refresh();
     showMap(true);
@@ -329,13 +332,14 @@ function showEnd(e: Ending) {
   ending = e;
   $('roomEnd').hidden = false;
   victory($('roomEnd'), e.kind === 'win');
+  $('roomEnd').classList.toggle('lose', e.kind === 'again');
   $('endTitle').textContent = e.title;
   $('endText').textContent = e.text;
   $('endBtn').textContent = e.kind === 'map' ? 'К карте' : mode === 'host' ? 'В лобби' : 'Новый забег';
   $('endBtn').onclick = e.kind === 'map' ? () => { hideEnd(); showMap(true); }
     : mode === 'host' ? backToLobby : openHeroSelect;
   // online every player reads a cleared room's result and walks to the map themselves; the end of the run waits for the host
-  if (e.kind !== 'map') screen(e.title, e.text, e.kind === 'win');
+  if (e.kind !== 'map') screen(e.title, e.text, e.kind === 'win', e.kind === 'again');
   else if (mode === 'host') net.broadcast({ t: 'end', e });
 }
 
@@ -626,7 +630,7 @@ net.onMsg = (from, m) => {
     hud.refresh();
     // the party walked into the blacksmith's: the shop takes the map's place
     if (!shop && hud.atForge) showMap(false);
-  } else if (m.t === 'screen') screen(m.title, m.text, m.win);
+  } else if (m.t === 'screen') screen(m.title, m.text, m.win, m.lose);
   else if (m.t === 'lobbyBack') { started = false; wait(''); hideEnd(); showMap(false); lobbyView(); show('lobby'); }
 };
 

@@ -37,7 +37,16 @@ export function icon(k: string, cls = '') {
   return `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true">${parts.map(([d, f]) => `<path d="${d}" fill="${f}" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>`).join('')}</svg>`;
 }
 
-/** Fill every `<i class="ico ico-…">` placeholder under `root` with its icon (the static ones in index.html). */
+/** A painted picture by its key in public/assets/ui (a room, an upgrade, a menu button), or nothing while it has not loaded. */
+export function art(key: string, cls = '') {
+  const img = uiArt.get(key);
+  return img ? `<img class="art ${cls}" src="${img.src}" alt="" draggable="false">` : '';
+}
+
+/**
+ * Fill every `<i class="ico ico-…">` placeholder under `root` with its icon, and every `<i data-art="…">` with its picture
+ * once loaded (the stylesheet hides an empty one).
+ */
 export function fillIcons(root: ParentNode = document) {
   root.querySelectorAll<HTMLElement>('i.ico[class*="ico-"]').forEach(el => {
     const k = [...el.classList].find(c => c.startsWith('ico-'))!.slice(4);
@@ -45,5 +54,11 @@ export function fillIcons(root: ParentNode = document) {
     if (el.dataset.k === key) return;
     el.dataset.k = key;
     el.innerHTML = icon(k);
+  });
+  root.querySelectorAll<HTMLElement>('i[data-art]').forEach(el => {
+    const k = uiArt.has(el.dataset.art!) ? el.dataset.art! : '';
+    if ((el.dataset.k ?? '') === k) return;
+    el.dataset.k = k;
+    el.innerHTML = art(k);
   });
 }

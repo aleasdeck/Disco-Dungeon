@@ -8,7 +8,7 @@ import type { Game, HeroState } from './game';
 import type { Mob } from './room';
 import { BASE_TH, drawHeroFigure, drawMiniature, drawMobFigure } from './draw/figures';
 import { lg } from './draw/util';
-import { fillIcons, icon } from './icons';
+import { art, fillIcons, icon } from './icons';
 import { hl } from './hl';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -80,6 +80,9 @@ export function drawPortrait(cv: HTMLCanvasElement, h: Pick<HeroState, 'i' | 'de
   }
 }
 
+/** Each upgrade's picture in public/assets/ui: more discs, damage, speed, bounce. */
+const UP_ART: Record<string, string> = { n: 'up_discs', m: 'up_dmg', pw: 'up_speed', e: 'up_bounce' };
+
 /**
  * A hero's disc upgrades, one row each: level pips and where the stat stands. Each says what it does in a line
  * under the name (the phone pop-up) or a tooltip (the desktop). At the blacksmith's (`shop`) a row also sells the next level.
@@ -87,10 +90,10 @@ export function drawPortrait(cv: HTMLCanvasElement, h: Pick<HeroState, 'i' | 'de
 function upRows(g: Game, h: HeroState, shop: boolean) {
   const canBuy = (c: number) => !!c && g.bank.ore >= c && g.canControl(h);
   const row = (k: string, name: string, txt: string, pips: number, lv: number, val: string, cost: number, tip: string) =>
-    `<div class="up" title="${tip}"><span class="up-name">${name}<small>${txt}</small></span>`
+    `<div class="up" title="${tip}">${art(UP_ART[k], 'up-ico')}<span class="up-name">${name}</span>`
     + `<span class="lvl">${Array.from({ length: pips }, (_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('')}</span><b>${val}</b>`
     + (shop ? `<button class="btn sm" data-h="${h.i}" data-k="${k}" ${canBuy(cost) ? '' : 'disabled'}>${cost ? '+ ' + cost + ' руды' : 'макс'}</button>` : '')
-    + '</div>';
+    + `<small class="up-txt">${txt}</small></div>`;
   const dc = g.discCost(h), discTxt = 'Больше бросков за ход. Самое сильное улучшение';
   return row('n', 'Диски за ход', discTxt, HAND_MAX - HAND_START, h.discs - HAND_START, String(h.discs), dc,
     `${discTxt}. ` + (dc ? `Следующий диск у кузнеца за ${dc} руды.` : 'Больше дисков не бывает.'))

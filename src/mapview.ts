@@ -2,7 +2,8 @@
 
 import { BIOMES, MOBS, ROOM_TYPES, type RoomType } from './data';
 import type { HeroState } from './game';
-import { icon as ico } from './icons';
+import { uiArt } from './assets';
+import { art as pic, fillIcons, icon as ico } from './icons';
 import { CASTS } from './room';
 import { FLOORS, reachable, type Run } from './run';
 import { drawPortrait, mobFace } from './ui';
@@ -141,6 +142,9 @@ export class MapView {
         el(g, 'image', { href: mobFace(CASTS[f].boss), x: x - r, y: y - r, width: r * 2, height: r * 2, 'clip-path': 'url(#bossFace)', preserveAspectRatio: 'xMidYMid slice' });
         el(g, 'circle', { cx: x, cy: y, r, class: 'rim' });
         el(g, 'path', { d: `M${x - 11} ${y - r + 3}L${x - 12} ${y - r - 9}L${x - 5} ${y - r - 3}L${x} ${y - r - 12}L${x + 5} ${y - r - 3}L${x + 12} ${y - r - 9}L${x + 11} ${y - r + 3}Z`, class: 'crown' });
+      } else if (uiArt.has('room_' + n.type)) {
+        // the painted sticker stands proud of the room's disc
+        el(g, 'image', { href: uiArt.get('room_' + n.type)!.src, x: x - r - 3, y: y - r - 5, width: r * 2 + 6, height: r * 2 + 6, class: 'mart' });
       } else icon(g, n.type, x, y);
       el(g, 'text', { x, y: y + r + 14, class: 'mlabel' }).textContent = t.name;
       // the players' tokens sit on the room's top rim, in their heroes' colours
@@ -180,6 +184,7 @@ export class MapView {
     // only the result of a rest room shows here; the map itself needs no explaining
     $('mapInfo').innerHTML = this.info;
     $('mapInfo').hidden = !this.info;
+    fillIcons($('mapInfo'));
     $('mapVotes').textContent = votes?.note ?? '';
     $('mapVotes').hidden = !votes;
   }
@@ -198,7 +203,7 @@ export class MapView {
     if (!n) { box.innerHTML = ''; return; }
     const t = ROOM_TYPES[n.type], go = canChoose && reachable(run, f).includes(n.id);
     const txt = n.type === 'boss' ? `${MOBS[CASTS[f].boss].name} со свитой.` : t.txt;
-    box.innerHTML = `<p><b>${t.name}.</b> ${txt}</p>` + (go && this.touch ? `<button class="btn big" id="mapGo">Идём</button>` : '');
+    box.innerHTML = pic(n.type === 'boss' ? '' : 'room_' + n.type) + `<p><b>${t.name}.</b> ${txt}</p>` + (go && this.touch ? `<button class="btn big" id="mapGo">Идём</button>` : '');
     box.querySelector('#mapGo')?.addEventListener('click', () => { this.peek = null; this.onChoose(n.id); });
   }
 
