@@ -2,7 +2,7 @@
 // Rendering and input live elsewhere; this module only changes state.
 
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, CRIT_COS, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
-import { KNOCK_T, fx, type ChipKind, type ChipTo, type Knock } from './fx';
+import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { cellAt, cellCentre, generate, hazKey, isFloor, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
@@ -66,8 +66,6 @@ export interface Spark {
   k?: ChipKind; a?: number; va?: number;
   /** Seconds it lasts, half a second when not given. */
   life?: number;
-  /** Into the counter: after popping out for `hang` seconds, the chip flies to this counter; `id` tells it apart. */
-  to?: ChipTo; hang?: number; id?: number;
 }
 
 export interface State extends Layout {
@@ -607,7 +605,6 @@ export class Game {
 
   /** A hard blow shakes the table: the figures around give a little jolt, the nearest first. */
   private tremor(x: number, y: number, p: number, skip: object) {
-    if (!fx.ripple) return;
     const jolt = (o: { knock?: Knock }, ox: number, oy: number) => {
       const L = Math.hypot(ox - x, oy - y), q = p * (1 - L / 150);
       if (o !== skip && q > 0.04) this.knock(o, ox, oy, x, y, q * 0.4, L / 400);
@@ -616,37 +613,25 @@ export class Game {
     for (const h of this.alive()) { const s = this.spot(h); if (s) jolt(h, s.x, s.y); }
   }
 
-  /** A disc knocks bits off a resource (or an icicle): what flies and where depends on the look picked. */
+  /** A disc knocks chips off a resource or an icicle: they spray back toward the disc, bounce on the floor and fade. */
   private chips(k: 'ore' | 'spk' | 'herb' | 'ice', x: number, y: number, r: number, d: Disc, q: number, big = false) {
     const S = this.S, L = Math.hypot(d.x - x, d.y - y) || 1, nx = (d.x - x) / L, ny = (d.y - y) / L;
     // from the side the disc struck, a little above the floor
     const ox = x + nx * r * 0.6, oy = y + ny * r * 0.6;
-    const add = (kind: ChipKind, sz: number, turn: number, spread: number, sp: number, up: number, life: number, to?: ChipTo, hang = 0) => {
-      // turn: how far from straight back at the disc it flies
-      const a = Math.atan2(ny, nx) + turn + (Math.random() - 0.5) * spread, s = sp * (0.6 + Math.random() * 0.6);
+    const add = (kind: ChipKind, sz: number, spread: number, sp: number, life: number) => {
+      const a = Math.atan2(ny, nx) + (Math.random() - 0.5) * spread, s = sp * (0.6 + Math.random() * 0.6);
       S.sparks.push({
-        x: ox, y: oy, h: 5 + Math.random() * 4, vx: Math.cos(a) * s, vy: Math.sin(a) * s, vh: up * (0.7 + Math.random() * 0.5),
-        t: 0, col: '', sz, k: kind, a: Math.random() * 6.3, va: (Math.random() - 0.5) * 24, life, to, hang, id: to && Math.random(),
+        x: ox, y: oy, h: 5 + Math.random() * 4, vx: Math.cos(a) * s, vy: Math.sin(a) * s, vh: 110 * (0.7 + Math.random() * 0.5),
+        t: 0, col: '', sz, k: kind, a: Math.random() * 6.3, va: (Math.random() - 0.5) * 24, life,
       });
     };
-    const small: Record<typeof k, ChipKind[]> = { ore: ['ore', 'ore', 'gold'], spk: ['spk'], herb: ['cap', 'cap', 'stem'], ice: ['ice'] };
-    const pick = () => small[k][Math.floor(Math.random() * small[k].length)];
     if (k === 'ice') {
-      for (let i = 0; i < (big ? 12 : 5); i++) add('ice', 1.4 + Math.random() * 1.6, 0, Math.PI * 1.6, big ? 70 : 50, 90, 0.9 + Math.random() * 0.3);
+      for (let i = 0; i < (big ? 12 : 5); i++) add('ice', 1.4 + Math.random() * 1.6, Math.PI * 1.6, big ? 70 : 50, 0.9 + Math.random() * 0.3);
       return;
     }
-    if (fx.res === 'bank') {
-      const to: ChipTo = k === 'ore' ? 'ore' : k === 'spk' ? 'spk' : 'hp', kind: ChipKind = k === 'ore' ? 'gold' : k === 'spk' ? 'spk' : 'cap';
-      for (let i = 0, n = 3 + 2 * q; i < n; i++) add(kind, 1.8 + Math.random() * 0.8, 0, Math.PI * 1.4, 35, 120, 0.45 + i * 0.06, to, 0.4 + i * 0.06);
-      return;
-    }
-    if (fx.res === 'chunk') {
-      // the piece the hit broke off tumbles away to one side, a few crumbs fly back
-      add(k === 'ore' ? 'lump' : k === 'spk' ? 'crystal' : 'shroom', k === 'ore' ? 4.2 : 5, (Math.random() < 0.5 ? -1 : 1) * 1.9, 0.6, 55, 125, 1.6);
-      for (let i = 0; i < 2 + q; i++) add(pick(), 1.1 + Math.random() * 0.8, 0, Math.PI * 1.4, 50, 80, 0.9 + Math.random() * 0.3);
-      return;
-    }
-    for (let i = 0, n = 5 + 3 * q; i < n; i++) add(pick(), 1.1 + Math.random() * 1.2, 0, Math.PI * 1.3, 65, 110, 0.9 + Math.random() * 0.4);
+    // stone with gold in it, crystal splinters, bits of cap and stem
+    const kinds: ChipKind[] = k === 'ore' ? ['ore', 'ore', 'gold'] : k === 'spk' ? ['spk'] : ['cap', 'cap', 'stem'];
+    for (let i = 0, n = 5 + 3 * q; i < n; i++) add(kinds[Math.floor(Math.random() * kinds.length)], 1.1 + Math.random() * 1.2, Math.PI * 1.3, 65, 0.9 + Math.random() * 0.4);
   }
 
   hurtMob(m: Mob, n: number, col = '#fff', pierce = false) {
@@ -826,7 +811,7 @@ export class Game {
         this.hurtMob(m, dmg);
         this.burst(d.x, d.y, d.hero.def.col, 8);
         // the figure rocks away from the disc, a big one less; a sure hit or a kill shakes the table
-        this.knock(m, m.x, m.y, d.x, d.y, (0.3 + vn / 260) * Math.min(1, (7 / m.r) ** 0.6));
+        this.knock(m, m.x, m.y, d.x, d.y, Math.min(1, 0.3 + vn / 260) * Math.min(1, (7 / m.r) ** 0.6));
         if (crit || m.hp <= 0) this.tremor(m.x, m.y, crit ? 0.6 : 0.45, m);
         changed = true;
       }
@@ -1309,8 +1294,7 @@ export class Game {
     if (S.shake > 0) S.shake -= dt;
     for (const p of S.sparks) {
       p.t += dt;
-      // a chip on its way into a counter is the screen's to move
-      if (p.k) { if (!p.to || p.t < p.hang!) this.roll(p, dt); continue; }
+      if (p.k) { this.roll(p, dt); continue; }
       p.x += p.vx * dt * 0.5; p.y += p.vy * dt * 0.5; p.vh -= 160 * dt; p.h = Math.max(0, p.h + p.vh * dt);
     }
     S.sparks = S.sparks.filter(p => p.t < (p.life ?? 0.5));

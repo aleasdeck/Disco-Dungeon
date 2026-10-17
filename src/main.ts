@@ -10,7 +10,6 @@ import { Input } from './input';
 import { Hud } from './ui';
 import { MapView, type MapVotes } from './mapview';
 import { SceneRenderer } from './draw/scene';
-import type { ChipTo } from './fx';
 import { loadSprites } from './assets';
 import { clearSeat, loadHost, loadSeat, newKey, saveHost, saveSeat, type Ending, type HostSave } from './resume';
 import { FLOORS, LAYERS, agreed, depthOf, newRun, nodeById, reachable, restRoom, type Run, type Votes } from './run';
@@ -24,35 +23,6 @@ const game = new Game();
 const hud = new Hud(game);
 const mapView = new MapView();
 const scene = new SceneRenderer();
-// chips knocked off a resource fly over the frame into its counter, which jumps when they land
-const bankEl = (to: ChipTo) => (to === 'hp' ? $('fHpWrap') : $(to === 'ore' ? 'fOre' : 'fSpk')?.parentElement) ?? null;
-const FLYER: Record<ChipTo, string> = {
-  ore: 'M8 1l6 6-6 8-6-8z',
-  spk: 'M8 0l2 6 6 2-6 2-2 6-2-6-6-2 6-2z',
-  hp: 'M8 14.5S1.5 10.4 1.5 5.8a3.3 3.3 0 0 1 6.5-1.3 3.3 3.3 0 0 1 6.5 1.3c0 4.6-6.5 8.7-6.5 8.7z',
-};
-scene.onFly = (to, x, y) => {
-  const el = bankEl(to), r = el?.getBoundingClientRect(), c = cv.getBoundingClientRect();
-  if (!el || !r || !r.width) return;
-  const f = document.createElement('i');
-  f.className = `flyer ${to}`;
-  f.innerHTML = `<svg viewBox="0 0 16 16"><path d="${FLYER[to]}"/></svg>`;
-  document.body.appendChild(f);
-  // up in an arc, then down into the counter, speeding up and growing a little
-  const x0 = c.left + x, y0 = c.top + y, x1 = r.left + r.width / 2, y1 = r.top + r.height / 2;
-  const mx = x0 + (x1 - x0) * 0.25, my = Math.min(y0, y1) - 70;
-  const frames = Array.from({ length: 9 }, (_, k) => {
-    const u = (k / 8) ** 1.6, v = 1 - u;
-    const px = v * v * x0 + 2 * v * u * mx + u * u * x1, py = v * v * y0 + 2 * v * u * my + u * u * y1;
-    return { transform: `translate(${px}px, ${py}px) scale(${0.9 + 0.3 * u})` };
-  });
-  f.animate(frames, { duration: 520, easing: 'linear' }).onfinish = () => {
-    f.remove();
-    el.classList.remove('bump');
-    void el.offsetWidth;
-    el.classList.add('bump');
-  };
-};
 
 let run: Run = newRun();
 /** True while the party stands between rooms and must pick the next one. */

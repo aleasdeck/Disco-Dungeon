@@ -9,7 +9,7 @@ import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure } from '
 import { circ, ell, fs, mix, pth, rr, type Ctx, type Pt } from './util';
 import { GRAFFITI_FONTS, envArt } from '../assets';
 import { settings } from '../settings';
-import { fx, knockPose, topplePose, type ChipTo, type Knock, type Pose } from '../fx';
+import { knockPose, topplePose, type Knock, type Pose } from '../fx';
 
 export interface Aim { hero: HeroState; dx: number; dy: number }
 /** A hero dragged to another rune: pointer position in screen pixels and the rune under it. */
@@ -56,12 +56,6 @@ export class SceneRenderer {
   private P = (x: number, y: number, h = 0): Pt => this.cam.iso(x, y, h);
   private get bk() { return this.g.S.biome.art; }
 
-  /**
-   * A chip has popped out and now flies into its counter, from (x, y) in canvas pixels: the page flies it over the
-   * frame, which covers the field.
-   */
-  onFly: (to: ChipTo, x: number, y: number) => void = () => {};
-  private flown = new Set<number>();
 
   /**
    * Lay a picture, or the part `src` (x, y, w, h in its pixels) of it, flat on the rectangle (x0, y0)-(x1, y1) at height h;
@@ -344,7 +338,7 @@ export class SceneRenderer {
     for (const m of S.mobs) if (m.dead <= 1) items.push([cam.depth(m.x, m.y), () => this.drawMob(m)]);
     for (const b of S.blocks) items.push([cam.depth(b.x0 + 8, b.y0 + 8), () => this.drawBlock(b)]);
     for (const n of S.nodes) items.push([cam.depth(n.x, n.y), () => this.drawNode(n)]);
-    for (const p of S.sparks) if (p.k && !(p.to && p.t >= p.hang!)) items.push([cam.depth(p.x, p.y) + 0.5, () => this.drawChip(p)]);
+    for (const p of S.sparks) if (p.k) items.push([cam.depth(p.x, p.y) + 0.5, () => this.drawChip(p)]);
     this.wallItems(items);
     this.decorItems(items);
     items.sort((a, b) => a[0] - b[0]).forEach(i => i[1]());
@@ -1181,7 +1175,7 @@ export class SceneRenderer {
     const S = g.S, [x, y] = P(m.x, m.y);
     const it = m.intent, th = it ? g.heroOf(it.hero) : null, tgt = (th && g.spot(th)) ?? { x: S.Wx, y: S.Wy };
     let pose = this.pose(m.knock, m.x, m.y, m.r), alpha = m.dead ? Math.max(0, 1 - m.dead) : (1 - (m.born ?? 0)) * (m.hp > 0 && !g.solid(m) ? 0.35 : 1);
-    if (m.dead && fx.topple && !reduce) {
+    if (m.dead && !reduce) {
       // beaten, it topples over away from the blow, lies a moment and fades
       const k = m.knock, side = (k && Math.sign(this.onScreen(m.x, m.y, k.x, k.y)[0])) || 1;
       pose = topplePose(m.dead, side, m.r * 1.27);
@@ -1247,7 +1241,7 @@ export class SceneRenderer {
     for (let k = 0; k < 5; k++) { rr(c, px - 11 + k * 4.6, py + 7, 3.6, 2.6, 1); fs(c, k < pw ? h.def.col : '#2a1f18', 0.6); }
   }
 
-  /** A chip of ore, crystal, mushroom or ice, tumbling, with its shadow on the floor; it fades at the end of its life. */
+  /** A chip of stone, gold, crystal, mushroom or ice, tumbling, with its shadow on the floor; it fades at the end of its life. */
   private drawChip(p: Spark) {
     const { c, P } = this, life = p.life ?? 0.5, s = p.sz;
     const [x, y] = P(p.x, p.y, p.h);
@@ -1270,14 +1264,6 @@ export class SceneRenderer {
       fs(c, '#f2b83c', lw * 0.8);
       circ(c, (u - 0.1 * k) * s, (v - 0.15 * k) * s, 0.14 * k * s); c.fillStyle = '#fff3c4'; c.fill();
     };
-    const prism = (L: number, w: number) => {
-      // a crystal: a lit left face, a shaded right face, a pointed tip
-      pth(c, [[-w * s, L * s], [-w * s, (-L + w * 1.4) * s], [0, -L * s], [0, L * s]]); c.fillStyle = '#c6b2f4'; c.fill();
-      pth(c, [[0, L * s], [0, -L * s], [w * s, (-L + w * 1.4) * s], [w * s, L * s]]); c.fillStyle = '#7650d6'; c.fill();
-      pth(c, [[-w * s, L * s], [-w * s, (-L + w * 1.4) * s], [0, -L * s], [w * s, (-L + w * 1.4) * s], [w * s, L * s]]);
-      c.strokeStyle = INK; c.lineWidth = lw; c.stroke();
-      c.lineWidth = lw * 0.6; c.beginPath(); c.moveTo(0, L * s); c.lineTo(0, -L * s); c.stroke();
-    };
     const cap = (r: number, dy: number) => {
       c.beginPath(); c.ellipse(0, dy * s, r * s, r * 0.85 * s, 0, Math.PI, 0); c.quadraticCurveTo(0, (dy + 0.35 * r) * s, -r * s, dy * s); c.closePath();
       fs(c, '#d24c3a', lw);
@@ -1286,13 +1272,10 @@ export class SceneRenderer {
     };
     switch (p.k) {
       case 'ore': rock('#948c80', '#6a635a'); break;
-      case 'lump': rock('#948c80', '#6a635a'); nug(-0.35, -0.2, 0.5); nug(0.3, 0.35, 0.4); break;
       case 'gold': nug(0, 0, 1.6); break;
       case 'spk': poly([[-0.35, 0.9], [-0.35, -0.4], [0, -1.1], [0.35, -0.4], [0.35, 0.9]], '#a98ae8'); break;
-      case 'crystal': prism(1.2, 0.45); break;
       case 'cap': cap(1, 0.4); break;
       case 'stem': rr(c, -0.35 * s, -0.8 * s, 0.7 * s, 1.6 * s, 0.3 * s); fs(c, '#f1e7d0', lw); break;
-      case 'shroom': rr(c, -0.3 * s, -0.4 * s, 0.6 * s, 1.3 * s, 0.25 * s); fs(c, '#f1e7d0', lw); cap(0.95, -0.3); break;
       case 'ice': poly([[-0.4, 0.8], [-0.2, -0.9], [0.5, 0.3]], '#d8f2ff'); break;
     }
     c.restore();
@@ -1301,13 +1284,6 @@ export class SceneRenderer {
   private drawFx() {
     const { c, P } = this;
     const S = this.g.S;
-    for (const p of S.sparks) {
-      if (!p.to || p.t < p.hang! || this.flown.has(p.id!)) continue;
-      if (this.flown.size > 200) this.flown.clear();
-      this.flown.add(p.id!);
-      const [x, y] = P(p.x, p.y, p.h), cam = this.cam;
-      this.onFly(p.to, x * cam.zoom + cam.panX, y * cam.zoom + cam.panY);
-    }
     for (const p of S.sparks) {
       if (p.k) continue;
       const [sx, sy] = P(p.x, p.y, p.h);

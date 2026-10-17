@@ -90,7 +90,7 @@ export function drawMiniature(c: Ctx, o: MiniatureOpts) {
   ell(c, o.x + 1.2, o.y + 1, r * 1.27 + 1.2, r * 0.64 + 0.8);
   c.fillStyle = 'rgba(15,8,4,.38)';
   c.fill();
-  const ps = o.pose, y = o.y - o.hop - (ps ? ps.lift : 0);
+  const ps = o.pose, y = o.y - o.hop;
   if (ps && ps.rot) {
     // the whole miniature tips over on the rim of its stand
     const px = o.x + ps.px, py = y + ps.py;
@@ -98,15 +98,14 @@ export function drawMiniature(c: Ctx, o: MiniatureOpts) {
     c.rotate(ps.rot);
     c.translate(-px, -py);
   }
-  if (ps) c.translate(ps.jx, ps.jy);
   drawBase(c, o.x, y, r, o.baseCol, o.hp);
   const feet = y - BASE_TH;
   const sp = sprites.get(o.key);
   c.save();
-  if (ps && (ps.sy !== 1 || ps.sh)) {
-    // the figure on the stand stretches, squashes and leans about its feet
+  if (ps && ps.sy !== 1) {
+    // leaning toward the viewer the figure looks shorter, away from it taller
     c.translate(o.x, feet);
-    c.transform(1, 0, -ps.sh, ps.sy, 0, 0);
+    c.scale(1, ps.sy);
     c.translate(-o.x, -feet);
   }
   const nativeRight = sp ? sp.facing === 'right' : true;
