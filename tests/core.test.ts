@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Camera, FIT } from '../src/camera';
+import { Camera, FIT, KEEP, type Vec } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, mobSize } from '../src/data';
 import { Game, newBank, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
@@ -314,50 +314,89 @@ describe('camera', () => {
     }
     return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
   };
-  /** Along each side the room is centred where it is smaller than the screen area, and covers the area where it is bigger. */
-  const held = (cam: Camera) => {
-    const b = onScreen(cam), e = 1e-6;
-    for (const [lo, hi, a, len] of [[b.x0, b.x1, rect.x, rect.w], [b.y0, b.y1, rect.y, rect.h]]) {
-      if (hi - lo <= len + e) expect(Math.abs((lo + hi) / 2 - (a + len / 2))).toBeLessThan(1e-3);
-      else { expect(lo).toBeLessThanOrEqual(a + e); expect(hi).toBeGreaterThanOrEqual(a + len - e); }
+  const size = (b: ReturnType<typeof onScreen>) => Math.max((b.x1 - b.x0) / rect.w, (b.y1 - b.y0) / rect.h);
+  /** The floor's corners on screen. */
+  const floor = (cam: Camera): Vec[] => [[0, 0], [Wx, 0], [Wx, Wy], [0, Wy]].map(([x, y]) => cam.isoToScreen(...cam.iso(x, y)));
+  /** How far apart two convex polygons are along the axis that parts them best: 0 or less when they overlap. */
+  const gap = (P: Vec[], Q: Vec[]) => {
+    let g = -Infinity;
+    for (const S of [P, Q]) for (let i = 0; i < S.length; i++) {
+      const a = S[i], b = S[(i + 1) % S.length], nx = b[1] - a[1], ny = a[0] - b[0], L = Math.hypot(nx, ny);
+      const p = P.map(v => (v[0] * nx + v[1] * ny) / L), q = Q.map(v => (v[0] * nx + v[1] * ny) / L);
+      g = Math.max(g, Math.min(...q) - Math.max(...p), Math.min(...p) - Math.max(...q));
     }
-    // never smaller than fitting the screen
-    expect(Math.max((b.x1 - b.x0) / rect.w, (b.y1 - b.y0) / rect.h)).toBeGreaterThan(FIT - 1e-6);
+    return g;
+  };
+  /** The screen area shrunk by the depth the floor has to reach into it. */
+  const m = Math.min(rect.w, rect.h) * KEEP;
+  const inner: Vec[] = [[rect.x + m, rect.y + m], [rect.x + rect.w - m, rect.y + m], [rect.x + rect.w - m, rect.y + rect.h - m], [rect.x + m, rect.y + rect.h - m]];
+  /** Never smaller than fitting the screen, and some of the floor still reaches KEEP into the area. */
+  const held = (cam: Camera) => {
+    expect(gap(floor(cam), inner)).toBeLessThan(1e-6);
+    expect(size(onScreen(cam))).toBeGreaterThan(FIT - 1e-6);
   };
 
-  it('fits the room with a margin, centred, and never lets it shrink below that or pan away', () => {
+  it('fits the room with a margin, centred, never lets it shrink below that, and lets it be dragged', () => {
     const cam = new Camera();
     cam.fit(Wx, Wy, wallH, rect);
     held(cam);
     const b = onScreen(cam);
-    expect(Math.max((b.x1 - b.x0) / rect.w, (b.y1 - b.y0) / rect.h)).toBeCloseTo(FIT, 6);
+    expect(size(b)).toBeCloseTo(FIT, 6);
+    expect((b.x0 + b.x1) / 2).toBeCloseTo(rect.x + rect.w / 2, 6);
+    expect((b.y0 + b.y1) / 2).toBeCloseTo(rect.y + rect.h / 2, 6);
     const z = cam.zoom;
     cam.zoomAt(0.5, 100, 700);
-    cam.panBy(400, -300);
     expect(cam.zoom).toBeCloseTo(z, 9);
     expect(onScreen(cam)).toEqual(b);
-    // turned, the room still just fits, centred
+    // zoomed all the way out the room still moves with the finger
+    const [px, py] = [cam.panX, cam.panY];
+    cam.panBy(400, -300);
+    expect(cam.panX).toBeCloseTo(px + 400, 9);
+    expect(cam.panY).toBeCloseTo(py - 300, 9);
+    // turned, the room still just fits
     for (const rot of [0.3, Math.PI / 4, 2, 4]) {
       cam.rotateAt(rot, 300, 300);
       held(cam);
-      const t = onScreen(cam);
-      expect(Math.max((t.x1 - t.x0) / rect.w, (t.y1 - t.y0) / rect.h)).toBeCloseTo(FIT, 6);
+      expect(size(onScreen(cam))).toBeCloseTo(FIT, 6);
     }
   });
 
-  it('at the closest zoom the screen never shows past the room, however far it is dragged', () => {
+  it('lets the room be dragged nearly off the screen, but a piece of the floor always stays', () => {
+    for (const rot of [0, 0.5, Math.PI / 4, 3]) for (const k of [1, 2.5, 100]) {
+      for (const [dx, dy] of [[9000, 0], [0, 9000], [-9000, -9000], [9000, -9000], [-9000, 0], [0, -9000]]) {
+        const cam = new Camera();
+        cam.setRot(rot);
+        cam.fit(Wx, Wy, wallH, rect);
+        cam.zoomAt(k, 600, 400);
+        cam.panBy(dx, dy);
+        held(cam);
+        // dragged as far as it goes: the floor just reaches KEEP in, and its middle is off the screen
+        expect(gap(floor(cam), inner)).toBeGreaterThan(-1e-6);
+        const [cx, cy] = cam.isoToScreen(...cam.iso(Wx / 2, Wy / 2));
+        expect(cx < rect.x || cx > rect.x + rect.w || cy < rect.y || cy > rect.y + rect.h).toBe(true);
+        // back from the edge, the first pixels of a drag move the room again
+        const [px, py] = [cam.panX, cam.panY];
+        cam.panBy(-Math.sign(dx) * 3, -Math.sign(dy) * 3);
+        expect(cam.panX).toBeCloseTo(px - Math.sign(dx) * 3, 9);
+        expect(cam.panY).toBeCloseTo(py - Math.sign(dy) * 3, 9);
+      }
+    }
+  });
+
+  it('turns a room dragged aside about its point nearest to the turn, not round the screen', () => {
     const cam = new Camera();
     cam.fit(Wx, Wy, wallH, rect);
-    cam.zoomAt(100, 600, 400);
-    expect(cam.zoom).toBeCloseTo(cam.maxZoom, 9);
-    for (const [dx, dy] of [[5000, 0], [0, 5000], [-9000, -9000], [9000, -9000]]) {
-      cam.panBy(dx, dy);
-      held(cam);
-    }
-    // back from the edge, the first pixels of a drag move the room again
-    const x = cam.panX;
-    cam.panBy(-3, 0);
-    expect(cam.panX).toBeCloseTo(x - 3, 9);
+    cam.zoomAt(2, 600, 425);
+    cam.panBy(1300, 0);
+    const [wx, wy] = cam.screenToWorld(600, 425);
+    expect(wx < 0 || wx > Wx || wy < 0 || wy > Wy).toBe(true);
+    const p = [Math.min(Wx, Math.max(0, wx)), Math.min(Wy, Math.max(0, wy))] as const;
+    const before = cam.isoToScreen(...cam.iso(...p));
+    cam.rotateAt(cam.rot + 0.3, 600, 425);
+    held(cam);
+    const after = cam.isoToScreen(...cam.iso(...p));
+    expect(after[0]).toBeCloseTo(before[0], 6);
+    expect(after[1]).toBeCloseTo(before[1], 6);
   });
 
   it('holds the room on screen through any mix of drags, zooms and turns, without jumps', () => {

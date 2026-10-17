@@ -4,12 +4,15 @@
 // Iso space: world rotated around the room centre, then projected to the classic 2:1 iso plane.
 // Screen space: CSS pixels, iso * zoom + pan.
 //
-// Once fitted to a room, the view is held to it: never smaller than fitting the screen, never panned off it.
+// Once fitted to a room, the view is held to it: never smaller than fitting the screen, and however far it is dragged,
+// a piece of the floor stays on screen to drag it back by.
 
 export const KX = 0.9;
 export const KY = 0.45;
 /** Share of the screen area the room fills at the fit: a little margin all round. */
 export const FIT = 0.96;
+/** How deep the floor reaches into the screen area at the least, however far the view is dragged: share of the area's shorter side. */
+export const KEEP = 0.2;
 
 export type Vec = [number, number];
 export interface Rect { x: number; y: number; w: number; h: number }
@@ -88,7 +91,13 @@ export class Camera {
 
   /** Change rotation keeping the floor point under (sx, sy) fixed on screen, as far as the room allows. */
   rotateAt(rot: number, sx: number, sy: number) {
-    const [wx, wy] = this.screenToWorld(sx, sy);
+    let [wx, wy] = this.screenToWorld(sx, sy);
+    // a room dragged aside turns about its point nearest to (sx, sy) rather than swinging round it
+    if (this.room) {
+      wx = Math.min(this.room.Wx, Math.max(0, wx));
+      wy = Math.min(this.room.Wy, Math.max(0, wy));
+      [sx, sy] = this.isoToScreen(...this.iso(wx, wy));
+    }
     this.setRot(rot);
     const [ix, iy] = this.iso(wx, wy);
     this.panX = sx - ix * this.zoom;
@@ -118,6 +127,9 @@ export class Camera {
     this.room = { Wx, Wy, wallH, rect };
     this.zoom = this.minZoom = this.fitZoom();
     this.maxZoom = this.zoom * 5;
+    const [x0, y0, x1, y1] = this.box();
+    this.panX = rect.x + rect.w / 2 - ((x0 + x1) / 2) * this.zoom;
+    this.panY = rect.y + rect.h / 2 - ((y0 + y1) / 2) * this.zoom;
     this.clamp();
   }
 
@@ -143,9 +155,9 @@ export class Camera {
   /**
    * Hold the view to the room after a pan, zoom or turn: never smaller than fitting the screen area (the least zoom
    * follows the rotation, since a turned room takes up more or less of the screen, and a view zoomed all the way out
-   * stays so), centred along a side where it is smaller than the area, and along a side where it is bigger, covering
-   * the area, so the view never leaves the room. Everything changes smoothly with the zoom and the angle, so holding
-   * never makes the view jump.
+   * stays so), and dragged no further than leaves some of the floor reaching KEEP into the area, so the room is never
+   * lost. The pans that do are the area shrunk by that depth less the floor (a convex polygon), and a pan outside them
+   * goes to the nearest one. Everything changes smoothly with the zoom and the angle, so holding never makes the view jump.
    */
   clamp() {
     const R = this.room;
@@ -153,10 +165,40 @@ export class Camera {
     const out = this.zoom <= this.minZoom * (1 + 1e-9);
     this.minZoom = this.fitZoom();
     const z = (this.zoom = out ? this.minZoom : Math.min(Math.max(this.minZoom, this.maxZoom), Math.max(this.minZoom, this.zoom)));
-    const [x0, y0, x1, y1] = this.box(), r = R.rect;
-    const hold = (pan: number, a: number, b: number, lo: number, len: number) =>
-      (b - a) * z <= len ? lo + len / 2 - ((a + b) / 2) * z : Math.min(lo - a * z, Math.max(lo + len - b * z, pan));
-    this.panX = hold(this.panX, x0, x1, r.x, r.w);
-    this.panY = hold(this.panY, y0, y1, r.y, r.h);
+    const r = R.rect, m = Math.min(r.w, r.h) * KEEP, pans: Vec[] = [];
+    for (const [ax, ay] of [[r.x + m, r.y + m], [r.x + r.w - m, r.y + m], [r.x + r.w - m, r.y + r.h - m], [r.x + m, r.y + r.h - m]])
+      for (const [x, y] of [[0, 0], [R.Wx, 0], [R.Wx, R.Wy], [0, R.Wy]]) {
+        const [ix, iy] = this.iso(x, y);
+        pans.push([ax - ix * z, ay - iy * z]);
+      }
+    [this.panX, this.panY] = nearestIn(hull(pans), [this.panX, this.panY]);
   }
+}
+
+/** Convex hull of the points, counter-clockwise. */
+function hull(ps: Vec[]): Vec[] {
+  ps = [...ps].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o: Vec, a: Vec, b: Vec) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const half = (qs: Vec[]) => {
+    const h: Vec[] = [];
+    for (const p of qs) {
+      while (h.length >= 2 && cross(h[h.length - 2], h[h.length - 1], p) <= 0) h.pop();
+      h.push(p);
+    }
+    return h.slice(0, -1);
+  };
+  return half(ps).concat(half(ps.reverse()));
+}
+
+/** The point of the convex polygon H (counter-clockwise) nearest to p: p itself when it is inside. */
+function nearestIn(H: Vec[], p: Vec): Vec {
+  let inside = true, best = p, bd = Infinity;
+  for (let i = 0; i < H.length; i++) {
+    const a = H[i], b = H[(i + 1) % H.length], ex = b[0] - a[0], ey = b[1] - a[1];
+    if (ex * (p[1] - a[1]) - ey * (p[0] - a[0]) < 0) inside = false;
+    const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * ex + (p[1] - a[1]) * ey) / (ex * ex + ey * ey)));
+    const q: Vec = [a[0] + ex * t, a[1] + ey * t], d = (q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2;
+    if (d < bd) { bd = d; best = q; }
+  }
+  return inside ? p : best;
 }
