@@ -4,7 +4,7 @@ import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, HAND_CO
 import { Game, newParty, stepsOf, wayLen, type Action } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { MOB_CAP, cellAt, cellCentre, clearOfRock, floorAt, generate, isFloor, muAt, newMob, tierOf } from '../src/room';
-import { FLOORS, LAYERS, genFloor, newRun, restRoom } from '../src/run';
+import { FLOORS, LAYERS, agreed, genFloor, newRun, restRoom } from '../src/run';
 
 /** Put every living hero on its own rune, as players do before the fight. */
 const placeAll = (g: Game) => g.alive().forEach((h, k) => g.movePad(h, k));
@@ -158,6 +158,16 @@ describe('run map', () => {
     const run = newRun(12345);
     expect(run.floor).toBe(0);
     expect(run.path.every(p => p.length === 0)).toBe(true);
+  });
+
+  it('moves an online party on only once every player here points at the same room', () => {
+    expect(agreed({}, [0, 2])).toBeNull();
+    expect(agreed({ 0: '0-0-1' }, [0, 2])).toBeNull();
+    expect(agreed({ 0: '0-0-1', 2: '0-0-0' }, [0, 2])).toBeNull();
+    expect(agreed({ 0: '0-0-1', 2: '0-0-1' }, [0, 2])).toBe('0-0-1');
+    // a player who left has no say: the host plays their hero
+    expect(agreed({ 0: '0-0-1' }, [0])).toBe('0-0-1');
+    expect(agreed({ 0: '0-0-1', 1: '0-0-0' }, [0])).toBe('0-0-1');
   });
 });
 

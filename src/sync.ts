@@ -4,6 +4,7 @@
 import { HEROES } from './data';
 import type { Bank, Disc, Float, Game, HeroState, Phase, Spark } from './game';
 import type { Mob, RoomSpec } from './room';
+import type { Run, Votes } from './run';
 
 type HeroSnap = Omit<HeroState, 'def'>;
 
@@ -46,6 +47,17 @@ export function snapshot(g: Game): Snapshot {
     bank: g.bank,
     haz: [...S.haz],
   };
+}
+
+/** The run map as the host has it between rooms; online the party moves on once every player points at the same room. */
+export interface MapState {
+  run: Run;
+  choosing: boolean;
+  /** What the last rest room gave the party. */
+  info: string;
+  votes: Votes;
+  /** Heroes whose players are here to vote; the host plays the others, and they have no say. */
+  voters: number[];
 }
 
 const sameSpec = (a: RoomSpec, b: RoomSpec) => a.seed === b.seed && a.depth === b.depth && a.floor === b.floor && a.type === b.type;
