@@ -8,6 +8,8 @@ import { FLOORS, FORGE_ROWS, LAYERS, agreed, genFloor, newRun, restRoom } from '
 
 /** Put every living hero on its own rune, as players do before the fight. */
 const placeAll = (g: Game) => g.alive().forEach((h, k) => g.movePad(h, k));
+/** Every living hero's player presses «Конец хода». */
+const endAll = (g: Game) => g.alive().forEach(h => g.endTurn(h));
 
 describe('room generator', () => {
   it('builds the same room from the same seed', () => {
@@ -268,7 +270,7 @@ describe('party size', () => {
     g.S.mobs = [newMob('lich', 120, 40, 1, 0)];
     placeAll(g); g.startFight();
     // the lich summons on its second turn: a party of three faces two ghouls, a lone hero one
-    for (const h of g.party) h.hand = 0;
+    endAll(g);
     for (let k = 0; k < 900 && g.S.turn === 1; k++) g.update(1 / 60);
     expect(g.S.turn).toBe(2);
     expect(g.S.mobs[0].intent!.t).toBe('summon');
@@ -470,6 +472,119 @@ describe('placement and discs', () => {
   });
 });
 
+describe('ending the turn', () => {
+  /** A floor 0 fight for the given heroes, one archer in the far corner and the floor otherwise bare. */
+  const arena = (picks: number[]) => {
+    const g = new Game();
+    g.party = newParty(picks);
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    g.S.mobs = [newMob('archer', cellCentre(1, 1).x, cellCentre(1, 1).y, 1, 0)];
+    g.S.nodes = []; g.S.blocks = []; g.S.pits = []; g.S.haz = new Set();
+    placeAll(g); g.startFight();
+    for (const h of g.party) h.hp = h.max = 99;
+    return g;
+  };
+  const run = (g: Game, n: number) => { for (let k = 0; k < n; k++) g.update(1 / 60); };
+
+  it('never passes on its own: alone, pressing passes at once, and the unthrown disc is lost', () => {
+    const g = arena([1]), h = g.hero;
+    g.throwDisc(h, 0, -30);
+    run(g, 600);
+    expect(g.moving()).toBe(false);
+    expect(g.S.phase).toBe('throw');
+    // another disc in hand when the press comes
+    h.hand = 1;
+    expect(g.canEndTurn()).toBe(true);
+    g.endTurn();
+    expect(g.ended()).toBe(true);
+    expect(g.canEndTurn()).toBe(false);
+    run(g, 1);
+    expect(g.S.phase).toBe('resolve');
+    expect(h.hand).toBe(0);
+    for (let k = 0; k < 2000 && g.S.phase !== 'throw'; k++) g.update(1 / 60);
+    expect(g.S.turn).toBe(2);
+    expect(g.S.done).toEqual([]);
+    expect(h.hand).toBe(h.discs);
+  });
+
+  it('waits for every living hero\'s player, and a press can be taken back while the turn lasts', () => {
+    const g = arena([0, 1, 2]), [a, b, c] = g.party;
+    g.endTurn(a);
+    run(g, 5);
+    expect(g.S.phase).toBe('throw');
+    g.endTurn(b);
+    g.cancelEndTurn(a);
+    expect(g.ended(a)).toBe(false);
+    expect(g.S.done).toEqual([b.i]);
+    g.endTurn(c);
+    run(g, 5);
+    expect(g.S.phase).toBe('throw');
+    // a fallen hero holds nobody up, and has nothing to press
+    a.hp = 0;
+    expect(g.canEndTurn(a)).toBe(false);
+    run(g, 1);
+    expect(g.S.phase).toBe('resolve');
+    // the press can't be taken back once the turn has passed
+    g.cancelEndTurn(b);
+    expect(g.ended(b)).toBe(true);
+  });
+
+  it('a hero whose player is done throws no more until the press is taken back', () => {
+    const g = arena([0, 2]), [a] = g.party;
+    a.sparks = AB_COST;
+    g.endTurn(a);
+    g.throwDisc(a, 0, -30);
+    expect(g.S.discs).toHaveLength(0);
+    expect(a.hand).toBe(1);
+    expect(g.canUseAbility(a)).toBe(false);
+    g.cancelEndTurn(a);
+    expect(g.canUseAbility(a)).toBe(true);
+    g.throwDisc(a, 0, -30);
+    expect(g.S.discs).toHaveLength(1);
+  });
+
+  it('a press while the discs still roll passes the turn once they stop', () => {
+    const g = arena([2]), h = g.hero;
+    g.throwDisc(h, 0, -60);
+    run(g, 2);
+    g.endTurn();
+    run(g, 1);
+    expect(g.moving()).toBe(true);
+    expect(g.S.phase).toBe('throw');
+    for (let k = 0; k < 2000 && g.moving(); k++) g.update(1 / 60);
+    run(g, 1);
+    expect(g.S.phase).toBe('resolve');
+  });
+
+  it('online, a client asks the host to end or take back its own turn, and every screen sees who is done', () => {
+    const host = arena([0, 2]), cli = new Game(), sent: Action[] = [];
+    host.online = true;
+    cli.online = true;
+    cli.send = a => sent.push(a);
+    cli.canControl = h => h.i === 2;
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    expect(cli.canEndTurn(cli.heroOf(0))).toBe(false);
+    expect(cli.canEndTurn()).toBe(true);
+    cli.endTurn();
+    expect(cli.ended()).toBe(false);
+    expect(sent).toEqual([{ k: 'end', h: 2, on: true }]);
+    host.perform(sent[0]);
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    expect(cli.ended()).toBe(true);
+    cli.cancelEndTurn();
+    expect(sent[1]).toEqual({ k: 'end', h: 2, on: false });
+    host.perform(sent[1]);
+    expect(host.S.done).toEqual([]);
+    host.perform({ k: 'end', h: 2, on: true });
+    host.endTurn(host.heroOf(0));
+    run(host, 1);
+    expect(host.S.phase).toBe('resolve');
+    // a new room starts with nobody done
+    host.loadRoom({ seed: 8, depth: 3, floor: 0, type: 'fight' });
+    expect(host.S.done).toEqual([]);
+  });
+});
+
 describe('discs and aiming', () => {
   it('every disc fits through a one-tile gap between blocks', () => {
     for (const d of HEROES) expect(d.r * 2).toBeLessThan(TILE - 2);
@@ -530,7 +645,8 @@ describe('online play', () => {
     for (let k = 0; k < 30; k++) host.update(1 / 60);
     const back = new Game();
     applySnapshot(back, JSON.parse(JSON.stringify(snapshot(host))));
-    for (const g of [host, back]) { g.throwDisc(g.heroOf(2), -0.4, -1); for (let k = 0; k < 600; k++) g.update(1 / 60); }
+    for (const g of [host, back]) { g.throwDisc(g.heroOf(2), -0.4, -1); endAll(g); for (let k = 0; k < 600; k++) g.update(1 / 60); }
+    expect(host.S.turn).toBe(2);
     const plain = (g: Game) => { const s = snapshot(g); return JSON.stringify({ ...s, floats: [], sparks: [] }); };
     expect(plain(back)).toBe(plain(host));
   });
@@ -539,7 +655,7 @@ describe('online play', () => {
     const { host, cli } = pair();
     host.startFight(host.heroOf(0));
     host.startFight(host.heroOf(2));
-    for (const h of host.party) { h.hand = 0; h.thrown = true; }
+    endAll(host);
     for (let k = 0; k < 2000 && !(host.S.phase === 'enemy' && host.S.actor >= 0 && host.S.clock > 0.05 && !host.S.attacked); k++) host.update(1 / 60);
     applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
     expect(cli.S.phase).toBe('enemy');
@@ -655,7 +771,7 @@ describe('floor casts and enemy abilities', () => {
   };
   const enemyTurn = (g: Game) => {
     const t = g.S.turn;
-    for (const h of g.party) h.hand = 0;
+    endAll(g);
     for (let k = 0; k < 600 && g.S.turn === t; k++) g.update(1 / 60);
   };
 
@@ -825,7 +941,8 @@ describe('hero abilities work through the discs', () => {
     g.throwDisc(other, 0, -40);
     expect(g.canUseAbility(other)).toBe(false);
     const t0 = g.S.turn;
-    for (const o of g.party) { o.hand = 0; o.hp = o.max = 99; }
+    for (const o of g.party) o.hp = o.max = 99;
+    endAll(g);
     for (let k = 0; k < 4000 && g.S.turn === t0; k++) g.update(1 / 60);
     expect(g.S.turn).toBe(t0 + 1);
     expect(h.boost).toBe(false);
@@ -851,7 +968,8 @@ describe('hero abilities work through the discs', () => {
     g.step(1 / 120);
     expect(m.burn).toBe(AB_BURN * 2);
     // fire goes through armour: the golem's 3 doesn't stop it
-    for (const o of g.party) { o.hand = 0; o.hp = o.max = 99; }
+    for (const o of g.party) o.hp = o.max = 99;
+    endAll(g);
     g.S.discs = [];
     const hp = m.hp;
     for (let k = 0; k < 4000 && !(g.S.phase === 'enemy' && g.S.actor === 0); k++) g.update(1 / 60);
@@ -934,7 +1052,8 @@ describe('enemy turn order', () => {
     g.S.nodes = [];
     g.S.blocks = [];
     placeAll(g); g.startFight();
-    for (const h of g.party) { h.hp = h.max = 99; h.hand = 0; h.thrown = true; }
+    for (const h of g.party) h.hp = h.max = 99;
+    endAll(g);
     return g;
   };
 
@@ -974,7 +1093,7 @@ describe('enemy turn order', () => {
     const g = arena(['necro', 'archer']), t0 = g.S.turn;
     // the necromancer raises its skeleton on the second turn
     for (let k = 0; k < 2000 && g.S.turn === t0; k++) g.update(1 / 60);
-    for (const h of g.party) { h.hand = 0; h.thrown = true; }
+    endAll(g);
     expect(g.S.mobs[0].intent!.t).toBe('summon');
     const actors = new Set<number>();
     for (let k = 0; k < 2000 && g.S.turn === t0 + 1; k++) { g.update(1 / 60); if (g.S.phase === 'enemy' && g.S.actor >= 0) actors.add(g.S.actor); }
@@ -997,6 +1116,7 @@ describe('every floor plays out', () => {
         for (const m of g.liveMobs()) if (m.intent) seen.add(m.intent.t);
         const t = g.S.turn;
         for (const h of g.party) g.throwDisc(h, -30, -40);
+        endAll(g);
         for (let k = 0; k < 2000 && g.S.turn === t && !over(); k++) g.update(1 / 60);
       }
       if (type === 'boss') expect([...seen].some(t => ['slam', 'summon', 'heat'].includes(t))).toBe(true);
@@ -1065,7 +1185,7 @@ describe('enemy walking', () => {
         // nobody throws: the enemies walk up turn after turn
         const t0 = g.S.turn;
         for (let t = 0; t < 600 && g.S.turn === t0 && (g.S.phase as string) !== 'over'; t++) {
-          for (const h of g.alive()) { h.hand = 0; h.thrown = true; }
+          endAll(g);
           g.update(1 / 60);
         }
         expect(g.S.turn > t0 || (g.S.phase as string) === 'over').toBe(true);
@@ -1099,7 +1219,7 @@ describe('heroes go where their last disc stopped', () => {
     ({ hero: h, x, y, vx: 0, vy: 0, r: 5, m: 4, e: 0.6, fr: 1, fall, gone: false, charged: false, bounces: 0, spin: 0, hits: 0, ab: false, rico: 0 });
   /** Every hero has thrown: play on until the throws are settled and the heroes have moved. */
   const settle = (g: Game) => {
-    for (const h of g.party) { h.hand = 0; h.thrown = true; }
+    endAll(g);
     for (let k = 0; k < 100 && g.S.phase === 'throw'; k++) g.update(1 / 60);
     expect(g.S.phase).toBe('resolve');
   };

@@ -110,7 +110,7 @@ export class Input {
       if (h) {
         if (g.canControl(h)) {
           g.select(h.i);
-          if (S.phase === 'throw' && h.hand > 0) { this.mode = 'aim'; this.aim = { hero: h, dx: 0, dy: 0 }; return; }
+          if (S.phase === 'throw' && h.hand > 0 && !g.ended(h)) { this.mode = 'aim'; this.aim = { hero: h, dx: 0, dy: 0 }; return; }
           if (S.phase === 'place') { this.mode = 'carry'; this.carry = { hero: h, x, y, pad: h.pad, moved: false }; return; }
           this.mode = 'none';
           return;

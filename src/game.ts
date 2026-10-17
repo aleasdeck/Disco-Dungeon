@@ -88,6 +88,8 @@ export interface State extends Layout {
   shake: number;
   /** Heroes (by `i`) whose players pressed "ready" during placement in an online game. */
   ready: number[];
+  /** Heroes (by `i`) whose players pressed «Конец хода» this turn: the enemies go once every living hero is here. */
+  done: number[];
 }
 
 /** What a player can do to the shared game; online clients send these to the host instead of applying them. */
@@ -97,7 +99,8 @@ export type Action =
   | { k: 'disc'; h: number }
   | { k: 'up'; h: number; stat: StatKey }
   | { k: 'ability'; h: number }
-  | { k: 'ready'; h: number };
+  | { k: 'ready'; h: number }
+  | { k: 'end'; h: number; on: boolean };
 
 const STEP = 1 / 120;
 
@@ -194,7 +197,7 @@ export class Game {
     const boon = Math.min(AB_COST, this.bank.boon ?? 0);
     for (const h of this.party) Object.assign(h, { pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0, chill: 0, fire: 0, boost: false, sparks: boon });
     this.bank.boon = 0;
-    this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [] };
+    this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [] };
     // every rune starts empty: the players put their heroes on them before the fight
     this.pickActive();
     this.pickIntents();
@@ -204,7 +207,7 @@ export class Game {
 
   /** Online client: rebuild a room from its spec (rooms are generated from the seed), state comes from the host. */
   showRoom(spec: RoomSpec) {
-    this.S = { ...generate(spec), spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [] };
+    this.S = { ...generate(spec), spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [] };
     this.pickActive();
   }
 
@@ -306,11 +309,45 @@ export class Game {
     this.onChange();
   }
 
+  /** This hero's player has pressed «Конец хода» this turn. */
+  ended(h = this.hero) {
+    return this.S.done.includes(h.i);
+  }
+
+  /** The player may say they are done with this turn: it is the heroes' turn, the hero stands, is theirs to move and isn't done yet. */
+  canEndTurn(h = this.hero) {
+    return this.mayEnd(h) && this.canControl(h);
+  }
+
+  private mayEnd(h: HeroState) {
+    return this.S.phase === 'throw' && h.hp > 0 && !this.ended(h);
+  }
+
+  /**
+   * The player is done with this turn: the hero throws no more, and discs left in hand are lost. The enemies go once
+   * every living hero's player has pressed it and the discs have stopped; alone that is at once.
+   */
+  endTurn(h = this.hero) {
+    if (!this.mayEnd(h)) return;
+    if (this.send) { this.send({ k: 'end', h: h.i, on: true }); return; }
+    this.S.done.push(h.i);
+    this.onChange();
+  }
+
+  /** Take the press back while the heroes' turn lasts: the hero may throw again. */
+  cancelEndTurn(h = this.hero) {
+    const S = this.S;
+    if (S.phase !== 'throw' || !this.ended(h)) return;
+    if (this.send) { this.send({ k: 'end', h: h.i, on: false }); return; }
+    S.done = S.done.filter(i => i !== h.i);
+    this.onChange();
+  }
+
   /** Throw the hero's next disc. (dx, dy) is the pull-back vector in world units, up to 60. */
   throwDisc(h: HeroState, dx: number, dy: number) {
     const S = this.S;
     const p = this.spot(h);
-    if (S.phase !== 'throw' || h.hand <= 0 || !p || h.hp <= 0) return;
+    if (S.phase !== 'throw' || h.hand <= 0 || !p || h.hp <= 0 || this.ended(h)) return;
     const L = Math.hypot(dx, dy);
     if (L < 4) return;
     if (this.send) { this.send({ k: 'throw', h: h.i, dx, dy }); return; }
@@ -406,9 +443,12 @@ export class Game {
     this.onChange();
   }
 
-  /** An ability works through the discs thrown after it, so it needs a disc still in hand, and it goes on once a turn on the hero's own sparks. */
+  /**
+   * An ability works through the discs thrown after it, so it needs a disc still in hand and a hero still throwing,
+   * and it goes on once a turn on the hero's own sparks.
+   */
   canUseAbility(h = this.hero) {
-    return this.S.phase === 'throw' && h.hp > 0 && h.hand > 0 && !h.boost && h.sparks >= AB_COST && this.liveMobs().length > 0;
+    return this.S.phase === 'throw' && h.hp > 0 && h.hand > 0 && !h.boost && !this.ended(h) && h.sparks >= AB_COST && this.liveMobs().length > 0;
   }
 
   useAbility(h = this.hero) {
@@ -451,6 +491,7 @@ export class Game {
     else if (a.k === 'up') this.upgrade(a.stat, h);
     else if (a.k === 'ability') this.useAbility(h);
     else if (a.k === 'ready') this.startFight(h);
+    else if (a.k === 'end') { if (a.on) this.endTurn(h); else this.cancelEndTurn(h); }
   }
 
   // ------------------------------------------------------------ intents
@@ -861,10 +902,15 @@ export class Game {
 
   allThrown() { return this.alive().every(h => h.hand === 0); }
 
+  /** Every living hero's player has pressed «Конец хода»; the fallen never hold the turn up. */
+  allDone() { return this.alive().every(h => this.ended(h)); }
+
   // ------------------------------------------------------------ turn flow
 
   private resolve() {
     const S = this.S;
+    // discs still in hand are lost: the hand fills again next turn
+    for (const h of S.heroes) h.hand = 0;
     for (const d of S.discs) {
       d.vx = d.vy = 0;
       if (d.gone || d.fall || d.hero.hp <= 0) continue;
@@ -1188,6 +1234,7 @@ export class Game {
     if (!this.alive().length || !this.liveMobs().length) { this.finish(); return; }
     S.turn++;
     S.discs = [];
+    S.done = [];
     for (const h of S.heroes) { h.shield = 0; h.thrown = false; h.boost = false; h.hand = h.hp > 0 ? h.discs : 0; if (h.chill > 0) h.chill--; }
     S.phase = 'throw';
     this.pickActive();
@@ -1209,7 +1256,8 @@ export class Game {
     while (this.acc >= STEP) { this.step(STEP); this.acc -= STEP; }
     // the last enemy down ends the fight at once, whatever throws are left
     if ((S.phase === 'throw' || S.phase === 'resolve' || S.phase === 'enemy') && !this.liveMobs().length) this.finish();
-    else if (S.phase === 'throw' && this.allThrown() && !this.moving()) {
+    // the heroes' turn ends by the players' word only, once the discs have stopped
+    else if (S.phase === 'throw' && this.allDone() && !this.moving()) {
       S.phase = 'resolve'; S.timer = 0.9; this.resolve(); this.onChange();
     } else if (S.phase === 'resolve' && (S.timer -= dt) <= 0) {
       S.phase = 'enemy'; this.mobsStart(); this.onChange();
