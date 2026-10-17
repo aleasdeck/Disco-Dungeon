@@ -27,7 +27,9 @@ const BL = 1.2;
 /** Chalk doodles from the manifest, any of which may turn up on any floor's walls. */
 const DOODLES = ['doodle_tally', 'doodle_skull', 'doodle_heart', 'doodle_peek', 'doodle_king', 'doodle_rat'];
 /** Whether the graffiti fonts have loaded; words drawn before that use a fallback face and are drawn again. */
-const fontsReady = () => typeof document === 'undefined' || !document.fonts || GRAFFITI_FONTS.every(f => document.fonts.check(f, 'Ж'));
+const fontsReady = () => typeof document === 'undefined' || !document.fonts || GRAFFITI_FONTS.every(f => document.fonts.check(f, 'W'));
+/** At most this many gags on the walls of one room, so each stays a find rather than wallpaper. */
+const MAX_GAGS = 4;
 /** Chalk white, for words and doodles on the walls. */
 const CHALK = '#efeadf';
 /** A gag on a wall line: world coordinate of its middle along the wall, height of its middle, height, and what it shows. */
@@ -155,24 +157,25 @@ export class SceneRenderer {
 
   private gagSet: { S: object; stamp: string; lines: Map<string, WallGag[]> } | null = null;
   /**
-   * Gags along every straight run of wall, laid out once per room: chalk doodles and scratched words, each up to about
-   * two tiles wide, with bare stretches between them. Keyed by the run's line, so every piece of wall draws its slice.
+   * A few big gags along the straight runs of wall, laid out once per room: chalk doodles and scratched words, each up to
+   * about two and a half tiles wide, with long bare stretches between them. Keyed by the run's line, so every piece of
+   * wall draws its slice.
    */
   private wallGags() {
     // laid out again once the doodles and the fonts arrive, since both change how wide a gag is
     const S = this.g.S, stamp = `${envArt.size}:${fontsReady()}`;
     if (this.gagSet?.S === S && this.gagSet.stamp === stamp) return this.gagSet.lines;
-    const runs = new Map<string, [number, number][]>(), torches = new Map<string, number[]>();
+    const runs = new Map<string, [number, number][]>(), hung = new Map<string, number[]>();
     for (const e of S.edges) {
-      const along = e.nx !== 0, u0 = Math.min(along ? e.a[1] : e.a[0], along ? e.b[1] : e.b[0]);
+      const along = e.nx !== 0, u0 = Math.min(along ? e.a[1] : e.a[0], along ? e.b[1] : e.b[0]), k = along ? e.j : e.i;
       const key = `${along ? 'x' : 'y'}${along ? e.a[0] : e.a[1]}:${e.nx},${e.ny}`;
-      if (!runs.has(key)) { runs.set(key, []); torches.set(key, []); }
+      if (!runs.has(key)) { runs.set(key, []); hung.set(key, []); }
       runs.get(key)!.push([u0, u0 + TILE]);
-      // the same rule drawWall uses for where torches hang
-      if ((along ? e.j : e.i) % 4 === 2) torches.get(key)!.push(u0 + TILE / 2);
+      // the same rules drawWall uses for where torches and banners hang
+      if (k % 4 === 2 || (k % 4 === 0 && (e.i + e.j) % 3 === 0)) hung.get(key)!.push(u0 + TILE / 2);
     }
     const words = WALL_WORDS[this.bk] ?? [], doodles = DOODLES.filter(k => env(k)), lines = new Map<string, WallGag[]>();
-    let seed = 1;
+    let seed = 1, placed = 0;
     for (const [key, spans] of runs) {
       spans.sort((p, q) => p[0] - q[0]);
       const gags: WallGag[] = [];
@@ -182,22 +185,23 @@ export class SceneRenderer {
         const start = spans[k][0];
         while (k + 1 < spans.length && spans[k + 1][0] <= end + 0.01) end = spans[++k][1];
         k++;
-        for (let u = start + 3; u < end - 12; seed++) {
+        for (let u = start + 4; u < end - 16 && placed < MAX_GAGS; seed++) {
           const r = (n: number) => hr(seed, n, 97);
-          if (r(1) < 0.35) { u += 8 + r(2) * 10; continue; }
-          const doodle = doodles.length && r(3) < 0.45;
+          if (r(1) < 0.55) { u += 20 + r(2) * 20; continue; }
+          const doodle = doodles.length && r(3) < 0.5;
           const g: WallGag = doodle
-            ? { u: 0, h: 13 + r(4) * 3, size: 12 + r(5) * 5, doodle: doodles[Math.floor(r(6) * doodles.length)], tilt: (r(7) - 0.5) * 0.12 }
-            : { u: 0, h: 13 + r(4) * 4, size: 6 + r(5) * 2.5, word: words[Math.floor(r(6) * words.length)], font: GRAFFITI_FONTS[Math.floor(r(8) * GRAFFITI_FONTS.length)], tilt: (r(7) - 0.5) * 0.3 };
-          if (!g.doodle && !g.word) { u += 10; continue; }
+            ? { u: 0, h: 15 + r(4) * 2, size: 19 + r(5) * 4, doodle: doodles[Math.floor(r(6) * doodles.length)], tilt: (r(7) - 0.5) * 0.12 }
+            : { u: 0, h: 15 + r(4) * 2, size: 9 + r(5) * 2, word: words[Math.floor(r(6) * words.length)], font: GRAFFITI_FONTS[Math.floor(r(8) * GRAFFITI_FONTS.length)], tilt: (r(7) - 0.5) * 0.25 };
+          if (!g.doodle && !g.word) { u += 20; continue; }
           const w = Math.min(end - u - 2, this.gagWidth(g));
-          if (w < 8) break;
-          // keep clear of the torches
-          const torch = torches.get(key)!.find(t => t + 5 > u && t - 5 < u + w);
-          if (torch !== undefined) { u = torch + 5; continue; }
+          if (w < 12) break;
+          // keep clear of torches and banners
+          const t = hung.get(key)!.find(c => c + 6 > u && c - 6 < u + w);
+          if (t !== undefined) { u = t + 6; continue; }
           g.u = u + w / 2;
           gags.push(g);
-          u += w + 4 + r(9) * 8;
+          placed++;
+          u += w + 40 + r(9) * 24;
         }
       }
       lines.set(key, gags);
@@ -211,7 +215,7 @@ export class SceneRenderer {
     const im = g.doodle ? env(g.doodle) : this.chalkWord(g.word!, g.font!);
     if (!im) return 0;
     const lines = g.word ? g.word.split('\n').length : 1;
-    return Math.min(30, (im.width / im.height) * g.size * lines);
+    return Math.min(40, (im.width / im.height) * g.size * lines);
   }
 
   private words = new Map<string, HTMLCanvasElement>();

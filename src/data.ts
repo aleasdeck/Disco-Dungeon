@@ -44,9 +44,9 @@ export interface Biome {
 
 /** Words sprayed on the walls, by the floor's art key; a line break splits a word over two lines. */
 export const WALL_WORDS: Record<string, string[]> = {
-  prison: ['ТУТ БЫЛ\nВАСЯ', 'ЛОХ', 'ЖОПА', 'ХУЙ', 'ЦОЙ\nЖИВ', 'МАМА\nПРОСТИ', 'КОРОЛЬ\nЛОХ', 'ДЕМБЕЛЬ\n96'],
-  ice: ['ХОЛОДНО\nБЛИН', 'ЖОПА\nМЁРЗНЕТ', 'ЛИЧ\nЛОХ', 'ЦОЙ\nЖИВ', 'ХУЙ', 'ТУТ БЫЛ\nВАСЯ', 'ЙЕТИ\nСУКА'],
-  forge: ['ЖАРКО\nКАК В АДУ', 'КУЗНЕЦ\nЛОХ', 'ХУЙ', 'ТУТ БЫЛ\nВАСЯ', 'ЦОЙ\nЖИВ', 'ЖОПА', 'ЗДЕСЬ\nНЕ ССАТЬ'],
+  prison: ['KILROY\nWAS HERE', 'LOSER', 'WTF', 'FUCK', 'KING\nSUX', 'FREE ME', 'BUTT', 'NO HOPE'],
+  ice: ['COLD\nAS HELL', 'WTF', 'FUCK', 'LICH\nSUX', 'FROZEN\nBUTT', 'BRRR', 'YETI\nSTINKS'],
+  forge: ['HOT\nAS HELL', 'WTF', 'FUCK', 'NO\nPEEING', 'SMITH\nSUX', 'LOSER', 'BURN'],
 };
 
 export const BIOMES: Biome[] = [
