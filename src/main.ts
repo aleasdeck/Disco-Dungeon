@@ -11,7 +11,7 @@ import { Hud, faceUrl } from './ui';
 import { hl } from './hl';
 import { MapView, type MapParty, type MapVotes } from './mapview';
 import { SceneRenderer } from './draw/scene';
-import { loadSprites } from './assets';
+import { loadAll } from './assets';
 import { clearSeat, loadHost, loadSeat, newKey, saveHost, saveSeat, type Ending, type HostSave } from './resume';
 import { FLOORS, LAYERS, agreed, depthOf, eventOf, newRun, nodeById, reachable, restRoom, type Run, type Votes } from './run';
 
@@ -758,25 +758,54 @@ controls.fit();
 window.addEventListener('resize', resize);
 // closing the tab tells the others right away instead of after the heartbeat timeout
 window.addEventListener('pagehide', () => { if (net.active) net.close(); });
-loadSprites(() => { hud.buildAllies(); hud.refresh(); stale = true; });
-// a shared link (…#CODE) opens straight into that room's lobby; a room this browser dropped out of is rejoined
-const linkCode = location.hash.slice(1).toUpperCase(), seat = loadSeat();
-if (linkCode) history.replaceState(null, '', location.pathname + location.search);
-if (seat && (!linkCode || linkCode === seat.code)) {
-  myKey = seat.key;
-  if (seat.host) reopen(seat.code);
-  else {
-    $<HTMLInputElement>('lobbyCode').value = seat.code;
+
+// ------------------------------------------------------------ start
+
+/** This long after the page was opened, a button on the loading screen lets the player go on while the rest loads. */
+const BOOT_SKIP = 8000;
+/** The loading screen is gone. */
+let booted = false;
+
+/** Leaves the loading screen for the menu, or for the lobby of a shared link or a room this browser dropped out of. */
+function start() {
+  if (booted) return;
+  booted = true;
+  $('boot').hidden = true;
+  // a shared link (…#CODE) opens straight into that room's lobby; a room this browser dropped out of is rejoined
+  const linkCode = location.hash.slice(1).toUpperCase(), seat = loadSeat();
+  if (linkCode) history.replaceState(null, '', location.pathname + location.search);
+  if (seat && (!linkCode || linkCode === seat.code)) {
+    myKey = seat.key;
+    if (seat.host) reopen(seat.code);
+    else {
+      $<HTMLInputElement>('lobbyCode').value = seat.code;
+      resetLobby();
+      show('lobby');
+      join(seat.code, seat.key);
+    }
+  } else if (/^[A-Z0-9]{4,6}$/.test(linkCode)) {
+    $<HTMLInputElement>('lobbyCode').value = linkCode;
     resetLobby();
     show('lobby');
-    join(seat.code, seat.key);
-  }
-} else if (/^[A-Z0-9]{4,6}$/.test(linkCode)) {
-  $<HTMLInputElement>('lobbyCode').value = linkCode;
-  resetLobby();
-  show('lobby');
-  join(linkCode);
-} else openMenu();
+    join(linkCode);
+  } else openMenu();
+}
+
+// every picture and font before the menu, so nothing loads mid-game; a player who won't wait gets the art as it comes
+const artIn = () => { hud.buildAllies(); hud.refresh(); stale = true; };
+loadAll(part => {
+  const pct = Math.round(part * 100);
+  $('bootFill').style.width = pct + '%';
+  $('bootBar').setAttribute('aria-valuenow', String(pct));
+  if (booted) artIn();
+}).then(() => {
+  artIn();
+  start();
+  // the offline cache, filled once the game has what it needs, so the two don't share the first download
+  if (import.meta.env.PROD && 'serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+});
+setTimeout(() => { $('bootSkip').hidden = booted; }, Math.max(0, BOOT_SKIP - performance.now()));
+$('bootSkip').addEventListener('click', start);
 $('waitLeave').addEventListener('click', () => { leaveOnline(); hideEnd(); showMap(false); openMenu(); });
 requestAnimationFrame(frame);
 
