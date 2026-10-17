@@ -1,5 +1,5 @@
 import './style.css';
-import { COMBAT_ROOMS, HEROES, ROOM_TYPES, WALL_H } from './data';
+import { BOOT_GAGS, COMBAT_ROOMS, HEROES, ROOM_TYPES, WALL_H } from './data';
 import { Camera } from './camera';
 import { Game, newBank, newParty } from './game';
 import { Net, type Player } from './net';
@@ -884,16 +884,31 @@ window.addEventListener('pagehide', () => { if (net.active) net.close(); });
 
 // ------------------------------------------------------------ start
 
-/** This long after the page was opened, a button on the loading screen lets the player go on while the rest loads. */
-const BOOT_SKIP = 8000;
+/** How long each gag stays on the loading screen, in ms. */
+const GAG_TIME = 2800;
 /** The loading screen is gone. */
 let booted = false;
+
+// the loading screen's gags, in a fresh order each time, faded from one to the next
+const gags = BOOT_GAGS.slice();
+for (let i = gags.length - 1; i > 0; i--) {
+  const j = Math.floor(Math.random() * (i + 1));
+  [gags[i], gags[j]] = [gags[j], gags[i]];
+}
+let gagAt = 0;
+$('bootGag').textContent = gags[0];
+const gagTimer = setInterval(() => {
+  const note = $('bootGag');
+  note.classList.add('out');
+  setTimeout(() => { note.textContent = gags[(gagAt = (gagAt + 1) % gags.length)]; note.classList.remove('out'); }, 300);
+}, GAG_TIME);
 
 /** Leaves the loading screen for the menu, or for the lobby of a shared link or a room this browser dropped out of. */
 function start() {
   if (booted) return;
   booted = true;
   $('boot').hidden = true;
+  clearInterval(gagTimer);
   // a shared link (…#CODE) opens straight into that room's lobby; a room this browser dropped out of is rejoined
   const linkCode = location.hash.slice(1).toUpperCase(), seat = loadSeat();
   if (linkCode) history.replaceState(null, '', location.pathname + location.search);
@@ -914,21 +929,19 @@ function start() {
   } else openMenu();
 }
 
-// every picture and font before the menu, so nothing loads mid-game; a player who won't wait gets the art as it comes
-const artIn = () => { hud.buildAllies(); hud.refresh(); stale = true; };
+// every picture and font before the menu, so nothing loads mid-game
 loadAll(part => {
   const pct = Math.round(part * 100);
   $('bootFill').style.width = pct + '%';
   $('bootBar').setAttribute('aria-valuenow', String(pct));
-  if (booted) artIn();
 }).then(() => {
-  artIn();
+  hud.buildAllies();
+  hud.refresh();
+  stale = true;
   start();
   // the offline cache, filled once the game has what it needs, so the two don't share the first download
   if (import.meta.env.PROD && 'serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 });
-setTimeout(() => { $('bootSkip').hidden = booted; }, Math.max(0, BOOT_SKIP - performance.now()));
-$('bootSkip').addEventListener('click', start);
 $('waitLeave').addEventListener('click', () => { leaveOnline(); hideEnd(); showMap(false); openMenu(); });
 requestAnimationFrame(frame);
 
