@@ -2,7 +2,7 @@
 // Everything is drawn in iso space through the camera, so zoom and rotation are free.
 
 import { WALL_WORDS, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize } from '../data';
-import type { Camera, Vec } from '../camera';
+import { KX, KY, type Camera, type Vec } from '../camera';
 import { type Disc, type Game, type HeroState, type Spark } from '../game';
 import { cellAt, floorAt, hazKey, inPit, isFloor, pitAt, type Block, type Decal, type Edge, type Mob, type Pit, type ResNode } from '../room';
 import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure } from './figures';
@@ -50,6 +50,21 @@ const CHALK = '#efeadf';
 interface WallGag { u: number; h: number; size: number; doodle?: string; word?: string; font?: string; tilt: number; flip?: boolean }
 /** The four sides of a cell: neighbour offset, then the side's two corners in cell units. */
 const SIDES: [number, number, number, number, number, number][] = [[0, -1, 0, 0, 1, 0], [1, 0, 1, 0, 1, 1], [0, 1, 0, 1, 1, 1], [-1, 0, 0, 0, 0, 1]];
+/** The convex hull of some points, in order round it. */
+const hull = (pts: Pt[]): Pt[] => {
+  const ps = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o: Pt, a: Pt, b: Pt) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const half = (list: Pt[]) => {
+    const out: Pt[] = [];
+    for (const p of list) {
+      while (out.length > 1 && cross(out[out.length - 2], out[out.length - 1], p) <= 0) out.pop();
+      out.push(p);
+    }
+    out.pop();
+    return out;
+  };
+  return [...half(ps), ...half([...ps].reverse())];
+};
 /** Stable pseudo-random 0..1 from integers, so stones and cracks stay put between frames. */
 const hr = (a: number, b = 0, d = 0) => {
   let h = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263) ^ Math.imul(d | 0, 1103515245);
@@ -357,6 +372,7 @@ export class SceneRenderer {
     items.sort((a, b) => a[0] - b[0]).forEach(i => i[1]());
 
     this.drawOmens();
+    if (S.spec.smoke && S.phase !== 'over') this.drawSmoke(view);
     this.drawAim(aim);
     this.drawFx();
 
@@ -1225,6 +1241,122 @@ export class SceneRenderer {
     }
   }
 
+  // ------------------------------------------------------------ smoke
+
+  private fog: { cv: HTMLCanvasElement; mask: HTMLCanvasElement; pats: CanvasPattern[]; key: string; at: number } | null = null;
+
+  /** A tile of soft clouds in one colour that repeats seamlessly. */
+  private puffTile(col: string) {
+    const N = 256;
+    const tile = document.createElement('canvas');
+    tile.width = tile.height = N;
+    const x = tile.getContext('2d')!;
+    for (let k = 0; k < 46; k++) {
+      const cx = hr(k, 1) * N, cy = hr(k, 2) * N, r = 26 + hr(k, 3) * 58, a = 0.18 + hr(k, 4) * 0.3;
+      // drawn again past each edge, so the tile meets itself without a seam
+      for (const ox of [-N, 0, N]) for (const oy of [-N, 0, N]) {
+        const gr = x.createRadialGradient(cx + ox, cy + oy, 0, cx + ox, cy + oy, r);
+        gr.addColorStop(0, `rgba(${col},${a})`);
+        gr.addColorStop(1, `rgba(${col},0)`);
+        x.fillStyle = gr;
+        x.fillRect(cx + ox - r, cy + oy - r, r * 2, r * 2);
+      }
+    }
+    return tile;
+  }
+
+  /**
+   * «Дым-машина», an event's curse: the room under drifting smoke, clear only around the heroes (and their runes while
+   * they are put out), with a small clearing following every disc in flight. Smoke is soft, so it is drawn at half a pixel
+   * per screen pixel, and made afresh only when something under it moves or, for the slow drift, ten times a second.
+   */
+  private drawSmoke(view: { w: number; h: number; dpr: number }) {
+    const { c, cam, g, t } = this;
+    const S = g.S, q = 0.5;
+    if (!this.fog) {
+      // made once: two cloud tiles, a light and a dark one, as patterns of the smoke's own canvas
+      const cv = document.createElement('canvas'), x = cv.getContext('2d')!;
+      this.fog = { cv, mask: document.createElement('canvas'), pats: ['240,236,250', '140,134,162'].map(col => x.createPattern(this.puffTile(col), 'repeat')!), key: '', at: -1 };
+    }
+    const fog = this.fog, { cv, mask, pats } = fog, W = Math.ceil(view.w * q), H = Math.ceil(view.h * q);
+    const spots = [...S.heroes.map(h => g.figureAt(h)), ...S.discs.filter(d => !d.gone && Math.hypot(d.vx, d.vy) > 1)]
+      .map(p => p && `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    const key = `${W}x${H} ${cam.panX},${cam.panY},${cam.zoom},${cam.rot} ${S.phase} ${spots} ${this.carry ? this.carry.x + ',' + this.carry.y : ''}`;
+    if (key !== fog.key || Math.abs(t - fog.at) > 0.1) {
+      fog.key = key;
+      fog.at = t;
+      for (const k of [cv, mask]) if (k.width !== W || k.height !== H) { k.width = W; k.height = H; }
+      this.smokeLayer(cv, mask, pats, W, H, view, q);
+    }
+    c.save();
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.drawImage(cv, 0, 0, W, H, 0, 0, view.w * view.dpr, view.h * view.dpr);
+    c.restore();
+  }
+
+  private smokeLayer(cv: HTMLCanvasElement, mask: HTMLCanvasElement, pats: CanvasPattern[], W: number, H: number, view: { w: number; h: number }, q: number) {
+    const { cam, g, t } = this;
+    const S = g.S;
+    const f = cv.getContext('2d')!;
+    f.setTransform(1, 0, 0, 1, 0, 0);
+    f.globalCompositeOperation = 'source-over';
+    f.clearRect(0, 0, W, H);
+    const z = cam.zoom * q, drift = reduce ? 0 : t;
+    // stage smoke: light lilac grey, the walls and torches stick out of it, an enemy inside is a shadow at most
+    f.fillStyle = 'rgba(172,166,192,.88)';
+    f.fillRect(0, 0, W, H);
+    // two layers of clouds drifting apart, anchored to the room so they turn and zoom with it
+    pats.forEach((pat, k) => {
+      const sp = k ? -5 : 7;
+      f.setTransform(z, 0, 0, z, cam.panX * q, cam.panY * q);
+      // the tile repeats every 256 units, so the drift wraps round and the clouds never run out
+      f.translate((drift * sp) % 256, (drift * sp * 0.4 * (k ? 1 : -1)) % 256);
+      f.fillStyle = pat;
+      const [x0, y0] = cam.screenToIso(0, 0), [x1, y1] = cam.screenToIso(view.w, view.h);
+      f.fillRect(x0 - 300, y0 - 300, x1 - x0 + 600, y1 - y0 + 600);
+    });
+    // the smoke fills the room's box and thins out towards the tops of the walls, never spilling into the dark around it:
+    // boxes of rising height, each adding a fifth of the smoke
+    const m = mask.getContext('2d')!;
+    m.setTransform(1, 0, 0, 1, 0, 0);
+    m.clearRect(0, 0, W, H);
+    m.setTransform(z, 0, 0, z, cam.panX * q, cam.panY * q);
+    m.fillStyle = 'rgba(0,0,0,.2)';
+    // added up, not laid over: where all five boxes meet, the smoke is whole
+    m.globalCompositeOperation = 'lighter';
+    for (const k of [0.3, 0.5, 0.7, 0.85, 1]) {
+      const box: Pt[] = [];
+      for (const [x, y] of [[0, 0], [S.Wx, 0], [S.Wx, S.Wy], [0, S.Wy]]) box.push(this.P(x, y), this.P(x, y, (WALL_H + 8) * k));
+      pth(m, hull(box));
+      m.fill();
+    }
+    f.setTransform(1, 0, 0, 1, 0, 0);
+    f.globalCompositeOperation = 'destination-in';
+    f.drawImage(mask, 0, 0);
+    // the clearings: a world circle lies on the iso floor as an ellipse twice as wide as it is tall
+    f.globalCompositeOperation = 'destination-out';
+    f.setTransform(z, 0, 0, z, cam.panX * q, cam.panY * q);
+    const clear = (x: number, y: number, r0: number, r1: number, lift = 0) => {
+      const [px, py] = this.P(x, y, lift);
+      f.save();
+      f.translate(px, py);
+      f.scale(KX * Math.SQRT2, KY * Math.SQRT2 * 1.25);
+      const gr = f.createRadialGradient(0, 0, r0, 0, 0, r1);
+      gr.addColorStop(0, 'rgba(0,0,0,1)');
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      f.fillStyle = gr;
+      f.fillRect(-r1, -r1, r1 * 2, r1 * 2);
+      f.restore();
+    };
+    for (const h of S.heroes) {
+      const p = g.figureAt(h);
+      if (p) clear(p.x, p.y, TILE * 1.8, TILE * 3.4, 10);
+    }
+    if (this.carry) { const [x, y] = cam.screenToWorld(this.carry.x, this.carry.y); clear(x, y, TILE * 1.2, TILE * 2.6, 10); }
+    if (S.phase === 'place') for (const p of S.pads) clear(p.x, p.y, TILE * 0.9, TILE * 2);
+    for (const d of S.discs) if (!d.gone && Math.hypot(d.vx, d.vy) > 1) clear(d.x, d.y, TILE * 0.6, TILE * 1.8);
+  }
+
   // ------------------------------------------------------------ aim & effects
 
   private drawAim(aim: Aim | null) {
@@ -1234,7 +1366,8 @@ export class SceneRenderer {
     if (!p || len < 4) return;
     // one straight line up to the first wall, block or mob; ricochets are left for the player to judge
     const pr = g.predict(h, aim.dx, aim.dy, 0);
-    if (pr.path.length < 2 || !settings.aimLine) return;
+    // «Стробоскоп», an event's curse: the fight goes without the line, as with it turned off in the settings
+    if (pr.path.length < 2 || !settings.aimLine || g.S.spec.strobe) return;
     // thick enough to read on a phone at any zoom: at least ~4 screen pixels
     const lw = Math.max(2.4, 4 / this.cam.zoom);
     const [x0, y0] = P(...pr.path[0], 2), [x1, y1] = P(...pr.path[pr.path.length - 1], 2);
