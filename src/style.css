@@ -1,3 +1,22 @@
+/* Caveat, the handwriting the notes and descriptions are written in. Scaled up so it sits in the
+   same sizes as the Oswald labels around it; only Cyrillic and Latin are bundled. */
+@font-face {
+  font-family: Hand;
+  src: url('./fonts/caveat-700-cyrillic.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: swap;
+  size-adjust: 140%;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: Hand;
+  src: url('./fonts/caveat-700-latin.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: swap;
+  size-adjust: 140%;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
   --bg: #16110d;
   --panel: #2a211b;
@@ -13,6 +32,7 @@
   --spark: #c9a8ff;
   --ore: #e8b44a;
   --safe-b: env(safe-area-inset-bottom, 0px);
+  --hand: Hand, Rubik, system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -24,7 +44,7 @@ html, body {
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.35 Rubik, system-ui, sans-serif;
+  font: 14px/1.35 var(--hand);
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
 }
@@ -243,7 +263,7 @@ i.ico { display: inline-block; font-style: normal; }
   background: linear-gradient(#3a2f28, #241c17); border: 2px solid #120c09; box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.35);
 }
 .discs i.on { background: linear-gradient(color-mix(in srgb, var(--c) 70%, #fff), var(--c) 60%, var(--dk)); }
-.hit-info { left: calc(var(--pf-w) + 70px); bottom: 74px; font: 500 13px/1.2 Oswald, sans-serif; color: var(--muted); white-space: nowrap; }
+.hit-info { left: calc(var(--pf-w) + 70px); bottom: 74px; font: 16px/1.2 var(--hand); color: #ffd06a; white-space: nowrap; }
 
 .bars { left: calc(var(--pf-w) + 10px); bottom: 10px; width: 300px; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
 .hpbar { position: relative; height: 28px; margin-right: 18px; pointer-events: auto; }
@@ -475,7 +495,7 @@ i.ico { display: inline-block; font-style: normal; }
 
 .ups { display: flex; flex-direction: column; justify-content: center; gap: 4px; }
 .up { display: grid; grid-template-columns: minmax(0, 1fr) auto 40px auto; align-items: center; gap: 1px 8px; font-size: 13px; }
-.up-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.up-name { font: 600 15px/1.2 Oswald, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* what the upgrade does: a line under the row, where there is room for it */
 .up-txt { display: none; grid-column: 1 / -1; color: var(--muted); font-size: 11px; line-height: 1.25; }
 .up .lvl { display: inline-flex; gap: 3px; }
@@ -570,7 +590,7 @@ i.ico { display: inline-block; font-style: normal; }
 .pick { position: relative; padding: 0; border: 2px solid var(--ink); border-radius: 12px; background: var(--c); overflow: hidden; cursor: pointer; color: #fff; font: 600 15px Oswald, sans-serif; }
 .pick canvas { display: block; width: 100%; aspect-ratio: 1; }
 .pick span { display: block; padding: 4px 2px; background: rgba(0, 0, 0, 0.55); }
-.pick em { display: block; font: 400 11px Rubik, sans-serif; font-style: normal; color: #f0e5d0; }
+.pick em { display: block; font: 13px/1.15 var(--hand); font-style: normal; color: #f0e5d0; }
 .pick.mine { outline: 3px solid var(--gold); outline-offset: 2px; }
 .pick.taken { filter: grayscale(0.7) brightness(0.6); cursor: default; }
 .hero-lead { margin: 4px 0 14px; color: #b2a38c; }
@@ -599,7 +619,7 @@ i.ico { display: inline-block; font-style: normal; }
 .map-panel { width: min(440px, 100%); padding: 12px 14px; display: flex; flex-direction: column; max-height: calc(100dvh - 32px); }
 .map-panel .panel-head { flex-wrap: nowrap; }
 .map-panel h2 { font-size: 20px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.map-panel h2 span { font: 500 13px Rubik, sans-serif; color: var(--muted); margin-left: 8px; }
+.map-panel h2 span { font: 15px var(--hand); color: var(--muted); margin-left: 8px; }
 .map-panel .panel-btns .btn { white-space: nowrap; }
 .map-panel .btn { padding: 6px 10px; font-size: 13px; }
 #map { width: 100%; flex: 1 1 auto; min-height: 0; height: auto; display: block; margin-top: 4px; }
@@ -633,7 +653,7 @@ i.ico { display: inline-block; font-style: normal; }
 #map .mnode.mine .halo { stroke: var(--text); stroke-width: 3.5; animation: none; }
 #map .pip circle { stroke: var(--ink); stroke-width: 2; }
 #map .pip text { fill: #f3ead8; font: 600 13px Oswald, sans-serif; text-anchor: middle; paint-order: stroke; stroke: var(--ink); stroke-width: 2.5px; stroke-linejoin: round; }
-#map .mlabel { fill: var(--muted); font: 500 12px Rubik, sans-serif; text-anchor: middle; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
+#map .mlabel { fill: var(--muted); font: 13px var(--hand); text-anchor: middle; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
 @keyframes pulse { 50% { stroke-opacity: 0.3; } }
 .map-info { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
 .map-info b { color: var(--text); }
