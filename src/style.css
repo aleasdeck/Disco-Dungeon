@@ -801,3 +801,21 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .map-info > i[data-art] { width: 46px; height: 46px; transform: rotate(-5deg); }
 .map-peek > img.art { flex: none; width: 46px; height: 46px; }
 #map .mart { pointer-events: none; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)); }
+
+/* the HP bar and the sparks as cardboard: a die-cut slot with the health printed into its groove, and three crystal shards */
+.art-bar_track .corner .hpbar { filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); border-image: var(--ui-bar_track) var(--bt-slice) fill / var(--bt-w) stretch; height: 38px; }
+.art-bar_track .hpbar .track { inset: var(--bt-groove); clip-path: none; background: #1d140f; }
+.art-bar_track .hpbar.shielded .track { box-shadow: inset 0 0 0 2px #7fb6dc; }
+.art-bar_track .track i { background: radial-gradient(rgba(0, 0, 0, 0.16) 0.8px, transparent 1.3px) 0 0 / 4px 4px, linear-gradient(#e0414f 0 58%, #a82634 58%); }
+.art-bar_track .track s { background: radial-gradient(rgba(0, 0, 0, 0.12) 0.8px, transparent 1.3px) 0 0 / 4px 4px, linear-gradient(#a9d6f3 0 58%, #5f9fcb 58%); }
+.art-bar_track .hp-num { inset: var(--bt-groove); }
+.art-ico_shield .sh-badge { clip-path: none; background: var(--ui-ico_shield) center / contain no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); text-shadow: 1px 1px 0 #120c09, -1px -1px 0 #120c09, 1px -1px 0 #120c09, -1px 1px 0 #120c09; }
+.art-spk_on.art-spk_off .spk { background: none; clip-path: none; box-shadow: none; padding: 0; gap: 0; height: 24px; margin: -4px -14px 0 4px; }
+.art-spk_on.art-spk_off .spk i { flex: 1; margin-right: -6px; background: var(--ui-spk_off) center / 100% 100% no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
+.art-spk_on.art-spk_off .spk i.on { background-image: var(--ui-spk_on); }
+.art-spk_on.art-spk_off .spk.full i { background-image: var(--ui-spk_on); filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 6px #c9a8ff); }
+:root { --bt-slice: 60 90; --bt-w: 12px 18px; --bt-groove: 9px 14px 10px 16px; }
+
+/* the menus stand on a painted disco dungeon instead of the dimmed room */
+.art-menu_bg .overlay.solid { background: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_bg) center / cover no-repeat; }
+@media (orientation: portrait) { .art-menu_bg_tall .overlay.solid { background-image: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_bg_tall); } }
