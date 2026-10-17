@@ -13,6 +13,7 @@
 <body>
   <canvas id="stage" aria-label="Игровое поле"></canvas>
   <div class="vignette" aria-hidden="true"></div>
+  <div class="turn-glow" aria-hidden="true"></div>
 
   <header class="hud-top">
     <div class="chip loc">
@@ -21,7 +22,8 @@
     </div>
     <div class="chip stats">
       <span>Ход <b id="hTurn">1</b></span>
-      <span>Мобов <b id="hMobs">0</b></span>
+      <span id="hSide" class="side"></span>
+      <span class="mobs-n">Мобов <b id="hMobs">0</b></span>
       <span id="hRage" class="rage" hidden></span>
     </div>
     <div class="top-btns">
@@ -30,7 +32,7 @@
     </div>
   </header>
 
-  <div id="phase" class="phase"></div>
+  <div id="turnBanner" class="turn-banner" aria-hidden="true"><b></b><span></span></div>
   <button id="fightBtn" class="btn big fight" hidden>В бой!</button>
   <aside id="allies" class="allies" aria-label="Отряд"></aside>
   <aside id="mobs" class="mobs" aria-label="Враги и их намерения"><ul id="mobList"></ul></aside>

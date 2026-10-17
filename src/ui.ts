@@ -1,4 +1,4 @@
-// DOM HUD: top bar, phase pill, ally cards, the enemy list and the hero frame at the bottom.
+// DOM HUD: top bar with whose turn it is, the turn banner, ally cards, the enemy list and the hero frame at the bottom.
 
 import { AB_COST, ENEMY_BASE, FORGE_ORE, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, type MobKind, type StatKey } from './data';
 import { sprites } from './assets';
@@ -73,8 +73,13 @@ function upRows(g: Game, h: HeroState, shop: boolean) {
     }).join('');
 }
 
+/** Whose turn it is, as the HUD tells it: the heroes throw (and the discs settle), then the enemies go. */
+export type Side = 'place' | 'heroes' | 'enemies' | 'over';
+
 export class Hud {
   private lastPortrait = '';
+  /** Whose turn the HUD showed last, so a change of turn gets its banner. */
+  private side: Side | null = null;
   /** Whose cards the blacksmith's screen holds now; the cards are built once per visit, then only their rows change. */
   private forgeCards = '';
   /** The blacksmith's (by depth) this player is done at and left for the map, while the others may still be buying. */
@@ -101,6 +106,17 @@ export class Hud {
       else g.upgrade(b.dataset.k as StatKey, h);
     });
     $('fightBtn').addEventListener('click', () => g.startFight());
+  }
+
+  /** The big band across the room for a moment when the turn passes: "Ваш ход", "Ход врагов". */
+  private banner(title: string, sub: string, side: Side) {
+    const b = $('turnBanner');
+    b.querySelector('b')!.textContent = title;
+    b.querySelector('span')!.textContent = sub;
+    b.className = 'turn-banner ' + side;
+    // restart the animation even if the last banner is still on screen
+    void b.offsetWidth;
+    b.classList.add('show');
   }
 
   buildAllies() {
@@ -135,15 +151,25 @@ export class Hud {
     rage.title = `С ${g.rageFrom()}-го хода каждый враг с каждым ходом бьёт на 1 сильнее.`;
 
     const left = g.alive().filter(o => o.hand > 0).length;
-    const phase = $('phase');
-    phase.className = 'phase ' + S.phase;
-    phase.textContent = {
-      place: g.online ? 'Расстановка: поставь своего героя на руну и нажми «Готов»' : 'Расстановка: поставь героев на руны и нажми «В бой!»',
-      throw: left ? `Броски · ждём ${left}` : 'Диски катятся',
-      resolve: 'Подсчёт',
-      enemy: S.mobs[S.actor]?.hp > 0 ? `Ход мобов · ${S.mobs[S.actor].name}` : 'Ход мобов',
-      over: g.alive().length ? 'Комната зачищена' : 'Отряд пал',
+    const side: Side = S.phase === 'place' || S.phase === 'over' ? S.phase : S.phase === 'enemy' ? 'enemies' : 'heroes';
+    const sideName = { place: 'Расстановка', heroes: 'Ваш ход', enemies: 'Ход врагов', over: g.alive().length ? 'Победа' : 'Отряд пал' }[side];
+    const detail = {
+      place: g.online ? 'поставь героя и нажми «Готов»' : 'поставь героев на руны',
+      throw: left ? `бросают: ${left}` : 'диски катятся',
+      resolve: 'подсчёт',
+      enemy: S.mobs[S.actor]?.hp > 0 ? S.mobs[S.actor].name : 'враги ходят по одному',
+      over: '',
     }[S.phase];
+    const sd = $('hSide');
+    sd.className = 'side ' + side;
+    sd.textContent = sideName;
+    sd.title = detail;
+    document.body.dataset.turn = side;
+    if (this.side !== side) {
+      // the fight starts or the turn passes to the other side: a banner across the room says so
+      if (this.side && (side === 'heroes' || side === 'enemies')) this.banner(side === 'heroes' ? 'Ваш ход' : 'Ход врагов', side === 'heroes' ? `Ход ${S.turn} · бросайте диски` : 'враги ходят по одному', side);
+      this.side = side;
+    }
 
     for (const o of g.party) {
       const t = $('ally' + o.i);
@@ -196,6 +222,7 @@ export class Hud {
     $('fHand').innerHTML = Array.from({ length: h.discs }, (_, k) => `<i class="${k < h.hand ? 'on' : ''}" style="--c:${h.def.col}"></i>`).join('');
     $('fState').textContent = h.hp <= 0 ? 'Пал'
       : S.phase === 'place' ? (h.pad === null ? 'Тапни свободную руну, чтобы поставить героя' : g.online ? 'Можно переставить, потом «Готов»' : g.placed() ? 'Можно переставить, потом «В бой!»' : 'Поставь остальных героев')
+      : S.phase === 'enemy' ? 'Ход врагов, ждём'
       : S.phase !== 'throw' ? (S.phase === 'over' ? 'Комната закрыта' : 'Ждём конца хода')
       : h.hand === 0 ? 'Бросил, ждём остальных'
       : h.thrown ? 'Бросай следующий диск'
