@@ -4,7 +4,8 @@
 // through, moving over to a direct link once the relay has helped set one up.
 
 import type { Action } from '../game';
-import type { Snapshot } from '../sync';
+import type { Ending } from '../resume';
+import type { MapState, Snapshot } from '../sync';
 import { hostRoom, joinRoom, RoomError, type Accept, type HostedRoom, type JoinRoom, type Link, type OpenRoom } from './link';
 
 /** `key` is the player's secret for rejoining after a drop; only the host keeps it. */
@@ -21,7 +22,13 @@ export type Msg =
   | { t: 'start'; players: Player[] }
   | { t: 'act'; a: Action }
   | { t: 'snap'; s: Snapshot }
-  /** A screen everyone sees while the host chooses (the map, the end of a room); an empty title hides it. */
+  /** The run map and how the vote for the next room stands, whenever either changes. */
+  | { t: 'map'; m: MapState }
+  /** A player points at the room they want to go to next. */
+  | { t: 'vote'; id: string }
+  /** A cleared room's result: each player reads it and walks over to the map on their own. */
+  | { t: 'end'; e: Ending }
+  /** A screen the players wait on until the host acts (the end of the run); an empty title hides it. */
   | { t: 'screen'; title: string; text: string; win?: boolean }
   | { t: 'lobbyBack' }
   /** The host closed the room on purpose, so there is nothing to reconnect to. */

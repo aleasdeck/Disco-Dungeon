@@ -3,16 +3,16 @@ import { COMBAT_ROOMS, HEROES, ROOM_TYPES, WALL_H } from './data';
 import { Camera } from './camera';
 import { Game, newBank, newParty } from './game';
 import { Net, type Player } from './net';
-import { applySnapshot, snapshot } from './sync';
+import { applySnapshot, snapshot, type MapState } from './sync';
 import { saveSettings, settings } from './settings';
 import { bindSettings, lobbyStatus, renderCollection, renderLobby, resetLobby, show } from './menu';
 import { Input } from './input';
 import { Hud } from './ui';
-import { MapView } from './mapview';
+import { MapView, type MapVotes } from './mapview';
 import { SceneRenderer } from './draw/scene';
 import { loadSprites } from './assets';
-import { clearSeat, loadHost, loadSeat, newKey, saveHost, saveSeat, type HostSave } from './resume';
-import { FLOORS, LAYERS, depthOf, newRun, nodeById, restRoom, type Run } from './run';
+import { clearSeat, loadHost, loadSeat, newKey, saveHost, saveSeat, type Ending, type HostSave } from './resume';
+import { FLOORS, LAYERS, agreed, depthOf, newRun, nodeById, reachable, restRoom, type Run, type Votes } from './run';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -27,6 +27,10 @@ const scene = new SceneRenderer();
 let run: Run = newRun();
 /** True while the party stands between rooms and must pick the next one. */
 let choosing = true;
+/** Online: the room each player points at (the host keeps the count, clients get a copy). */
+let votes: Votes = {};
+/** Client: the heroes whose players the host waits for. */
+let voters: number[] = [];
 let view = { w: 0, h: 0, dpr: 1 };
 
 // ------------------------------------------------------------ camera
@@ -103,12 +107,15 @@ $('camFit').addEventListener('click', () => controls.fit());
 // ------------------------------------------------------------ run flow
 
 function showMap(open: boolean) {
+  // the blacksmith's screen stands in for the map until this player is done there
+  if (hud.atForge) open = false;
+  const was = !$('mapScreen').hidden;
   $('mapScreen').hidden = !open;
   $('mapClose').hidden = choosing;
   if (open) {
-    mapView.render(run, choosing);
+    mapView.render(run, choosing, mapVotes());
     // on a short screen the map scrolls; bring the rooms to choose from into view
-    document.querySelector('#map .mnode.reach, #map .mnode.cur')?.scrollIntoView({ block: 'center' });
+    if (!was) document.querySelector('#map .mnode.reach, #map .mnode.cur')?.scrollIntoView({ block: 'center' });
   }
 }
 
@@ -132,6 +139,7 @@ let reconnecting = 0;
 
 const playerName = () => settings.name || 'Игрок';
 const ownerOf = (i: number) => players.find(p => p.hero === i)?.id ?? 'host';
+const myHero = () => players.find(p => p.id === net.id)?.hero ?? null;
 /** The players as the clients see them: without anyone's rejoin key. */
 const pub = () => players.map(({ key: _key, ...p }) => p);
 
@@ -145,7 +153,6 @@ function screen(title: string, text = '', win = false) {
 function wait(title: string, text = '', away = false, win = false) {
   $('waitScreen').hidden = !title;
   victory($('waitScreen'), win && !!title);
-  $('waitNote').textContent = win ? 'Хозяин комнаты вернёт всех в лобби.' : 'Хозяин комнаты выбирает, куда идти дальше.';
   $('waitTitle').textContent = title;
   $('waitText').innerHTML = text;
   $('waitNote').hidden = away || mode !== 'client';
@@ -156,13 +163,12 @@ function setOnline(m: Mode) {
   mode = m;
   game.online = m === 'host' || m === 'client';
   game.send = m === 'client' ? a => net.send({ t: 'act', a }) : null;
-  const myHero = players.find(p => p.id === net.id)?.hero ?? null;
-  game.canControl = m === 'client' ? h => h.i === myHero
+  const mine = myHero();
+  game.canControl = m === 'client' ? h => h.i === mine
     // the host also takes over heroes whose players left
     : m === 'host' ? h => ownerOf(h.i) === 'host' || !net.has(ownerOf(h.i))
     : () => true;
-  if (myHero !== null) game.act = myHero;
-  $('btnMap').hidden = m === 'client';
+  if (mine !== null) game.act = mine;
   $('newRun').hidden = m === 'client';
 }
 
@@ -173,13 +179,15 @@ function startRun(picks?: number[]) {
   game.pickActiveParty();
   hud.buildAllies();
   choosing = true;
+  votes = {};
   mapView.info = '';
   // a quiet room behind the map so the screen is never empty
   game.loadRoom({ seed: run.seed, depth: 1, floor: 0, type: 'fight' });
   controls.fit();
   hideEnd();
   showMap(true);
-  screen('Выбор комнаты', 'Хозяин комнаты смотрит на карту забега.');
+  screen('');
+  shareMap();
 }
 
 function startCampaign() {
@@ -189,32 +197,89 @@ function startCampaign() {
   startRun();
 }
 
-mapView.onChoose = id => {
+/** Go into a room on the map. */
+function choose(id: string) {
   const f = run.floor, n = nodeById(run, f, id), depth = depthOf(f, n);
   run.path[f].push(id);
+  votes = {};
+  // the party walks on, so the blacksmith's shop closes
+  game.forge = 0;
   if (COMBAT_ROOMS.includes(n.type)) {
     choosing = false;
     mapView.info = '';
     game.loadRoom({ seed: run.seed + depth * 97 + n.i, depth, floor: f, type: n.type });
     controls.fit();
     showMap(false);
-    screen('');
   } else if (n.type === 'forge') {
-    // the blacksmith's: everyone upgrades their discs, then the party goes back to the map
+    // the blacksmith's: everyone upgrades their own discs and goes back to the map when done
     restRoom(n.type, game.party, game.bank, run.seed + depth * 131);
     mapView.info = '';
-    game.forge = true;
+    game.forge = depth;
     showMap(false);
-    screen('');
     game.onChange();
   } else {
     mapView.info = `<b>${ROOM_TYPES[n.type].name}.</b> ${restRoom(n.type, game.party, game.bank, run.seed + depth * 131)}`;
     hud.buildAllies();
     hud.refresh();
     showMap(true);
-    screen(ROOM_TYPES[n.type].name, mapView.info);
+  }
+  shareMap();
+}
+
+// alone a click on the map goes there; online it is a vote, and the party goes once everyone here picked the same room
+mapView.onChoose = id => {
+  const me = myHero();
+  if (!game.online) choose(id);
+  else if (me === null) return;
+  else if (mode === 'host') vote(me, id);
+  else {
+    // the token moves at once; the host's count follows
+    votes = { ...votes, [me]: id };
+    showMap(true);
+    net.send({ t: 'vote', id });
   }
 };
+
+/** Host: the heroes whose players are here to vote; the host plays the others, and they have no say. */
+const atTable = () => players.filter(p => p.hero !== null && net.has(p.id)).map(p => p.hero!);
+
+/** Host: a player points at a room. */
+function vote(hero: number, id: string) {
+  if (!choosing || !reachable(run, run.floor).includes(id)) return;
+  votes[hero] = id;
+  settle();
+}
+
+/** Host: go where everyone here agreed, or show them all how the vote stands. */
+function settle() {
+  if (!choosing) return;
+  const go = agreed(votes, atTable());
+  if (go) choose(go);
+  else shareMap();
+}
+
+/** Host: tell everyone where the party stands on the map, and show it on the host's own map too. */
+function shareMap() {
+  if (mode !== 'host' || !started) return;
+  const m: MapState = { run, choosing, info: mapView.info, votes, voters: atTable() };
+  net.broadcast({ t: 'map', m });
+  if (!$('mapScreen').hidden) showMap(true);
+}
+
+/** Online: whose token stands on which room, and whom the party still waits for. Alone there is nothing to show. */
+function mapVotes(): MapVotes | undefined {
+  const table = mode === 'host' ? atTable() : mode === 'client' ? voters : [];
+  if (!choosing || table.length < 2) return undefined;
+  const me = myHero();
+  const nameOf = (h: number) => players.find(p => p.hero === h)?.name ?? HEROES[h].name;
+  const pips: MapVotes['pips'] = {};
+  for (const h of table) if (votes[h]) (pips[votes[h]] ??= []).push({ col: HEROES[h].col, name: nameOf(h) });
+  const idle = table.filter(h => !votes[h]).map(h => (h === me ? 'ты' : nameOf(h)));
+  const note = idle.length === table.length ? 'Идём, когда все нажмут одну и ту же комнату.'
+    : idle.length ? `Ещё не выбрали: ${idle.join(', ')}.`
+    : 'Голоса разошлись. Договоритесь и нажмите одну комнату.';
+  return { pips, mine: me !== null ? votes[me] ?? null : null, note };
+}
 
 game.onChange = () => { hud.refresh(); dirty = true; stale = true; };
 game.onRoomEnd = win => {
@@ -229,23 +294,26 @@ game.onRoomEnd = win => {
     }
     if (boss) run.floor++;
     choosing = true;
+    votes = {};
     showEnd({ title: boss ? `Этаж ${run.floor} пройден` : 'Комната зачищена',
       text: `Ходов: ${S.turn}. Пройдено комнат: ${run.path.reduce((a, p) => a + p.length, 0)} из ${FLOORS * LAYERS}.`, kind: 'map' });
+    shareMap();
   }, 900);
 };
 
 /** The result of a room: on to the map, or (the run is over) a new run; online that means back to the lobby. */
-function showEnd(e: NonNullable<HostSave['ending']>) {
+function showEnd(e: Ending) {
   ending = e;
   $('roomEnd').hidden = false;
   victory($('roomEnd'), e.kind === 'win');
   $('endTitle').textContent = e.title;
   $('endText').textContent = e.text;
   $('endBtn').textContent = e.kind === 'map' ? 'К карте' : mode === 'host' ? 'В лобби' : 'Новый забег';
-  $('endBtn').onclick = e.kind === 'map'
-    ? () => { hideEnd(); showMap(true); screen('Выбор комнаты', 'Хозяин комнаты смотрит на карту забега.'); }
+  $('endBtn').onclick = e.kind === 'map' ? () => { hideEnd(); showMap(true); }
     : mode === 'host' ? backToLobby : () => startRun();
-  screen(e.title, e.text, e.kind === 'win');
+  // online every player reads a cleared room's result and walks to the map themselves; the end of the run waits for the host
+  if (e.kind !== 'map') screen(e.title, e.text, e.kind === 'win');
+  else if (mode === 'host') net.broadcast({ t: 'end', e });
 }
 
 /** Dress a result screen up as the victory banner: a spinning disco ball and confetti falling over it. */
@@ -268,10 +336,8 @@ function hideEnd() {
 }
 
 $('forgeDone').addEventListener('click', () => {
-  game.forge = false;
-  game.onChange();
+  hud.leaveForge();
   showMap(true);
-  screen('Выбор комнаты', 'Хозяин комнаты смотрит на карту забега.');
 });
 $('btnMap').addEventListener('click', () => showMap(true));
 $('mapClose').addEventListener('click', () => showMap(false));
@@ -311,7 +377,7 @@ $('pMenu').addEventListener('click', () => {
 function leaveOnline() {
   reconnecting++;
   // a client thrown out of the blacksmith's would keep the shop on screen over the menu
-  if (game.forge) { game.forge = false; hud.refresh(); }
+  if (game.forge) { game.forge = 0; hud.refresh(); }
   if (mode === 'host') net.broadcast({ t: 'bye' });
   if (net.active) net.close();
   clearSeat();
@@ -458,7 +524,10 @@ function welcome(id: string, name: string, key: string) {
     if (old !== id) net.kick(old);
     if (started) {
       net.sendTo(id, { t: 'start', players: pub() });
+      // everyone hears they are back at the table: the vote now waits for them too
+      shareMap();
       net.sendTo(id, { t: 'screen', ...lastScreen });
+      if (ending?.kind === 'map') net.sendTo(id, { t: 'end', e: ending });
       game.float(game.S.Wx / 2, 20, `${name} вернулся`, '#c7cbe0');
       setOnline('host');
       hud.buildAllies();
@@ -489,6 +558,8 @@ net.onLeave = id => {
   setOnline('host');
   hud.buildAllies();
   hud.refresh();
+  // the vote goes on without them: the others may already agree
+  settle();
 };
 
 net.onLost = () => { if (mode === 'client') reconnect(net.code); };
@@ -497,6 +568,7 @@ net.onMsg = (from, m) => {
   if (mode === 'host') {
     if (m.t === 'hello') welcome(from, m.name, m.key);
     else if (m.t === 'pick') pick(from, m.hero);
+    else if (m.t === 'vote' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) vote(h, m.id); }
     else if (m.t === 'act' && started && ownerOf(m.a.h) === from) game.perform(m.a);
     return;
   }
@@ -509,15 +581,26 @@ net.onMsg = (from, m) => {
     started = true;
     setOnline('client');
     show(null);
-    screen('Начинаем', 'Хозяин комнаты выбирает первую комнату.');
-  } else if (m.t === 'snap') {
+    wait('');
+  } else if (m.t === 'map') {
+    const went = choosing && !m.m.choosing;
+    ({ run, choosing, votes, voters } = m.m);
+    mapView.info = m.m.info;
+    // the party agreed on a fight and walks in; otherwise the map shows the vote as it stands
+    if (went) { hideEnd(); showMap(false); }
+    else if ((choosing && $('roomEnd').hidden) || !$('mapScreen').hidden) showMap(true);
+  } else if (m.t === 'end') showEnd(m.e);
+  else if (m.t === 'snap') {
+    const shop = hud.atForge;
     const ch = applySnapshot(game, m.s);
     stale = true;
     if (ch.party) hud.buildAllies();
     if (ch.room) controls.fit();
     hud.refresh();
+    // the party walked into the blacksmith's: the shop takes the map's place
+    if (!shop && hud.atForge) showMap(false);
   } else if (m.t === 'screen') screen(m.title, m.text, m.win);
-  else if (m.t === 'lobbyBack') { started = false; wait(''); lobbyView(); show('lobby'); }
+  else if (m.t === 'lobbyBack') { started = false; wait(''); hideEnd(); showMap(false); lobbyView(); show('lobby'); }
 };
 
 /** Host: send the game state to everyone, often while things move, and whenever something changed. */
@@ -538,7 +621,7 @@ function keepSeat(now: number) {
   if (mode !== 'host') return;
   saveSeat({ code: net.code, key: myKey, host: true });
   saveHost({
-    code: net.code, players, started, run, choosing, mapInfo: mapView.info, ending, screen: lastScreen,
+    code: net.code, players, started, run, choosing, mapInfo: mapView.info, votes, ending, screen: lastScreen,
     snap: started && game.S ? snapshot(game) : null,
   });
 }
@@ -556,6 +639,7 @@ async function reopen(code: string) {
   if (started && s.snap) {
     run = s.run;
     choosing = s.choosing;
+    votes = s.votes ?? {};
     mapView.info = s.mapInfo;
     applySnapshot(game, s.snap);
     setOnline('host');
@@ -579,8 +663,6 @@ async function reopen(code: string) {
   dirty = true;
   if (!started || !s.snap) { lobbyView(); show('lobby'); return; }
   if (s.ending) showEnd(s.ending);
-  // at the blacksmith's the shop came back with the game and is on screen already
-  else if (game.forge) hud.refresh();
   else if (choosing) showMap(true);
   else if (!game.liveMobs().length || !game.alive().length) game.onRoomEnd(game.alive().length > 0);
 }

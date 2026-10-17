@@ -77,6 +77,16 @@ export class Hud {
   private lastPortrait = '';
   /** Whose cards the blacksmith's screen holds now; the cards are built once per visit, then only their rows change. */
   private forgeCards = '';
+  /** The blacksmith's (by depth) this player is done at and left for the map, while the others may still be buying. */
+  private forgeLeft = 0;
+
+  /** The blacksmith's screen is up on this screen. */
+  get atForge() { return this.g.forge > 0 && this.g.forge !== this.forgeLeft; }
+
+  leaveForge() {
+    this.forgeLeft = this.g.forge;
+    this.forge();
+  }
 
   constructor(private g: Game) {
     $('abBtn').addEventListener('click', () => g.useAbility());
@@ -161,7 +171,10 @@ export class Hud {
           ? `<span class="m-go" title="Идёт к ${tgt!.def.name}${it.eta ? ', ударит через ' + turns(it.eta) : ''}">→${it.eta ? ' ' + it.eta : ''}</span><i class="m-dot" style="--c:${tgt!.def.col}" title="${tgt!.def.name}"></i>`
           : `<span class="m-sp">${{ charge: 'фитиль', slam: (it.chill ? 'метель ' : 'всем ') + it.dmg, heal: 'лечит ' + it.dmg, summon: 'призыв', heat: 'жар' }[it.t]}</span>`;
       return `<li${m === now ? ' class="now" aria-current="true"' : g.acted(m) ? ' class="done"' : ''}><img src="${mobIcon(m.k)}" alt=""><span class="m-name">${m.name}</span>`
-        + `<span class="m-hp" title="${m.hp}/${m.max} HP"><i style="width:${(Math.max(0, m.hp) / m.max) * 100}%"></i><b>${m.hp}</b></span>`
+        + `<span class="m-hp" title="${m.hp}/${m.max} HP${m.burn > 0 ? `, горит: в начале хода потеряет ${Math.min(m.burn, m.hp)}` : ''}"><i style="width:${(Math.max(0, m.hp) / m.max) * 100}%"></i>`
+        // what its fire will burn off at its next move, at the end of the bar
+        + (m.burn > 0 ? `<em style="left:${(Math.max(0, m.hp - m.burn) / m.max) * 100}%;width:${(Math.min(m.burn, Math.max(0, m.hp)) / m.max) * 100}%"></em>` : '')
+        + `<b>${m.hp}</b></span>`
         + `<span class="m-act">${act}</span></li>`;
     }).join('');
 
@@ -188,10 +201,14 @@ export class Hud {
       : h.thrown ? 'Бросай следующий диск'
       : 'Тяни фигурку назад и отпускай';
     $('abName').textContent = h.def.ab;
-    $('abTxt').textContent = h.def.abTxt;
+    // once on, the ability lives in this turn's discs: the button says so until the turn ends
+    $('abTxt').textContent = h.boost ? (h.hand ? 'Включено до конца хода: бросай' : 'Включено до конца хода') : h.def.abTxt;
     $('abCost').innerHTML = Array.from({ length: AB_COST }, (_, k) => `<i class="${k < g.bank.sparks ? 'on' : ''}"></i>`).join('');
-    $<HTMLButtonElement>('abBtn').disabled = !g.canUseAbility();
-    $('abBtn').title = `${h.def.ab}: ${h.def.abTxt} Стоит ${AB_COST} искры из общего запаса.`;
+    const ab = $<HTMLButtonElement>('abBtn');
+    ab.disabled = !g.canUseAbility();
+    ab.classList.toggle('on', h.boost);
+    ab.style.setProperty('--ab', h.def.abCol);
+    ab.title = `${h.def.ab}: ${h.def.abTxt} ${h.def.abMore} Стоит ${AB_COST} искры из общего запаса, включается до броска.`;
     const fb = $<HTMLButtonElement>('fightBtn'), isReady = S.ready.includes(h.i);
     fb.hidden = S.phase !== 'place' || h.hp <= 0;
     fb.disabled = (g.online && isReady) || !(g.online ? g.placed(h) : g.placed());
@@ -204,8 +221,9 @@ export class Hud {
   /** The blacksmith's screen: every hero's upgrades with the next level for sale, paid from the party's shared ore. */
   private forge() {
     const g = this.g;
-    $('forgeScreen').hidden = !g.forge;
-    if (!g.forge) { this.forgeCards = ''; return; }
+    $('forgeScreen').hidden = !this.atForge;
+    if (!g.forge) { this.forgeCards = ''; this.forgeLeft = 0; }
+    if (!this.atForge) return;
     const key = g.party.map(h => h.i + (sprites.has(h.def.key) ? '+img' : '')).join();
     if (this.forgeCards !== key) {
       const box = $('forgeHeroes');
@@ -229,8 +247,6 @@ export class Hud {
       c.querySelector('.fc-hp')!.textContent = h.hp > 0 ? `${h.hp}/${h.max} HP` : 'пал';
       c.querySelector('.ups')!.innerHTML = upRows(g, h, true);
     }
-    // online the host leads the party on, once the others are done
-    $('forgeDone').hidden = !!g.send;
-    $('forgeNote').textContent = g.send ? 'Прокачай своего героя. Дальше отряд поведёт хозяин комнаты.' : g.online ? 'Каждый прокачивает своего героя.' : '';
+    $('forgeNote').textContent = g.online ? 'Каждый прокачивает своего героя. Кто закончил, идёт на карту выбирать комнату.' : '';
   }
 }

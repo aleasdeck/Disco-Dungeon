@@ -83,6 +83,15 @@ export function reachable(run: Run, f: number): string[] {
 
 export const runDone = (run: Run) => run.path[FLOORS - 1].length === LAYERS;
 
+/** Online, the room each player points at on the map, by their hero. */
+export type Votes = Record<number, string>;
+
+/** The room every voter points at, or null while someone hasn't chosen yet or they disagree. */
+export function agreed(votes: Votes, voters: number[]): string | null {
+  const ids = voters.map(h => votes[h]);
+  return ids.length && ids.every(id => id && id === ids[0]) ? ids[0] : null;
+}
+
 /** Minutes played so far and the forecast for the whole run. */
 export function minutes(run: Run) {
   let done = 0, est = 0;
