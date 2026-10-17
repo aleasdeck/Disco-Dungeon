@@ -8,11 +8,12 @@ import { saveSettings, settings } from './settings';
 import { bindSettings, lobbyStatus, renderCollection, renderHeroSelect, renderLobby, resetLobby, show } from './menu';
 import { Input } from './input';
 import { Hud } from './ui';
-import { MapView, type MapVotes } from './mapview';
+import { hl } from './hl';
+import { MapView, type MapParty, type MapVotes } from './mapview';
 import { SceneRenderer } from './draw/scene';
 import { loadSprites } from './assets';
 import { clearSeat, loadHost, loadSeat, newKey, saveHost, saveSeat, type Ending, type HostSave } from './resume';
-import { FLOORS, LAYERS, agreed, depthOf, newRun, nodeById, reachable, restRoom, type Run, type Votes } from './run';
+import { FLOORS, LAYERS, agreed, depthOf, eventOf, newRun, nodeById, reachable, restRoom, type Run, type Votes } from './run';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -35,11 +36,15 @@ let view = { w: 0, h: 0, dpr: 1 };
 
 // ------------------------------------------------------------ camera
 
-/** Screen rectangle not covered by the top bar and the hero frame. */
+/**
+ * Screen rectangle the room is fitted into and held to: below the top bar, with a little margin all round. A panel across
+ * most of the bottom (the hero frame on a narrow screen) is kept clear too; one in a corner only covers a corner of the room.
+ */
 function playRect() {
-  const top = 50, fr = $('frame').getBoundingClientRect();
-  const bottom = Math.max(0, view.h - fr.top) + 6;
-  return { x: 0, y: top, w: view.w, h: Math.max(120, view.h - top - bottom) };
+  const m = 10, top = (document.querySelector('header')?.getBoundingClientRect().bottom ?? 50) + m;
+  const fr = document.getElementById('frame')?.getBoundingClientRect();
+  const bottom = fr && fr.height && fr.width > view.w / 2 ? Math.max(0, view.h - fr.top) + m : m;
+  return { x: m, y: top, w: Math.max(120, view.w - 2 * m), h: Math.max(120, view.h - top - bottom) };
 }
 
 let anim: { from: number; to: number; t: number; cx: number; cy: number } | null = null;
@@ -98,12 +103,6 @@ function resize() {
 
 const input = new Input(cv, cam, game, controls);
 
-$('zoomIn').addEventListener('click', () => controls.zoomBy(1.25));
-$('zoomOut').addEventListener('click', () => controls.zoomBy(0.8));
-$('rotL').addEventListener('click', () => controls.rotateBy(-Math.PI / 4));
-$('rotR').addEventListener('click', () => controls.rotateBy(Math.PI / 4));
-$('camFit').addEventListener('click', () => controls.fit());
-
 // ------------------------------------------------------------ run flow
 
 function showMap(open: boolean) {
@@ -113,7 +112,7 @@ function showMap(open: boolean) {
   $('mapScreen').hidden = !open;
   $('mapClose').hidden = choosing;
   if (open) {
-    mapView.render(run, choosing, mapVotes());
+    mapView.render(run, choosing, mapParty(), mapVotes());
     // on a short screen the map scrolls; bring the rooms to choose from into view
     if (!was) document.querySelector('#map .mnode.reach, #map .mnode.cur')?.scrollIntoView({ block: 'center' });
   }
@@ -139,20 +138,27 @@ let reconnecting = 0;
 
 const playerName = () => settings.name || 'Игрок';
 const ownerOf = (i: number) => players.find(p => p.hero === i)?.id ?? 'host';
+
+/** Host: tell the game whose players are not at the table right now, so nobody waits for them. */
+function seatAway() {
+  if (mode !== 'host' || !started || !game.S) return;
+  game.setAway(players.filter(p => p.hero !== null && p.id !== 'host' && !net.has(p.id)).map(p => p.hero!).sort());
+}
 const myHero = () => players.find(p => p.id === net.id)?.hero ?? null;
 /** The players as the clients see them: without anyone's rejoin key. */
 const pub = () => players.map(({ key: _key, ...p }) => p);
 
 /** The waiting screen online clients see while the host is on the map or reading a room's result. */
-function screen(title: string, text = '', win = false) {
-  if (mode === 'host') { lastScreen = { title, text, win }; net.broadcast({ t: 'screen', title, text, win }); }
-  if (mode === 'client') wait(title, text, false, win);
+function screen(title: string, text = '', win = false, lose = false) {
+  if (mode === 'host') { lastScreen = { title, text, win, lose }; net.broadcast({ t: 'screen', title, text, win, lose }); }
+  if (mode === 'client') wait(title, text, false, win, lose);
 }
 
 /** Show or hide the waiting screen on this browser; `away` is for a lost connection, which the player may give up on. */
-function wait(title: string, text = '', away = false, win = false) {
+function wait(title: string, text = '', away = false, win = false, lose = false) {
   $('waitScreen').hidden = !title;
   victory($('waitScreen'), win && !!title);
+  $('waitScreen').classList.toggle('lose', lose);
   $('waitTitle').textContent = title;
   $('waitText').innerHTML = text;
   $('waitNote').hidden = away || mode !== 'client';
@@ -169,7 +175,6 @@ function setOnline(m: Mode) {
     : m === 'host' ? h => ownerOf(h.i) === 'host' || !net.has(ownerOf(h.i))
     : () => true;
   if (mine !== null) game.act = mine;
-  $('newRun').hidden = m === 'client';
 }
 
 function startRun(picks?: number[]) {
@@ -225,7 +230,9 @@ function choose(id: string) {
     showMap(false);
     game.onChange();
   } else {
-    mapView.info = `<b>${ROOM_TYPES[n.type].name}.</b> ${restRoom(n.type, game.party, game.bank, run.seed + depth * 131)}`;
+    // the room's picture rides along in the shared text: every screen fills it in from its own art
+    const seed = run.seed + depth * 131, pic = n.type === 'event' ? 'ev_' + eventOf(seed) : 'room_' + n.type;
+    mapView.info = `<i data-art="${pic}" aria-hidden="true"></i><span><b>${ROOM_TYPES[n.type].name}.</b> ${restRoom(n.type, game.party, game.bank, seed)}</span>`;
     hud.buildAllies();
     hud.refresh();
     showMap(true);
@@ -273,6 +280,12 @@ function shareMap() {
   if (!$('mapScreen').hidden) showMap(true);
 }
 
+/** Who walks the map, this screen's own hero first, and the party's ore. */
+function mapParty(): MapParty {
+  const mine = game.online ? myHero() : game.party[0]?.i ?? null, me = game.party.find(h => h.i === mine) ?? null;
+  return { heroes: me ? [me, ...game.party.filter(h => h !== me)] : game.party, me, ore: game.bank.ore };
+}
+
 /** Online: whose token stands on which room, and whom the party still waits for. Alone there is nothing to show. */
 function mapVotes(): MapVotes | undefined {
   const table = mode === 'host' ? atTable() : mode === 'client' ? voters : [];
@@ -289,6 +302,9 @@ function mapVotes(): MapVotes | undefined {
 }
 
 game.onChange = () => { hud.refresh(); dirty = true; stale = true; };
+// online every party head says whose hero it is
+hud.nameOf = i => (game.online ? players.find(p => p.hero === i)?.name ?? null : null);
+hl.changed = () => { dirty = true; };
 game.onRoomEnd = win => {
   const S = game.S, boss = S.spec.type === 'boss';
   const last = boss && run.floor === FLOORS - 1;
@@ -314,13 +330,14 @@ function showEnd(e: Ending) {
   ending = e;
   $('roomEnd').hidden = false;
   victory($('roomEnd'), e.kind === 'win');
+  $('roomEnd').classList.toggle('lose', e.kind === 'again');
   $('endTitle').textContent = e.title;
   $('endText').textContent = e.text;
   $('endBtn').textContent = e.kind === 'map' ? 'К карте' : mode === 'host' ? 'В лобби' : 'Новый забег';
   $('endBtn').onclick = e.kind === 'map' ? () => { hideEnd(); showMap(true); }
     : mode === 'host' ? backToLobby : openHeroSelect;
   // online every player reads a cleared room's result and walks to the map themselves; the end of the run waits for the host
-  if (e.kind !== 'map') screen(e.title, e.text, e.kind === 'win');
+  if (e.kind !== 'map') screen(e.title, e.text, e.kind === 'win', e.kind === 'again');
   else if (mode === 'host') net.broadcast({ t: 'end', e });
 }
 
@@ -349,7 +366,6 @@ $('forgeDone').addEventListener('click', () => {
 });
 $('btnMap').addEventListener('click', () => showMap(true));
 $('mapClose').addEventListener('click', () => showMap(false));
-$('newRun').addEventListener('click', () => (mode === 'host' ? startRun(game.party.map(h => h.i)) : openHeroSelect()));
 $('helpClose').addEventListener('click', () => { $('help').hidden = true; });
 
 // ------------------------------------------------------------ menu
@@ -540,6 +556,7 @@ function welcome(id: string, name: string, key: string) {
       if (ending?.kind === 'map') net.sendTo(id, { t: 'end', e: ending });
       game.float(game.S.Wx / 2, 20, `${name} вернулся`, '#c7cbe0');
       setOnline('host');
+      seatAway();
       hud.buildAllies();
       hud.refresh();
       dirty = true;
@@ -566,6 +583,7 @@ net.onLeave = id => {
   if (!p) return;
   game.float(game.S.Wx / 2, 20, `${p.name} отключился`, '#c7cbe0');
   setOnline('host');
+  seatAway();
   hud.buildAllies();
   hud.refresh();
   // the vote goes on without them: the others may already agree
@@ -609,7 +627,7 @@ net.onMsg = (from, m) => {
     hud.refresh();
     // the party walked into the blacksmith's: the shop takes the map's place
     if (!shop && hud.atForge) showMap(false);
-  } else if (m.t === 'screen') screen(m.title, m.text, m.win);
+  } else if (m.t === 'screen') screen(m.title, m.text, m.win, m.lose);
   else if (m.t === 'lobbyBack') { started = false; wait(''); hideEnd(); showMap(false); lobbyView(); show('lobby'); }
 };
 
@@ -672,6 +690,8 @@ async function reopen(code: string) {
   wait('');
   dirty = true;
   if (!started || !s.snap) { lobbyView(); show('lobby'); return; }
+  // players get a moment to find their seats again; whoever is still missing after it stops holding the others up
+  setTimeout(seatAway, 15_000);
   if (s.ending) showEnd(s.ending);
   else if (choosing) showMap(true);
   else if (!game.liveMobs().length || !game.alive().length) game.onRoomEnd(game.alive().length > 0);
@@ -758,4 +778,4 @@ $('waitLeave').addEventListener('click', () => { leaveOnline(); hideEnd(); showM
 requestAnimationFrame(frame);
 
 // handle for automated checks
-Object.assign(window, { __dd: { game, cam, scene, ctx, net, get view() { return view; }, get run() { return run; }, get mode() { return mode; } } });
+Object.assign(window, { __dd: { game, cam, hud, scene, ctx, net, get view() { return view; }, get run() { return run; }, get mode() { return mode; } } });

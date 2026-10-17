@@ -10,6 +10,7 @@ import { circ, ell, fs, mix, pth, rr, type Ctx, type Pt } from './util';
 import { GRAFFITI_FONTS, envArt } from '../assets';
 import { settings } from '../settings';
 import { knockPose, topplePose, type Knock, type Pose } from '../fx';
+import { hl } from '../hl';
 
 export interface Aim { hero: HeroState; dx: number; dy: number }
 /** A hero dragged to another rune: pointer position in screen pixels and the rune under it. */
@@ -1160,24 +1161,13 @@ export class SceneRenderer {
       alpha: dead ? 0.45 : carried ? 0.3 : lifted ? 0.85 : 1,
       hp: dead || carried ? undefined : { now: h.hp, max: h.max },
       pose: lifted ? undefined : this.pose(h.knock, p.x, p.y, HERO_BASE),
+      light: S.biome.light,
       placeholder: (cc, x, y, fl) => drawHeroFigure(cc, h.i, x, y, 0.8, fl, this.t),
     });
     if (dead || carried) return;
-    const top = sy - BASE_TH - HERO_FIG - 6;
-    if (h.shield > 0) {
-      // shield badge on the right of the stand
-      const bx = sx + 12, by = sy - 6;
-      c.beginPath(); c.moveTo(bx - 2.5, by - 3); c.lineTo(bx + 2.5, by - 3); c.lineTo(bx + 2.5, by);
-      c.quadraticCurveTo(bx + 2.5, by + 2.5, bx, by + 3.5); c.quadraticCurveTo(bx - 2.5, by + 2.5, bx - 2.5, by); c.closePath();
-      fs(c, '#3fc4b6', 0.8);
-    }
-    if (h.chill > 0 || h.fire > 0) {
-      c.font = '600 6.5px Oswald, sans-serif'; c.textAlign = 'right';
-      c.fillStyle = h.chill > 0 ? '#bfe6ff' : '#ff9a5c';
-      c.fillText(h.chill > 0 && h.fire > 0 ? 'озноб, горит' : h.chill > 0 ? 'озноб' : 'горит', sx - 11, top + 1);
-    }
-    if (g.hero === h && S.phase !== 'over') {
-      const yy = top - 7 - (reduce ? 0 : Math.sin(this.t * 6) * 1.2);
+    // with friends on the field a small gold arrow just over the head says which figure is yours
+    if (g.hero === h && g.party.length > 1 && S.phase !== 'over') {
+      const yy = sy - BASE_TH - HERO_FIG - 4 - (reduce ? 0 : Math.sin(this.t * 6) * 1.2);
       pth(c, [[sx - 3, yy - 3], [sx + 3, yy - 3], [sx, yy + 1]]);
       fs(c, '#ffd34d', 0.8);
     }
@@ -1194,12 +1184,20 @@ export class SceneRenderer {
       pose = topplePose(m.dead, side, m.r * 1.27);
       alpha = Math.min(1, Math.max(0, (1 - m.dead) / 0.4));
     }
+    if (hl.mob >= 0 && S.mobs[hl.mob] === m && m.hp > 0) {
+      // picked in the HUD's queue: a gold ring round its stand shows which figure that is
+      const k = reduce ? 1 : 1 + 0.08 * Math.sin(this.t * 6);
+      ell(c, x, y, m.r * 1.27 * 1.35 * k, m.r * 0.64 * 1.35 * k);
+      c.strokeStyle = '#ffd864'; c.lineWidth = 2.2; c.stroke();
+      c.strokeStyle = 'rgba(255,216,100,.35)'; c.lineWidth = 5; c.stroke();
+    }
     drawMiniature(c, {
       key: m.k, x, y, baseR: m.r, baseCol: ENEMY_BASE, fig: MOBS[m.k].fig,
       faceRight: this.faceRight(m.x, m.y, tgt.x, tgt.y), flash: m.flash > 0, hop: m.hop,
       alpha,
       hp: m.hp > 0 ? { now: m.hp, max: m.max } : undefined,
       pose,
+      light: S.biome.light,
       placeholder: (cc, fx, fy, fl) => drawMobFigure(cc, m.k, fx, fy, fl),
     });
     if (m.hp <= 0) return;
@@ -1212,13 +1210,6 @@ export class SceneRenderer {
         c.beginPath(); c.moveTo(fx, fy - 4); c.quadraticCurveTo(fx + 2, fy, fx, fy + 1); c.quadraticCurveTo(fx - 2, fy, fx, fy - 4);
         c.fillStyle = `rgba(255,140,60,${1 - ph})`; c.fill();
       }
-      c.font = '700 7px Oswald, sans-serif'; c.textAlign = 'left'; c.fillStyle = '#ffb070';
-      c.strokeStyle = INK; c.lineWidth = 2; c.strokeText(String(m.burn), x + n * 2.5 + 2, top + 13); c.fillText(String(m.burn), x + n * 2.5 + 2, top + 13);
-    }
-    if (m.armor) { c.font = '600 6px Oswald, sans-serif'; c.textAlign = 'right'; c.fillStyle = '#d6cfbd'; c.fillText('бр ' + m.armor, x - m.r * 1.27 - 2, y - m.hop - 1); }
-    if (!g.solid(m) && m.hp > 0 && S.phase !== 'over') {
-      c.font = '600 6px Oswald, sans-serif'; c.textAlign = 'center'; c.fillStyle = '#d9f2ff';
-      c.fillText('бесплотен', x, y + m.r * 0.64 + 8);
     }
   }
 

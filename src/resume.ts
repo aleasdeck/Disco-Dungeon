@@ -23,7 +23,7 @@ export interface HostSave {
   votes?: Votes;
   /** The room's result screen, if it was showing. */
   ending: Ending | null;
-  screen: { title: string; text: string; win?: boolean };
+  screen: { title: string; text: string; win?: boolean; lose?: boolean };
   snap: Snapshot | null;
 }
 

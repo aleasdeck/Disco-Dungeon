@@ -1,3 +1,22 @@
+/* Caveat, the handwriting the notes and descriptions are written in. Scaled up so it sits in the
+   same sizes as the Oswald labels around it; only Cyrillic and Latin are bundled. */
+@font-face {
+  font-family: Hand;
+  src: url('./fonts/caveat-700-cyrillic.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: swap;
+  size-adjust: 140%;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: Hand;
+  src: url('./fonts/caveat-700-latin.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: swap;
+  size-adjust: 140%;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
   --bg: #16110d;
   --panel: #2a211b;
@@ -12,8 +31,8 @@
   --teal: #3fc4b6;
   --spark: #c9a8ff;
   --ore: #e8b44a;
-  --frame-h: 128px;
   --safe-b: env(safe-area-inset-bottom, 0px);
+  --hand: Hand, Rubik, system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -25,7 +44,7 @@ html, body {
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.35 Rubik, system-ui, sans-serif;
+  font: 14px/1.35 var(--hand);
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
 }
@@ -76,43 +95,346 @@ button { font: inherit; color: inherit; }
   backdrop-filter: blur(4px);
 }
 
-/* ---------- top bar */
+/* ---------- the HUD: angular, uneven plates with a thick ink edge, kept to the screen's strips and corners */
+:root {
+  --outline: drop-shadow(2px 0 0 #120c09) drop-shadow(-2px 0 0 #120c09) drop-shadow(0 2px 0 #120c09) drop-shadow(0 -2px 0 #120c09);
+  --cut-slab: polygon(1.5% 12%, 34% 0, 97% 5%, 100% 64%, 95.5% 100%, 7% 95%, 0 66%);
+  --cut-tile: polygon(12% 0, 100% 7%, 93% 88%, 70% 100%, 0 93%, 5% 24%);
+  --cut-face: polygon(9% 3%, 88% 0, 100% 16%, 96% 92%, 78% 100%, 4% 96%, 0 18%);
+  --cut-gem: polygon(28% 2%, 76% 0, 100% 30%, 96% 74%, 66% 100%, 22% 97%, 0 66%, 5% 24%);
+  --cut-bar: polygon(1.2% 0, 100% 0, 98.6% 100%, 0 100%);
+  --gold-1: #ffd864; --gold-2: #e3a42e; --gold-3: #a8640f;
+}
+.ico { display: block; width: 100%; height: 100%; }
+i.ico { display: inline-block; font-style: normal; }
+
+/* ---------- top strip */
 .hud-top {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  padding: max(10px, env(safe-area-inset-top)) 12px 0;
-  pointer-events: none;
   z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: max(7px, env(safe-area-inset-top)) 12px 7px;
+  background: linear-gradient(rgba(20, 14, 10, 0.94), rgba(20, 14, 10, 0.8));
+  border-bottom: 3px solid #120c09;
+  box-shadow: 0 2px 0 rgba(92, 74, 57, 0.7), 0 8px 18px rgba(0, 0, 0, 0.4);
 }
-.hud-top > * { pointer-events: auto; }
-.loc { display: flex; flex-direction: column; min-width: 0; }
-.loc b { font: 600 16px Oswald, sans-serif; letter-spacing: 0.02em; color: var(--gold); white-space: nowrap; }
-.loc span { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.stats { display: flex; gap: 14px; align-items: center; align-self: stretch; color: var(--muted); font-size: 13px; }
-.stats span { white-space: nowrap; }
-.stats b { color: var(--text); font-family: Oswald, sans-serif; font-weight: 600; }
-.top-btns { margin-left: auto; display: flex; gap: 8px; }
+.party { display: flex; gap: 7px; }
+.head { position: relative; width: 48px; height: 52px; padding: 0; border: 0; background: none; cursor: pointer; filter: var(--outline); }
+.head canvas { display: block; width: 48px; height: 44px; clip-path: var(--cut-face); background: var(--c); }
+.head::before { content: ''; position: absolute; inset: -3px -3px 5px; clip-path: var(--cut-face); background: var(--c); z-index: -1; }
+.head.me::before { background: var(--gold-1); }
+.head .a-hp { position: absolute; left: 3px; right: 3px; bottom: 0; height: 6px; background: #241a14; clip-path: var(--cut-bar); }
+.head .a-hp i { position: absolute; inset: 0 auto 0 0; background: var(--hp); }
+.head .a-hp s { position: absolute; top: 0; bottom: 0; background: #8fc6ea; }
+.head .a-hp em { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(-45deg, #ffd34d 0 2px, #8a1f2a 2px 4px); animation: risk 0.9s ease-in-out infinite; }
+.head .tick { position: absolute; right: -6px; top: -5px; width: 20px; height: 20px; display: none; }
+.head.done .tick { display: block; }
+.head.dead { filter: var(--outline) grayscale(1) brightness(0.55); }
+.head .who { position: absolute; left: -2px; right: -2px; bottom: 7px; font: 600 10px/1.3 Oswald, sans-serif; color: #fff; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: rgba(18, 12, 9, 0.72); pointer-events: none; }
+.head .who:empty { display: none; }
+.head .off { position: absolute; left: -6px; top: -5px; width: 20px; height: 20px; display: none; }
+.head.away canvas { filter: grayscale(1) brightness(0.6); }
+.head.away .off { display: block; }
+.head.lethal { animation: lethal-f 0.9s ease-in-out infinite; }
+.head:disabled { cursor: default; }
+.ore-chip { display: flex; align-items: center; gap: 6px; padding: 3px 14px 3px 8px; background: #2c2119; clip-path: var(--cut-slab); font: 700 20px/1 Oswald, sans-serif; color: #f3e6c8; }
+.ore-chip .ico { width: 28px; height: 28px; }
+.where { display: flex; flex-direction: column; align-items: center; min-width: 0; margin: 0 auto; text-align: center; }
+.where b { font: 700 19px/1.1 Oswald, sans-serif; letter-spacing: 0.03em; color: #f3e6c8; white-space: nowrap; }
+.where-sub { display: flex; gap: 8px; justify-content: center; font: 500 13px/1.3 Oswald, sans-serif; color: var(--gold); white-space: nowrap; }
+.where-sub .side.enemies { color: #ff6b7d; }
+.where-sub .side.over { color: var(--gold-1); }
+.where-sub .rage { color: #ff6b7d; }
+.where-sub .rage.soon { color: #ffb070; }
 
-/* ---------- whose turn: the heroes throw, then the enemies go */
-/* the turn in the top bar, next to the turn number */
-.stats .side {
-  padding: 1px 9px;
-  border: 1.5px solid var(--ink);
-  border-radius: 99px;
-  font: 600 13px/18px Oswald, sans-serif;
-  letter-spacing: 0.03em;
-  color: #fff;
-  background: #2f6f68;
-  transition: background-color 0.3s;
+/* the enemy queue: whoever is further left goes first */
+.queue { list-style: none; margin: 0 0 0 auto; padding: 0; display: flex; align-items: flex-start; gap: 4px; }
+.queue li { position: relative; display: flex; flex-direction: column; align-items: center; transition: opacity 0.2s; }
+.queue li + li { margin-left: 18px; }
+.queue li + li::before {
+  content: ''; position: absolute; left: -17px; top: 17px; width: 11px; height: 14px; background: var(--gold-2);
+  clip-path: polygon(0 0, 45% 0, 100% 50%, 45% 100%, 0 100%, 52% 50%);
 }
-.stats .side.enemies { background: var(--red); }
-.stats .side.place { background: #5a4a7a; }
-.stats .side.over { background: #a67812; }
+.qb { position: relative; width: 48px; height: 48px; padding: 0; border: 0; background: none; cursor: pointer; filter: var(--outline); }
+.qb img { display: block; width: 100%; height: 100%; clip-path: var(--cut-tile); background: var(--red); }
+.queue li.boss .qb { width: 56px; height: 56px; margin-top: -4px; }
+.queue li.now .qb { transform: scale(1.12); }
+.queue li.now .qb::after { content: ''; position: absolute; inset: -5px; border: 3px solid var(--gold-1); clip-path: var(--cut-tile); }
+.queue li.done { opacity: 0.4; }
+.qi { position: absolute; right: -9px; bottom: -7px; }
+.cd { font: 600 10px/1 Oswald, sans-serif; color: #c9a8ff; margin-top: 9px; white-space: nowrap; }
+.cd:empty { display: none; }
+/* a badge in the colour of the hero it is after: a number for a blow, a hollow ring for walking up, every colour for a blow on all */
+.ib {
+  display: grid; place-items: center; min-width: 24px; height: 24px; padding: 0 4px;
+  font: 700 14px/1 Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #120c09;
+  background: var(--c); border: 2px solid #120c09; clip-path: var(--cut-gem); border-radius: 0;
+}
+.ib.go { background: #120c09; color: #fff; box-shadow: inset 0 0 0 4px var(--c); font-size: 12px; }
+.ib.all { background: var(--pie); }
+.ib.sp { background: #6b4fa8; padding: 3px; }
+.ib.sp .ico { width: 16px; height: 16px; }
+.ib.go .ico { width: 12px; height: 12px; }
+
+.top-btns { display: flex; gap: 8px; }
+.ibtn {
+  position: relative; width: 44px; height: 44px; padding: 7px; border: 0; cursor: pointer;
+  background: linear-gradient(#4d3c2d, #2b2018); clip-path: var(--cut-tile);
+}
+.ibtn:hover { background: linear-gradient(#5d4934, #33271d); }
+.ibtn:active { transform: translateY(1px); }
+.top-btns { filter: var(--outline); }
+.ibtn.new::after { content: ''; position: absolute; right: 5px; top: 6px; width: 9px; height: 9px; background: var(--gold-1); clip-path: var(--cut-gem); }
+
+/* a boss: a wide bar under the strip with its health and how soon it hits everyone */
+.boss-bar {
+  position: fixed; top: 76px; left: 50%; transform: translateX(-50%); z-index: 4;
+  display: flex; align-items: center; gap: 8px; width: min(520px, calc(100% - 24px)); padding: 6px 14px 6px 8px;
+  background: rgba(40, 14, 22, 0.9); clip-path: var(--cut-slab);
+}
+.boss-bar canvas { width: 40px; height: 40px; clip-path: var(--cut-tile); flex: none; }
+.boss-bar > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.boss-bar b { font: 600 14px/1.1 Oswald, sans-serif; color: #f3e6c8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bb-hp, .mc-hp { position: relative; display: block; height: 14px; background: #241a14; clip-path: var(--cut-bar); }
+.bb-hp i, .mc-hp i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(#e85b66, #a52a35); }
+.bb-hp em, .mc-hp em { position: absolute; top: 0; bottom: 0; background: #ff8a3d; }
+.bb-hp u, .mc-hp u { position: absolute; inset: 0; text-decoration: none; text-align: center; font: 600 11px/14px Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #000; }
+
+/* an enemy's card from the queue */
+.mob-card {
+  position: fixed; z-index: 8; width: 250px; padding: 10px 12px 12px;
+  background: #2a211b; border: 2px solid #120c09; outline: 2px solid var(--edge); outline-offset: -6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6); pointer-events: none;
+}
+.mc-head { display: flex; gap: 8px; align-items: center; }
+.mc-head img { width: 44px; height: 44px; clip-path: var(--cut-tile); }
+.mc-head > div { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.mc-head b { font: 600 16px/1.1 Oswald, sans-serif; }
+.mc-act { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; font-size: 13px; }
+.mc-cd { margin: 4px 0 0; color: #c9a8ff; font-size: 12px; }
+.mc-st { display: flex; gap: 6px; margin-top: 6px; }
+.mc-st:empty { display: none; }
+.mc-txt { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+.st { position: relative; display: inline-block; width: 24px; height: 24px; }
+.st b { position: absolute; right: -4px; bottom: -3px; font: 700 11px/1 Oswald, sans-serif; color: #fff; text-shadow: 1px 1px 0 #120c09, -1px -1px 0 #120c09, 1px -1px 0 #120c09, -1px 1px 0 #120c09; }
+
+/* the enemy turn's journal under the scroll */
+.log-panel {
+  position: fixed; top: 70px; right: 12px; z-index: 8; width: min(320px, calc(100% - 24px)); max-height: 50vh; overflow: auto;
+  padding: 10px 14px; background: #2a211b; border: 2px solid #120c09; outline: 2px solid var(--edge); outline-offset: -6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+.log-panel h3 { margin: 0 0 6px; font: 600 16px Oswald, sans-serif; color: var(--gold); }
+.log-panel ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.log-panel li.old { color: var(--muted); }
+.log-panel small { color: var(--muted); font-size: 11px; margin-right: 4px; }
+
+/* ---------- my hero's corner: portrait, discs, health with the shield, sparks running into the ability */
+.corner {
+  position: fixed; left: 16px; bottom: calc(16px + var(--safe-b)); z-index: 5;
+  width: 560px; height: 196px; pointer-events: none;
+  --pf-w: 156px; --pf-h: 184px;
+  transition: filter 0.35s;
+}
+.corner > * { position: absolute; pointer-events: auto; }
+[data-turn='enemies'] .corner { filter: saturate(0.4) brightness(0.8); }
+.portrait { left: 0; bottom: 0; width: var(--pf-w); height: var(--pf-h); padding: 0; border: 0; background: none; cursor: pointer; filter: var(--outline); }
+.portrait::before { content: ''; position: absolute; inset: 0; background: var(--c); clip-path: var(--cut-face); }
+.portrait canvas { position: absolute; inset: 5px; width: calc(100% - 10px); height: calc(100% - 10px); clip-path: var(--cut-face); }
+.pname {
+  position: absolute; left: 8px; right: 8px; bottom: 8px; padding: 2px 4px 3px;
+  --pn: 22px; font: var(--pn)/1 var(--hand); color: #fff; text-align: center; white-space: nowrap;
+  background: rgba(18, 12, 9, 0.62); clip-path: var(--cut-bar);
+}
+/* the handwriting runs wide: a long name like «Пепельница» is written smaller */
+.pname.long { font-size: calc(var(--pn) * 0.8); }
+.statuses { position: absolute; right: 6px; top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.statuses .st { width: 30px; height: 30px; padding: 3px; background: rgba(18, 12, 9, 0.7); clip-path: var(--cut-gem); }
+.statuses .st b { font-size: 12px; right: 1px; bottom: 0; }
+.corner.dead .portrait { filter: var(--outline) grayscale(1) brightness(0.6); }
+
+/* the discs of this turn as a stack: in hand in the hero's colour, thrown ones dark */
+.discs { left: calc(var(--pf-w) + 14px); bottom: 70px; display: flex; flex-direction: column-reverse; }
+.discs i {
+  display: block; width: 44px; height: 15px; margin-top: -4px; border-radius: 50%;
+  background: linear-gradient(#3a2f28, #241c17); border: 2px solid #120c09; box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.35);
+}
+.discs i.on { background: linear-gradient(color-mix(in srgb, var(--c) 70%, #fff), var(--c) 60%, var(--dk)); }
+
+.bars { left: calc(var(--pf-w) + 10px); bottom: 10px; width: 300px; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+.hpbar { position: relative; height: 28px; margin-right: 18px; pointer-events: auto; }
+.track { position: absolute; inset: 0; background: #241a14; clip-path: var(--cut-bar); }
+.corner .hpbar { filter: var(--outline); }
+.hpbar.shielded .track { box-shadow: inset 0 0 0 3px #7fb6dc; }
+.track i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(#ef6b75, #c13340 55%, #8d1e2a); transition: width 0.25s; }
+.track s { position: absolute; top: 0; bottom: 0; background: linear-gradient(#c5e6fb, #8fc6ea 55%, #5a9cc8); transition: width 0.25s, left 0.25s; }
+.track s.risk { background: repeating-linear-gradient(-45deg, #ffd34d 0 3px, #5a9cc8 3px 6px); animation: risk 0.9s ease-in-out infinite; }
+.track em { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(-45deg, #ffd34d 0 3px, #8a1f2a 3px 6px); animation: risk 0.9s ease-in-out infinite; }
+.hpbar.lethal { animation: lethal-f 0.9s ease-in-out infinite; }
+.hp-num { position: absolute; inset: 0; display: grid; place-items: center; font: 700 15px/1 Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #000, 0 0 3px #000; }
+@keyframes risk { 50% { opacity: 0.45; } }
+@keyframes lethal-f { 50% { filter: var(--outline) drop-shadow(0 0 6px #ff4d6a); } }
+
+/* the sparks bar: three cells that stop short of the ability button; full, both shine like the lit turn button */
+.spk { position: relative; display: flex; gap: 3px; height: 12px; margin-right: 18px; padding: 2px 3px; background: #241a33; clip-path: var(--cut-bar); }
+.spk i { flex: 1; background: #3a2c55; }
+.spk i.on { background: linear-gradient(#a98bf0, #6b4cc0); }
+.spk.full { background: #d9c8ff; box-shadow: 0 0 12px #c9a8ff; }
+.spk.full i { background: linear-gradient(#e2d4ff, #a07ef0); animation: shine 1.4s ease-in-out infinite; }
+@keyframes shine { 50% { filter: brightness(1.25); } }
+
+.ability {
+  left: calc(var(--pf-w) + 300px); bottom: 0; width: 104px; height: 112px; padding: 10px 6px 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  border: 0; cursor: pointer; background: none; filter: var(--outline);
+}
+.ability::before { content: ''; position: absolute; inset: 0; clip-path: var(--cut-gem); background: linear-gradient(#5a3f99, #2f2050); }
+.ability::after { content: ''; position: absolute; inset: 7px; clip-path: var(--cut-gem); background: linear-gradient(160deg, #8f6fe0, #5a3aa8 60%, #3d2875); }
+.ability > * { position: relative; z-index: 1; }
+.ability b { font: 700 15px/1 Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #120c09; }
+.ability:disabled { cursor: default; }
+.ability:disabled::after { filter: saturate(0.45) brightness(0.7); }
+.ability.full::after { background: linear-gradient(160deg, #c7b0ff, #8f6fe0 55%, #5a3aa8); }
+.ability.full { filter: var(--outline) drop-shadow(0 0 12px #c9a8ff); }
+.ability.full:not(.on) { animation: ab-full 1.4s ease-in-out infinite; }
+@keyframes ab-full { 50% { filter: var(--outline) drop-shadow(0 0 26px #e2d4ff) brightness(1.18); } }
+.ability.on { filter: var(--outline) drop-shadow(0 0 12px var(--ab)); }
+.ability.on::before { background: var(--ab); }
+.ability:not(:disabled):active { transform: translateY(2px); }
+
+/* the hero's card from the portrait */
+.hero-card {
+  left: 0; bottom: calc(var(--pf-h) + 10px); width: min(340px, calc(100vw - 32px)); padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 6px;
+  background: #2a211b; border: 2px solid #120c09; outline: 2px solid var(--edge); outline-offset: -6px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+.hero-card h3 { margin: 0; font: 700 18px Oswald, sans-serif; }
+.hc-hit { margin: 0; color: var(--gold); font-size: 13px; }
+.hc-ab { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.hc-ab b { color: #c9a8ff; }
+.hero-card .up { grid-template-columns: minmax(0, 1fr) auto 44px; }
+.hero-card .up-txt { display: block; }
+
+/* ---------- the one big turn button: «В бой!», «Конец хода», «Ждём…», «Ход врагов» */
+.turn-btn {
+  position: fixed; right: 20px; bottom: calc(20px + var(--safe-b)); z-index: 6;
+  width: 360px; height: 96px; padding: 0 20px; border: 0; background: none; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  filter: var(--outline) drop-shadow(0 5px 0 rgba(0, 0, 0, 0.55));
+  --p1: #b39253; --p2: #8a6b36; --p3: #5c4422; --tc: #2a1a0c;
+  --plate: var(--cut-slab);
+  transition: filter 0.2s;
+}
+.tb-plate { position: absolute; inset: 0; clip-path: var(--plate); background: linear-gradient(var(--p1), var(--p2) 55%, var(--p3)); }
+.tb-plate::before { content: ''; position: absolute; inset: 0; clip-path: var(--plate); background: linear-gradient(rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 38%); }
+.tb-plate::after { content: ''; position: absolute; left: 4%; right: 4%; bottom: 0; height: 18%; background: rgba(0, 0, 0, 0.22); clip-path: polygon(0 0, 100% 0, 96% 100%, 3% 100%); }
+.turn-btn b { position: relative; font: 700 38px/1 Oswald, sans-serif; text-transform: uppercase; letter-spacing: 0.03em; color: var(--tc); }
+.turn-btn.long b { font-size: 32px; }
+.turn-btn small { position: relative; font: 600 13px/1 Oswald, sans-serif; color: var(--tc); opacity: 0.8; }
+.turn-btn.lit { --p1: var(--gold-1); --p2: var(--gold-2); --p3: var(--gold-3); filter: var(--outline) drop-shadow(0 5px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 16px rgba(255, 200, 80, 0.75)); animation: lit 1.6s ease-in-out infinite; }
+.turn-btn.confirm { --p1: #ffb86b; --p2: #e07a2e; --p3: #9a4112; }
+.turn-btn.wait { --p1: #8a7a5c; --p2: #6b5b40; --p3: #46392a; --tc: #f3e6c8; }
+.turn-btn.wait b { animation: wait 1.4s ease-in-out infinite; }
+.turn-btn.enemy { --p1: #e2525e; --p2: #b8323f; --p3: #6e1520; --tc: #fff; cursor: default; }
+.turn-btn:not(:disabled):active { transform: translateY(3px); }
+.turn-btn:disabled:not(.enemy):not(.wait) { cursor: default; }
+@keyframes lit { 50% { filter: var(--outline) drop-shadow(0 5px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 26px rgba(255, 210, 90, 0.95)); } }
+@keyframes wait { 50% { opacity: 0.6; } }
+@media (prefers-reduced-motion: reduce) { .turn-btn.lit, .turn-btn.wait b, .spk.full i, .ability.full { animation: none !important; } }
+
+/* ---------- a phone on its side: the same corners, smaller */
+@media (max-height: 520px) and (orientation: landscape) {
+  .hud-top { gap: 8px; padding: max(4px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 4px max(8px, env(safe-area-inset-left)); }
+  .head { width: 34px; height: 38px; }
+  .head canvas { width: 34px; height: 31px; }
+  .head .a-hp { height: 4px; }
+  .ore-chip { font-size: 15px; padding: 2px 10px 2px 6px; }
+  .ore-chip .ico { width: 20px; height: 20px; }
+  .where b { font-size: 14px; }
+  .where-sub { font-size: 11px; }
+  .qb { width: 34px; height: 34px; }
+  .queue li.boss .qb { width: 40px; height: 40px; margin-top: -3px; }
+  .queue li + li { margin-left: 13px; }
+  .queue li + li::before { left: -12px; top: 11px; width: 8px; height: 11px; }
+  .ib { min-width: 18px; height: 18px; font-size: 11px; padding: 0 3px; }
+  .ib.sp .ico, .ib.go .ico { width: 12px; height: 12px; }
+  .qi { right: -7px; bottom: -6px; }
+  .ibtn { width: 34px; height: 34px; padding: 5px; }
+  .boss-bar { top: 52px; padding: 4px 10px 4px 6px; }
+  .boss-bar canvas { width: 30px; height: 30px; }
+  .log-panel { top: 50px; }
+  .corner { left: max(8px, env(safe-area-inset-left)); bottom: calc(8px + var(--safe-b)); width: 330px; height: 118px; --pf-w: 84px; --pf-h: 104px; }
+  .pname { --pn: 14px; left: 5px; right: 5px; bottom: 5px; }
+  .statuses .st { width: 22px; height: 22px; padding: 2px; }
+  .discs { bottom: 44px; left: calc(var(--pf-w) + 10px); }
+  .discs i { width: 30px; height: 11px; margin-top: -3px; border-width: 1.5px; }
+  .bars { left: calc(var(--pf-w) + 8px); bottom: 6px; width: 176px; gap: 4px; }
+  .hpbar { height: 19px; margin-right: 12px; }
+  .hp-num { font-size: 11px; }
+  .spk { height: 9px; margin-right: 12px; }
+  .ability { left: calc(var(--pf-w) + 176px); width: 68px; height: 74px; padding-top: 6px; gap: 3px; }
+  .ability b { font-size: 10px; }
+  .turn-btn { right: max(10px, env(safe-area-inset-right)); bottom: calc(8px + var(--safe-b)); width: 210px; height: 58px; }
+  .turn-btn b { font-size: 22px; }
+  .turn-btn.long b { font-size: 18px; }
+  .turn-btn small { font-size: 10px; }
+}
+
+/* ---------- a phone held upright: the strip wraps the queue onto its own row, my hero gets a board along the bottom,
+   and the turn button sits on the board above the health, its lower edge stepping round the ability */
+@media (orientation: portrait) and (max-width: 700px) {
+  .hud-top { flex-wrap: wrap; gap: 6px 8px; padding: max(6px, env(safe-area-inset-top)) 8px 6px; }
+  .head { width: 34px; height: 38px; }
+  .head canvas { width: 34px; height: 31px; }
+  .head .a-hp { height: 4px; }
+  .party { gap: 5px; }
+  .ore-chip { font-size: 15px; padding: 2px 10px 2px 6px; }
+  .ore-chip .ico { width: 20px; height: 20px; }
+  .where b { font-size: 14px; }
+  .where-sub { font-size: 11px; gap: 6px; }
+  .top-btns { gap: 5px; }
+  .ibtn { width: 34px; height: 34px; padding: 5px; }
+  .queue { order: 5; flex-basis: 100%; justify-content: center; margin: 2px 0 0; }
+  .qb { width: 38px; height: 38px; }
+  .queue li.boss .qb { width: 44px; height: 44px; margin-top: -3px; }
+  .queue li + li { margin-left: 14px; }
+  .queue li + li::before { left: -13px; top: 13px; width: 9px; height: 12px; }
+  .ib { min-width: 19px; height: 19px; font-size: 11px; padding: 0 3px; }
+  .ib.sp .ico, .ib.go .ico { width: 12px; height: 12px; }
+  .qi { right: -7px; bottom: -6px; }
+  .boss-bar { top: 104px; }
+  .log-panel { top: 52px; }
+  .corner { left: 6px; right: 6px; bottom: calc(6px + var(--safe-b)); width: auto; height: 136px; --pf-w: 94px; --pf-h: 128px; }
+  .corner::before {
+    content: ''; position: absolute; inset: 14px -6px -14px; z-index: -1; pointer-events: none;
+    background: linear-gradient(color-mix(in srgb, var(--dk) 70%, #120c09), #19120e);
+    clip-path: polygon(0 10px, 22% 0, 100% 6px, 100% 100%, 0 100%); border-top: 3px solid var(--c);
+  }
+  .pname { --pn: 16px; left: 6px; right: 6px; bottom: 6px; }
+  .statuses .st { width: 24px; height: 24px; padding: 2px; }
+  .discs { left: calc(var(--pf-w) + 8px); top: 22px; bottom: auto; }
+  .discs i { width: 32px; height: 12px; margin-top: -3px; border-width: 1.5px; }
+  .bars { left: calc(var(--pf-w) + 10px); right: 92px; bottom: 6px; width: auto; gap: 5px; }
+  .hpbar { height: 22px; margin-right: 6px; }
+  .hp-num { font-size: 13px; }
+  .spk { height: 10px; margin-right: 6px; }
+  .ability { left: auto; right: 0; bottom: 0; width: 90px; height: 96px; padding-top: 8px; gap: 4px; }
+  .ability b { font-size: 12px; }
+  .hero-card { bottom: calc(100% + 8px); }
+  .turn-btn {
+    left: 146px; right: 10px; bottom: calc(6px + var(--safe-b) + 68px); width: auto; height: 58px; padding: 0 86px 14px 6px;
+    --plate: polygon(0 10px, 40% 0, calc(100% - 6px) 3px, 100% 16px, 100% calc(100% - 36px), calc(100% - 9px) calc(100% - 33px),
+      calc(100% - 90px) calc(100% - 29px), calc(100% - 104px) 100%, 7px calc(100% - 3px), 0 62%);
+  }
+  .turn-btn b { font-size: 22px; white-space: nowrap; }
+  .turn-btn.long b { font-size: 17px; }
+  .turn-btn small { font-size: 10px; }
+}
 
 /* a band across the room for a moment when the turn passes */
 .turn-banner {
@@ -158,192 +480,18 @@ button { font: inherit; color: inherit; }
   box-shadow: inset 0 0 0 3px rgba(194, 54, 79, 0.85), inset 0 0 90px rgba(184, 50, 63, 0.55);
 }
 [data-turn='enemies'] .turn-glow { opacity: 1; }
-.frame { transition: filter 0.35s; }
-[data-turn='enemies'] .frame { filter: saturate(0.35) brightness(0.75); }
-.fight {
-  position: fixed;
-  left: 50%;
-  bottom: calc(var(--frame-h) + 26px + var(--safe-b));
-  transform: translateX(-50%);
-  z-index: 5;
-  padding: 10px 34px;
-  font-size: 20px;
-  background: #c2364f;
-  color: #fff;
-  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.5), 0 0 24px rgba(194, 54, 79, 0.45);
-}
-.fight[hidden] { display: none; }
-
-/* ---------- allies */
-.allies {
-  position: fixed;
-  left: 12px;
-  top: 76px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  z-index: 4;
-}
-.ally {
-  position: relative;
-  width: 64px;
-  padding: 0;
-  border: 2px solid var(--c);
-  border-radius: 10px;
-  overflow: hidden;
-  background: var(--panel);
-  cursor: pointer;
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
-}
-.ally canvas { display: block; width: 100%; aspect-ratio: 1; }
-.ally .a-hp { position: absolute; left: 4px; right: 4px; bottom: 16px; height: 5px; background: #2a1f18; border-radius: 3px; overflow: hidden; }
-.ally .a-hp i { position: absolute; inset: 0 auto 0 0; background: var(--hp); }
-.ally .a-hp em { position: absolute; top: 0; bottom: 0; }
-.ally .a-res { display: block; font-size: 10px; text-align: center; padding: 1px 0 2px; background: rgba(0, 0, 0, 0.55); color: var(--text); }
-.ally.dead { filter: grayscale(1) brightness(0.6); }
-
-/* ---------- enemies and their intents */
-.mobs {
-  position: fixed;
-  right: 12px;
-  top: 76px;
-  z-index: 4;
-  max-height: calc(100dvh - var(--frame-h) - 330px);
-  overflow-y: auto;
-  padding: 6px;
-  background: rgba(27, 22, 18, 0.82);
-  border: 2px solid var(--ink);
-  border-radius: 10px;
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
-}
-.mobs[hidden] { display: none; }
-.mobs ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.mobs li { display: grid; grid-template-columns: 30px 82px 44px 40px; align-items: center; gap: 6px; font-size: 12px; border-radius: 6px; transition: background-color 0.15s, opacity 0.15s; }
-/* enemy turn: the enemy moving now is lit, the ones that have moved fade back */
-.mobs li.now { background: rgba(217, 178, 74, 0.28); box-shadow: inset 0 0 0 1.5px var(--gold); }
-.mobs li.done { opacity: 0.45; }
-.mobs img { width: 30px; height: 30px; display: block; }
-.m-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.m-hp { position: relative; height: 12px; background: #2a1f18; border-radius: 4px; overflow: hidden; }
-.m-hp i { display: block; height: 100%; background: #d9434f; }
-.m-hp em { position: absolute; top: 0; bottom: 0; background: #ff8a3d; }
-.m-hp b { position: absolute; inset: 0; font: 600 10px/12px Oswald, sans-serif; text-align: center; color: #fff; }
-.m-act { display: flex; align-items: center; gap: 4px; }
-.m-hit {
-  min-width: 18px; height: 18px; padding: 0 3px;
-  font: 600 12px/18px Oswald, sans-serif; text-align: center; color: #fff;
-  background: #b8323f; border: 1.5px solid var(--ink); border-radius: 4px 4px 9px 9px;
-}
-.m-go { min-width: 18px; text-align: center; font-weight: 700; color: #d6cfbd; }
-.m-sp { font: 600 11px/16px Oswald, sans-serif; color: #fff; background: #6b4fa8; border: 1.5px solid var(--ink); border-radius: 4px; padding: 0 4px; white-space: nowrap; }
-.m-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--c); border: 1.5px solid var(--ink); flex: none; }
-
-/* ---------- camera controls */
-.camctl {
-  position: fixed;
-  right: 12px;
-  bottom: calc(var(--frame-h) + 24px + var(--safe-b));
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  z-index: 4;
-}
-
-/* ---------- hero frame */
-.frame {
-  position: fixed;
-  left: 50%;
-  bottom: calc(10px + var(--safe-b));
-  transform: translateX(-50%);
-  width: min(1000px, calc(100% - 20px));
-  height: var(--frame-h);
-  display: grid;
-  grid-template-columns: auto minmax(170px, 1fr) minmax(170px, 230px) minmax(250px, 300px);
-  gap: 12px;
-  align-items: stretch;
-  padding: 10px;
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.15)),
-    var(--panel);
-  border: 2px solid var(--ink);
-  outline: 2px solid var(--edge);
-  outline-offset: -5px;
-  border-radius: 14px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
-  z-index: 5;
-}
-.frame > * { min-width: 0; min-height: 0; }
-.pf-wrap {
-  width: calc(var(--frame-h) - 24px);
-  height: calc(var(--frame-h) - 24px);
-  border-radius: 10px;
-  overflow: hidden;
-  border: 2px solid var(--ink);
-}
-.pf-wrap canvas { width: 100%; height: 100%; display: block; }
-.who { display: flex; flex-direction: column; justify-content: center; gap: 6px; min-width: 0; }
-.name-row { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-.name-row b { font: 700 20px Oswald, sans-serif; letter-spacing: 0.02em; }
-.state { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hpbar { position: relative; height: 16px; background: #1d1611; border: 1.5px solid var(--ink); border-radius: 8px; overflow: hidden; }
-.hpbar i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(#e85b66, #a52a35); transition: width 0.25s; }
-/* the part of the health that the coming enemy turn will take, unless someone stops it */
-.hpbar em, .ally .a-hp em { background: repeating-linear-gradient(-45deg, #ffd34d 0 3px, #8a1f2a 3px 6px); animation: risk 0.9s ease-in-out infinite; }
-.hpbar em { position: absolute; top: 0; bottom: 0; }
-.hpbar.lethal { border-color: #ff4d6a; box-shadow: 0 0 0 2px rgba(255, 77, 106, 0.45); animation: lethal 0.9s ease-in-out infinite; }
-.ally.lethal { animation: lethal 0.9s ease-in-out infinite; }
-@keyframes risk { 50% { opacity: 0.45; } }
-@keyframes lethal { 50% { box-shadow: 0 0 0 3px rgba(255, 77, 106, 0.85); } }
-.stats .rage { color: #ff6b7d; font-weight: 600; }
-.stats .rage.soon { color: #ffb070; font-weight: 400; }
-.hpbar span { position: relative; display: block; text-align: center; font: 600 12px/13px Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #000; }
-.res { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-.r { display: inline-flex; align-items: center; gap: 4px; font: 600 15px Oswald, sans-serif; }
-.r svg { width: 15px; height: 15px; stroke: var(--ink); stroke-width: 1.2; }
-.r.shield svg { fill: var(--teal); }
-.r.ore svg { fill: var(--ore); }
-.r.spk svg { fill: var(--spark); }
-.r.hand svg { fill: var(--c); }
-.r.hand.out b { color: var(--muted); }
-
-.ability {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  text-align: left;
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 2px solid var(--ink);
-  background: linear-gradient(#3f3354, #2a2238);
-  cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 2px 0 rgba(0, 0, 0, 0.45);
-  min-width: 0;
-}
-.ability:not(:disabled):hover { background: linear-gradient(#4b3d66, #332a45); }
-.ability:disabled { opacity: 0.55; cursor: default; }
-/* switched on for this turn: lit in the hero's ability colour until the turn ends */
-.ability.on { opacity: 1; border-color: var(--ab); box-shadow: 0 0 0 2px var(--ab), 0 0 14px var(--ab); }
-.ability.on .ab-head b { color: var(--ab); }
-.ab-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
-.ab-head b { font: 600 16px Oswald, sans-serif; color: var(--spark); }
-.ability small { color: var(--muted); font-size: 12px; line-height: 1.3; }
-.pips { display: inline-flex; gap: 3px; }
-.pips i { width: 9px; height: 9px; transform: rotate(45deg); border: 1.5px solid var(--ink); background: #2a1f18; }
-.pips i.on { background: var(--spark); }
 
 .ups { display: flex; flex-direction: column; justify-content: center; gap: 4px; }
-.up { display: grid; grid-template-columns: minmax(0, 1fr) auto 40px auto; align-items: center; gap: 8px; font-size: 13px; }
-.up-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.up-name small { display: none; }
+.up { display: grid; grid-template-columns: minmax(0, 1fr) auto 40px auto; align-items: center; gap: 1px 8px; font-size: 13px; }
+.up-name { font: 600 15px/1.2 Oswald, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* what the upgrade does: a line under the row, where there is room for it */
+.up-txt { display: none; grid-column: 1 / -1; color: var(--muted); font-size: 11px; line-height: 1.25; }
 .up .lvl { display: inline-flex; gap: 3px; }
 .up .lvl i { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--ink); background: #2a1f18; }
 .up .lvl i.on { background: var(--gold); }
 .up b { font-family: Oswald, sans-serif; font-weight: 600; text-align: right; }
 .up .btn { justify-self: end; white-space: nowrap; }
-.ups-toggle { display: none; }
 .ups-note { color: var(--muted); font-size: 11px; }
-/* in the hero frame the upgrades are only shown: no buy buttons there */
-.frame .up { grid-template-columns: minmax(0, 1fr) auto 44px; }
 
 /* ---------- the blacksmith's: every hero's upgrades for sale */
 .forge-panel { width: min(980px, 100%); }
@@ -359,7 +507,7 @@ button { font: inherit; color: inherit; }
 .fc-hp { color: var(--muted); font-size: 12px; }
 .fcard .ups { grid-column: 1 / -1; gap: 6px; }
 .fcard .up-name { white-space: normal; }
-.fcard .up-name small { display: block; color: var(--muted); font-size: 11px; line-height: 1.25; margin-top: 1px; }
+.fcard .up-txt { display: block; }
 /* on a phone the cards scroll; the ore left and the way out stay in sight */
 .forge-panel .panel-head, .forge-foot { position: sticky; z-index: 1; background: var(--panel); }
 .forge-panel .panel-head { top: -16px; padding: 4px 0; }
@@ -430,7 +578,7 @@ button { font: inherit; color: inherit; }
 .pick { position: relative; padding: 0; border: 2px solid var(--ink); border-radius: 12px; background: var(--c); overflow: hidden; cursor: pointer; color: #fff; font: 600 15px Oswald, sans-serif; }
 .pick canvas { display: block; width: 100%; aspect-ratio: 1; }
 .pick span { display: block; padding: 4px 2px; background: rgba(0, 0, 0, 0.55); }
-.pick em { display: block; font: 400 11px Rubik, sans-serif; font-style: normal; color: #f0e5d0; }
+.pick em { display: block; font: 13px/1.15 var(--hand); font-style: normal; color: #f0e5d0; }
 .pick.mine { outline: 3px solid var(--gold); outline-offset: 2px; }
 .pick.taken { filter: grayscale(0.7) brightness(0.6); cursor: default; }
 .hero-lead { margin: 4px 0 14px; color: #b2a38c; }
@@ -458,8 +606,9 @@ button { font: inherit; color: inherit; }
 
 .map-panel { width: min(440px, 100%); padding: 12px 14px; display: flex; flex-direction: column; max-height: calc(100dvh - 32px); }
 .map-panel .panel-head { flex-wrap: nowrap; }
-.map-panel h2 { font-size: 20px; white-space: nowrap; }
-.map-panel h2 span { font: 500 13px Rubik, sans-serif; color: var(--muted); margin-left: 6px; }
+.map-panel h2 { font-size: 20px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.map-panel h2 span { font: 15px var(--hand); color: var(--muted); margin-left: 8px; }
+.map-panel .panel-btns .btn { white-space: nowrap; }
 .map-panel .btn { padding: 6px 10px; font-size: 13px; }
 #map { width: 100%; flex: 1 1 auto; min-height: 0; height: auto; display: block; margin-top: 4px; }
 /* a phone on its side: the floor stays readable and scrolls instead of shrinking to dots */
@@ -469,110 +618,67 @@ button { font: inherit; color: inherit; }
   #map { flex: none; height: 520px; }
 }
 #map .edge { fill: none; stroke: #5c4a39; stroke-width: 3; stroke-dasharray: 2 6; stroke-linecap: round; }
-#map .edge.walked { stroke: var(--gold); stroke-dasharray: none; }
+#map .edge.walked { stroke: var(--gold-1); stroke-width: 4.5; stroke-dasharray: none; filter: drop-shadow(0 0 4px rgba(255, 210, 90, 0.7)); }
+#map .edge.past { opacity: 0.3; }
+#map .gate path { fill: #6b5a48; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; }
 #map .mnode .disc { stroke: var(--ink); stroke-width: 2.5; }
 #map .mnode .halo { fill: none; stroke: transparent; stroke-width: 3; }
 #map .mnode.reach { cursor: pointer; }
 #map .mnode.reach .halo { stroke: var(--gold); animation: pulse 1.2s ease-in-out infinite; }
-#map .mnode.visited .disc { opacity: 0.55; }
-#map .mnode.cur .halo { stroke: var(--teal); }
-#map .mnode:not(.reach):not(.visited) { opacity: 0.8; }
+#map .mnode { cursor: pointer; outline: none; }
+#map .mnode:focus-visible .halo { stroke: #fff; stroke-width: 3; }
+#map .mnode.visited .halo { stroke: var(--gold-2); stroke-width: 2.5; }
+#map .mnode.past { opacity: 0.32; }
+#map .mnode:not(.reach):not(.visited):not(.past) { opacity: 0.85; }
+#map .mnode.peek .halo { stroke: #fff; stroke-width: 3; animation: none; }
+#map .mnode .rim { fill: none; stroke: var(--ink); stroke-width: 2.5; }
+#map .mnode .crown { fill: var(--gold-1); stroke: var(--ink); stroke-width: 1.8; stroke-linejoin: round; }
+#map .token { pointer-events: none; animation: token 1.6s ease-in-out infinite; }
+#map .token .tk-rim { stroke: var(--ink); stroke-width: 2.5; }
+#map .token .tk-rim.me { stroke: var(--gold-1); stroke-width: 3; }
+@keyframes token { 50% { transform: translateY(-2px); } }
 #map .mnode.reach:hover .disc, #map .mnode.reach:focus .disc { stroke: var(--gold); }
 #map .mnode.mine .halo { stroke: var(--text); stroke-width: 3.5; animation: none; }
 #map .pip circle { stroke: var(--ink); stroke-width: 2; }
 #map .pip text { fill: #f3ead8; font: 600 13px Oswald, sans-serif; text-anchor: middle; paint-order: stroke; stroke: var(--ink); stroke-width: 2.5px; stroke-linejoin: round; }
-#map .mlabel { fill: var(--muted); font: 500 12px Rubik, sans-serif; text-anchor: middle; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
+#map .mlabel { fill: var(--muted); font: 13px var(--hand); text-anchor: middle; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
 @keyframes pulse { 50% { stroke-opacity: 0.3; } }
 .map-info { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
 .map-info b { color: var(--text); }
 .map-votes { color: var(--gold); }
+/* the run as three gems by the floor's name: done, here, ahead */
+.fl-dots { display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: middle; }
+.fl-dots i { width: 10px; height: 10px; clip-path: var(--cut-gem); background: #4a3b2e; }
+.fl-dots i.done { background: var(--gold-3); }
+.fl-dots i.cur { background: var(--gold-1); box-shadow: 0 0 6px var(--gold-1); }
+/* the heroes' health and the party's ore over the map */
+.map-party { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.mp-hero { display: flex; align-items: center; gap: 6px; flex: 1 1 0; min-width: 0; max-width: 150px; filter: var(--outline); }
+.mp-hero img { width: 34px; height: 34px; flex: none; clip-path: var(--cut-face); background: var(--c); }
+.mp-hp { position: relative; flex: 1; height: 16px; background: #241a14; clip-path: var(--cut-bar); }
+.mp-hp i { position: absolute; inset: 0 auto 0 0; background: var(--hp); }
+.mp-hp u { position: absolute; inset: 0; text-decoration: none; text-align: center; font: 600 12px/16px Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #000; }
+.mp-hero.dead { filter: var(--outline) grayscale(1) brightness(0.6); }
+.mp-ore { display: flex; align-items: center; gap: 4px; margin-left: auto; padding: 2px 12px 2px 6px; background: #2c2119; clip-path: var(--cut-slab); font: 700 17px/1 Oswald, sans-serif; color: #f3e6c8; }
+.mp-ore .ico { width: 22px; height: 22px; }
+/* what is in the room picked on the map */
+/* its place stays taken while it is closed: a map that jumped under the pointer would flicker the card on and off */
+.map-peek { flex: none; display: flex; align-items: center; gap: 10px; height: 78px; margin-top: 6px; padding: 6px 10px; background: rgba(0, 0, 0, 0.25); border: 1.5px solid var(--ink); border-radius: 8px; overflow: hidden; }
+.map-peek.off { visibility: hidden; }
+.map-peek p { margin: 0; flex: 1; font-size: 12.5px; line-height: 1.3; color: var(--muted); }
+.map-peek b { color: var(--text); }
+.map-peek .btn { flex: none; }
+.map-peek .btn.big { padding: 9px 18px 9px 14px; font-size: 16px; }
 
-/* ---------- small screens: compact frame, upgrades in a pull-up sheet */
+/* ---------- small screens */
 @media (max-width: 820px), (max-height: 520px) {
-  :root { --frame-h: 84px; }
-  .frame {
-    grid-template-columns: auto 1fr minmax(118px, 34%) auto;
-    gap: 8px;
-    padding: 7px;
-    bottom: calc(6px + var(--safe-b));
-    width: calc(100% - 12px);
-  }
-  .name-row b { font-size: 16px; }
-  .state { display: none; }
-  .who { gap: 4px; }
-  .hpbar { height: 14px; }
-  .hpbar span { font-size: 11px; line-height: 11px; }
-  .res { gap: 7px; flex-wrap: nowrap; }
-  .ability, .ups-toggle { overflow: hidden; }
-  .r { font-size: 13px; }
-  .ability { padding: 5px 7px; gap: 2px; }
-  .ability small { display: none; }
-  .ab-head { flex-direction: column; align-items: flex-start; }
-  .ab-head b { font-size: 14px; }
-  .ups-toggle { display: block; padding: 6px 9px; }
-  .frame .ups {
-    display: none;
-    position: absolute;
-    right: 0;
-    bottom: calc(100% + 8px);
-    width: min(330px, 100%);
-    padding: 10px;
-    background: var(--panel);
-    border: 2px solid var(--ink);
-    border-radius: 12px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
-  }
-  .frame.ups-open .ups { display: flex; gap: 8px; }
-  .up-name { white-space: normal; }
-  .up-name small { display: block; color: var(--muted); font-size: 11px; line-height: 1.25; margin-top: 1px; }
-  .pf-wrap { width: calc(var(--frame-h) - 18px); height: calc(var(--frame-h) - 18px); }
   .panel { padding: 14px; }
   .chip { padding: 5px 9px; }
-  .loc b { font-size: 14px; }
-  .stats { gap: 9px; font-size: 12px; }
-  .allies { left: 8px; top: 66px; gap: 6px; }
-  .ally { width: 48px; }
-  .ally .a-hp { bottom: 14px; height: 4px; }
-  .ally .a-res { font-size: 9px; }
-  .camctl { right: 8px; bottom: calc(var(--frame-h) + 16px + var(--safe-b)); gap: 6px; }
-  .mobs { right: 8px; top: 66px; padding: 4px; }
   .pick-heroes { gap: 6px; }
   .pick span { font-size: 13px; }
   .pick em { display: none; }
-  .mobs li { grid-template-columns: 24px 34px 38px; gap: 4px; }
-  .mobs img { width: 24px; height: 24px; }
-  .m-name { display: none; }
-  .btn.round { width: 36px; height: 36px; font-size: 16px; }
-  .turn-banner b { font-size: 32px; }
-  .turn-banner span { font-size: 12px; }
-  .stats .side { font-size: 12px; padding: 0 7px; }
-  .fight { bottom: calc(var(--frame-h) + 18px + var(--safe-b)); padding: 8px 26px; font-size: 18px; }
+  .up-txt { display: block; }
 }
-@media (max-width: 560px) {
-  .stats .mobs-n { display: none; }
-  .loc span { max-width: 40vw; }
-  .top-btns .btn:not(.round) { padding: 6px 9px; }
-}
-/* a phone held upright has no room in the counters row: the discs sit on the portrait's bottom corner */
-@media (max-width: 480px) {
-  .r.hand {
-    position: absolute;
-    left: calc(5px + var(--frame-h) - 18px);
-    bottom: 9px;
-    transform: translateX(-100%);
-    padding: 1px 5px 1px 4px;
-    background: rgba(26, 18, 16, 0.85);
-    border-radius: 8px 0 8px 0;
-  }
-}
-@media (max-height: 520px) and (orientation: landscape) {
-  .camctl { flex-direction: row; bottom: calc(var(--frame-h) + 14px); }
-  .fight { left: auto; right: 8px; transform: none; bottom: calc(var(--frame-h) + 62px); }
-  .allies { top: 58px; }
-  .ally { width: 42px; }
-  .mobs { top: 58px; max-height: calc(100dvh - var(--frame-h) - 140px); }
-}
-.ally:disabled { cursor: default; }
 
 /* ---------- victory banner: the result screen after the last boss */
 .win-deco { display: none; }
@@ -626,3 +732,164 @@ button { font: inherit; color: inherit; }
   .confetti { display: none; }
   .win-ball, .overlay.win .end-panel { animation: none; }
 }
+
+/* ---------- painted cardboard plates and icons (public/assets/ui): each takes over from the drawn one once its picture loads */
+/* the turn button is a mustard blade (btn_turn): low on the left, its top edge rising to a sharp corner on the right; the box is
+   taller and the words sit low and left, in the blade's body, tilted along the rising edge */
+.art-btn_turn .turn-btn { height: 115px; width: 360px; padding: 34px 70px 6px 26px; filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)); }
+.art-btn_turn .tb-plate { clip-path: none; background: var(--ui-btn_turn) center / 100% 100% no-repeat; transition: filter 0.2s; }
+.art-btn_turn .tb-plate::before, .art-btn_turn .tb-plate::after { display: none; }
+/* the words climb with the blade's top edge, lifted a little off its bottom */
+.art-btn_turn .turn-btn { --lift: -9px; }
+.art-btn_turn .turn-btn b, .art-btn_turn .turn-btn small { transform: translateY(var(--lift)) rotate(-7deg); }
+.art-btn_turn .turn-btn.idle .tb-plate { filter: saturate(0.45) brightness(0.7); }
+.art-btn_turn .turn-btn.idle b { color: #1c120a; }
+.art-btn_turn .turn-btn.lit { filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 16px rgba(255, 200, 80, 0.8)); animation: lit-art 1.6s ease-in-out infinite; }
+.art-btn_turn .turn-btn.confirm .tb-plate { filter: hue-rotate(-16deg) saturate(1.5); }
+.art-btn_turn .turn-btn.wait .tb-plate { filter: grayscale(0.75) brightness(0.62); }
+.art-btn_turn .turn-btn.enemy .tb-plate { filter: hue-rotate(-45deg) saturate(1.9) brightness(0.9); }
+.art-btn_turn .tb-who { top: -6px; right: 15%; }
+@keyframes lit-art { 50% { filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 28px rgba(255, 210, 90, 1)); } }
+@media (prefers-reduced-motion: reduce) { .art-btn_turn .turn-btn.lit { animation: none; } }
+@media (max-height: 520px) and (orientation: landscape) {
+  .art-btn_turn .turn-btn { width: 220px; height: 70px; padding: 20px 42px 2px 14px; --lift: -5px; }
+  .art-btn_turn .tb-who { top: -8px; right: 14%; }
+}
+/* the upright phone: the blade runs above the health and is cut round the ability gem; the ink edge follows the cut */
+@media (orientation: portrait) and (max-width: 700px) {
+  .art-btn_turn .turn-btn {
+    width: auto; height: 76px; padding: 24px 86px 6px 22px; filter: var(--outline) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); --lift: -5px;
+    --plate: polygon(0 0, 100% 0, 100% calc(100% - 40px), calc(100% - 9px) calc(100% - 37px), calc(100% - 90px) calc(100% - 31px), calc(100% - 104px) 100%, 0 100%);
+  }
+  .art-btn_turn .tb-plate { clip-path: var(--plate); }
+  .art-btn_turn .turn-btn b { font-size: 20px; }
+  .art-btn_turn .turn-btn.long b { font-size: 15px; }
+  .art-btn_turn .turn-btn.lit { filter: var(--outline) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px rgba(255, 200, 80, 0.8)); animation: none; }
+  .art-btn_turn .tb-who { top: -8px; right: 12px; }
+}
+
+.art-btn_tile .top-btns { filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
+.art-btn_tile .ibtn { clip-path: none; background: var(--ui-btn_tile) center / 100% 100% no-repeat; padding: 5px; }
+.art-btn_tile .ibtn:hover { background: var(--ui-btn_tile) center / 100% 100% no-repeat; filter: brightness(1.18); }
+
+.art-btn_dark .ore-chip { clip-path: none; background: var(--ui-btn_dark) center / 100% 100% no-repeat; padding: 4px 18px 4px 10px; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
+
+.art-btn_gem .ability { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); background: var(--ui-btn_gem) center / contain no-repeat; }
+.art-btn_gem .ability::before, .art-btn_gem .ability::after { display: none; }
+.art-btn_gem .ability:disabled { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) saturate(0.4) brightness(0.65); }
+.art-btn_gem .ability.full { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 12px #c9a8ff); }
+.art-btn_gem .ability.full:not(.on) { animation-name: ab-full-art; }
+@keyframes ab-full-art { 50% { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 26px #e2d4ff) brightness(1.22); } }
+.art-btn_gem .ability.on { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px var(--ab)); }
+.art-btn_gem .ability b { padding: 2px 5px; background: rgba(18, 12, 9, 0.6); }
+/* the ability's own picture fills the gem instead of its name */
+.ability .ab-ico { position: absolute; inset: 37%; z-index: 1; pointer-events: none; }
+.ability .ab-ico:empty { display: none; }
+.ability:has(.ab-ico img) b { display: none; }
+
+/* panels: the map stands tall, everything else lies wide */
+/* sliced in nine, so the taped corners keep their size on a wide or a tall panel */
+.art-panel .panel { background: none; border: 0; outline: 0; border-radius: 0; box-shadow: none; border-image: var(--ui-panel) 190 130 fill / 58px 40px stretch; filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.6)); padding: 30px 34px; }
+.art-panel .forge-panel .panel-head, .art-panel .forge-foot { background: #513a2b; }
+.art-panel_tall .panel.map-panel { border-image: var(--ui-panel_tall) 130 fill / 40px stretch; padding: 26px 26px 22px; }
+.art-btn_dark .btn:not(.round) { background: var(--ui-btn_dark) center / 100% 100% no-repeat; border: 0; border-radius: 0; box-shadow: none; padding: 8px 16px; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
+.art-btn_dark .btn.sm { padding: 5px 11px; }
+.art-btn_dark .btn:not(.round):hover { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)) brightness(1.2); }
+.art-btn_main .btn.big { background: var(--ui-btn_main) center / 100% 100% no-repeat; border: 0; border-radius: 0; box-shadow: none; color: #1c120a; padding: 12px 28px; }
+.art-btn_main .tab.on { background: var(--ui-btn_main) center / 100% 100% no-repeat; color: #1c120a; }
+
+/* painted stickers: rooms, upgrades, menu buttons; an empty slot (picture not in yet) takes no room */
+i[data-art] { display: inline-block; flex: none; font-style: normal; }
+i[data-art]:empty { display: none; }
+img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.btn > i[data-art] { width: 22px; height: 22px; margin: -4px 7px -4px -4px; vertical-align: middle; }
+.btn.sm > i[data-art] { width: 16px; height: 16px; margin: -3px 5px -3px -2px; }
+/* on the big plates the sticker sits slapped over the left end */
+.btn.big { position: relative; }
+.btn.big > i[data-art] { position: absolute; left: -12px; top: 50%; width: 44px; height: 44px; margin: 0; transform: translateY(-50%) rotate(-7deg); filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45)); }
+.btn.big:has(> i[data-art]:not(:empty)) { padding-left: 40px; }
+.menu-panel .menu-btns { padding-left: 12px; }
+.menu-btns .btn.big > i[data-art] { width: 52px; height: 52px; left: -18px; }
+.forge-foot .btn.big > i[data-art] { width: 36px; height: 36px; }
+/* the disco ball hangs over the name on its chain */
+.logo-art { display: block !important; width: 76px; height: 76px; margin: 0 auto 2px; filter: drop-shadow(0 4px 0 #120d0a); animation: logo-swing 4s ease-in-out infinite; transform-origin: 50% 0; }
+.logo-art:empty { display: none !important; }
+@keyframes logo-swing { 50% { transform: rotate(6deg); } }
+@media (prefers-reduced-motion: reduce) { .logo-art { animation: none; } }
+.end-art { display: none !important; }
+.overlay.lose .end-art:not(:empty) { display: block !important; width: 96px; height: 96px; margin: -6px auto 4px; transform: rotate(-4deg); filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); }
+.forge-ore { display: flex; align-items: center; gap: 6px; font: 700 22px/1 Oswald, sans-serif; }
+.forge-ore .ico { width: 30px; height: 30px; }
+.up > img.up-ico { width: 30px; height: 30px; grid-row: span 2; align-self: start; }
+.up:has(> .up-ico) .up-txt { grid-column: 2 / -1; }
+.up:has(> .up-ico) { grid-template-columns: 30px minmax(0, 1fr) auto 40px auto; }
+.hero-card .up:has(> .up-ico) { grid-template-columns: 30px minmax(0, 1fr) auto 44px; }
+/* statuses printed as stickers need no dark backing */
+.statuses .st:has(> img) { background: none; clip-path: none; padding: 0; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
+.mob-card .st:has(> img) { filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5)); }
+.map-info:not([hidden]) { display: flex; align-items: center; gap: 10px; }
+.map-info > i[data-art] { width: 46px; height: 46px; transform: rotate(-5deg); }
+.map-peek > img.art { flex: none; width: 42px; height: 42px; }
+#map .mnode .hit { fill: transparent; }
+#map .mart { pointer-events: none; transform-box: fill-box; transform-origin: 50% 60%; transition: transform 0.15s; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)); }
+#map .mnode.art.reach .mart { animation: room-glow 1.2s ease-in-out infinite; }
+#map .mnode.art.reach:hover .mart, #map .mnode.art.reach:focus-visible .mart { transform: scale(1.1); }
+#map .mnode.art.visited .mart { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 4px var(--gold-2)); }
+#map .mnode.art.peek .mart, #map .mnode.art.mine .mart, #map .mnode.art:focus-visible .mart { animation: none; transform: scale(1.1); filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 3px #fff) drop-shadow(0 0 7px #fff); }
+@keyframes room-glow {
+  0%, 100% { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 3px var(--gold)) drop-shadow(0 0 8px var(--gold)); }
+  50% { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 1px var(--gold)); }
+}
+@media (prefers-reduced-motion: reduce) { #map .mnode.art.reach .mart { animation: none; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 3px var(--gold)) drop-shadow(0 0 8px var(--gold)); } }
+
+/* the HP bar and the sparks as die-cut cardboard (art/ui/draw_hp_spk.py draws both from the shapes Vladislav picked) */
+/* health «Мягкий перехват», after his sketch: a tall left end, a dip with a step on top, a pinched waist and a slanted right
+   end, with no plate under it (hp_empty, hp_full, hp_shield: one shape, stretched whole). The red runs from x 42 to 975 of
+   1024, so .track is that span and the fills stay plain percentages of it; each fill shows the same picture at the bar's
+   full size (cqw/cqh of the track), shifted by where the fill starts (--x, set with it) */
+.art-hp_empty.art-hp_full .corner .hpbar { height: auto; aspect-ratio: 1024 / 319; background: var(--ui-hp_empty) center / 100% 100% no-repeat; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
+.art-hp_empty.art-hp_full .corner .hpbar .track { inset: 0 4.785% 0 4.102%; clip-path: none; background: none; container-type: size; }
+.art-hp_empty.art-hp_full .corner .hpbar.shielded .track { box-shadow: none; }
+.art-hp_empty.art-hp_full .corner .track > * { background: var(--ui-hp_full) calc(-4.502cqw - var(--x, 0) * 1cqw) 0 / 109.75cqw 100cqh no-repeat; }
+.art-hp_empty.art-hp_full .corner .track s { background-image: var(--ui-hp_shield); }
+.art-hp_empty.art-hp_full .corner .track s.risk, .art-hp_empty.art-hp_full .corner .track em { filter: brightness(1.7) saturate(0.5); }
+/* the number sits in the bar's wide right part, past the waist */
+.art-hp_empty.art-hp_full .corner .hp-num { inset: 20% 12% 30% 44%; font-size: 20px; }
+/* the sparks are one long crystal (its point at the ability gem) split in three: each piece keeps its own width and the
+   pieces overlap by their margins (14 of 856 px), so the cracks line up with a hair of a gap */
+.art-spk_1_on .spk { background: none; clip-path: none; box-shadow: none; padding: 0; gap: 0; height: auto; align-items: flex-start; margin: -2px 18px 0 4px; }
+.art-spk_1_on .spk i { flex: none; background: center / 100% 100% no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
+.art-spk_1_on .spk i:nth-child(1) { width: 33.18%; aspect-ratio: 284 / 124; }
+.art-spk_1_on .spk i:nth-child(2) { width: 36.21%; aspect-ratio: 310 / 124; margin-left: -1.64%; }
+.art-spk_1_on .spk i:nth-child(3) { width: 33.88%; aspect-ratio: 290 / 124; margin-left: -1.64%; }
+.art-spk_1_off .spk i:nth-child(1) { background-image: var(--ui-spk_1_off); }
+.art-spk_2_off .spk i:nth-child(2) { background-image: var(--ui-spk_2_off); }
+.art-spk_3_off .spk i:nth-child(3) { background-image: var(--ui-spk_3_off); }
+.art-spk_1_on .spk i.on:nth-child(1) { background-image: var(--ui-spk_1_on); }
+.art-spk_2_on .spk i.on:nth-child(2) { background-image: var(--ui-spk_2_on); }
+.art-spk_3_on .spk i.on:nth-child(3) { background-image: var(--ui-spk_3_on); }
+.art-spk_1_on .spk.full i { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 6px #c9a8ff); }
+@media (max-height: 520px) and (orientation: landscape) {
+  .art-spk_1_on .spk { margin-right: 12px; }
+  .art-hp_empty.art-hp_full .corner .hp-num { font-size: 15px; }
+}
+@media (orientation: portrait) and (max-width: 700px) {
+  .art-spk_1_on .spk { margin-right: 6px; }
+  .art-hp_empty.art-hp_full .corner .hp-num { font-size: 17px; }
+  /* the painted bar and crystal are taller than the drawn ones and grow with the screen (the bars are 100vw - 208px wide,
+     about 0.43 of that tall without the bar's transparent top), so the blade above them rises with them */
+  .art-hp_empty.art-hp_full .turn-btn { bottom: calc(26px + var(--safe-b) + (100vw - 208px) * 0.425); }
+}
+
+/* the menus stand on a painted disco dungeon instead of the dimmed room */
+.art-menu_bg .overlay.solid { background: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_bg) center / cover no-repeat; }
+@media (orientation: portrait) { .art-menu_bg_tall .overlay.solid { background-image: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_bg_tall); } }
+
+/* who already pressed the turn button: their faces stuck on its top edge */
+/* on the right end, clear of the words */
+.tb-who { position: absolute; top: -18px; right: 30px; z-index: 1; display: flex; gap: 3px; pointer-events: none; }
+.tb-who:empty { display: none; }
+.tb-who img { width: 32px; height: 32px; border: 2px solid var(--c); outline: 2px solid #120c09; transform: rotate(-5deg); }
+.tb-who img:nth-child(2) { transform: rotate(4deg); }
+@media (max-height: 520px) and (orientation: landscape) { .tb-who { top: -14px; right: 20px; } .tb-who img { width: 24px; height: 24px; } }
+@media (orientation: portrait) and (max-width: 700px) { .tb-who { top: -15px; right: 12px; } .tb-who img { width: 24px; height: 24px; border-width: 1.5px; } }

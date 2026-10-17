@@ -29,7 +29,7 @@ export type Msg =
   /** A cleared room's result: each player reads it and walks over to the map on their own. */
   | { t: 'end'; e: Ending }
   /** A screen the players wait on until the host acts (the end of the run); an empty title hides it. */
-  | { t: 'screen'; title: string; text: string; win?: boolean }
+  | { t: 'screen'; title: string; text: string; win?: boolean; lose?: boolean }
   | { t: 'lobbyBack' }
   /** The host closed the room on purpose, so there is nothing to reconnect to. */
   | { t: 'bye' };

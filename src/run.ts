@@ -1,6 +1,6 @@
 // Run structure: 3 floors, each a layered branching map of rooms; a path takes 7 rooms ending at the boss.
 
-import { FORGE_ORE, ROOM_TYPES, type RoomType } from './data';
+import { AB_COST, FORGE_ORE, ROOM_TYPES, type RoomType } from './data';
 import type { Bank, HeroState } from './game';
 import { makeRng } from './rng';
 
@@ -103,6 +103,10 @@ export function minutes(run: Run) {
   return { done, total: done + est };
 }
 
+/** What an event room turns out to be: the altar of sparks, a trapped chest or a wandering healer (their pictures are `ev_…`). */
+export const EVENTS = ['altar', 'trap', 'healer'] as const;
+export const eventOf = (seed: number) => EVENTS[makeRng(seed).int(0, 2)];
+
 /** Rooms without a fight resolve at once; returns what happened, worded for a lone hero or a party. */
 export function restRoom(type: RoomType, party: HeroState[], bank: Bank, seed: number): string {
   const solo = party.length === 1;
@@ -114,14 +118,13 @@ export function restRoom(type: RoomType, party: HeroState[], bank: Bank, seed: n
     bank.ore += FORGE_ORE;
     return solo ? `Кузнец дал ${FORGE_ORE} руды. Прокачать диски можно только у него.` : `Кузнец дал отряду ${FORGE_ORE} руды. Прокачать диски можно только у него, руда общая на всех.`;
   }
-  const R = makeRng(seed);
-  const roll = R.int(0, 2);
-  if (roll === 0) {
-    // sparks burn out between fights, so the altar's gift waits for the next one
-    bank.boon = (bank.boon ?? 0) + 4;
-    return 'Алтарь искр: следующий бой начнётся с 4 искрами.';
+  const ev = eventOf(seed);
+  if (ev === 'altar') {
+    // sparks burn out between fights, so the altar's gift waits for the next one: every hero starts it full
+    bank.boon = AB_COST;
+    return `Алтарь искр: следующий бой ${solo ? 'герой' : 'каждый герой'} начнёт с полным запасом искр (${AB_COST}).`;
   }
-  if (roll === 1) {
+  if (ev === 'trap') {
     for (const h of party) if (h.hp > 0) h.hp = Math.max(1, h.hp - 3);
     bank.ore += 4;
     return `Ловушка в сундуке: −3 HP${solo ? '' : ' каждому'}, зато внутри 4 руды.`;

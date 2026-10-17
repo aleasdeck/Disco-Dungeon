@@ -21,6 +21,8 @@ export interface Standee {
   y: number;
   w: number;
   h: number;
+  /** The levels washed in the current floor's light, made when a floor first draws the figure. */
+  lit?: { light: string; levels: HTMLCanvasElement[] };
 }
 
 type Rgb = [number, number, number];
@@ -206,4 +208,28 @@ export function makeStandee(img: HTMLImageElement, facing: 'left' | 'right', rel
     levels.push(half);
   }
   return { levels, W, H, x: ox, y: oy, w: SW, h: SH };
+}
+
+/**
+ * The standee's levels in a floor's light: multiplied by `light` so the white sticker edge and the bright paint take
+ * the room's cast, as torchlight or the crypt's cold would. Kept for one light at a time: a floor change remakes it.
+ */
+export function litLevels(b: Standee, light: string): HTMLCanvasElement[] {
+  if (b.lit?.light === light) return b.lit.levels;
+  const levels = b.levels.map(lv => {
+    const cv = document.createElement('canvas');
+    cv.width = lv.width;
+    cv.height = lv.height;
+    const c = cv.getContext('2d')!;
+    c.drawImage(lv, 0, 0);
+    c.globalCompositeOperation = 'multiply';
+    c.fillStyle = light;
+    c.fillRect(0, 0, cv.width, cv.height);
+    // multiplying fills the empty corners too; the picture's own outline cuts them away again
+    c.globalCompositeOperation = 'destination-in';
+    c.drawImage(lv, 0, 0);
+    return cv;
+  });
+  b.lit = { light, levels };
+  return levels;
 }

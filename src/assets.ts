@@ -17,18 +17,21 @@ interface ManifestEntry { file: string; facing?: 'left' | 'right' }
 export const sprites = new Map<string, Sprite>();
 /** Room art by key: floor slabs, brickwork, torches, pillars, resources, disc tops (keys in the README). */
 export const envArt = new Map<string, HTMLImageElement>();
+/** Interface art by key: plates (`btn_…`, `panel…`), icons (`ico_…`) and the stickers of rooms, upgrades and menus, see the README. */
+export const uiArt = new Map<string, HTMLImageElement>();
 /** Hand-drawn faces with Latin and Cyrillic for words scratched and chalked on the walls (Google Fonts, linked in index.html). */
 export const GRAFFITI_FONTS = ['700 20px "Amatic SC"', '700 20px "Caveat"', '400 20px "Neucha"'];
 
 export async function loadSprites(onLoad: () => void): Promise<void> {
   const base = import.meta.env.BASE_URL;
-  let figures: Record<string, ManifestEntry> = {}, env: Record<string, string> = {};
+  let figures: Record<string, ManifestEntry> = {}, env: Record<string, string> = {}, ui: Record<string, string> = {};
   try {
     const res = await fetch(`${base}assets/manifest.json`, { cache: 'no-cache' });
     if (res.ok) {
       const m = await res.json();
       figures = m.figures ?? {};
       env = m.env ?? {};
+      ui = m.ui ?? {};
     }
   } catch {
     return;
@@ -46,6 +49,13 @@ export async function loadSprites(onLoad: () => void): Promise<void> {
       sprites.set(key, { img, facing, standee: makeStandee(img, facing, fig / HERO_FIG, tint) });
     })),
     ...Object.entries(env).map(([key, file]) => load(file, img => envArt.set(key, img))),
+    ...Object.entries(ui).map(([key, file]) => load(file, img => {
+      uiArt.set(key, img);
+      // the stylesheet paints a plate once its picture is in: as var(--ui-btn_main) under the class art-btn_main
+      const root = document.documentElement;
+      root.style.setProperty('--ui-' + key, `url("${img.src}")`);
+      root.classList.add('art-' + key);
+    })),
     // the wall graffiti fonts, Latin and Cyrillic letters both, before the room is drawn with them
     ...GRAFFITI_FONTS.map(f => document.fonts?.load(f, 'WTF ЖОПА').then(onLoad, () => {})),
   ]);
