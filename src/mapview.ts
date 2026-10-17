@@ -6,7 +6,7 @@ import { uiArt } from './assets';
 import { art as pic, fillIcons, icon as ico } from './icons';
 import { CASTS } from './room';
 import { FLOORS, reachable, type Run } from './run';
-import { drawPortrait, mobFace } from './ui';
+import { faceUrl, mobFace } from './ui';
 
 const NS = 'http://www.w3.org/2000/svg';
 const $ = (id: string) => document.getElementById(id)!;
@@ -63,20 +63,6 @@ export interface MapParty {
   ore: number;
 }
 
-/** A hero's face as a picture, drawn once per hero (and again once its art loads). */
-const faces = new Map<string, string>();
-function heroFace(h: HeroState) {
-  const cv = document.createElement('canvas');
-  drawPortrait(cv, h);
-  return cv.toDataURL();
-}
-function faceOf(h: HeroState, art: boolean) {
-  const key = h.def.key + (art ? '+' : '');
-  let url = faces.get(key);
-  if (!url) { url = heroFace(h); faces.set(key, url); }
-  return url;
-}
-
 const el = <K extends keyof SVGElementTagNameMap>(parent: Element, tag: K, at: Record<string, string | number>) => {
   const e = document.createElementNS(NS, tag);
   for (const k in at) e.setAttribute(k, String(at[k]));
@@ -87,8 +73,6 @@ const el = <K extends keyof SVGElementTagNameMap>(parent: Element, tag: K, at: R
 export class MapView {
   info = '';
   onChoose: (id: string) => void = () => {};
-  /** Whether the hero pictures have loaded: the faces are drawn again once they have. */
-  art = () => false;
   /** The room whose card is open under the map. */
   private peek: string | null = null;
   /** How the last press on the map came: a touch shows what is in a room first, a mouse goes straight in. */
@@ -99,11 +83,11 @@ export class MapView {
   }
 
   render(run: Run, canChoose: boolean, party: MapParty, votes?: MapVotes) {
-    const f = run.floor, layers = run.floors[f], art = this.art();
+    const f = run.floor, layers = run.floors[f];
     // the floor, and the whole run as three gems: done, here, ahead
     const dots = Array.from({ length: FLOORS }, (_, k) => `<i class="${k < f ? 'done' : k === f ? 'cur' : ''}"></i>`).join('');
     $('mapFloor').innerHTML = `Этаж ${f + 1}<em class="fl-dots" title="Этаж ${f + 1} из ${FLOORS}">${dots}</em><span>${BIOMES[f].name}</span>`;
-    this.partyRow(party, art);
+    this.partyRow(party);
     const svg = $('map');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.innerHTML = '';
@@ -132,9 +116,16 @@ export class MapView {
       g.setAttribute('class', 'mnode' + (isR ? ' reach' : '') + (isV ? ' visited' : '') + (isCur ? ' cur' : '') + (past ? ' past' : '')
         + (isR && votes?.mine === n.id ? ' mine' : '') + (this.peek === n.id ? ' peek' : ''));
       g.dataset.id = n.id;
-      const boss = n.type === 'boss', r = boss ? 24 : 19;
-      el(g, 'circle', { cx: x, cy: y, r: r + 6, class: 'halo' });
-      el(g, 'circle', { cx: x, cy: y, r, fill: t.col, class: 'disc' });
+      const boss = n.type === 'boss', r = boss ? 24 : 19, pic = boss ? undefined : uiArt.get('room_' + n.type);
+      if (pic) {
+        // a painted room is its own token: no disc under it, and it glows instead of a ring when it can be picked
+        g.classList.add('art');
+        el(g, 'circle', { cx: x, cy: y, r: r + 4, class: 'hit' });
+        el(g, 'image', { href: pic.src, x: x - r - 6, y: y - r - 8, width: r * 2 + 12, height: r * 2 + 12, class: 'mart' });
+      } else {
+        el(g, 'circle', { cx: x, cy: y, r: r + 6, class: 'halo' });
+        el(g, 'circle', { cx: x, cy: y, r, fill: t.col, class: 'disc' });
+      }
       if (boss) {
         // who waits at the top: the floor's boss in a round frame, a crown on top
         const clip = el(el(g, 'defs', {}), 'clipPath', { id: 'bossFace' });
@@ -142,11 +133,8 @@ export class MapView {
         el(g, 'image', { href: mobFace(CASTS[f].boss), x: x - r, y: y - r, width: r * 2, height: r * 2, 'clip-path': 'url(#bossFace)', preserveAspectRatio: 'xMidYMid slice' });
         el(g, 'circle', { cx: x, cy: y, r, class: 'rim' });
         el(g, 'path', { d: `M${x - 11} ${y - r + 3}L${x - 12} ${y - r - 9}L${x - 5} ${y - r - 3}L${x} ${y - r - 12}L${x + 5} ${y - r - 3}L${x + 12} ${y - r - 9}L${x + 11} ${y - r + 3}Z`, class: 'crown' });
-      } else if (uiArt.has('room_' + n.type)) {
-        // the painted sticker stands proud of the room's disc
-        el(g, 'image', { href: uiArt.get('room_' + n.type)!.src, x: x - r - 3, y: y - r - 5, width: r * 2 + 6, height: r * 2 + 6, class: 'mart' });
-      } else icon(g, n.type, x, y);
-      el(g, 'text', { x, y: y + r + 14, class: 'mlabel' }).textContent = t.name;
+      } else if (!pic) icon(g, n.type, x, y);
+      el(g, 'text', { x, y: y + r + (pic ? 17 : 14), class: 'mlabel' }).textContent = t.name;
       // the players' tokens sit on the room's top rim, in their heroes' colours
       const ps = votes?.pips[n.id] ?? [];
       ps.forEach((p, k) => {
@@ -178,7 +166,7 @@ export class MapView {
       const clip = el(el(tok, 'defs', {}), 'clipPath', { id });
       el(clip, 'circle', { cx: tx, cy: ty, r: 13 });
       el(tok, 'circle', { cx: tx, cy: ty, r: 15, fill: h.def.col, class: 'tk-rim' + (h === party.me ? ' me' : '') });
-      el(tok, 'image', { href: faceOf(h, art), x: tx - 13, y: ty - 13, width: 26, height: 26, 'clip-path': `url(#${id})`, opacity: h.hp > 0 ? 1 : 0.4 });
+      el(tok, 'image', { href: faceUrl(h), x: tx - 13, y: ty - 13, width: 26, height: 26, 'clip-path': `url(#${id})`, opacity: h.hp > 0 ? 1 : 0.4 });
     });
     this.card(run, canChoose);
     // only the result of a rest room shows here; the map itself needs no explaining
@@ -208,12 +196,12 @@ export class MapView {
   }
 
   /** The heroes' health and the party's ore over the map: enough to choose between a camp and a fight. */
-  private partyRow(party: MapParty, art: boolean) {
+  private partyRow(party: MapParty) {
     const box = $('mapParty');
     box.innerHTML = party.heroes.map(h => {
       const hp = Math.max(0, h.hp), pct = (hp / h.max) * 100;
       return `<div class="mp-hero${h.hp <= 0 ? ' dead' : ''}${h === party.me ? ' me' : ''}" style="--c:${h.def.col}" title="${h.def.name}: ${hp} из ${h.max}">`
-        + `<img src="${faceOf(h, art)}" alt=""><span class="mp-hp"><i style="width:${pct}%"></i><u>${h.hp > 0 ? `${hp}/${h.max}` : 'пал'}</u></span></div>`;
+        + `<img src="${faceUrl(h)}" alt=""><span class="mp-hp"><i style="width:${pct}%"></i><u>${h.hp > 0 ? `${hp}/${h.max}` : 'пал'}</u></span></div>`;
     }).join('') + `<div class="mp-ore" title="Руда отряда">${ico('ore')}<b>${party.ore}</b></div>`;
   }
 }

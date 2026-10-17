@@ -59,6 +59,20 @@ export function mobFace(k: MobKind) {
   return url;
 }
 
+/** A hero's face as a picture, drawn once per hero (and again once its art loads): for the map and the turn button. */
+const faces = new Map<string, string>();
+export function faceUrl(h: Pick<HeroState, 'i' | 'def'>) {
+  const key = h.def.key + (sprites.has(h.def.key) ? '+img' : '');
+  let url = faces.get(key);
+  if (!url) {
+    const cv = document.createElement('canvas');
+    drawPortrait(cv, h);
+    url = cv.toDataURL();
+    faces.set(key, url);
+  }
+  return url;
+}
+
 /** Draw a hero's bust into a square canvas: the artist's picture when loaded, else the placeholder. */
 export function drawPortrait(cv: HTMLCanvasElement, h: Pick<HeroState, 'i' | 'def'>) {
   const size = 96, r = 2;
@@ -132,6 +146,8 @@ export class Hud {
   /** The first press of «Конец хода» with discs still in hand only asks «ТОЧНО?»; a second press within a moment ends. */
   private confirmUntil = 0;
   private act: TurnAct = 'none';
+  /** Whose faces the turn button shows now, so it is redrawn only when that changes. */
+  private whoKey = '';
   /** Journal lines already seen, so the scroll button says when there are new ones. */
   private logSeen = 0;
 
@@ -474,6 +490,13 @@ export class Hud {
     } else {
       txt = 'Ход врагов';
       cls = 'enemy';
+    }
+    // the faces of the heroes whose players already pressed, stuck on the button's edge
+    const pressed = alive < 2 ? [] : (S.phase === 'place' ? (g.online ? S.ready : []) : S.phase === 'throw' ? S.done : []).filter(i => here.includes(i));
+    const who = pressed.map(i => g.heroOf(i)), whoKey = who.map(o => faceUrl(o)).join();
+    if (this.whoKey !== whoKey) {
+      this.whoKey = whoKey;
+      $('turnWho').innerHTML = who.map(o => `<img src="${faceUrl(o)}" alt="" style="--c:${o.def.col}">`).join('');
     }
     b.hidden = false;
     b.className = 'turn-btn ' + cls + (txt.length > 11 ? ' long' : '');

@@ -11,7 +11,7 @@ import { Hud } from './ui';
 import { hl } from './hl';
 import { MapView, type MapParty, type MapVotes } from './mapview';
 import { SceneRenderer } from './draw/scene';
-import { loadSprites, sprites } from './assets';
+import { loadSprites } from './assets';
 import { clearSeat, loadHost, loadSeat, newKey, saveHost, saveSeat, type Ending, type HostSave } from './resume';
 import { FLOORS, LAYERS, agreed, depthOf, eventOf, newRun, nodeById, reachable, restRoom, type Run, type Votes } from './run';
 
@@ -23,7 +23,6 @@ const cam = new Camera();
 const game = new Game();
 const hud = new Hud(game);
 const mapView = new MapView();
-mapView.art = () => game.party.every(h => sprites.has(h.def.key));
 const scene = new SceneRenderer();
 
 let run: Run = newRun();

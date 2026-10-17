@@ -101,6 +101,7 @@
     "wall_prison": "env/wall_prison.webp"
   },
   "ui": {
+    "bar_track": "ui/bar_track.webp",
     "btn_dark": "ui/btn_dark.webp",
     "btn_gem": "ui/btn_gem.webp",
     "btn_main": "ui/btn_main.webp",
@@ -144,6 +145,8 @@
     "m_link": "ui/m_link.webp",
     "m_online": "ui/m_online.webp",
     "m_settings": "ui/m_settings.webp",
+    "menu_bg": "ui/menu_bg.webp",
+    "menu_bg_tall": "ui/menu_bg_tall.webp",
     "panel": "ui/panel.webp",
     "panel_tall": "ui/panel_tall.webp",
     "room_boss": "ui/room_boss.webp",
@@ -153,6 +156,8 @@
     "room_fight": "ui/room_fight.webp",
     "room_forge": "ui/room_forge.webp",
     "room_treasure": "ui/room_treasure.webp",
+    "spk_off": "ui/spk_off.webp",
+    "spk_on": "ui/spk_on.webp",
     "up_bounce": "ui/up_bounce.webp",
     "up_discs": "ui/up_discs.webp",
     "up_dmg": "ui/up_dmg.webp",
