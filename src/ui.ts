@@ -193,7 +193,12 @@ export class Hud {
     $('fShield').textContent = String(h.shield);
     $('fOre').textContent = String(g.bank.ore);
     $('fSpk').textContent = String(g.bank.sparks);
-    $('fHand').innerHTML = Array.from({ length: h.discs }, (_, k) => `<i class="${k < h.hand ? 'on' : ''}" style="--c:${h.def.col}"></i>`).join('');
+    // discs still in hand out of this hero's discs per turn, in the hero's colour
+    $('fHand').textContent = `${h.hand}/${h.discs}`;
+    const hand = $('fHandBox');
+    hand.style.setProperty('--c', h.def.col);
+    hand.classList.toggle('out', h.hand === 0);
+    hand.title = `Диски в руке: ${h.hand} из ${h.discs} за ход`;
     $('fState').textContent = h.hp <= 0 ? 'Пал'
       : S.phase === 'place' ? (h.pad === null ? 'Тапни свободную руну, чтобы поставить героя' : g.online ? 'Можно переставить, потом «Готов»' : g.placed() ? 'Можно переставить, потом «В бой!»' : 'Поставь остальных героев')
       : S.phase !== 'throw' ? (S.phase === 'over' ? 'Комната закрыта' : 'Ждём конца хода')

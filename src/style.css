@@ -261,9 +261,8 @@ button { font: inherit; color: inherit; }
 .r.shield svg { fill: var(--teal); }
 .r.ore svg { fill: var(--ore); }
 .r.spk svg { fill: var(--spark); }
-.hand { gap: 3px; }
-.hand i { width: 14px; height: 9px; border-radius: 50%; border: 1.5px solid var(--ink); background: #2a1f18; }
-.hand i.on { background: var(--c); }
+.r.hand svg { fill: var(--c); }
+.r.hand.out b { color: var(--muted); }
 
 .ability {
   display: flex;
@@ -459,7 +458,6 @@ button { font: inherit; color: inherit; }
   .hpbar { height: 14px; }
   .hpbar span { font-size: 11px; line-height: 11px; }
   .res { gap: 7px; flex-wrap: nowrap; }
-  .r.hand { display: none; }
   .ability, .ups-toggle { overflow: hidden; }
   .r { font-size: 13px; }
   .ability { padding: 5px 7px; gap: 2px; }
@@ -506,6 +504,18 @@ button { font: inherit; color: inherit; }
 @media (max-width: 560px) {
   .loc span { max-width: 40vw; }
   .top-btns .btn:not(.round) { padding: 6px 9px; }
+}
+/* a phone held upright has no room in the counters row: the discs sit on the portrait's bottom corner */
+@media (max-width: 480px) {
+  .r.hand {
+    position: absolute;
+    left: calc(5px + var(--frame-h) - 18px);
+    bottom: 9px;
+    transform: translateX(-100%);
+    padding: 1px 5px 1px 4px;
+    background: rgba(26, 18, 16, 0.85);
+    border-radius: 8px 0 8px 0;
+  }
 }
 @media (max-height: 520px) and (orientation: landscape) {
   .camctl { flex-direction: row; bottom: calc(var(--frame-h) + 14px); }
