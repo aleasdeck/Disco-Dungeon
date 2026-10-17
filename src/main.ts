@@ -777,4 +777,4 @@ $('waitLeave').addEventListener('click', () => { leaveOnline(); hideEnd(); showM
 requestAnimationFrame(frame);
 
 // handle for automated checks
-Object.assign(window, { __dd: { game, cam, scene, ctx, net, get view() { return view; }, get run() { return run; }, get mode() { return mode; } } });
+Object.assign(window, { __dd: { game, cam, hud, scene, ctx, net, get view() { return view; }, get run() { return run; }, get mode() { return mode; } } });
