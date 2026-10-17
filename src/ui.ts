@@ -137,7 +137,10 @@ export class Hud {
           ? `<span class="m-go" title="Идёт к ${tgt!.def.name}${it.eta ? ', ударит через ' + turns(it.eta) : ''}">→${it.eta ? ' ' + it.eta : ''}</span><i class="m-dot" style="--c:${tgt!.def.col}" title="${tgt!.def.name}"></i>`
           : `<span class="m-sp">${{ charge: 'фитиль', slam: (it.chill ? 'метель ' : 'всем ') + it.dmg, heal: 'лечит ' + it.dmg, summon: 'призыв', heat: 'жар' }[it.t]}</span>`;
       return `<li${m === now ? ' class="now" aria-current="true"' : g.acted(m) ? ' class="done"' : ''}><img src="${mobIcon(m.k)}" alt=""><span class="m-name">${m.name}</span>`
-        + `<span class="m-hp" title="${m.hp}/${m.max} HP"><i style="width:${(Math.max(0, m.hp) / m.max) * 100}%"></i><b>${m.hp}</b></span>`
+        + `<span class="m-hp" title="${m.hp}/${m.max} HP${m.burn > 0 ? `, горит: в начале хода потеряет ${Math.min(m.burn, m.hp)}` : ''}"><i style="width:${(Math.max(0, m.hp) / m.max) * 100}%"></i>`
+        // what its fire will burn off at its next move, at the end of the bar
+        + (m.burn > 0 ? `<em style="left:${(Math.max(0, m.hp - m.burn) / m.max) * 100}%;width:${(Math.min(m.burn, Math.max(0, m.hp)) / m.max) * 100}%"></em>` : '')
+        + `<b>${m.hp}</b></span>`
         + `<span class="m-act">${act}</span></li>`;
     }).join('');
 
@@ -164,10 +167,14 @@ export class Hud {
       : h.thrown ? 'Бросай следующий диск'
       : 'Тяни фигурку назад и отпускай';
     $('abName').textContent = h.def.ab;
-    $('abTxt').textContent = h.def.abTxt;
+    // once on, the ability lives in this turn's discs: the button says so until the turn ends
+    $('abTxt').textContent = h.boost ? (h.hand ? 'Включено до конца хода: бросай' : 'Включено до конца хода') : h.def.abTxt;
     $('abCost').innerHTML = Array.from({ length: AB_COST }, (_, k) => `<i class="${k < g.bank.sparks ? 'on' : ''}"></i>`).join('');
-    $<HTMLButtonElement>('abBtn').disabled = !g.canUseAbility();
-    $('abBtn').title = `${h.def.ab}: ${h.def.abTxt} Стоит ${AB_COST} искры из общего запаса.`;
+    const ab = $<HTMLButtonElement>('abBtn');
+    ab.disabled = !g.canUseAbility();
+    ab.classList.toggle('on', h.boost);
+    ab.style.setProperty('--ab', h.def.abCol);
+    ab.title = `${h.def.ab}: ${h.def.abTxt} ${h.def.abMore} Стоит ${AB_COST} искры из общего запаса, включается до броска.`;
     const fb = $<HTMLButtonElement>('fightBtn'), isReady = S.ready.includes(h.i);
     fb.hidden = S.phase !== 'place' || h.hp <= 0;
     fb.disabled = (g.online && isReady) || !(g.online ? g.placed(h) : g.placed());
