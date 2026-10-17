@@ -24,16 +24,14 @@ const env = (k: string) => envArt.get(k);
 const OL = 2.1, DL = 1.1;
 /** Ink on stone blocks: thinner than the room's silhouette, so a block doesn't look cut out of the floor. */
 const BL = 1.2;
-/** Chalk doodles from the manifest, any of which may turn up on any floor's walls. */
-const DOODLES = ['doodle_tally', 'doodle_skull', 'doodle_heart', 'doodle_peek', 'doodle_king', 'doodle_rat'];
 /** Whether the graffiti fonts have loaded; words drawn before that use a fallback face and are drawn again. */
-const fontsReady = () => typeof document === 'undefined' || !document.fonts || GRAFFITI_FONTS.every(f => document.fonts.check(f, 'W'));
+const fontsReady = () => typeof document === 'undefined' || !document.fonts || GRAFFITI_FONTS.every(f => document.fonts.check(f, 'WЖ'));
 /** At most this many gags on the walls of one room, so each stays a find rather than wallpaper. */
 const MAX_GAGS = 4;
 /** Chalk white, for words and doodles on the walls. */
 const CHALK = '#efeadf';
 /** A gag on a wall line: world coordinate of its middle along the wall, height of its middle, height, and what it shows. */
-interface WallGag { u: number; h: number; size: number; doodle?: string; word?: string; font?: string; tilt: number }
+interface WallGag { u: number; h: number; size: number; doodle?: string; word?: string; font?: string; tilt: number; flip?: boolean }
 /** The four sides of a cell: neighbour offset, then the side's two corners in cell units. */
 const SIDES: [number, number, number, number, number, number][] = [[0, -1, 0, 0, 1, 0], [1, 0, 1, 0, 1, 1], [0, 1, 0, 1, 1, 1], [-1, 0, 0, 0, 0, 1]];
 /** Stable pseudo-random 0..1 from integers, so stones and cracks stay put between frames. */
@@ -174,8 +172,17 @@ export class SceneRenderer {
       // the same rules drawWall uses for where torches and banners hang
       if (k % 4 === 2 || (k % 4 === 0 && (e.i + e.j) % 3 === 0)) hung.get(key)!.push(u0 + TILE / 2);
     }
-    const words = WALL_WORDS[this.bk] ?? [], doodles = DOODLES.filter(k => env(k)), lines = new Map<string, WallGag[]>();
-    let seed = 1, placed = 0;
+    // every chalk doodle in the manifest and every word for this floor; each room picks its own few, none twice
+    const words = [...WALL_WORDS.all, ...(WALL_WORDS[this.bk] ?? [])], lines = new Map<string, WallGag[]>();
+    const doodles = [...envArt.keys()].filter(k => k.startsWith('doodle_')).sort(), used = new Set<string>();
+    const fresh = (list: string[], v: number) => {
+      for (let k = 0, i = Math.floor(v * list.length); k < list.length; k++) {
+        const pick = list[(i + k) % list.length];
+        if (!used.has(pick)) { used.add(pick); return pick; }
+      }
+      return undefined;
+    };
+    let seed = Math.imul(S.spec.seed, 31) + S.spec.depth * 7 + S.spec.floor, placed = 0;
     for (const [key, spans] of runs) {
       spans.sort((p, q) => p[0] - q[0]);
       const gags: WallGag[] = [];
@@ -190,8 +197,9 @@ export class SceneRenderer {
           if (r(1) < 0.55) { u += 20 + r(2) * 20; continue; }
           const doodle = doodles.length && r(3) < 0.5;
           const g: WallGag = doodle
-            ? { u: 0, h: 15 + r(4) * 2, size: 19 + r(5) * 4, doodle: doodles[Math.floor(r(6) * doodles.length)], tilt: (r(7) - 0.5) * 0.12 }
-            : { u: 0, h: 15 + r(4) * 2, size: 9 + r(5) * 2, word: words[Math.floor(r(6) * words.length)], font: GRAFFITI_FONTS[Math.floor(r(8) * GRAFFITI_FONTS.length)], tilt: (r(7) - 0.5) * 0.25 };
+            // doodles come in all sizes, turned and sometimes mirrored, as if different hands drew them
+            ? { u: 0, h: 14 + r(4) * 4, size: 12 + r(5) * 14, doodle: fresh(doodles, r(6)), tilt: (r(7) - 0.5) * 0.7, flip: r(8) < 0.4 }
+            : { u: 0, h: 14 + r(4) * 4, size: 7 + r(5) * 5, word: fresh(words, r(6)), font: GRAFFITI_FONTS[Math.floor(r(8) * GRAFFITI_FONTS.length)], tilt: (r(7) - 0.5) * 0.4 };
           if (!g.doodle && !g.word) { u += 20; continue; }
           const w = Math.min(end - u - 2, this.gagWidth(g));
           if (w < 12) break;
@@ -269,6 +277,7 @@ export class SceneRenderer {
       c.save();
       c.transform(d[0], d[1], 0, 1, m[0], m[1]);
       c.rotate(g.tilt);
+      if (g.flip) c.scale(-1, 1);
       c.globalAlpha = g.word ? 0.9 : 0.85;
       c.drawImage(im, -w / 2, -h / 2, w, h);
       c.restore();
