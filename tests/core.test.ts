@@ -3,7 +3,7 @@ import { Camera } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, mobSize } from '../src/data';
 import { Game, newBank, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { MOB_CAP, PARTY_SCALE, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Layout } from '../src/room';
+import { MOB_CAP, PARTY_SCALE, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
 import { FLOORS, FORGE_ROWS, LAYERS, agreed, genFloor, newRun, restRoom } from '../src/run';
 
 /** Put every living hero on its own rune, as players do before the fight. */
@@ -1100,6 +1100,89 @@ describe('enemy turn order', () => {
     expect(g.S.mobs).toHaveLength(3);
     expect([...actors]).toEqual([0, 1]);
     expect(g.S.mobs[2].intent).not.toBeNull();
+  });
+});
+
+describe('enemy-turn journal', () => {
+  /** Bastion on the rune at (10, 8) and Ash on the one at (1, 8) of a bare floor 0 room, the given enemies on the given cells. */
+  const arena = (mobs: [keyof typeof MOBS, number, number][]) => {
+    const g = new Game();
+    g.party = newParty([0, 2]);
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    g.S.nodes = []; g.S.blocks = []; g.S.pits = []; g.S.haz = new Set();
+    g.S.mobs = mobs.map(([k, i, j]) => { const c = cellCentre(i, j, mobSize(k)); return newMob(k, c.x, c.y, 1, 0); });
+    placeAll(g); g.startFight();
+    for (const h of g.party) h.hp = h.max = 99;
+    return g;
+  };
+  /** The enemy makes the given move at once. */
+  const act = (g: Game, m: Mob, it: Intent) => { m.intent = it; (g as unknown as { mobAct: (m: Mob) => void }).mobAct(m); };
+  const lines = (g: Game) => g.S.log.map(l => l.txt);
+
+  it('writes a line for every enemy move as it lands, burns and shields included', () => {
+    const g = arena([['skel', 9, 7], ['skel', 5, 1], ['archer', 5, 0], ['rat', 2, 2]]), [b, a] = g.party, [near, far, archer, rat] = g.S.mobs;
+    expect(cellAt(g.spot(b)!.x, g.spot(b)!.y)).toEqual([10, 8]);
+    b.shield = 3;
+    a.fire = 1;
+    archer.burn = 2;
+    rat.burn = 50;
+    expect(near.intent!.t).toBe('hit');
+    expect(far.intent!.t).toBe('move');
+    const goes = g.heroOf(far.intent!.hero), shot = g.heroOf(archer.intent!.hero);
+    endAll(g);
+    for (let k = 0; k < 2000 && g.S.turn === 1; k++) g.update(1 / 60);
+    expect(lines(g)).toEqual([
+      'Пепельница горит: −2',
+      'Скелет ударил Бастиона на 4, щит принял 3',
+      `Скелет идёт к ${goes.def.dat}`,
+      'Гоблин-лучник горит: −2',
+      `Гоблин-лучник выстрелил в ${shot.def.acc} на 3`,
+      'Тюремная крыса горит: −50',
+      'Тюремная крыса сгорела',
+    ]);
+    expect(g.S.log.every(l => l.turn === 1)).toBe(true);
+  });
+
+  it('tells every kind of enemy move, and a hero falling', () => {
+    const g = arena([['king', 2, 2], ['lich', 6, 2], ['necro', 1, 1], ['witch', 9, 1], ['bomber', 5, 4], ['rat', 9, 7], ['skel', 4, 4]]);
+    const [king, lich, necro, witch, bomber, rat, skel] = g.S.mobs, [b, a] = g.party;
+    b.shield = 3;
+    a.hp = 5;
+    g.S.log = [];
+    act(g, king, { t: 'slam', hero: -1, dmg: 9 });
+    act(g, lich, { t: 'slam', hero: -1, dmg: 3, chill: true });
+    act(g, necro, { t: 'summon', hero: -1, dmg: 0, spots: [cellCentre(2, 5)] });
+    act(g, lich, { t: 'summon', hero: -1, dmg: 0, spots: [cellCentre(3, 5), cellCentre(4, 5)] });
+    skel.hp -= 8;
+    act(g, witch, { t: 'heal', hero: -1, dmg: 6, mob: g.S.mobs.indexOf(skel) });
+    act(g, bomber, { t: 'charge', hero: b.i, dmg: 0 });
+    act(g, bomber, { t: 'hit', hero: b.i, dmg: 8 });
+    act(g, rat, { t: 'hit', hero: b.i, dmg: 3 });
+    act(g, skel, { t: 'hit', hero: b.i, dmg: 4 });
+    expect(lines(g)).toEqual([
+      'Король-в-короне: удар по всем на 9',
+      'Бастион: щит принял 3',
+      'Пепельница пала',
+      'Ледяной лич: метель по всем на 3',
+      'Некромант призвал скелета',
+      'Ледяной лич призвал ледяного упыря ×2',
+      'Ледяная ведьма подлечила Скелета на 6',
+      'Гном-подрывник поджёг фитиль',
+      'Гном-подрывник бросил бомбу в Бастиона на 8',
+      'Тюремная крыса ударила Бастиона на 3',
+      'Скелет не достал Бастиона',
+    ]);
+  });
+
+  it('keeps the last 40 lines of the room, on every screen, and starts empty in the next room', () => {
+    const g = arena([['bomber', 5, 4]]), [bomber] = g.S.mobs;
+    for (let k = 0; k < 50; k++) act(g, bomber, { t: 'charge', hero: 0, dmg: 0 });
+    expect(g.S.log).toHaveLength(40);
+    const cli = new Game();
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(g))));
+    expect(cli.S.log).toEqual(g.S.log);
+    g.loadRoom({ seed: 8, depth: 3, floor: 0, type: 'fight' });
+    expect(g.S.log).toEqual([]);
   });
 });
 

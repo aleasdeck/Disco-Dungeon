@@ -2,7 +2,7 @@
 // Rooms are rebuilt from their spec (generation is seeded), so only what changes travels.
 
 import { AB_COST, HEROES } from './data';
-import type { Bank, Disc, Float, Game, HeroState, Phase, Spark } from './game';
+import type { Bank, Disc, Float, Game, HeroState, Phase, Spark, State } from './game';
 import type { Mob, RoomSpec } from './room';
 import type { Run, Votes } from './run';
 
@@ -18,8 +18,9 @@ export interface Snapshot {
   clock?: number;
   attacked: boolean;
   ready: number[];
-  /** Saves from before ending the turn by hand have none. */
+  /** Saves from before ending the turn by hand have none, nor the enemy-turn journal. */
   done?: number[];
+  log?: State['log'];
   shake: number;
   heroes: HeroSnap[];
   mobs: Mob[];
@@ -41,7 +42,7 @@ export function snapshot(g: Game): Snapshot {
   const S = g.S;
   return {
     spec: S.spec, turn: S.turn, phase: S.phase, timer: S.timer, actor: S.actor, clock: S.clock, attacked: S.attacked,
-    ready: S.ready, done: S.done, shake: S.shake,
+    ready: S.ready, done: S.done, log: S.log, shake: S.shake,
     heroes: g.party.map(({ def: _def, ...h }) => h),
     mobs: S.mobs,
     nodes: S.nodes.map(n => [n.left, n.hit]),
@@ -92,7 +93,7 @@ export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boo
   S.heroes = g.party;
   Object.assign(S, {
     turn: s.turn, phase: s.phase, timer: s.timer, actor: s.actor ?? -1, clock: s.clock ?? 0, attacked: s.attacked,
-    ready: s.ready, done: s.done ?? [], shake: s.shake, mobs: s.mobs, floats: s.floats, sparks: s.sparks,
+    ready: s.ready, done: s.done ?? [], log: s.log ?? [], shake: s.shake, mobs: s.mobs, floats: s.floats, sparks: s.sparks,
   });
   S.nodes.forEach((n, k) => { if (s.nodes[k]) [n.left, n.hit] = s.nodes[k]; });
   if (s.ice) S.blocks.filter(b => b.ice).forEach((b, k) => { if (s.ice![k] !== undefined) b.hp = s.ice![k]; });

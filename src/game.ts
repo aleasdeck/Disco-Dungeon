@@ -90,6 +90,8 @@ export interface State extends Layout {
   ready: number[];
   /** Heroes (by `i`) whose players pressed «Конец хода» this turn: the enemies go once every living hero is here. */
   done: number[];
+  /** The enemy-turn journal, oldest first: a line for each thing the enemies did, the room's last LOG_MAX of them. */
+  log: { turn: number; txt: string }[];
 }
 
 /** What a player can do to the shared game; online clients send these to the host instead of applying them. */
@@ -113,6 +115,12 @@ const LEAD = 1, CELL_T = 0.14, BEAT = 0.18, AFTER = 0.35;
 
 /** Seconds a hero takes to hop over to where its last disc stopped. */
 const HOP_T = 0.45;
+
+/** Lines the enemy-turn journal keeps. */
+const LOG_MAX = 40;
+
+/** A past-tense verb agreeing with whoever did it: «ударил», «ударила». */
+const did = (o: { fem?: boolean }, he: string, she = he + 'а') => (o.fem ? she : he);
 
 type Pt = { x: number; y: number };
 
@@ -197,7 +205,7 @@ export class Game {
     const boon = Math.min(AB_COST, this.bank.boon ?? 0);
     for (const h of this.party) Object.assign(h, { pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0, chill: 0, fire: 0, boost: false, sparks: boon });
     this.bank.boon = 0;
-    this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [] };
+    this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [] };
     // every rune starts empty: the players put their heroes on them before the fight
     this.pickActive();
     this.pickIntents();
@@ -207,7 +215,7 @@ export class Game {
 
   /** Online client: rebuild a room from its spec (rooms are generated from the seed), state comes from the host. */
   showRoom(spec: RoomSpec) {
-    this.S = { ...generate(spec), spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [] };
+    this.S = { ...generate(spec), spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [] };
     this.pickActive();
   }
 
@@ -721,10 +729,27 @@ export class Game {
     m.burn = 0;
   }
 
-  /** Damage a hero; `from` is where the blow came from, so the figure rocks away from it. */
+  /** A line in the enemy-turn journal. */
+  private note(txt: string) {
+    const L = this.S.log;
+    L.push({ turn: this.S.turn, txt });
+    if (L.length > LOG_MAX) L.splice(0, L.length - LOG_MAX);
+  }
+
+  /** Journal a blow on a hero: the line, what the shield took of it, and the hero falling to it. */
+  private noteBlow(txt: string, h: HeroState, blk: number) {
+    this.note(blk ? `${txt}, щит принял ${blk}` : txt);
+    this.noteFall(h);
+  }
+
+  private noteFall(h: HeroState) {
+    if (h.hp <= 0) this.note(`${h.def.name} ${did(h.def, 'пал')}`);
+  }
+
+  /** Damage a hero; `from` is where the blow came from, so the figure rocks away from it. Returns what the shield took. */
   hurtHero(h: HeroState, n: number, why = '', from?: Pt) {
     const S = this.S;
-    if (h.hp <= 0) return;
+    if (h.hp <= 0) return 0;
     const p = this.spot(h) ?? { x: S.Wx - 20, y: S.Wy - 20 };
     const blk = Math.min(h.shield, n);
     h.shield -= blk;
@@ -738,6 +763,7 @@ export class Game {
     this.float(p.x, p.y, dmg ? `-${dmg}${why ? ' ' + why : ''}` : 'блок', dmg ? '#ff4d6a' : '#3fc4b6');
     if (dmg) { this.burst(p.x, p.y, '#ff4d6a', 10); S.shake = 0.2; }
     if (h.hp <= 0) { this.float(p.x, p.y - 6, 'пал', '#ff4d6a'); h.hand = 0; }
+    return blk;
   }
 
   // ------------------------------------------------------------ physics
@@ -989,7 +1015,12 @@ export class Game {
   /** The enemy turn begins: burning heroes smoulder, then the enemies take their moves one at a time. */
   private mobsStart() {
     const S = this.S;
-    for (const h of this.alive()) if (h.fire > 0) { h.fire--; this.hurtHero(h, 2, 'горит'); }
+    for (const h of this.alive()) {
+      if (h.fire <= 0) continue;
+      h.fire--;
+      const blk = this.hurtHero(h, 2, 'горит');
+      this.noteBlow(blk < 2 ? `${h.def.name} горит: −${2 - blk}` : `${h.def.name} горит`, h, blk);
+    }
     for (const m of S.mobs) { m.fx = m.tx = m.x; m.fy = m.ty = m.y; m.walk = undefined; m.hop = 0; }
     S.actor = -1;
     S.clock = 0;
@@ -1011,7 +1042,12 @@ export class Game {
       S.attacked = false;
       const burnt = m.burn > 0;
       // fire takes as many HP as it has, through armour, and dies down by one
-      if (burnt) { const fire = m.burn--; this.hurtMob(m, fire, '#ff7a3d', true); }
+      if (burnt) {
+        const fire = m.burn--;
+        this.hurtMob(m, fire, '#ff7a3d', true);
+        this.note(`${m.name} горит: −${fire}`);
+        if (m.hp <= 0) this.note(`${m.name} ${did(MOBS[m.k], 'сгорел')}`);
+      }
       this.planWalk(m);
       if (burnt || (m.hp > 0 && !this.idle(m))) return true;
     }
@@ -1183,7 +1219,13 @@ export class Game {
     if (it.t === 'slam') {
       m.flash = 0.12; S.shake = 0.3;
       this.float(m.x, m.y - 10, it.chill ? 'МЕТЕЛЬ' : 'УДАР ОБ ПОЛ', it.chill ? '#bfe6ff' : '#ffd34d');
-      for (const h of this.alive()) { this.hurtHero(h, it.dmg, '', m); if (it.chill) this.chillHero(h); }
+      this.note(`${m.name}: ${it.chill ? 'метель' : 'удар'} по всем на ${it.dmg}`);
+      for (const h of this.alive()) {
+        const blk = this.hurtHero(h, it.dmg, '', m);
+        if (blk) this.note(`${h.def.name}: щит принял ${blk}`);
+        this.noteFall(h);
+        if (it.chill) this.chillHero(h);
+      }
       this.tremor(m.x, m.y, 1, m);
     } else if (it.t === 'heal') {
       const o = S.mobs[it.mob!];
@@ -1191,9 +1233,11 @@ export class Game {
       const hl = Math.min(o.max - o.hp, it.dmg);
       o.hp += hl;
       this.float(o.x, o.y, `+${hl}`, '#7be39a'); this.burst(o.x, o.y, '#9fe3ff', 12);
+      this.note(`${m.name} ${did(d, 'подлечил')} ${MOBS[o.k].acc} на ${hl}`);
     } else if (it.t === 'summon') {
-      const kind = d.acts!.find(a => a.k === 'summon')!.kind!, mi = S.mobs.indexOf(m);
+      const kind = d.acts!.find(a => a.k === 'summon')!.kind!, mi = S.mobs.indexOf(m), n = it.spots?.length ?? 0;
       this.float(m.x, m.y - 10, 'призыв!', '#c9a8ff');
+      this.note(`${m.name} ${did(d, 'призвал')} ${MOBS[kind].acc.toLowerCase()}${n > 1 ? ' ×' + n : ''}`);
       for (const p of it.spots ?? []) {
         // a disc may have come to rest on the circle; the mob still rises, the disc is long gone by then
         const o = newMob(kind, p.x, p.y, S.hpMul, S.dmgAdd, S.dmgMul);
@@ -1203,9 +1247,14 @@ export class Game {
       }
     } else if (it.t === 'heat') {
       this.float(m.x, m.y - 10, 'РАСКАЛЯЕТ ПОЛ', '#ff7a3d');
+      this.note(`${m.name} ${did(d, 'раскалил')} пол`);
       for (const p of it.spots ?? []) { S.haz.add(hazKey(Math.floor(p.x / TILE), Math.floor(p.y / TILE))); this.burst(p.x, p.y, '#ff7a3d', 10); }
     } else if (it.t === 'charge') {
       this.float(m.x, m.y - 10, 'фитиль горит', '#ffb070');
+      this.note(`${m.name} ${did(d, 'поджёг', 'подожгла')} фитиль`);
+    } else if (it.t === 'move') {
+      // walled off, it stayed put: nothing to tell
+      if (m.walk) this.note(`${m.name} идёт к ${this.heroOf(it.hero).def.dat}`);
     } else if (it.t === 'hit') {
       const h = this.heroOf(it.hero);
       const p = this.spot(h);
@@ -1214,10 +1263,15 @@ export class Game {
         // up close the enemy lunges at the hero; a shooter rocks back from its shot
         if (isRanged(m.k)) this.knock(m, m.x, m.y, p.x, p.y, 0.3);
         else this.knock(m, p.x, p.y, m.x, m.y, 0.5);
-        this.hurtHero(h, it.dmg, '', m); m.flash = 0.12;
+        const blk = this.hurtHero(h, it.dmg, '', m); m.flash = 0.12;
+        const how = !isRanged(m.k) ? `${did(d, 'ударил')} ${h.def.acc}` : d.charge ? `${did(d, 'бросил')} бомбу в ${h.def.acc}` : `${did(d, 'выстрелил')} в ${h.def.acc}`;
+        this.noteBlow(`${m.name} ${how} на ${it.dmg}`, h, blk);
         if (d.chill && h.hp > 0) this.chillHero(h);
         if (d.fire && h.hp > 0) { h.fire = 1; this.float(p.x, p.y - 8, 'горит!', '#ff7a3d'); }
-      } else this.float(m.x, m.y, 'не достал', '#c7cbe0');
+      } else {
+        this.float(m.x, m.y, 'не достал', '#c7cbe0');
+        this.note(`${m.name} не ${did(d, 'достал')} ${h.def.acc}`);
+      }
     }
   }
 
