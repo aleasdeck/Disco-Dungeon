@@ -1,6 +1,6 @@
-// DOM HUD: top bar, phase pill, ally cards, the enemy list and the hero frame at the bottom.
+// DOM HUD: top bar with whose turn it is, the turn banner, ally cards, the enemy list and the hero frame at the bottom.
 
-import { AB_COST, ENEMY_BASE, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, type MobKind } from './data';
+import { AB_COST, ENEMY_BASE, FORGE_ORE, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, type MobKind, type StatKey } from './data';
 import { sprites } from './assets';
 import type { Game, HeroState } from './game';
 import { BASE_TH, drawHeroFigure, drawMiniature, drawMobFigure } from './draw/figures';
@@ -52,8 +52,46 @@ export function drawPortrait(cv: HTMLCanvasElement, h: Pick<HeroState, 'i' | 'de
   }
 }
 
+/**
+ * A hero's disc upgrades, one row each: level pips and where the stat stands. Each says what it does in a line
+ * under the name (the phone pop-up) or a tooltip (the desktop). At the blacksmith's (`shop`) a row also sells the next level.
+ */
+function upRows(g: Game, h: HeroState, shop: boolean) {
+  const canBuy = (c: number) => !!c && g.bank.ore >= c && g.canControl(h);
+  const row = (k: string, name: string, txt: string, pips: number, lv: number, val: string, cost: number, tip: string) =>
+    `<div class="up" title="${tip}"><span class="up-name">${name}<small>${txt}</small></span>`
+    + `<span class="lvl">${Array.from({ length: pips }, (_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('')}</span><b>${val}</b>`
+    + (shop ? `<button class="btn sm" data-h="${h.i}" data-k="${k}" ${canBuy(cost) ? '' : 'disabled'}>${cost ? '+ ' + cost + ' руды' : 'макс'}</button>` : '')
+    + '</div>';
+  const dc = g.discCost(h), discTxt = 'Больше бросков за ход. Самое сильное улучшение';
+  return row('n', 'Диски за ход', discTxt, HAND_MAX - HAND_START, h.discs - HAND_START, String(h.discs), dc,
+    `${discTxt}. ` + (dc ? `Следующий диск у кузнеца за ${dc} руды.` : 'Больше дисков не бывает.'))
+    + UPS.map(u => {
+      const lv = h.up[u.k], cost = g.upCost(h, u.k), v = g.stat(h, u.k);
+      return row(u.k, u.name, u.txt, UP_COST.length, lv, u.fmt(lv * u.step, v), cost,
+        `${u.txt}. ${u.now?.(v) ?? ''}` + (cost ? `Следующий уровень у кузнеца за ${cost} руды.` : 'Больше не прокачать.'));
+    }).join('');
+}
+
+/** Whose turn it is, as the HUD tells it: the heroes throw (and the discs settle), then the enemies go. */
+export type Side = 'place' | 'heroes' | 'enemies' | 'over';
+
 export class Hud {
   private lastPortrait = '';
+  /** Whose turn the HUD showed last, so a change of turn gets its banner. */
+  private side: Side | null = null;
+  /** Whose cards the blacksmith's screen holds now; the cards are built once per visit, then only their rows change. */
+  private forgeCards = '';
+  /** The blacksmith's (by depth) this player is done at and left for the map, while the others may still be buying. */
+  private forgeLeft = 0;
+
+  /** The blacksmith's screen is up on this screen. */
+  get atForge() { return this.g.forge > 0 && this.g.forge !== this.forgeLeft; }
+
+  leaveForge() {
+    this.forgeLeft = this.g.forge;
+    this.forge();
+  }
 
   constructor(private g: Game) {
     $('abBtn').addEventListener('click', () => g.useAbility());
@@ -61,12 +99,24 @@ export class Hud {
       const open = $('frame').classList.toggle('ups-open');
       $('upsToggle').setAttribute('aria-expanded', String(open));
     });
-    $('ups').addEventListener('click', e => {
-      const b = (e.target as HTMLElement).closest('button');
-      if (b?.dataset.k === 'n') g.buyDisc();
-      else if (b?.dataset.k) g.upgrade(b.dataset.k as 'm' | 'pw' | 'e');
+    $('forgeHeroes').addEventListener('click', e => {
+      const b = (e.target as HTMLElement).closest('button'), h = b && g.party.find(o => o.i === Number(b.dataset.h));
+      if (!h || !g.canControl(h)) return;
+      if (b.dataset.k === 'n') g.buyDisc(h);
+      else g.upgrade(b.dataset.k as StatKey, h);
     });
     $('fightBtn').addEventListener('click', () => g.startFight());
+  }
+
+  /** The big band across the room for a moment when the turn passes: "Ваш ход", "Ход врагов". */
+  private banner(title: string, sub: string, side: Side) {
+    const b = $('turnBanner');
+    b.querySelector('b')!.textContent = title;
+    b.querySelector('span')!.textContent = sub;
+    b.className = 'turn-banner ' + side;
+    // restart the animation even if the last banner is still on screen
+    void b.offsetWidth;
+    b.classList.add('show');
   }
 
   buildAllies() {
@@ -101,15 +151,25 @@ export class Hud {
     rage.title = `С ${g.rageFrom()}-го хода каждый враг с каждым ходом бьёт на 1 сильнее.`;
 
     const left = g.alive().filter(o => o.hand > 0).length;
-    const phase = $('phase');
-    phase.className = 'phase ' + S.phase;
-    phase.textContent = {
-      place: g.online ? 'Расстановка: поставь своего героя на руну и нажми «Готов»' : 'Расстановка: поставь героев на руны и нажми «В бой!»',
-      throw: left ? `Броски · ждём ${left}` : 'Диски катятся',
-      resolve: 'Подсчёт',
-      enemy: S.mobs[S.actor]?.hp > 0 ? `Ход мобов · ${S.mobs[S.actor].name}` : 'Ход мобов',
-      over: g.alive().length ? 'Комната зачищена' : 'Отряд пал',
+    const side: Side = S.phase === 'place' || S.phase === 'over' ? S.phase : S.phase === 'enemy' ? 'enemies' : 'heroes';
+    const sideName = { place: 'Расстановка', heroes: 'Ваш ход', enemies: 'Ход врагов', over: g.alive().length ? 'Победа' : 'Отряд пал' }[side];
+    const detail = {
+      place: g.online ? 'поставь героя и нажми «Готов»' : 'поставь героев на руны',
+      throw: left ? `бросают: ${left}` : 'диски катятся',
+      resolve: 'подсчёт',
+      enemy: S.mobs[S.actor]?.hp > 0 ? S.mobs[S.actor].name : 'враги ходят по одному',
+      over: '',
     }[S.phase];
+    const sd = $('hSide');
+    sd.className = 'side ' + side;
+    sd.textContent = sideName;
+    sd.title = detail;
+    document.body.dataset.turn = side;
+    if (this.side !== side) {
+      // the fight starts or the turn passes to the other side: a banner across the room says so
+      if (this.side && (side === 'heroes' || side === 'enemies')) this.banner(side === 'heroes' ? 'Ваш ход' : 'Ход врагов', side === 'heroes' ? `Ход ${S.turn} · бросайте диски` : 'враги ходят по одному', side);
+      this.side = side;
+    }
 
     for (const o of g.party) {
       const t = $('ally' + o.i);
@@ -137,7 +197,10 @@ export class Hud {
           ? `<span class="m-go" title="Идёт к ${tgt!.def.name}${it.eta ? ', ударит через ' + turns(it.eta) : ''}">→${it.eta ? ' ' + it.eta : ''}</span><i class="m-dot" style="--c:${tgt!.def.col}" title="${tgt!.def.name}"></i>`
           : `<span class="m-sp">${{ charge: 'фитиль', slam: (it.chill ? 'метель ' : 'всем ') + it.dmg, heal: 'лечит ' + it.dmg, summon: 'призыв', heat: 'жар' }[it.t]}</span>`;
       return `<li${m === now ? ' class="now" aria-current="true"' : g.acted(m) ? ' class="done"' : ''}><img src="${mobIcon(m.k)}" alt=""><span class="m-name">${m.name}</span>`
-        + `<span class="m-hp" title="${m.hp}/${m.max} HP"><i style="width:${(Math.max(0, m.hp) / m.max) * 100}%"></i><b>${m.hp}</b></span>`
+        + `<span class="m-hp" title="${m.hp}/${m.max} HP${m.burn > 0 ? `, горит: в начале хода потеряет ${Math.min(m.burn, m.hp)}` : ''}"><i style="width:${(Math.max(0, m.hp) / m.max) * 100}%"></i>`
+        // what its fire will burn off at its next move, at the end of the bar
+        + (m.burn > 0 ? `<em style="left:${(Math.max(0, m.hp - m.burn) / m.max) * 100}%;width:${(Math.min(m.burn, Math.max(0, m.hp)) / m.max) * 100}%"></em>` : '')
+        + `<b>${m.hp}</b></span>`
         + `<span class="m-act">${act}</span></li>`;
     }).join('');
 
@@ -156,35 +219,66 @@ export class Hud {
     $('fShield').textContent = String(h.shield);
     $('fOre').textContent = String(g.bank.ore);
     $('fSpk').textContent = String(g.bank.sparks);
-    $('fHand').innerHTML = Array.from({ length: h.discs }, (_, k) => `<i class="${k < h.hand ? 'on' : ''}" style="--c:${h.def.col}"></i>`).join('');
+    // discs still in hand out of this hero's discs per turn, in the hero's colour
+    $('fHand').textContent = `${h.hand}/${h.discs}`;
+    const hand = $('fHandBox');
+    hand.style.setProperty('--c', h.def.col);
+    hand.classList.toggle('out', h.hand === 0);
+    hand.title = `Диски в руке: ${h.hand} из ${h.discs} за ход`;
     $('fState').textContent = h.hp <= 0 ? 'Пал'
       : S.phase === 'place' ? (h.pad === null ? 'Тапни свободную руну, чтобы поставить героя' : g.online ? 'Можно переставить, потом «Готов»' : g.placed() ? 'Можно переставить, потом «В бой!»' : 'Поставь остальных героев')
+      : S.phase === 'enemy' ? 'Ход врагов, ждём'
       : S.phase !== 'throw' ? (S.phase === 'over' ? 'Комната закрыта' : 'Ждём конца хода')
       : h.hand === 0 ? 'Бросил, ждём остальных'
       : h.thrown ? 'Бросай следующий диск'
       : 'Тяни фигурку назад и отпускай';
     $('abName').textContent = h.def.ab;
-    $('abTxt').textContent = h.def.abTxt;
+    // once on, the ability lives in this turn's discs: the button says so until the turn ends
+    $('abTxt').textContent = h.boost ? (h.hand ? 'Включено до конца хода: бросай' : 'Включено до конца хода') : h.def.abTxt;
     $('abCost').innerHTML = Array.from({ length: AB_COST }, (_, k) => `<i class="${k < g.bank.sparks ? 'on' : ''}"></i>`).join('');
-    $<HTMLButtonElement>('abBtn').disabled = !g.canUseAbility();
-    $('abBtn').title = `${h.def.ab}: ${h.def.abTxt} Стоит ${AB_COST} искры из общего запаса.`;
+    const ab = $<HTMLButtonElement>('abBtn');
+    ab.disabled = !g.canUseAbility();
+    ab.classList.toggle('on', h.boost);
+    ab.style.setProperty('--ab', h.def.abCol);
+    ab.title = `${h.def.ab}: ${h.def.abTxt} ${h.def.abMore} Стоит ${AB_COST} искры из общего запаса, включается до броска.`;
     const fb = $<HTMLButtonElement>('fightBtn'), isReady = S.ready.includes(h.i);
     fb.hidden = S.phase !== 'place' || h.hp <= 0;
     fb.disabled = (g.online && isReady) || !(g.online ? g.placed(h) : g.placed());
     fb.textContent = !g.online ? 'В бой!' : isReady ? `Ждём остальных · ${S.ready.length}/${g.alive().length}` : 'Готов';
-    // each upgrade says what it does: a line under the name in the phone pop-up, a tooltip on the desktop
-    const canBuy = (c: number) => !!c && g.bank.ore >= c && h.hp > 0 && S.phase !== 'over';
-    const row = (k: string, name: string, txt: string, pips: number, lv: number, val: string, cost: number, tip: string) =>
-      `<div class="up" title="${tip}"><span class="up-name">${name}<small>${txt}</small></span>`
-      + `<span class="lvl">${Array.from({ length: pips }, (_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('')}</span>`
-      + `<b>${val}</b><button class="btn sm" data-k="${k}" ${canBuy(cost) ? '' : 'disabled'}>${cost ? '+ ' + cost + ' руды' : 'макс'}</button></div>`;
-    const dc = g.discCost(h), discTxt = 'Больше бросков за ход. Самое сильное улучшение';
-    $('ups').innerHTML = row('n', 'Диски за ход', discTxt, HAND_MAX - HAND_START, h.discs - HAND_START, String(h.discs), dc,
-      `${discTxt}. ` + (dc ? `Следующий диск за ${dc} руды.` : 'Больше дисков не бывает.'))
-      + UPS.map(u => {
-        const lv = h.up[u.k], cost = g.upCost(h, u.k), v = g.stat(h, u.k);
-        return row(u.k, u.name, u.txt, UP_COST.length, lv, u.fmt(lv * u.step, v), cost,
-          `${u.txt}. ${u.now?.(v) ?? ''}` + (cost ? `Следующий уровень за ${cost} руды.` : 'Больше не прокачать.'));
-      }).join('');
+    // the frame only shows the upgrades: they are bought at the blacksmith's, a room on the map
+    $('ups').innerHTML = '<small class="ups-note">Прокачка у кузнеца на карте</small>' + upRows(g, h, false);
+    this.forge();
+  }
+
+  /** The blacksmith's screen: every hero's upgrades with the next level for sale, paid from the party's shared ore. */
+  private forge() {
+    const g = this.g;
+    $('forgeScreen').hidden = !this.atForge;
+    if (!g.forge) { this.forgeCards = ''; this.forgeLeft = 0; }
+    if (!this.atForge) return;
+    const key = g.party.map(h => h.i + (sprites.has(h.def.key) ? '+img' : '')).join();
+    if (this.forgeCards !== key) {
+      const box = $('forgeHeroes');
+      box.innerHTML = '';
+      for (const h of g.party) {
+        const c = document.createElement('div');
+        c.className = 'fcard';
+        c.id = 'fcard' + h.i;
+        c.style.setProperty('--c', h.def.col);
+        c.innerHTML = `<canvas></canvas><div class="fc-head"><b>${h.def.name}</b><span class="fc-hp"></span></div><div class="ups"></div>`;
+        drawPortrait(c.querySelector('canvas')!, h);
+        box.appendChild(c);
+      }
+      this.forgeCards = key;
+    }
+    $('forgeText').textContent = `Кузнец дал отряду ${FORGE_ORE} руды. Диски прокачиваются только здесь, а руда общая на всех: решайте, кому что.`;
+    $('forgeOre').textContent = String(g.bank.ore);
+    for (const h of g.party) {
+      const c = $('fcard' + h.i);
+      c.classList.toggle('mine', g.online && g.canControl(h));
+      c.querySelector('.fc-hp')!.textContent = h.hp > 0 ? `${h.hp}/${h.max} HP` : 'пал';
+      c.querySelector('.ups')!.innerHTML = upRows(g, h, true);
+    }
+    $('forgeNote').textContent = g.online ? 'Каждый прокачивает своего героя. Кто закончил, идёт на карту выбирать комнату.' : '';
   }
 }

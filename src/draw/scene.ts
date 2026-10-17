@@ -1013,7 +1013,7 @@ export class SceneRenderer {
     const di = env(`disc_${d.hero.def.key}`);
     if (di) {
       c.save(); c.translate(x, y - th); c.scale(1, ry / rx); c.rotate(d.spin); c.drawImage(di, -rx * 1.04, -rx * 1.04, rx * 2.08, rx * 2.08); c.restore();
-      if (d.charged) { c.save(); c.globalCompositeOperation = 'lighter'; ell(c, x, y - th, rx + 2.5, ry + 1.8); c.fillStyle = 'rgba(184,147,255,.35)'; c.fill(); c.restore(); }
+      this.discGlow(d, x, y - th, rx, ry);
       return;
     }
     ell(c, x, y - th, rx, ry); fs(c, col, 1.5);
@@ -1024,7 +1024,20 @@ export class SceneRenderer {
     else { c.beginPath(); c.moveTo(0, -rx * 0.42); c.quadraticCurveTo(rx * 0.36, -rx * 0.05, rx * 0.2, rx * 0.3); c.quadraticCurveTo(0, rx * 0.42, -rx * 0.2, rx * 0.3); c.quadraticCurveTo(-rx * 0.36, -rx * 0.05, 0, -rx * 0.42); c.closePath(); c.stroke(); c.fill(); }
     c.restore();
     c.strokeStyle = 'rgba(255,255,255,.8)'; c.lineWidth = 1.1; c.beginPath(); c.ellipse(x, y - th, rx * 0.8, ry * 0.74, 0, Math.PI * 1.1, Math.PI * 1.42); c.stroke();
-    if (d.charged) { c.save(); c.globalCompositeOperation = 'lighter'; ell(c, x, y - th, rx + 2.5, ry + 1.8); c.fillStyle = 'rgba(184,147,255,.35)'; c.fill(); c.restore(); }
+    this.discGlow(d, x, y - th, rx, ry);
+  }
+
+  /** Rings over a disc's top: the hero's ability colour while it carries the ability, violet while charged by a clash. */
+  private discGlow(d: Disc, x: number, y: number, rx: number, ry: number) {
+    const { c } = this;
+    // Ricochet's disc glows only while it still has sure bounces
+    if (d.ab && !d.fall && (d.hero.def.key !== 'ricochet' || d.rico > 0)) {
+      c.save();
+      c.strokeStyle = d.hero.def.abCol; c.lineWidth = 1.6; c.globalAlpha = 0.65 + Math.sin(this.t * 10) * 0.25;
+      ell(c, x, y, rx + 2.2, ry + 1.6); c.stroke();
+      c.restore();
+    }
+    if (d.charged) { c.save(); c.globalCompositeOperation = 'lighter'; ell(c, x, y, rx + 2.5, ry + 1.8); c.fillStyle = 'rgba(184,147,255,.35)'; c.fill(); c.restore(); }
   }
 
   // ------------------------------------------------------------ miniatures
@@ -1056,7 +1069,6 @@ export class SceneRenderer {
       c.quadraticCurveTo(bx + 2.5, by + 2.5, bx, by + 3.5); c.quadraticCurveTo(bx - 2.5, by + 2.5, bx - 2.5, by); c.closePath();
       fs(c, '#3fc4b6', 0.8);
     }
-    for (let k = 0; k < h.hand; k++) { ell(c, sx - 13 - k * 5, sy - 1, 3, 1.6); fs(c, h.def.col, 0.7); }
     if (h.chill > 0 || h.fire > 0) {
       c.font = '600 6.5px Oswald, sans-serif'; c.textAlign = 'right';
       c.fillStyle = h.chill > 0 ? '#bfe6ff' : '#ff9a5c';
@@ -1083,11 +1095,15 @@ export class SceneRenderer {
     if (m.hp <= 0) return;
     const top = y - m.hop - BASE_TH - MOB_TOP[m.k];
     if (m.burn > 0) {
-      for (let k = 0; k < 3; k++) {
-        const ph = (this.t * 1.5 + k / 3) % 1, fx = x - 5 + k * 5, fy = top + 14 - ph * 8;
+      // the more fire piled on, the more tongues of flame, and the number says what it burns off next move
+      const n = Math.min(5, 2 + Math.floor(m.burn / 3));
+      for (let k = 0; k < n; k++) {
+        const ph = (this.t * 1.5 + k / n) % 1, fx = x - (n - 1) * 2.5 + k * 5, fy = top + 14 - ph * 8;
         c.beginPath(); c.moveTo(fx, fy - 4); c.quadraticCurveTo(fx + 2, fy, fx, fy + 1); c.quadraticCurveTo(fx - 2, fy, fx, fy - 4);
         c.fillStyle = `rgba(255,140,60,${1 - ph})`; c.fill();
       }
+      c.font = '700 7px Oswald, sans-serif'; c.textAlign = 'left'; c.fillStyle = '#ffb070';
+      c.strokeStyle = INK; c.lineWidth = 2; c.strokeText(String(m.burn), x + n * 2.5 + 2, top + 13); c.fillText(String(m.burn), x + n * 2.5 + 2, top + 13);
     }
     if (m.armor) { c.font = '600 6px Oswald, sans-serif'; c.textAlign = 'right'; c.fillStyle = '#d6cfbd'; c.fillText('бр ' + m.armor, x - m.r * 1.27 - 2, y - m.hop - 1); }
     if (!g.solid(m) && m.hp > 0 && S.phase !== 'over') {

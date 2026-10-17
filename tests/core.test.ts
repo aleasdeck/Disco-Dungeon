@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { Camera } from '../src/camera';
-import { CRIT, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, mobSize } from '../src/data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, mobSize } from '../src/data';
 import { Game, newParty, stepsOf, wayLen, type Action } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { MOB_CAP, cellAt, cellCentre, clearOfRock, floorAt, generate, isFloor, muAt, newMob, tierOf } from '../src/room';
-import { FLOORS, LAYERS, genFloor, newRun, restRoom } from '../src/run';
+import { FLOORS, FORGE_ROWS, LAYERS, agreed, genFloor, newRun, restRoom } from '../src/run';
 
 /** Put every living hero on its own rune, as players do before the fight. */
 const placeAll = (g: Game) => g.alive().forEach((h, k) => g.movePad(h, k));
@@ -146,6 +146,8 @@ describe('run map', () => {
         expect(n).toBeGreaterThanOrEqual(12);
         expect(n).toBeLessThanOrEqual(16);
         for (const r of [3, 5]) expect(layers[r].some(m => m.type === 'camp' || m.type === 'forge')).toBe(true);
+        // discs are upgraded only at the blacksmith's, so every floor has one by its middle
+        expect(FORGE_ROWS.some(r => layers[r].some(m => m.type === 'forge'))).toBe(true);
         expect(layers[LAYERS - 1][0].type).toBe('boss');
         for (let l = 1; l < LAYERS; l++) {
           for (const n of layers[l]) expect(layers[l - 1].some(p => p.next.includes(n.id))).toBe(true);
@@ -158,6 +160,16 @@ describe('run map', () => {
     const run = newRun(12345);
     expect(run.floor).toBe(0);
     expect(run.path.every(p => p.length === 0)).toBe(true);
+  });
+
+  it('moves an online party on only once every player here points at the same room', () => {
+    expect(agreed({}, [0, 2])).toBeNull();
+    expect(agreed({ 0: '0-0-1' }, [0, 2])).toBeNull();
+    expect(agreed({ 0: '0-0-1', 2: '0-0-0' }, [0, 2])).toBeNull();
+    expect(agreed({ 0: '0-0-1', 2: '0-0-1' }, [0, 2])).toBe('0-0-1');
+    // a player who left has no say: the host plays their hero
+    expect(agreed({ 0: '0-0-1' }, [0])).toBe('0-0-1');
+    expect(agreed({ 0: '0-0-1', 1: '0-0-0' }, [0])).toBe('0-0-1');
   });
 });
 
@@ -190,8 +202,28 @@ describe('placement and discs', () => {
     expect(a.pad).toBe(1);
   });
 
+  it('sells disc upgrades only at the blacksmith\'s, between rooms', () => {
+    const g = fresh(), h = g.hero;
+    g.bank.ore = 100;
+    g.buyDisc();
+    g.upgrade('m');
+    expect([h.discs, h.up.m, g.bank.ore]).toEqual([HAND_START, 0, 100]);
+    g.forge = 1;
+    g.buyDisc();
+    g.upgrade('m');
+    expect([h.discs, h.up.m]).toEqual([HAND_START + 1, 1]);
+    // the next room closes the shop, and the new disc is in hand there
+    g.loadRoom({ seed: 8, depth: 3, floor: 0, type: 'fight' });
+    expect(g.forge).toBe(0);
+    expect(h.hand).toBe(HAND_START + 1);
+    const ore = g.bank.ore;
+    g.upgrade('pw');
+    expect(g.bank.ore).toBe(ore);
+  });
+
   it('spends ore from one pool shared by the party', () => {
     const g = fresh();
+    g.forge = 1;
     g.bank.ore = HAND_COST[0];
     g.select(1);
     g.buyDisc();
@@ -204,10 +236,10 @@ describe('placement and discs', () => {
 
   it('sells extra discs for ore up to the limit', () => {
     const g = fresh(), h = g.hero;
+    g.forge = 1;
     g.bank.ore = 100;
-    while (g.discCost(h)) g.buyDisc();
+    for (let k = 0; k < 9 && g.discCost(h); k++) g.buyDisc();
     expect(h.discs).toBe(HAND_MAX);
-    expect(h.hand).toBe(HAND_MAX);
     expect(g.bank.ore).toBe(100 - HAND_COST[0] - HAND_COST[1]);
   });
 
@@ -217,6 +249,7 @@ describe('placement and discs', () => {
 
   it('grows damage and speed by the same share for every hero, and stops the bounce at its limit', () => {
     const g = fresh();
+    g.forge = 1;
     g.bank.ore = 100;
     for (const h of g.party) {
       g.select(h.i);
@@ -350,6 +383,23 @@ describe('online play', () => {
     expect(cli.S.mobs[cli.S.actor].y).toBeCloseTo(host.S.mobs[host.S.actor].y, 5);
   });
 
+  it('opens the blacksmith\'s on every screen, and a client buys through the host', () => {
+    const { host, cli, sent } = pair();
+    host.forge = 4;
+    host.bank.ore = 20;
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    expect(cli.forge).toBe(4);
+    cli.buyDisc(cli.heroOf(2));
+    expect(sent).toEqual([{ k: 'disc', h: 2 }]);
+    host.perform(sent[0]);
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    expect(cli.heroOf(2).discs).toBe(HAND_START + 1);
+    expect(cli.bank.ore).toBe(20 - HAND_COST[0]);
+    host.forge = 0;
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    expect(cli.forge).toBe(0);
+  });
+
   it('lets a client control only its own hero', () => {
     const { cli } = pair();
     cli.select(0);
@@ -388,7 +438,7 @@ describe('ice caves', () => {
     const b = g.S.blocks.find(o => o.ice && o.big)!;
     let hits = 0;
     while (b.hp! > 0 && hits < 10) {
-      g.S.discs = [{ hero: g.hero, x: b.x0 - 6, y: (b.y0 + b.y1) / 2, vx: 260, vy: 0, r: 5, m: 4, e: 0.6, fr: 1, fall: 0, gone: false, charged: false, bounces: 0, spin: 0, hits: 0 }];
+      g.S.discs = [{ hero: g.hero, x: b.x0 - 6, y: (b.y0 + b.y1) / 2, vx: 260, vy: 0, r: 5, m: 4, e: 0.6, fr: 1, fall: 0, gone: false, charged: false, bounces: 0, spin: 0, hits: 0, ab: false, rico: 0 }];
       g.step(1 / 60);
       hits++;
     }
@@ -481,7 +531,7 @@ describe('pressure in a fight', () => {
     return g;
   };
   const disc = (g: Game, x: number, y: number, vx: number, vy: number, bounces = 0) =>
-    ({ hero: g.party[0], x, y, vx, vy, r: 5, m: 4, e: 0.6, fr: 1, fall: 0, gone: false, charged: false, bounces, spin: 0, hits: 0 });
+    ({ hero: g.party[0], x, y, vx, vy, r: 5, m: 4, e: 0.6, fr: 1, fall: 0, gone: false, charged: false, bounces, spin: 0, hits: 0, ab: false, rico: 0 });
 
   it('enemies hit one harder every turn once the fight drags on', () => {
     const g = arena(['archer']), m = g.S.mobs[0];
@@ -526,6 +576,142 @@ describe('pressure in a fight', () => {
     expect(g.bank.ore).toBeGreaterThan(0);
     expect(Math.hypot(d.vx, d.vy)).toBeLessThan(200 * NODE_E + 5);
     expect(d.hits).toBe(1);
+  });
+});
+
+describe('hero abilities work through the discs', () => {
+  /** A floor 0 fight with the given enemies along the top and nothing else in the room. */
+  const arena = (kinds: (keyof typeof MOBS)[]) => {
+    const g = new Game();
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    g.S.mobs = kinds.map((k, i) => newMob(k, cellCentre(2 + i * 3, 1).x, cellCentre(2 + i * 3, 1).y, 1, 0));
+    g.S.nodes = [];
+    g.S.blocks = [];
+    g.S.rock = [];
+    g.S.pits = [];
+    placeAll(g); g.startFight();
+    return g;
+  };
+  const byKey = (g: Game, key: string) => g.party.find(h => h.def.key === key)!;
+  /** A disc of hero h rolling straight up into mob m from just below it. */
+  const into = (g: Game, h: ReturnType<typeof byKey>, m: { x: number; y: number; r: number }, ab: boolean, v = 200) => {
+    const d = { hero: h, x: m.x, y: m.y + m.r + h.def.r + 1, vx: 0, vy: -v, r: h.def.r, m: g.stat(h, 'm'), e: g.stat(h, 'e'), fr: h.def.fr,
+      fall: 0, gone: false, charged: false, bounces: 1, spin: 0, hits: 0, ab, rico: ab && h.def.key === 'ricochet' ? AB_BOUNCES : 0 };
+    g.S.discs.push(d);
+    return d;
+  };
+
+  it('goes on before a throw, costs sparks, and lasts to the end of the turn', () => {
+    const g = arena(['archer']), h = byKey(g, 'bastion');
+    expect(g.canUseAbility(h)).toBe(false);
+    g.bank.sparks = AB_COST * 2;
+    g.useAbility(h);
+    expect(h.boost).toBe(true);
+    expect(g.bank.sparks).toBe(AB_COST);
+    // once a turn: a second press would only waste sparks
+    expect(g.canUseAbility(h)).toBe(false);
+    g.throwDisc(h, 0, -40);
+    expect(g.S.discs[0].ab).toBe(true);
+    // a hero with no disc left in hand has nothing to carry it
+    const other = byKey(g, 'ash');
+    g.throwDisc(other, 0, -40);
+    expect(g.canUseAbility(other)).toBe(false);
+    const t0 = g.S.turn;
+    for (const o of g.party) { o.hand = 0; o.hp = o.max = 99; }
+    for (let k = 0; k < 4000 && g.S.turn === t0; k++) g.update(1 / 60);
+    expect(g.S.turn).toBe(t0 + 1);
+    expect(h.boost).toBe(false);
+  });
+
+  it('Bastion: every hit of his disc on an enemy shields the whole party', () => {
+    const g = arena(['skel', 'skel']), h = byKey(g, 'bastion'), [a, b] = g.S.mobs;
+    into(g, h, a, false);
+    g.step(1 / 120);
+    expect(g.party.map(o => o.shield)).toEqual([0, 0, 0]);
+    into(g, h, b, true);
+    g.step(1 / 120);
+    expect(g.party.map(o => o.shield)).toEqual([AB_SHIELD, AB_SHIELD, AB_SHIELD]);
+  });
+
+  it('Ash: her hits pile fire on an enemy, it burns that much at its move and dies down by one', () => {
+    const g = arena(['golem', 'archer']), h = byKey(g, 'ash'), [m] = g.S.mobs;
+    m.hp = m.max = 200;
+    into(g, h, m, true);
+    g.step(1 / 120);
+    g.S.discs = [];
+    into(g, h, m, true);
+    g.step(1 / 120);
+    expect(m.burn).toBe(AB_BURN * 2);
+    // fire goes through armour: the golem's 3 doesn't stop it
+    for (const o of g.party) { o.hand = 0; o.hp = o.max = 99; }
+    g.S.discs = [];
+    const hp = m.hp;
+    for (let k = 0; k < 4000 && !(g.S.phase === 'enemy' && g.S.actor === 0); k++) g.update(1 / 60);
+    expect(hp - m.hp).toBe(AB_BURN * 2);
+    expect(m.burn).toBe(AB_BURN * 2 - 1);
+  });
+
+  it('Ash: fire on an enemy that falls leaps onto the nearest one still standing', () => {
+    const g = arena(['rat', 'archer', 'skel']), h = byKey(g, 'ash'), [rat, near, far] = g.S.mobs;
+    rat.hp = 1;
+    into(g, h, rat, true);
+    g.step(1 / 120);
+    expect(rat.hp).toBeLessThanOrEqual(0);
+    expect(near.burn).toBe(AB_BURN);
+    expect(far.burn).toBe(0);
+  });
+
+  it('Ricochet: a disc thrown with it bounces at least the promised number of times, even a soft throw', () => {
+    const bounces = (ab: boolean) => {
+      const g = arena(['archer']), h = byKey(g, 'ricochet');
+      g.S.mobs[0].x = g.S.mobs[0].y = 8; // out of the way, in the corner
+      g.bank.sparks = AB_COST;
+      if (ab) g.useAbility(h);
+      g.throwDisc(h, 0.3, -5);
+      const d = g.S.discs[0];
+      for (let k = 0; k < 60 * 60 && g.moving(); k++) g.update(1 / 60);
+      return d.bounces + d.hits;
+    };
+    expect(bounces(false)).toBeLessThan(2);
+    expect(bounces(true)).toBeGreaterThanOrEqual(AB_BOUNCES);
+  });
+
+  it('Ricochet: with sure bounces left the disc comes off an enemy at full speed', () => {
+    const g = arena(['skel']), h = byKey(g, 'ricochet'), [m] = g.S.mobs;
+    const plain = into(g, h, m, false, 300);
+    g.step(1 / 120);
+    expect(Math.hypot(plain.vx, plain.vy)).toBeLessThan(150);
+    g.S.discs = [];
+    m.hp = m.max = 99;
+    const sure = into(g, h, m, true, 300);
+    g.step(1 / 120);
+    expect(Math.hypot(sure.vx, sure.vy)).toBeGreaterThanOrEqual(Math.min(300, AB_SPEED) - 1);
+    expect(sure.vy).toBeGreaterThan(0);
+    expect(sure.rico).toBe(AB_BOUNCES - 1);
+  });
+
+  it('online, a client asks the host for its ability and sees it on, and the fire on the enemies', () => {
+    const host = new Game(), cli = new Game();
+    host.party = newParty([0, 2]);
+    host.online = true;
+    host.loadRoom({ seed: 21, depth: 2, floor: 0, type: 'fight' });
+    placeAll(host);
+    host.startFight(host.heroOf(0)); host.startFight(host.heroOf(2));
+    const sent: Action[] = [];
+    cli.online = true;
+    cli.send = a => sent.push(a);
+    cli.canControl = o => o.i === 2;
+    host.bank.sparks = AB_COST;
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    cli.useAbility(cli.heroOf(2));
+    expect(cli.heroOf(2).boost).toBe(false);
+    expect(sent).toEqual([{ k: 'ability', h: 2 }]);
+    host.perform(sent[0]);
+    host.S.mobs[0].burn = 5;
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    expect(cli.heroOf(2).boost).toBe(true);
+    expect(cli.bank.sparks).toBe(0);
+    expect(cli.S.mobs[0].burn).toBe(5);
   });
 });
 

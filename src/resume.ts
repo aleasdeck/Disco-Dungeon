@@ -2,8 +2,11 @@
 // also keeps the whole game, so it can open the same room again and the others rejoin their heroes.
 
 import type { Player } from './net';
-import type { Run } from './run';
+import type { Run, Votes } from './run';
 import type { Snapshot } from './sync';
+
+/** A room's result screen; `again` and `win` (the whole run beaten) lead back to the lobby, `map` to the map. */
+export interface Ending { title: string; text: string; kind: 'again' | 'map' | 'win' }
 
 /** Which online room this browser is in, and the secret it rejoins its seat with. */
 export interface Seat { code: string; key: string; host: boolean; at: number }
@@ -16,8 +19,10 @@ export interface HostSave {
   run: Run;
   choosing: boolean;
   mapInfo: string;
-  /** The room's result screen, if it was showing; `again` and `win` (the whole run beaten) lead back to the lobby, `map` to the map. */
-  ending: { title: string; text: string; kind: 'again' | 'map' | 'win' } | null;
+  /** Saves from before the vote have none. */
+  votes?: Votes;
+  /** The room's result screen, if it was showing. */
+  ending: Ending | null;
   screen: { title: string; text: string; win?: boolean };
   snap: Snapshot | null;
 }

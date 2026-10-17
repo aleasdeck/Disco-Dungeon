@@ -4,6 +4,7 @@
 import { HEROES } from './data';
 import type { Bank, Disc, Float, Game, HeroState, Phase, Spark } from './game';
 import type { Mob, RoomSpec } from './room';
+import type { Run, Votes } from './run';
 
 type HeroSnap = Omit<HeroState, 'def'>;
 
@@ -29,6 +30,8 @@ export interface Snapshot {
   bank: Bank;
   /** Hazard tiles change mid-fight: lava from slimes and the forge boss. */
   haz: string[];
+  /** Depth of the blacksmith's the party is at, 0 elsewhere: everyone upgrades their own hero's discs there. */
+  forge?: number;
 }
 
 export function snapshot(g: Game): Snapshot {
@@ -45,7 +48,19 @@ export function snapshot(g: Game): Snapshot {
     sparks: S.sparks,
     bank: g.bank,
     haz: [...S.haz],
+    forge: g.forge,
   };
+}
+
+/** The run map as the host has it between rooms; online the party moves on once every player points at the same room. */
+export interface MapState {
+  run: Run;
+  choosing: boolean;
+  /** What the last rest room gave the party. */
+  info: string;
+  votes: Votes;
+  /** Heroes whose players are here to vote; the host plays the others, and they have no say. */
+  voters: number[];
 }
 
 const sameSpec = (a: RoomSpec, b: RoomSpec) => a.seed === b.seed && a.depth === b.depth && a.floor === b.floor && a.type === b.type;
@@ -72,6 +87,7 @@ export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boo
   S.discs = s.discs.map(d => ({ ...d, hero: g.heroOf(d.hero) }));
   Object.assign(g.bank, s.bank);
   if (s.haz) S.haz = new Set(s.haz);
+  g.forge = s.forge ?? 0;
   g.pickActive();
   return { party, room };
 }
