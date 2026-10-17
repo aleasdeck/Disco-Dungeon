@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { Camera } from '../src/camera';
+import { Camera, FIT } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, mobSize } from '../src/data';
 import { Game, newBank, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { MOB_CAP, PARTY_SCALE, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
 import { FLOORS, FORGE_ROWS, LAYERS, agreed, genFloor, newRun, restRoom } from '../src/run';
+import { makeRng } from '../src/rng';
 
 /** Put every living hero on its own rune, as players do before the fight. */
 const placeAll = (g: Game) => g.alive().forEach((h, k) => g.movePad(h, k));
@@ -294,13 +295,87 @@ describe('camera', () => {
 
   it('keeps the point under the cursor fixed while zooming and rotating', () => {
     const cam = new Camera();
-    cam.fit(200, 176, 34, { x: 0, y: 0, w: 1200, h: 800 });
+    cam.cx = 100; cam.cy = 88; cam.zoom = 2; cam.panX = 600; cam.panY = 400;
     const before = cam.screenToWorld(500, 420);
     cam.zoomAt(1.7, 500, 420);
     cam.rotateAt(1.1, 500, 420);
     const after = cam.screenToWorld(500, 420);
     expect(after[0]).toBeCloseTo(before[0], 6);
     expect(after[1]).toBeCloseTo(before[1], 6);
+  });
+
+  const Wx = 200, Wy = 176, wallH = 34, rect = { x: 10, y: 60, w: 1180, h: 730 };
+  /** The room's box on screen, walls included, as the camera fits it. */
+  const onScreen = (cam: Camera) => {
+    const xs: number[] = [], ys: number[] = [];
+    for (const [x, y] of [[0, 0], [Wx, 0], [Wx, Wy], [0, Wy]]) for (const h of [-10, wallH + 6]) {
+      const [sx, sy] = cam.isoToScreen(...cam.iso(x, y, h));
+      xs.push(sx); ys.push(sy);
+    }
+    return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+  };
+  /** Along each side the room is centred where it is smaller than the screen area, and covers the area where it is bigger. */
+  const held = (cam: Camera) => {
+    const b = onScreen(cam), e = 1e-6;
+    for (const [lo, hi, a, len] of [[b.x0, b.x1, rect.x, rect.w], [b.y0, b.y1, rect.y, rect.h]]) {
+      if (hi - lo <= len + e) expect(Math.abs((lo + hi) / 2 - (a + len / 2))).toBeLessThan(1e-3);
+      else { expect(lo).toBeLessThanOrEqual(a + e); expect(hi).toBeGreaterThanOrEqual(a + len - e); }
+    }
+    // never smaller than fitting the screen
+    expect(Math.max((b.x1 - b.x0) / rect.w, (b.y1 - b.y0) / rect.h)).toBeGreaterThan(FIT - 1e-6);
+  };
+
+  it('fits the room with a margin, centred, and never lets it shrink below that or pan away', () => {
+    const cam = new Camera();
+    cam.fit(Wx, Wy, wallH, rect);
+    held(cam);
+    const b = onScreen(cam);
+    expect(Math.max((b.x1 - b.x0) / rect.w, (b.y1 - b.y0) / rect.h)).toBeCloseTo(FIT, 6);
+    const z = cam.zoom;
+    cam.zoomAt(0.5, 100, 700);
+    cam.panBy(400, -300);
+    expect(cam.zoom).toBeCloseTo(z, 9);
+    expect(onScreen(cam)).toEqual(b);
+    // turned, the room still just fits, centred
+    for (const rot of [0.3, Math.PI / 4, 2, 4]) {
+      cam.rotateAt(rot, 300, 300);
+      held(cam);
+      const t = onScreen(cam);
+      expect(Math.max((t.x1 - t.x0) / rect.w, (t.y1 - t.y0) / rect.h)).toBeCloseTo(FIT, 6);
+    }
+  });
+
+  it('at the closest zoom the screen never shows past the room, however far it is dragged', () => {
+    const cam = new Camera();
+    cam.fit(Wx, Wy, wallH, rect);
+    cam.zoomAt(100, 600, 400);
+    expect(cam.zoom).toBeCloseTo(cam.maxZoom, 9);
+    for (const [dx, dy] of [[5000, 0], [0, 5000], [-9000, -9000], [9000, -9000]]) {
+      cam.panBy(dx, dy);
+      held(cam);
+    }
+    // back from the edge, the first pixels of a drag move the room again
+    const x = cam.panX;
+    cam.panBy(-3, 0);
+    expect(cam.panX).toBeCloseTo(x - 3, 9);
+  });
+
+  it('holds the room on screen through any mix of drags, zooms and turns, without jumps', () => {
+    const cam = new Camera(), R = makeRng(4242);
+    cam.fit(Wx, Wy, wallH, rect);
+    for (let k = 0; k < 400; k++) {
+      const big = k % 50 === 0, x = R.int(0, 1200), y = R.int(0, 800), [wx, wy] = cam.screenToWorld(x, y), op = R.int(0, 3);
+      if (op === 0) cam.panBy((R.next() - 0.5) * (big ? 4000 : 10), (R.next() - 0.5) * (big ? 4000 : 10));
+      else if (op === 1) cam.zoomAt(big ? 6 : 1 + (R.next() - 0.5) * 0.04, x, y);
+      else if (op === 2) cam.rotateAt(cam.rot + (R.next() - 0.5) * (big ? 3 : 0.03), x, y);
+      else cam.pinWorld(R.int(0, Wx), R.int(0, Wy), x, y);
+      held(cam);
+      // a small step moves the floor under the finger only a little, even where the room's edge holds it back
+      if (!big && op < 3) {
+        const [sx, sy] = cam.isoToScreen(...cam.iso(wx, wy));
+        expect(Math.hypot(sx - x, sy - y)).toBeLessThan(25);
+      }
+    }
   });
 });
 

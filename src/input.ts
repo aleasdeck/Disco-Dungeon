@@ -29,7 +29,7 @@ export class Input {
   carry: Carry | null = null;
   private pts = new Map<number, [number, number]>();
   private mode: Mode = 'none';
-  private start = { x: 0, y: 0, panX: 0, panY: 0, rot: 0 };
+  private start = { x: 0, y: 0, rot: 0 };
   private gesture: Gesture | null = null;
 
   constructor(private cv: HTMLCanvasElement, private cam: Camera, private g: Game, private view: ViewControls) {
@@ -76,7 +76,7 @@ export class Input {
 
   private beginPan(x: number, y: number) {
     this.mode = 'pan';
-    this.start = { x, y, panX: this.cam.panX, panY: this.cam.panY, rot: this.cam.rot };
+    this.start = { x, y, rot: this.cam.rot };
   }
 
   private beginGesture() {
@@ -100,7 +100,7 @@ export class Input {
     if (this.pts.size > 2) return;
     if (e.button === 2 || (e.button === 0 && e.altKey)) {
       this.mode = 'rotate';
-      this.start = { x, y, panX: this.cam.panX, panY: this.cam.panY, rot: this.cam.rot };
+      this.start = { x, y, rot: this.cam.rot };
       return;
     }
     if (e.button === 1) { this.beginPan(x, y); return; }
@@ -145,8 +145,10 @@ export class Input {
       const pi = this.padAt(x, y);
       C.pad = pi >= 0 ? pi : null;
     } else if (this.mode === 'pan') {
-      cam.panX = this.start.panX + x - this.start.x;
-      cam.panY = this.start.panY + y - this.start.y;
+      // step by step, so at the room's edge a drag back moves the room again at once
+      cam.panBy(x - this.start.x, y - this.start.y);
+      this.start.x = x;
+      this.start.y = y;
       this.cv.style.cursor = 'grabbing';
       this.view.changed();
     } else if (this.mode === 'rotate') {
