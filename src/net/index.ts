@@ -26,6 +26,8 @@ export type Msg =
   | { t: 'map'; m: MapState }
   /** A player points at the room they want to go to next. */
   | { t: 'vote'; id: string }
+  /** A player points at one of the event's choices, by its place in the list. */
+  | { t: 'evote'; opt: number }
   /** A cleared room's result: each player reads it and walks over to the map on their own. */
   | { t: 'end'; e: Ending }
   /** A screen the players wait on until the host acts (the end of the run); an empty title hides it. */

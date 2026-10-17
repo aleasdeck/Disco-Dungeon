@@ -21,6 +21,8 @@ export const envArt = new Map<string, HTMLImageElement>();
 export const uiArt = new Map<string, HTMLImageElement>();
 /** The music by key (`menu`, `calm`, `fight0`…`fight2`): the file's bytes, decoded when first played, and the loop's length. */
 export const music = new Map<string, { data: ArrayBuffer; loop: number }>();
+/** Pictures of the map's events by the event's key (`EVENTS` in src/events.ts): the scene with its gag. */
+export const eventArt = new Map<string, HTMLImageElement>();
 /** Hand-drawn faces with Latin and Cyrillic for words scratched and chalked on the walls (Google Fonts, linked in index.html). */
 export const GRAFFITI_FONTS = ['700 20px "Amatic SC"', '700 20px "Caveat"', '400 20px "Neucha"'];
 
@@ -46,7 +48,7 @@ const FONT_WAIT = 12000;
  * loaded so far, 0 to 1, by size; whatever fails to load is counted in too and left to the code-drawn fallback.
  */
 export async function loadAll(onProgress: (part: number) => void): Promise<void> {
-  let figures: Record<string, ManifestEntry> = {}, env: Record<string, string> = {}, ui: Record<string, string> = {};
+  let figures: Record<string, ManifestEntry> = {}, env: Record<string, string> = {}, ui: Record<string, string> = {}, events: Record<string, string> = {};
   let tracks: Record<string, { file: string; loop: number }> = {};
   try {
     const res = await fetch(assetUrl('manifest.json'), { cache: 'no-cache' });
@@ -56,12 +58,13 @@ export async function loadAll(onProgress: (part: number) => void): Promise<void>
       env = m.env ?? {};
       ui = m.ui ?? {};
       tracks = m.music ?? {};
+      events = m.events ?? {};
     }
   } catch {
     // no manifest, no pictures: the fonts still load
   }
   const fonts = document.fonts ? [...UI_FONTS, ...GRAFFITI_FONTS] : [];
-  const files = [...Object.values(figures).map(e => e.file), ...Object.values(env), ...Object.values(ui), ...Object.values(tracks).map(t => t.file)];
+  const files = [...Object.values(figures).map(e => e.file), ...Object.values(env), ...Object.values(ui), ...Object.values(events), ...Object.values(tracks).map(t => t.file)];
   const total = files.reduce((t, f) => t + weightOf(f), 0) + fonts.length * weightOf();
   let done = 0;
   const tick = (file?: string) => onProgress((done += weightOf(file)) / total);
@@ -79,6 +82,7 @@ export async function loadAll(onProgress: (part: number) => void): Promise<void>
       sprites.set(key, { img, facing, standee: makeStandee(img, facing, fig / HERO_FIG, tint) });
     })),
     ...Object.entries(env).map(([key, file]) => load(file, img => envArt.set(key, img))),
+    ...Object.entries(events).map(([key, file]) => load(file, img => eventArt.set(key, img))),
     ...Object.entries(ui).map(([key, file]) => load(file, img => {
       uiArt.set(key, img);
       // the stylesheet paints a plate once its picture is in: as var(--ui-btn_main) under the class art-btn_main
