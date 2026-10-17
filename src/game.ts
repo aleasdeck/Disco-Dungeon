@@ -170,12 +170,12 @@ export function newBank(): Bank {
 
 /** A fresh party; `picks` lists which heroes (by index into HEROES) take part, all of them by default. */
 export function newParty(picks: number[] = HEROES.map((_, i) => i)): HeroState[] {
-  return picks.map(i => ({ i, def: HEROES[i], ...heroStart() }));
+  return picks.map(i => ({ i, def: HEROES[i], ...heroStart(HEROES[i].hp) }));
 }
 
-function heroStart() {
+function heroStart(hp: number) {
   return {
-    hp: 22, max: 22, shield: 0, up: { m: 0, pw: 0, e: 0 }, discs: HAND_START,
+    hp, max: hp, shield: 0, up: { m: 0, pw: 0, e: 0 }, discs: HAND_START,
     pad: null as number | null, at: null as Pt | null, from: null as Pt | null, leap: 0, hand: HAND_START, thrown: false, flash: 0, chill: 0, fire: 0, boost: false, sparks: 0,
   };
 }
