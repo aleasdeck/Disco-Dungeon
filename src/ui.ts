@@ -240,6 +240,11 @@ export class Hud {
     rage.classList.toggle('soon', g.rage() === 0);
     rage.textContent = g.rage() ? `ярость +${g.rage()}` : 'ярость со след. хода';
     rage.title = `С ${g.rageFrom()}-го хода каждый враг с каждым ходом бьёт на 1 сильнее.`;
+    // an event's curse on this fight
+    const curse = $('hCurse'), cs = [S.spec.smoke && 'дым-машина', S.spec.strobe && 'стробоскоп'].filter(Boolean);
+    curse.hidden = !cs.length || S.phase === 'over';
+    curse.textContent = cs.join(' · ');
+    curse.title = [S.spec.smoke && 'Дым-машина: видно только вокруг героев.', S.spec.strobe && 'Стробоскоп: нет линии прицела.'].filter(Boolean).join(' ');
 
     const side: Side = S.phase === 'place' || S.phase === 'over' ? S.phase : S.phase === 'enemy' || S.phase === 'resolve' ? 'enemies' : 'heroes';
     const sd = $('hSide');

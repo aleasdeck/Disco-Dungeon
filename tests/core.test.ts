@@ -560,10 +560,33 @@ describe('map events', () => {
     expect(g.S.mobs.map(m => m.dmg)).toEqual(plain);
   });
 
+  it('lays the smoke and the strobe on the next fight only, where every screen gets them with the room', () => {
+    const g = new Game();
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    applyFx([{ k: 'smoke' }, { k: 'strobe' }], g.party, g.bank, 1);
+    expect(g.bank).toMatchObject({ smoke: true, strobe: true });
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    expect(g.S.spec).toMatchObject({ smoke: true, strobe: true });
+    expect(g.bank.smoke).toBeUndefined();
+    expect(g.bank.strobe).toBeUndefined();
+    // a client rebuilds the room from the host's snapshot, curse and all
+    const c = new Game();
+    c.loadRoom({ seed: 1, depth: 1, floor: 0, type: 'fight' });
+    applySnapshot(c, snapshot(g));
+    expect(c.S.spec).toMatchObject({ smoke: true, strobe: true });
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    expect(g.S.spec.smoke).toBeUndefined();
+    expect(g.S.spec.strobe).toBeUndefined();
+  });
+
   it('says what a choice does for a lone hero or for each hero of a party', () => {
     expect(fxParts([{ k: 'hp', n: -5 }], true)).toEqual([{ t: '−5 HP', good: false }]);
     expect(fxParts([{ k: 'hp', n: 10 }], false)).toEqual([{ t: '+10 HP каждому', good: true }]);
     expect(fxParts([{ k: 'ore', n: 8 }], false)).toEqual([{ t: '+8 руды', good: true }]);
+    expect(fxParts([{ k: 'smoke' }, { k: 'strobe' }], true)).toEqual([
+      { t: 'Дым-машина: следующий бой в дыму', good: false },
+      { t: 'Стробоскоп: следующий бой без прицела', good: false },
+    ]);
   });
 
   it('takes an event choice online only once everyone here points at the same one', () => {

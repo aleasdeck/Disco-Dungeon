@@ -12,6 +12,10 @@ export interface RoomSpec {
   type: RoomType;
   /** Heroes in the party the room is built for, 1..3; rooms from before this was kept were built for three. */
   heroes?: number;
+  /** An event's curse on the fight, «Дым-машина»: smoke over the room, clear only a few steps around the heroes. */
+  smoke?: boolean;
+  /** An event's curse on the fight, «Стробоскоп»: no aiming line. */
+  strobe?: boolean;
 }
 
 export interface Pad { x: number; y: number }
