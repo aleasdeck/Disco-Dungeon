@@ -724,3 +724,44 @@ i.ico { display: inline-block; font-style: normal; }
   .confetti { display: none; }
   .win-ball, .overlay.win .end-panel { animation: none; }
 }
+
+/* ---------- painted cardboard plates and icons (public/assets/ui): each takes over from the drawn one once its picture loads */
+.art-btn_main .tb-plate { clip-path: none; background: var(--btn_main) center / 100% 100% no-repeat; transition: filter 0.2s; }
+.art-btn_main .tb-plate::before, .art-btn_main .tb-plate::after { display: none; }
+.art-btn_main .turn-btn { filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)); }
+.art-btn_main .turn-btn b { transform: rotate(-1.5deg); }
+.art-btn_main .turn-btn.idle .tb-plate { filter: saturate(0.45) brightness(0.7); }
+.art-btn_main .turn-btn.idle b { color: #1c120a; }
+.art-btn_main .turn-btn.lit { filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 16px rgba(255, 200, 80, 0.8)); animation: lit-art 1.6s ease-in-out infinite; }
+.art-btn_main .turn-btn.confirm .tb-plate { filter: hue-rotate(-16deg) saturate(1.5); }
+.art-btn_main .turn-btn.wait .tb-plate { filter: grayscale(0.75) brightness(0.62); }
+.art-btn_red .turn-btn.enemy .tb-plate { background-image: var(--btn_red); filter: none; }
+@keyframes lit-art { 50% { filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 28px rgba(255, 210, 90, 1)); } }
+@media (prefers-reduced-motion: reduce) { .art-btn_main .turn-btn.lit { animation: none; } }
+/* the upright phone keeps the step round the ability: the card is cut there, and the ink edge follows the cut */
+@media (orientation: portrait) and (max-width: 700px) {
+  .art-btn_main .tb-plate { clip-path: var(--plate); }
+  .art-btn_main .turn-btn { filter: var(--outline) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); }
+  .art-btn_main .turn-btn.lit { filter: var(--outline) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px rgba(255, 200, 80, 0.8)); animation: none; }
+}
+
+.art-btn_tile .top-btns { filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
+.art-btn_tile .ibtn { clip-path: none; background: var(--btn_tile) center / 100% 100% no-repeat; padding: 5px; }
+.art-btn_tile .ibtn:hover { background: var(--btn_tile) center / 100% 100% no-repeat; filter: brightness(1.18); }
+
+.art-btn_dark .ore-chip { clip-path: none; background: var(--btn_dark) center / 100% 100% no-repeat; padding: 4px 18px 4px 10px; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
+
+.art-btn_gem .ability { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); background: var(--btn_gem) center / contain no-repeat; }
+.art-btn_gem .ability::before, .art-btn_gem .ability::after { display: none; }
+.art-btn_gem .ability:disabled { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) saturate(0.4) brightness(0.65); }
+.art-btn_gem .ability.full { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 12px #c9a8ff); }
+.art-btn_gem .ability.on { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px var(--ab)); }
+.art-btn_gem .ability b { padding: 2px 5px; background: rgba(18, 12, 9, 0.6); }
+
+/* panels: the map stands tall, everything else lies wide */
+.art-panel .panel { background: var(--panel) center / 100% 100% no-repeat; border: 0; outline: 0; border-radius: 0; box-shadow: none; filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.6)); padding: 30px 34px; }
+.art-panel_tall .panel.map-panel { background-image: var(--panel_tall); padding: 26px 26px 22px; }
+.art-btn_dark .btn:not(.round) { background: var(--btn_dark) center / 100% 100% no-repeat; border: 0; border-radius: 0; box-shadow: none; padding: 8px 16px; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
+.art-btn_dark .btn:not(.round):hover { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)) brightness(1.2); }
+.art-btn_main .btn.big { background: var(--btn_main) center / 100% 100% no-repeat; border: 0; border-radius: 0; box-shadow: none; color: #1c120a; padding: 12px 28px; }
+.art-btn_main .tab.on { background: var(--btn_main) center / 100% 100% no-repeat; color: #1c120a; }

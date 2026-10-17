@@ -99,5 +99,24 @@
     "wall_forge": "env/wall_forge.webp",
     "wall_ice": "env/wall_ice.webp",
     "wall_prison": "env/wall_prison.webp"
+  },
+  "ui": {
+    "btn_dark": "ui/btn_dark.webp",
+    "btn_gem": "ui/btn_gem.webp",
+    "btn_main": "ui/btn_main.webp",
+    "btn_red": "ui/btn_red.webp",
+    "btn_tile": "ui/btn_tile.webp",
+    "ico_check": "ui/ico_check.webp",
+    "ico_disc": "ui/ico_disc.webp",
+    "ico_hp": "ui/ico_hp.webp",
+    "ico_log": "ui/ico_log.webp",
+    "ico_map": "ui/ico_map.webp",
+    "ico_menu": "ui/ico_menu.webp",
+    "ico_ore": "ui/ico_ore.webp",
+    "ico_plug": "ui/ico_plug.webp",
+    "ico_shield": "ui/ico_shield.webp",
+    "ico_spark": "ui/ico_spark.webp",
+    "panel": "ui/panel.webp",
+    "panel_tall": "ui/panel_tall.webp"
   }
 }

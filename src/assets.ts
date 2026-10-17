@@ -49,7 +49,13 @@ export async function loadSprites(onLoad: () => void): Promise<void> {
       sprites.set(key, { img, facing, standee: makeStandee(img, facing, fig / HERO_FIG, tint) });
     })),
     ...Object.entries(env).map(([key, file]) => load(file, img => envArt.set(key, img))),
-    ...Object.entries(ui).map(([key, file]) => load(file, img => uiArt.set(key, img))),
+    ...Object.entries(ui).map(([key, file]) => load(file, img => {
+      uiArt.set(key, img);
+      // the stylesheet paints a plate once its picture is in: as var(--btn_main) under the class art-btn_main
+      const root = document.documentElement;
+      root.style.setProperty('--' + key, `url("${img.src}")`);
+      root.classList.add('art-' + key);
+    })),
     // the wall graffiti fonts, Latin and Cyrillic letters both, before the room is drawn with them
     ...GRAFFITI_FONTS.map(f => document.fonts?.load(f, 'WTF ЖОПА').then(onLoad, () => {})),
   ]);
