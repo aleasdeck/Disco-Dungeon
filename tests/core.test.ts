@@ -792,6 +792,43 @@ describe('floor casts and enemy abilities', () => {
     expect(Math.hypot(risen.x - it.spots![0].x, risen.y - it.spots![0].y)).toBeLessThan(40);
   });
 
+  it('counts down to each mob\'s special move by the rules that pick its intents', () => {
+    /** Every mob's coming special move on the given turn, intents picked as they are at its start. */
+    const on = (g: Game, turn: number) => { g.S.turn = turn; g.pickIntents(); return g.S.mobs.map(m => g.specialIn(m)); };
+    const ice = fight(1, ['lich', 'witch', 'ghoul']), [, , ghoul] = ice.S.mobs;
+    // the lich raises ghouls on turns 2, 5, 8 and sends the blizzard on 3, 6, 9; the witch mends on even turns
+    expect(on(ice, 1)).toEqual([{ name: 'призыв', turns: 1 }, { name: 'лечение', turns: 1 }, null]);
+    expect(on(ice, 3)).toEqual([{ name: 'метель', turns: 0 }, { name: 'лечение', turns: 1 }, null]);
+    expect(on(ice, 4)).toEqual([{ name: 'призыв', turns: 1 }, { name: 'лечение', turns: 2 }, null]);
+    // the witch mends this turn only with someone hurt; left alone, she has nobody to mend at all
+    ghoul.hp -= 3;
+    expect(on(ice, 4)[1]).toEqual({ name: 'лечение', turns: 0 });
+    for (const m of ice.S.mobs) if (m.k !== 'witch') m.hp = 0;
+    expect(ice.specialIn(ice.S.mobs[1])).toBeNull();
+
+    const king = fight(0, ['king', 'skel']);
+    expect(on(king, 1)).toEqual([{ name: 'удар по всем', turns: 2 }, null]);
+    expect(on(king, 3)).toEqual([{ name: 'удар по всем', turns: 0 }, null]);
+    const forge = fight(2, ['forgelord', 'bomber']);
+    expect(on(forge, 1)).toEqual([{ name: 'жар', turns: 2 }, { name: 'фитиль', turns: 0 }]);
+    expect(on(forge, 2)).toEqual([{ name: 'жар', turns: 1 }, { name: 'фитиль', turns: 1 }]);
+  });
+
+  it('a summoner\'s countdown starts over once it has raised its mob, and stops at its limit', () => {
+    const g = fight(0, ['necro']), [necro] = g.S.mobs;
+    expect(g.specialIn(necro)).toEqual({ name: 'призыв', turns: 1 });
+    enemyTurn(g);
+    expect(g.specialIn(necro)).toEqual({ name: 'призыв', turns: 0 });
+    endAll(g);
+    for (let k = 0; k < 600 && !g.acted(necro); k++) g.update(1 / 60);
+    expect(g.S.mobs).toHaveLength(2);
+    expect(g.specialIn(necro)).toEqual({ name: 'призыв', turns: 2 });
+    for (let k = 0; k < 2; k++) g.S.mobs.push(Object.assign(newMob('skel', 8, 8), { owner: 0 }));
+    expect(g.specialIn(necro)).toBeNull();
+    g.S.mobs[1].hp = 0;
+    expect(g.specialIn(necro)).toEqual({ name: 'призыв', turns: 2 });
+  });
+
   it('a ghost lets discs through on even turns', () => {
     const g = fight(1, ['ghost']);
     expect(g.solid(g.S.mobs[0])).toBe(true);

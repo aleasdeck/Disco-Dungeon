@@ -119,6 +119,10 @@ const HOP_T = 0.45;
 /** Lines the enemy-turn journal keeps. */
 const LOG_MAX = 40;
 
+/** What the HUD calls a mob's special move. */
+const SPECIAL = { summon: 'призыв', heal: 'лечение', heat: 'жар', charge: 'фитиль' };
+const specialName = (k: keyof typeof SPECIAL | 'slam', chill?: boolean) => (k === 'slam' ? (chill ? 'метель' : 'удар по всем') : SPECIAL[k]);
+
 /** A past-tense verb agreeing with whoever did it: «ударил», «ударила». */
 const did = (o: { fem?: boolean }, he: string, she = he + 'а') => (o.fem ? she : he);
 
@@ -535,6 +539,39 @@ export class Game {
     return S.phase === 'enemy' && (k < S.actor || (k === S.actor && S.attacked));
   }
 
+  /**
+   * The special move a mob makes next and in how many enemy turns, 0 for the coming one (or the one under way, until the
+   * mob has moved), by the rules that pick its intents: summons, heals, slams and heat on their turns, a bomber's fuse on
+   * odd ones. Null for a mob without one. A turn to come counts if the move can happen as things stand: a summoner with
+   * its risen at their limit has no summon coming until one falls, a healer left alone has nobody to mend.
+   */
+  specialIn(m: Mob): { name: string; turns: number } | null {
+    const S = this.S, d = MOBS[m.k], it = m.intent;
+    if (m.hp <= 0 || S.phase === 'over' || (!d.acts && !d.charge)) return null;
+    // the move picked for this turn, unless it is made already or has come to nothing (the one to heal has fallen)
+    if (it && it.t !== 'hit' && it.t !== 'move' && !this.acted(m) && !this.idle(m)) return { name: specialName(it.t, it.chill), turns: 0 };
+    for (let k = 1; k <= 6; k++) {
+      const t = S.turn + k, a = d.acts?.find(o => t % o.every === o.at && this.able(m, o));
+      if (a) return { name: specialName(a.k, a.chill), turns: k };
+      if (d.charge && t % 2 === 1) return { name: SPECIAL.charge, turns: k };
+    }
+    return null;
+  }
+
+  /** Whether a mob could make its special act now: room and a limit left to summon, someone else standing to heal. */
+  private able(m: Mob, a: MobAct) {
+    if (a.k === 'summon') return this.risen(m, a) > 0;
+    if (a.k === 'heal') return this.liveMobs().some(o => o !== m);
+    return true;
+  }
+
+  /** How many mobs a summon raises now: fewer for a smaller party, never past the summoner's limit or a crowded room. */
+  private risen(m: Mob, a: MobAct) {
+    const S = this.S, mi = S.mobs.indexOf(m), k = partyScale(S.spec).mobs;
+    const mine = S.mobs.filter(o => o.hp > 0 && o.owner === mi).length;
+    return Math.min(Math.max(1, Math.round((a.n ?? 1) * k)), Math.max(1, Math.round((a.cap ?? 3) * k)) - mine, 9 - this.liveMobs().length);
+  }
+
   pickIntents() {
     const S = this.S, hs = this.alive().filter(h => this.spot(h)), rage = this.rage();
     if (!hs.length) return;
@@ -588,7 +625,7 @@ export class Game {
 
   /** The intent for a mob's special act this turn, or null when it can't do it (nobody to heal, no room to summon). */
   private special(m: Mob, a: MobAct, hs: HeroState[], taken: { x: number; y: number }[]): Intent | null {
-    const S = this.S, mi = S.mobs.indexOf(m);
+    const S = this.S;
     if (a.k === 'slam') return { t: 'slam', hero: -1, dmg: Math.ceil(m.dmg * (a.chill ? 0.5 : 0.6)), chill: a.chill };
     if (a.k === 'heal') {
       const hurt = this.liveMobs().filter(o => o !== m && o.hp < o.max).sort((p, q) => p.hp / p.max - q.hp / q.max)[0];
@@ -597,8 +634,7 @@ export class Game {
     }
     if (a.k === 'summon') {
       // a smaller party faces fewer risen mobs, like it faces fewer enemies from the start
-      const mine = S.mobs.filter(o => o.hp > 0 && o.owner === mi).length, k = partyScale(S.spec).mobs;
-      const n = Math.min(Math.max(1, Math.round((a.n ?? 1) * k)), Math.max(1, Math.round((a.cap ?? 3) * k)) - mine, 9 - this.liveMobs().length);
+      const n = this.risen(m, a);
       if (n <= 0) return null;
       const spots: { x: number; y: number }[] = [];
       // circles on the cells right around the summoner, the side facing the runes first, so the risen mob plainly comes from it
