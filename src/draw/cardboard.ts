@@ -10,6 +10,10 @@ export interface BoardStyle {
   border: number;
   /** Rows of flutes in the cut: 0 plain board, 1 single wall, 2 double wall. */
   flute: 0 | 1 | 2;
+  /** Thin coloured plastic instead of board: the margin and the cut take the stand's colour. */
+  plastic?: boolean;
+  /** The picture is a sticker on top, with a white edge this wide (share of a hero's height) and a shadow. */
+  sticker?: number;
 }
 
 export const BOARD_STYLES: Record<string, BoardStyle> = {
@@ -18,6 +22,7 @@ export const BOARD_STYLES: Record<string, BoardStyle> = {
   slim: { thick: 0.04, border: 0, flute: 1 },
   diecut: { thick: 0.055, border: 0.02, flute: 1 },
   double: { thick: 0.085, border: 0, flute: 2 },
+  plastic: { thick: 0.026, border: 0.03, flute: 0, plastic: true, sticker: 0.009 },
 };
 
 /**
@@ -39,27 +44,35 @@ type Rgb = [number, number, number];
 const hex = (s: string): Rgb => [parseInt(s.slice(1, 3), 16), parseInt(s.slice(3, 5), 16), parseInt(s.slice(5, 7), 16)];
 const LINER = hex('#e4bc83'), HOLLOW = hex('#b98749'), FLUTE = hex('#6a4220');
 const PLAIN = hex('#d4a468'), PLAIN_BACK = hex('#a77843');
-const PAPER = hex('#f4ede0'), INK_RGB = hex(INK);
+const PAPER = hex('#f4ede0'), INK_RGB = hex(INK), WHITE: Rgb = [255, 255, 255], BLACK: Rgb = [0, 0, 0];
 
-/** Grow (op = max) or shrink (op = min) a mask by r pixels in each direction; separable square window. */
+/** Grow or shrink a 0/255 mask by r pixels each way (square window): rows first, then columns. */
 function morph(src: Uint8Array, W: number, H: number, r: number, grow: boolean): Uint8Array {
   const tmp = new Uint8Array(W * H), out = new Uint8Array(W * H);
-  const pick = grow ? Math.max : Math.min, edge = grow ? 0 : 0;
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      let v = grow ? 0 : 255;
-      for (let k = -r; k <= r; k++) { const xx = x + k; v = pick(v, xx < 0 || xx >= W ? edge : src[y * W + xx]); }
-      tmp[y * W + x] = v;
-    }
-  }
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      let v = grow ? 0 : 255;
-      for (let k = -r; k <= r; k++) { const yy = y + k; v = pick(v, yy < 0 || yy >= H ? edge : tmp[yy * W + x]); }
-      out[y * W + x] = v;
-    }
-  }
+  sweep(src, tmp, W, H, 1, W, r, grow);
+  sweep(tmp, out, H, W, W, 1, r, grow);
   return out;
+}
+
+/** One direction of `morph`: a pixel takes the spreading value when one lies within r of it along its line. */
+function sweep(a: Uint8Array, b: Uint8Array, len: number, lines: number, step: number, lineStep: number, r: number, grow: boolean) {
+  // growing spreads the figure; shrinking spreads the empty space, and beyond the edge counts as empty
+  const spread = grow ? 255 : 0;
+  for (let l = 0; l < lines; l++) {
+    const base = l * lineStep;
+    let last = grow ? -1e9 : -1;
+    for (let i = 0; i < len; i++) {
+      const p = base + i * step;
+      if (a[p] === spread) last = i;
+      b[p] = i - last <= r ? spread : a[p];
+    }
+    last = grow ? 1e9 : len;
+    for (let i = len - 1; i >= 0; i--) {
+      const p = base + i * step;
+      if (a[p] === spread) last = i;
+      if (last - i <= r) b[p] = spread;
+    }
+  }
 }
 
 /** Box blur, twice, so the outline's slope can be read off it. */
@@ -91,7 +104,9 @@ function blur(src: Uint8Array, W: number, H: number, r: number): Float32Array {
 const mixRgb = (a: Rgb, b: Rgb, t: number): Rgb => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
 /** Colour of the cut at depth t (0 front face, 1 back face) and phase u (position along the cut, in flute periods). */
-function cutColour(st: BoardStyle, t: number, u: number): Rgb {
+function cutColour(st: BoardStyle, t: number, u: number, tint: Rgb): Rgb {
+  // plastic: a glossy lip along the front, then the colour going darker toward the back
+  if (st.plastic) return t < 0.25 ? mixRgb(tint, WHITE, 0.35) : mixRgb(mixRgb(tint, BLACK, 0.3), BLACK, (t - 0.25) * 0.3);
   if (st.flute === 0) return mixRgb(PLAIN, PLAIN_BACK, t);
   // the back of the cut sits under the outline, so the walls fill the front 85% of it
   const walls = st.flute, d = t / 0.85;
@@ -105,10 +120,10 @@ function cutColour(st: BoardStyle, t: number, u: number): Rgb {
 /**
  * Print `img` on board. `facing` is the way the figure looks: the cut shows behind it, as on a standee turned
  * a little toward its target, and on top, since the camera looks down. `rel` is the figure's height over a
- * hero's, `SH` the picture height in the result. The cut itself is worked out at `WORK` pixels high, where
- * all the time goes; it is plain colour, so scaling it up loses nothing that shows.
+ * hero's, `tint` the colour of its stand, `SH` the picture height in the result. The cut itself is worked out at
+ * `WORK` pixels high, where all the time goes; it is plain colour, so scaling it up loses nothing that shows.
  */
-export function makeBoard(img: HTMLImageElement, facing: 'left' | 'right', st: BoardStyle, rel: number, SH = 512, WORK = 320): Board {
+export function makeBoard(img: HTMLImageElement, facing: 'left' | 'right', st: BoardStyle, rel: number, tint: string, SH = 512, WORK = 320): Board {
   const sc = SH / img.naturalHeight, SW = Math.round(img.naturalWidth * sc), side = facing === 'left' ? 1 : -1;
   const T = (st.thick / rel) * SH, B0 = (st.border / rel) * SH, dx0 = side * T * 0.8, dy0 = -T * 0.6;
   const m = Math.ceil(B0) + 8;
@@ -123,11 +138,14 @@ export function makeBoard(img: HTMLImageElement, facing: 'left' | 'right', st: B
   wk.height = h;
   const c = wk.getContext('2d', { willReadFrequently: true })!;
 
-  // the cut outline: the figure itself, grown by the white margin when there is one
+  // the figure's own outline, then the cut outline: the figure grown by the margin when there is one
+  c.drawImage(img, px, py, pw, ph);
+  const raw = c.getImageData(0, 0, w, h).data;
+  c.clearRect(0, 0, w, h);
   if (B > 0) {
     // round margin: stamp the figure around a few rings, then firm up the soft edge
-    for (const r of [B, B * 0.66, B * 0.33]) {
-      for (let a = 0; a < 20; a++) c.drawImage(img, px + r * Math.cos(a * 0.314), py + r * Math.sin(a * 0.314), pw, ph);
+    for (const r of [B, B * 0.5]) {
+      for (let a = 0; a < 16; a++) c.drawImage(img, px + r * Math.cos(a * 0.3927), py + r * Math.sin(a * 0.3927), pw, ph);
     }
   } else c.drawImage(img, px, py, pw, ph);
   const pic = c.getImageData(0, 0, w, h).data, shape = new Uint8Array(n);
@@ -154,7 +172,23 @@ export function makeBoard(img: HTMLImageElement, facing: 'left' | 'right', st: B
   for (let i = 0; i < n; i++) solid[i] = cov[i] >= 128 || shape[i] >= 128 ? 255 : 0;
   const ink = Math.max(2, Math.round(WORK * 0.006));
   const inner = morph(solid, w, h, ink, false);
-  const rimShape = B > 0 ? morph(shape.map(v => (v >= 128 ? 255 : 0)), w, h, Math.max(1, Math.round(ink * 0.6)), false) : null;
+  let cutShape: Uint8Array | null = null;
+  if (B > 0) {
+    cutShape = new Uint8Array(n);
+    for (let i = 0; i < n; i++) cutShape[i] = shape[i] >= 128 ? 255 : 0;
+  }
+  const rimShape = cutShape ? morph(cutShape, w, h, Math.max(1, Math.round(ink * 0.6)), false) : null;
+  // plastic catches the light in a thin line just inside its outline
+  const bevel = cutShape && st.plastic ? morph(cutShape, w, h, Math.max(2, Math.round(ink * 1.6)), false) : null;
+  const tc = hex(tint);
+  // a sticker: the figure's outline grown a little for its white edge, with a soft shadow down and to the right
+  let stick: Uint8Array | null = null, shadowAt = 0;
+  if (st.sticker) {
+    const fig = new Uint8Array(n), sk = Math.max(1, Math.round((st.sticker / rel) * SH * f));
+    for (let i = 0; i < n; i++) fig[i] = raw[i * 4 + 3] >= 128 ? 255 : 0;
+    stick = morph(fig, w, h, sk, true);
+    shadowAt = Math.round(sk * 0.8) * (w + 1);
+  }
   // slope of the outline: cuts on top of the figure catch the light, the ones underneath sit in shade
   const soft = blur(shape, w, h, 2);
   const len = Math.hypot(dx, dy), vx = -dy / len, vy = dx / len, period = T * f * 0.9;
@@ -168,7 +202,7 @@ export function makeBoard(img: HTMLImageElement, facing: 'left' | 'right', st: B
         const t = depth[p] || 1, qx = x - dx * t, qy = y - dy * t;
         if (inner[p] === 0 && shape[p] < 128) col = INK_RGB;
         else {
-          col = cutColour(st, t, (qx * vx + qy * vy) / period);
+          col = cutColour(st, t, (qx * vx + qy * vy) / period, tc);
           const sx = Math.min(w - 2, Math.max(1, Math.round(qx))), sy = Math.min(h - 2, Math.max(1, Math.round(qy)));
           const gy = soft[(sy + 1) * w + sx] - soft[(sy - 1) * w + sx], gx = soft[sy * w + sx + 1] - soft[sy * w + sx - 1];
           const k = 0.88 + (0.14 * gy) / (Math.hypot(gx, gy) || 1); // gy > 0: the outline faces up
@@ -177,10 +211,15 @@ export function makeBoard(img: HTMLImageElement, facing: 'left' | 'right', st: B
         a = cov[p];
       }
       if (B > 0 && shape[p] > 0) {
-        // white margin with a thin ink rim; it covers the cut where they overlap
-        const mc = rimShape![p] === 0 ? INK_RGB : PAPER;
+        // the margin with a thin ink rim: white card, or plastic lit from above; it covers the cut where they overlap
+        const face = st.plastic ? (bevel![p] === 0 ? mixRgb(tc, WHITE, 0.4) : mixRgb(tc, WHITE, 0.12 * (1 - y / h))) : PAPER;
+        const mc = rimShape![p] === 0 ? INK_RGB : face;
         if (a === 0 || shape[p] >= 128) { col = mc; a = shape[p]; }
         else col = mixRgb(col!, mc, shape[p] / 255);
+      }
+      if (stick && col) {
+        if (stick[p]) { col = WHITE; a = 255; }
+        else if (p >= shadowAt && stick[p - shadowAt]) col = mixRgb(col, BLACK, 0.3);
       }
       if (col) {
         o[p * 4] = col[0]; o[p * 4 + 1] = col[1]; o[p * 4 + 2] = col[2]; o[p * 4 + 3] = a;

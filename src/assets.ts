@@ -1,7 +1,7 @@
 // Art loader. public/assets/manifest.json lists the pictures that exist;
 // anything missing falls back to the code-drawn placeholder.
 
-import { HERO_FIG, MOBS, type MobKind } from './data';
+import { ENEMY_BASE, HEROES, HERO_FIG, MOBS, type MobKind } from './data';
 import { BOARD_STYLES, makeBoard, type Board } from './draw/cardboard';
 
 export interface Sprite {
@@ -42,7 +42,8 @@ export async function loadSprites(onLoad: () => void): Promise<void> {
   await Promise.all([
     ...Object.entries(figures).map(([key, e]) => load(e.file, img => {
       const facing = e.facing ?? 'right', fig = MOBS[key as MobKind]?.fig ?? HERO_FIG;
-      sprites.set(key, { img, facing, board: boardStyle ? makeBoard(img, facing, boardStyle, fig / HERO_FIG) : undefined });
+      const tint = HEROES.find(h => h.key === key)?.col ?? ENEMY_BASE;
+      sprites.set(key, { img, facing, board: boardStyle ? makeBoard(img, facing, boardStyle, fig / HERO_FIG, tint) : undefined });
     })),
     ...Object.entries(env).map(([key, file]) => load(file, img => envArt.set(key, img))),
   ]);
