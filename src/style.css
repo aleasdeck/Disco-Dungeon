@@ -627,25 +627,25 @@ i.ico { display: inline-block; font-style: normal; }
 #map .mnode .disc { stroke: var(--ink); stroke-width: 2.5; }
 #map .mnode .halo { fill: none; stroke: transparent; stroke-width: 3; }
 #map .mnode.reach { cursor: pointer; }
-#map .mnode.reach .halo { stroke: var(--gold); animation: pulse 1.2s ease-in-out infinite; }
+/* the rooms to go to glow steadily and the token stands still: a pulse under the overlay's blur re-blurred the whole
+   screen every frame and was most of what the map cost a phone */
+#map .mnode.reach .halo { stroke: var(--gold); }
 #map .mnode { cursor: pointer; outline: none; }
 #map .mnode:focus-visible .halo { stroke: #fff; stroke-width: 3; }
 #map .mnode.visited .halo { stroke: var(--gold-2); stroke-width: 2.5; }
 #map .mnode.past { opacity: 0.32; }
 #map .mnode:not(.reach):not(.visited):not(.past) { opacity: 0.85; }
-#map .mnode.peek .halo { stroke: #fff; stroke-width: 3; animation: none; }
+#map .mnode.peek .halo { stroke: #fff; stroke-width: 3; }
 #map .mnode .rim { fill: none; stroke: var(--ink); stroke-width: 2.5; }
 #map .mnode .crown { fill: var(--gold-1); stroke: var(--ink); stroke-width: 1.8; stroke-linejoin: round; }
-#map .token { pointer-events: none; animation: token 1.6s ease-in-out infinite; }
+#map .token { pointer-events: none; }
 #map .token .tk-rim { stroke: var(--ink); stroke-width: 2.5; }
 #map .token .tk-rim.me { stroke: var(--gold-1); stroke-width: 3; }
-@keyframes token { 50% { transform: translateY(-2px); } }
 #map .mnode.reach:hover .disc, #map .mnode.reach:focus .disc { stroke: var(--gold); }
-#map .mnode.mine .halo { stroke: var(--text); stroke-width: 3.5; animation: none; }
+#map .mnode.mine .halo { stroke: var(--text); stroke-width: 3.5; }
 #map .pip circle { stroke: var(--ink); stroke-width: 2; }
 #map .pip text { fill: #f3ead8; font: 600 13px Oswald, sans-serif; text-anchor: middle; paint-order: stroke; stroke: var(--ink); stroke-width: 2.5px; stroke-linejoin: round; }
 #map .mlabel { fill: var(--muted); font: 13px var(--hand); text-anchor: middle; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
-@keyframes pulse { 50% { stroke-opacity: 0.3; } }
 .map-info { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
 .map-info b { color: var(--text); }
 .map-votes { color: var(--gold); }
@@ -835,15 +835,10 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .map-peek > img.art { flex: none; width: 42px; height: 42px; }
 #map .mnode .hit { fill: transparent; }
 #map .mart { pointer-events: none; transform-box: fill-box; transform-origin: 50% 60%; transition: transform 0.15s; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)); }
-#map .mnode.art.reach .mart { animation: room-glow 1.2s ease-in-out infinite; }
+#map .mnode.art.reach .mart { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 3px var(--gold)) drop-shadow(0 0 8px var(--gold)); }
 #map .mnode.art.reach:hover .mart, #map .mnode.art.reach:focus-visible .mart { transform: scale(1.1); }
 #map .mnode.art.visited .mart { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 4px var(--gold-2)); }
-#map .mnode.art.peek .mart, #map .mnode.art.mine .mart, #map .mnode.art:focus-visible .mart { animation: none; transform: scale(1.1); filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 3px #fff) drop-shadow(0 0 7px #fff); }
-@keyframes room-glow {
-  0%, 100% { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 3px var(--gold)) drop-shadow(0 0 8px var(--gold)); }
-  50% { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 1px var(--gold)); }
-}
-@media (prefers-reduced-motion: reduce) { #map .mnode.art.reach .mart { animation: none; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 3px var(--gold)) drop-shadow(0 0 8px var(--gold)); } }
+#map .mnode.art.peek .mart, #map .mnode.art.mine .mart, #map .mnode.art:focus-visible .mart { transform: scale(1.1); filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 3px #fff) drop-shadow(0 0 7px #fff); }
 
 /* the HP bar and the sparks as die-cut cardboard (art/ui/draw_hp_spk.py draws both from the shapes Vladislav picked) */
 /* health «Мягкий перехват», after his sketch: a tall left end, a dip with a step on top, a pinched waist and a slanted right
