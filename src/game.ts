@@ -2,6 +2,7 @@
 // Rendering and input live elsewhere; this module only changes state.
 
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, CRIT_COS, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
+import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { cellAt, cellCentre, generate, hazKey, isFloor, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
@@ -31,6 +32,8 @@ export interface HeroState {
   fire: number;
   /** The ability is on for the rest of this turn: the discs thrown now shield, set on fire or keep their speed. */
   boost: boolean;
+  /** The last knock it took: the figure rocks on its stand for a moment. */
+  knock?: Knock;
 }
 
 export interface Disc {
@@ -57,7 +60,13 @@ export interface Disc {
 }
 
 export interface Float { x: number; y: number; txt: string; col: string; t: number }
-export interface Spark { x: number; y: number; h: number; vx: number; vy: number; vh: number; t: number; col: string; sz: number }
+export interface Spark {
+  x: number; y: number; h: number; vx: number; vy: number; vh: number; t: number; col: string; sz: number;
+  /** A chip of something solid: what it looks like. It tumbles (angle a, turning at va), bounces and lies a moment. */
+  k?: ChipKind; a?: number; va?: number;
+  /** Seconds it lasts, half a second when not given. */
+  life?: number;
+}
 
 export interface State extends Layout {
   spec: RoomSpec;
@@ -582,6 +591,49 @@ export class Game {
     }
   }
 
+  /**
+   * Knock a figure standing at (x, y) away from (fromX, fromY), with strength p (0 to 1), after `delay` seconds;
+   * when the two points coincide, some way at random. A figure still swinging from a harder knock keeps that one.
+   */
+  knock(o: { knock?: Knock }, x: number, y: number, fromX: number, fromY: number, p: number, delay = 0) {
+    let dx = x - fromX, dy = y - fromY, L = Math.hypot(dx, dy);
+    if (L < 1e-6) { const a = Math.random() * Math.PI * 2; dx = Math.cos(a); dy = Math.sin(a); L = 1; }
+    const k = o.knock;
+    if (k && k.t < KNOCK_T / 2 && k.p * (1 - Math.max(0, k.t) / KNOCK_T) > p) return;
+    o.knock = { t: -delay, x: dx / L, y: dy / L, p: Math.min(1, p) };
+  }
+
+  /** A hard blow shakes the table: the figures around give a little jolt, the nearest first. */
+  private tremor(x: number, y: number, p: number, skip: object) {
+    const jolt = (o: { knock?: Knock }, ox: number, oy: number) => {
+      const L = Math.hypot(ox - x, oy - y), q = p * (1 - L / 150);
+      if (o !== skip && q > 0.04) this.knock(o, ox, oy, x, y, q * 0.4, L / 400);
+    };
+    for (const m of this.liveMobs()) jolt(m, m.x, m.y);
+    for (const h of this.alive()) { const s = this.spot(h); if (s) jolt(h, s.x, s.y); }
+  }
+
+  /** A disc knocks chips off a resource or an icicle: they spray back toward the disc, bounce on the floor and fade. */
+  private chips(k: 'ore' | 'spk' | 'herb' | 'ice', x: number, y: number, r: number, d: Disc, q: number, big = false) {
+    const S = this.S, L = Math.hypot(d.x - x, d.y - y) || 1, nx = (d.x - x) / L, ny = (d.y - y) / L;
+    // from the side the disc struck, a little above the floor
+    const ox = x + nx * r * 0.6, oy = y + ny * r * 0.6;
+    const add = (kind: ChipKind, sz: number, spread: number, sp: number, life: number) => {
+      const a = Math.atan2(ny, nx) + (Math.random() - 0.5) * spread, s = sp * (0.6 + Math.random() * 0.6);
+      S.sparks.push({
+        x: ox, y: oy, h: 5 + Math.random() * 4, vx: Math.cos(a) * s, vy: Math.sin(a) * s, vh: 110 * (0.7 + Math.random() * 0.5),
+        t: 0, col: '', sz, k: kind, a: Math.random() * 6.3, va: (Math.random() - 0.5) * 24, life,
+      });
+    };
+    if (k === 'ice') {
+      for (let i = 0; i < (big ? 12 : 5); i++) add('ice', 1.4 + Math.random() * 1.6, Math.PI * 1.6, big ? 70 : 50, 0.9 + Math.random() * 0.3);
+      return;
+    }
+    // stone with gold in it, crystal splinters, bits of cap and stem
+    const kinds: ChipKind[] = k === 'ore' ? ['ore', 'ore', 'gold'] : k === 'spk' ? ['spk'] : ['cap', 'cap', 'stem'];
+    for (let i = 0, n = 5 + 3 * q; i < n; i++) add(kinds[Math.floor(Math.random() * kinds.length)], 1.1 + Math.random() * 1.2, Math.PI * 1.3, 65, 0.9 + Math.random() * 0.4);
+  }
+
   hurtMob(m: Mob, n: number, col = '#fff', pierce = false) {
     if (m.hp <= 0) return;
     if (m.armor && !pierce && n < m.armor) { this.float(m.x, m.y, 'броня', '#c7cbe0'); return; }
@@ -614,7 +666,8 @@ export class Game {
     m.burn = 0;
   }
 
-  hurtHero(h: HeroState, n: number, why = '') {
+  /** Damage a hero; `from` is where the blow came from, so the figure rocks away from it. */
+  hurtHero(h: HeroState, n: number, why = '', from?: Pt) {
     const S = this.S;
     if (h.hp <= 0) return;
     const p = this.spot(h) ?? { x: S.Wx - 20, y: S.Wy - 20 };
@@ -623,6 +676,10 @@ export class Game {
     const dmg = n - blk;
     h.hp -= dmg;
     h.flash = 0.2;
+    // a blow knocks the figure away from the enemy; spikes, lava and fire just make it jump
+    const kp = (0.35 + Math.min(n, 10) / 14) * (dmg ? 1 : 0.6);
+    if (from) this.knock(h, p.x, p.y, from.x, from.y, kp, 0.06);
+    else if (dmg) this.knock(h, p.x, p.y, p.x, p.y, kp * 0.7);
     this.float(p.x, p.y, dmg ? `-${dmg}${why ? ' ' + why : ''}` : 'блок', dmg ? '#ff4d6a' : '#3fc4b6');
     if (dmg) { this.burst(p.x, p.y, '#ff4d6a', 10); S.shake = 0.2; }
     if (h.hp <= 0) { this.float(p.x, p.y - 6, 'пал', '#ff4d6a'); h.hand = 0; }
@@ -713,8 +770,8 @@ export class Game {
         // icicles chip like mobs take damage, and shatter at zero
         const x = (b.x0 + b.x1) / 2, y = (b.y0 + b.y1) / 2;
         b.hp = Math.max(0, b.hp! - Math.ceil((d.m * vn) / 120));
-        if (b.hp > 0) this.burst(d.x, d.y, '#d8f2ff', 5);
-        else { this.float(x, y, 'дзынь!', '#bfe9ff'); this.burst(x, y, '#d8f2ff', b.big ? 22 : 12); this.S.shake = Math.max(this.S.shake, 0.12); }
+        if (b.hp > 0) this.chips('ice', x, y, 8, d, 1);
+        else { this.float(x, y, 'дзынь!', '#bfe9ff'); this.chips('ice', x, y, 0, d, 1, true); this.S.shake = Math.max(this.S.shake, 0.12); }
         changed = true;
       }
       for (const b of S.rock) if (this.bounceBox(d, b, this.keep(d)) > 0) this.bounced(d);
@@ -729,9 +786,10 @@ export class Game {
         const big = Math.ceil((d.m * vn) / 120) >= 4, h = d.hero, q = big ? 2 : 1;
         n.left--;
         n.hit = 0.2;
-        if (n.k === 'ore') { this.bank.ore += q; this.float(n.x, n.y, `+${q} руда`, '#ffb070'); this.burst(n.x, n.y, '#ffcf6a', big ? 14 : 8); }
-        if (n.k === 'spk') { this.bank.sparks += q; this.float(n.x, n.y, `+${q} искр${q > 1 ? 'ы' : 'а'}`, '#c9a8ff'); this.burst(n.x, n.y, '#c9a8ff', big ? 14 : 8); }
-        if (n.k === 'herb') { const hl = Math.min(h.max - h.hp, 1 + 2 * q); h.hp += hl; this.float(n.x, n.y, hl ? `+${hl} HP` : 'HP полное', '#7be39a'); this.burst(n.x, n.y, '#7be39a', 8); }
+        if (n.k === 'ore') { this.bank.ore += q; this.float(n.x, n.y, `+${q} руда`, '#ffb070'); }
+        if (n.k === 'spk') { this.bank.sparks += q; this.float(n.x, n.y, `+${q} искр${q > 1 ? 'ы' : 'а'}`, '#c9a8ff'); }
+        if (n.k === 'herb') { const hl = Math.min(h.max - h.hp, 1 + 2 * q); h.hp += hl; this.float(n.x, n.y, hl ? `+${hl} HP` : 'HP полное', '#7be39a'); }
+        this.chips(n.k, n.x, n.y, n.r, d, q);
         if (n.left <= 0) this.float(n.x, n.y - 6, 'истощено', '#c7cbe0');
         changed = true;
       }
@@ -752,6 +810,9 @@ export class Game {
         if (d.ab) this.abilityHit(d, m);
         this.hurtMob(m, dmg);
         this.burst(d.x, d.y, d.hero.def.col, 8);
+        // the figure rocks away from the disc, a big one less; a sure hit or a kill shakes the table
+        this.knock(m, m.x, m.y, d.x, d.y, Math.min(1, 0.3 + vn / 260) * Math.min(1, (7 / m.r) ** 0.6));
+        if (crit || m.hp <= 0) this.tremor(m.x, m.y, crit ? 0.6 : 0.45, m);
         changed = true;
       }
     }
@@ -1061,7 +1122,8 @@ export class Game {
     if (it.t === 'slam') {
       m.flash = 0.12; S.shake = 0.3;
       this.float(m.x, m.y - 10, it.chill ? 'МЕТЕЛЬ' : 'УДАР ОБ ПОЛ', it.chill ? '#bfe6ff' : '#ffd34d');
-      for (const h of this.alive()) { this.hurtHero(h, it.dmg); if (it.chill) this.chillHero(h); }
+      for (const h of this.alive()) { this.hurtHero(h, it.dmg, '', m); if (it.chill) this.chillHero(h); }
+      this.tremor(m.x, m.y, 1, m);
     } else if (it.t === 'heal') {
       const o = S.mobs[it.mob!];
       if (!o || o.hp <= 0) return;
@@ -1088,7 +1150,10 @@ export class Game {
       const p = this.spot(h);
       if (h.hp <= 0 || !p) return;
       if (isRanged(m.k) || this.beside(m, p)) {
-        this.hurtHero(h, it.dmg); m.flash = 0.12;
+        // up close the enemy lunges at the hero; a shooter rocks back from its shot
+        if (isRanged(m.k)) this.knock(m, m.x, m.y, p.x, p.y, 0.3);
+        else this.knock(m, p.x, p.y, m.x, m.y, 0.5);
+        this.hurtHero(h, it.dmg, '', m); m.flash = 0.12;
         if (d.chill && h.hp > 0) this.chillHero(h);
         if (d.fire && h.hp > 0) { h.fire = 1; this.float(p.x, p.y - 8, 'горит!', '#ff7a3d'); }
       } else this.float(m.x, m.y, 'не достал', '#c7cbe0');
@@ -1190,13 +1255,32 @@ export class Game {
     this.fade(dt);
   }
 
+  /** A chip in flight: it falls, bounces off the floor and the walls, slides to a stop; one that drops into a hole is gone. */
+  private roll(p: Spark, dt: number) {
+    const S = this.S, nx = p.x + p.vx * dt, ny = p.y + p.vy * dt;
+    p.vh -= 340 * dt;
+    p.h += p.vh * dt;
+    p.a! += p.va! * dt;
+    if (isFloor(S, Math.floor(nx / TILE), Math.floor(p.y / TILE))) p.x = nx; else p.vx *= -0.5;
+    if (isFloor(S, Math.floor(p.x / TILE), Math.floor(ny / TILE))) p.y = ny; else p.vy *= -0.5;
+    if (p.h > 0) return;
+    if (pitAt(S.pits, p.x, p.y)) { p.t = p.life ?? 1; return; }
+    p.h = 0;
+    if (p.vh < -35) { p.vh *= -0.38; p.vx *= 0.55; p.vy *= 0.55; p.va! *= 0.5; }
+    else { const k = Math.max(0, 1 - 9 * dt); p.vh = 0; p.vx *= k; p.vy *= k; p.va! *= k; }
+  }
+
   /** Timers of flashes, falling discs, particles and floating numbers. */
   private fade(dt: number) {
     const S = this.S;
     for (const d of S.discs) if (d.fall && !d.gone) { d.fall += dt; if (d.fall > 0.5) d.gone = true; }
-    for (const m of S.mobs) { if (m.flash > 0) m.flash -= dt; if (m.dead) m.dead += dt; if (m.born > 0) m.born = Math.max(0, m.born - dt * 1.5); }
+    for (const m of S.mobs) {
+      if (m.flash > 0) m.flash -= dt; if (m.dead) m.dead += dt; if (m.born > 0) m.born = Math.max(0, m.born - dt * 1.5);
+      if (m.knock && (m.knock.t += dt) > KNOCK_T) m.knock = undefined;
+    }
     for (const h of S.heroes) {
       if (h.flash > 0) h.flash -= dt;
+      if (h.knock && (h.knock.t += dt) > KNOCK_T) h.knock = undefined;
       if (h.from && (h.leap += dt / HOP_T) >= 1) {
         h.from = null;
         h.leap = 0;
@@ -1208,8 +1292,12 @@ export class Game {
     }
     for (const n of S.nodes) if (n.hit > 0) n.hit -= dt;
     if (S.shake > 0) S.shake -= dt;
-    for (const p of S.sparks) { p.t += dt; p.x += p.vx * dt * 0.5; p.y += p.vy * dt * 0.5; p.vh -= 160 * dt; p.h = Math.max(0, p.h + p.vh * dt); }
-    S.sparks = S.sparks.filter(p => p.t < 0.5);
+    for (const p of S.sparks) {
+      p.t += dt;
+      if (p.k) { this.roll(p, dt); continue; }
+      p.x += p.vx * dt * 0.5; p.y += p.vy * dt * 0.5; p.vh -= 160 * dt; p.h = Math.max(0, p.h + p.vh * dt);
+    }
+    S.sparks = S.sparks.filter(p => p.t < (p.life ?? 0.5));
     for (const f of S.floats) f.t += dt;
     S.floats = S.floats.filter(f => f.t < 1.6);
   }

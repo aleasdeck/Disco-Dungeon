@@ -1154,3 +1154,68 @@ describe('heroes go where their last disc stopped', () => {
     expect(client.spot(client.heroOf(a.i))).toEqual(cellCentre(5, 4));
   });
 });
+
+describe('hit effects', () => {
+  /** A floor 0 fight with the given enemies in a row and nothing else in the room. */
+  const arena = (kinds: (keyof typeof MOBS)[]) => {
+    const g = new Game();
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    g.S.mobs = kinds.map((k, i) => newMob(k, cellCentre(2 + i * 3, 3).x, cellCentre(2 + i * 3, 3).y, 1, 0));
+    g.S.nodes = []; g.S.blocks = []; g.S.rock = []; g.S.pits = [];
+    placeAll(g); g.startFight();
+    return g;
+  };
+  const disc = (g: Game, x: number, y: number, vx: number, vy: number) =>
+    ({ hero: g.hero, x, y, vx, vy, r: 5, m: 4, e: 0.6, fr: 1, fall: 0, gone: false, charged: false, bounces: 0, spin: 0, hits: 0, ab: false, rico: 0 });
+
+  it('a struck enemy rocks away from the disc, a big one less, and a sure hit jolts the figures nearby a moment later', () => {
+    const g = arena(['skel', 'skel']), [a, b] = g.S.mobs;
+    a.hp = a.max = 99;
+    g.S.discs = [disc(g, a.x, a.y + 11, 0, -220)];
+    g.step(1 / 120);
+    expect(a.knock!.y).toBeLessThan(-0.99);
+    expect(a.knock!.p).toBeGreaterThan(0.5);
+    // the neighbour three cells off feels it, but later and softer
+    expect(b.knock!.t).toBeLessThan(0);
+    expect(b.knock!.p).toBeLessThan(a.knock!.p);
+    const p = a.knock!.p;
+    for (let k = 0; k < 160; k++) g.update(1 / 120);
+    expect(a.knock).toBeUndefined();
+    expect(p).toBeGreaterThan(0.75);
+
+    const big = arena(['golem']), m = big.S.mobs[0];
+    m.hp = m.max = 99;
+    big.S.discs = [disc(big, m.x, m.y + m.r + 4, 0, -220)];
+    big.step(1 / 120);
+    expect(m.knock!.p).toBeLessThan(p - 0.1);
+  });
+
+  it('an enemy lunges at the hero it hits, and the hero rocks away from it', () => {
+    const g = arena([]);
+    const [h] = g.alive(), p = g.spot(h)!;
+    const sk = newMob('skel', p.x + TILE, p.y, 1, 0);
+    g.S.mobs = [sk];
+    sk.intent = { t: 'hit', hero: h.i, dmg: 3 };
+    (g as unknown as { mobAct: (m: typeof sk) => void }).mobAct(sk);
+    expect(sk.knock!.x).toBeLessThan(-0.99);
+    expect(h.knock!.x).toBeLessThan(-0.99);
+    expect(h.knock!.t).toBeLessThan(0);
+  });
+
+  it('a struck resource throws chips that land, stop and vanish, and a client sees them too', () => {
+    const g = arena(['archer']);
+    g.S.nodes = [{ k: 'ore', name: 'Рудная жила', r: 7, ch: 3, x: 88, y: 88, left: 3, hit: 0 }];
+    g.S.discs = [disc(g, 88, 88 + TILE / 2 + 5.5, 0, -200)];
+    g.step(1 / 60);
+    const chips = g.S.sparks.filter(p => p.k);
+    expect(chips.length).toBeGreaterThanOrEqual(5);
+    expect(chips.some(p => p.k === 'gold') || chips.some(p => p.k === 'ore')).toBe(true);
+    const cli = new Game();
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(g))));
+    expect(cli.S.sparks.filter(p => p.k)).toHaveLength(chips.length);
+    let landed = 0;
+    for (let k = 0; k < 90; k++) { g.update(1 / 60); landed = Math.max(landed, g.S.sparks.filter(p => p.k && p.h === 0).length); }
+    expect(landed).toBeGreaterThan(0);
+    expect(g.S.sparks.some(p => p.k)).toBe(false);
+  });
+});

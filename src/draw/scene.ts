@@ -3,12 +3,13 @@
 
 import { WALL_WORDS, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize } from '../data';
 import type { Camera, Vec } from '../camera';
-import { type Disc, type Game, type HeroState } from '../game';
+import { type Disc, type Game, type HeroState, type Spark } from '../game';
 import { cellAt, floorAt, hazKey, inPit, isFloor, pitAt, type Block, type Decal, type Edge, type Mob, type Pit, type ResNode } from '../room';
 import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure } from './figures';
 import { circ, ell, fs, mix, pth, rr, type Ctx, type Pt } from './util';
 import { GRAFFITI_FONTS, envArt } from '../assets';
 import { settings } from '../settings';
+import { knockPose, topplePose, type Knock, type Pose } from '../fx';
 
 export interface Aim { hero: HeroState; dx: number; dy: number }
 /** A hero dragged to another rune: pointer position in screen pixels and the rune under it. */
@@ -54,6 +55,7 @@ export class SceneRenderer {
 
   private P = (x: number, y: number, h = 0): Pt => this.cam.iso(x, y, h);
   private get bk() { return this.g.S.biome.art; }
+
 
   /**
    * Lay a picture, or the part `src` (x, y, w, h in its pixels) of it, flat on the rectangle (x0, y0)-(x1, y1) at height h;
@@ -336,6 +338,7 @@ export class SceneRenderer {
     for (const m of S.mobs) if (m.dead <= 1) items.push([cam.depth(m.x, m.y), () => this.drawMob(m)]);
     for (const b of S.blocks) items.push([cam.depth(b.x0 + 8, b.y0 + 8), () => this.drawBlock(b)]);
     for (const n of S.nodes) items.push([cam.depth(n.x, n.y), () => this.drawNode(n)]);
+    for (const p of S.sparks) if (p.k) items.push([cam.depth(p.x, p.y) + 0.5, () => this.drawChip(p)]);
     this.wallItems(items);
     this.decorItems(items);
     items.sort((a, b) => a[0] - b[0]).forEach(i => i[1]());
@@ -1059,7 +1062,17 @@ export class SceneRenderer {
     if (n.left <= 0) return;
     const { c, P } = this;
     ell(c, ...P(n.x + 1.5, n.y + 1.5), 11, 5.5); c.fillStyle = 'rgba(15,8,4,.35)'; c.fill();
+    // a struck resource jolts: squashed and shaken for a moment
+    const f = n.hit > 0 && !reduce ? n.hit / 0.2 : 0;
+    if (f) {
+      const [x, y] = P(n.x, n.y);
+      c.save();
+      c.translate(x + Math.sin(f * 19) * 1.4 * f, y);
+      c.scale(1 + 0.1 * f, 1 - 0.14 * f);
+      c.translate(-x, -y);
+    }
     this.drawNodeShape(n, Math.min(n.left, n.ch), n.hit > 0);
+    if (f) c.restore();
   }
 
   private drawDisc(d: Disc) {
@@ -1115,6 +1128,18 @@ export class SceneRenderer {
 
   // ------------------------------------------------------------ miniatures
 
+  /** How far one world unit in direction (x, y) goes on screen from (ox, oy). */
+  private onScreen(ox: number, oy: number, x: number, y: number): Pt {
+    const a = this.P(ox, oy), b = this.P(ox + x, oy + y);
+    return [b[0] - a[0], b[1] - a[1]];
+  }
+
+  /** A figure at (x, y) on a stand of radius R, rocking from its last knock. */
+  private pose(k: Knock | undefined, x: number, y: number, R: number): Pose | undefined {
+    if (!k || k.t <= 0 || reduce) return undefined;
+    return knockPose(k, ...this.onScreen(x, y, k.x, k.y), R);
+  }
+
   private faceRight(fromX: number, fromY: number, toX: number, toY: number) {
     return this.P(toX, toY)[0] >= this.P(fromX, fromY)[0];
   }
@@ -1134,6 +1159,7 @@ export class SceneRenderer {
       faceRight: this.faceRight(p.x, p.y, target.x, target.y), flash: h.flash > 0, hop: at ? 0 : g.figureAt(h)!.lift,
       alpha: dead ? 0.45 : carried ? 0.3 : lifted ? 0.85 : 1,
       hp: dead || carried ? undefined : { now: h.hp, max: h.max },
+      pose: lifted ? undefined : this.pose(h.knock, p.x, p.y, HERO_BASE),
       placeholder: (cc, x, y, fl) => drawHeroFigure(cc, h.i, x, y, 0.8, fl, this.t),
     });
     if (dead || carried) return;
@@ -1161,11 +1187,19 @@ export class SceneRenderer {
     const { c, P, g } = this;
     const S = g.S, [x, y] = P(m.x, m.y);
     const it = m.intent, th = it ? g.heroOf(it.hero) : null, tgt = (th && g.spot(th)) ?? { x: S.Wx, y: S.Wy };
+    let pose = this.pose(m.knock, m.x, m.y, m.r), alpha = m.dead ? Math.max(0, 1 - m.dead) : (1 - (m.born ?? 0)) * (m.hp > 0 && !g.solid(m) ? 0.35 : 1);
+    if (m.dead && !reduce) {
+      // beaten, it topples over away from the blow, lies a moment and fades
+      const k = m.knock, side = (k && Math.sign(this.onScreen(m.x, m.y, k.x, k.y)[0])) || 1;
+      pose = topplePose(m.dead, side, m.r * 1.27);
+      alpha = Math.min(1, Math.max(0, (1 - m.dead) / 0.4));
+    }
     drawMiniature(c, {
       key: m.k, x, y, baseR: m.r, baseCol: ENEMY_BASE, fig: MOBS[m.k].fig,
       faceRight: this.faceRight(m.x, m.y, tgt.x, tgt.y), flash: m.flash > 0, hop: m.hop,
-      alpha: m.dead ? Math.max(0, 1 - m.dead) : (1 - (m.born ?? 0)) * (m.hp > 0 && !g.solid(m) ? 0.35 : 1),
+      alpha,
       hp: m.hp > 0 ? { now: m.hp, max: m.max } : undefined,
+      pose,
       placeholder: (cc, fx, fy, fl) => drawMobFigure(cc, m.k, fx, fy, fl),
     });
     if (m.hp <= 0) return;
@@ -1220,10 +1254,51 @@ export class SceneRenderer {
     for (let k = 0; k < 5; k++) { rr(c, px - 11 + k * 4.6, py + 7, 3.6, 2.6, 1); fs(c, k < pw ? h.def.col : '#2a1f18', 0.6); }
   }
 
+  /** A chip of stone, gold, crystal, mushroom or ice, tumbling, with its shadow on the floor; it fades at the end of its life. */
+  private drawChip(p: Spark) {
+    const { c, P } = this, life = p.life ?? 0.5, s = p.sz;
+    const [x, y] = P(p.x, p.y, p.h);
+    c.save();
+    c.globalAlpha = Math.max(0, Math.min(1, (life - p.t) / 0.3));
+    ell(c, ...P(p.x, p.y), s * 0.9, s * 0.45); c.fillStyle = 'rgba(15,8,4,.3)'; c.fill();
+    c.translate(x, y);
+    c.rotate(p.a ?? 0);
+    c.lineJoin = 'round';
+    const lw = Math.min(0.9, 0.3 + s * 0.12);
+    const poly = (pts: number[][], col: string) => { pth(c, pts.map(([u, v]) => [u * s, v * s] as Pt)); fs(c, col, lw); };
+    const rock = (col: string, dk: string) => {
+      const pts = [[-1, -0.3], [-0.4, -1], [0.6, -0.8], [1, 0.1], [0.4, 0.9], [-0.7, 0.7]];
+      poly(pts, col);
+      pth(c, [[0.6 * s, -0.8 * s], [1 * s, 0.1 * s], [0.4 * s, 0.9 * s], [-0.1 * s, 0.2 * s]]); c.fillStyle = dk; c.fill();
+      pth(c, pts.map(([u, v]) => [u * s, v * s] as Pt)); c.strokeStyle = INK; c.lineWidth = lw; c.stroke();
+    };
+    const nug = (u: number, v: number, k: number) => {
+      pth(c, [[(u - 0.5 * k) * s, v * s], [u * s, (v - 0.7 * k) * s], [(u + 0.5 * k) * s, v * s], [u * s, (v + 0.45 * k) * s]]);
+      fs(c, '#f2b83c', lw * 0.8);
+      circ(c, (u - 0.1 * k) * s, (v - 0.15 * k) * s, 0.14 * k * s); c.fillStyle = '#fff3c4'; c.fill();
+    };
+    const cap = (r: number, dy: number) => {
+      c.beginPath(); c.ellipse(0, dy * s, r * s, r * 0.85 * s, 0, Math.PI, 0); c.quadraticCurveTo(0, (dy + 0.35 * r) * s, -r * s, dy * s); c.closePath();
+      fs(c, '#d24c3a', lw);
+      ell(c, -0.3 * r * s, (dy - 0.45 * r) * s, 0.2 * r * s, 0.17 * r * s); fs(c, '#fbf3e0', lw * 0.6);
+      ell(c, 0.35 * r * s, (dy - 0.3 * r) * s, 0.14 * r * s, 0.12 * r * s); fs(c, '#fbf3e0', lw * 0.6);
+    };
+    switch (p.k) {
+      case 'ore': rock('#948c80', '#6a635a'); break;
+      case 'gold': nug(0, 0, 1.6); break;
+      case 'spk': poly([[-0.35, 0.9], [-0.35, -0.4], [0, -1.1], [0.35, -0.4], [0.35, 0.9]], '#a98ae8'); break;
+      case 'cap': cap(1, 0.4); break;
+      case 'stem': rr(c, -0.35 * s, -0.8 * s, 0.7 * s, 1.6 * s, 0.3 * s); fs(c, '#f1e7d0', lw); break;
+      case 'ice': poly([[-0.4, 0.8], [-0.2, -0.9], [0.5, 0.3]], '#d8f2ff'); break;
+    }
+    c.restore();
+  }
+
   private drawFx() {
     const { c, P } = this;
     const S = this.g.S;
     for (const p of S.sparks) {
+      if (p.k) continue;
       const [sx, sy] = P(p.x, p.y, p.h);
       c.globalAlpha = Math.max(0, 1 - p.t * 2);
       circ(c, sx, sy, p.sz);

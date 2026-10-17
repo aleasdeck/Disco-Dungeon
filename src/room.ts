@@ -1,5 +1,6 @@
 // Procedural room generator. Pure: the same RoomSpec always yields the same layout.
 
+import type { Knock } from './fx';
 import { BIOMES, MOB_HP_MUL, MOBS, NODES, TILE, isRanged, mobSize, type Biome, type MobKind, type NodeKind, type RoomType } from './data';
 import { makeRng } from './rng';
 import { LAYERS } from './run';
@@ -135,6 +136,8 @@ export interface Mob {
   /** Counts down from 1 while a summoned mob rises out of its circle. */
   born: number;
   rage?: boolean;
+  /** The last knock it took: the figure rocks on its stand for a moment. */
+  knock?: Knock;
 }
 
 export type Shape = 'rect' | 'corner' | 'funnel' | 'alcove' | 'cross';
