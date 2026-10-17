@@ -15,7 +15,9 @@ import { loadAll } from './assets';
 import { fillIcons } from './icons';
 import { sound, type Track } from './sound';
 import { clearSeat, loadHost, loadSeat, newKey, saveHost, saveSeat, type Ending, type HostSave } from './resume';
-import { FLOORS, LAYERS, agreed, depthOf, eventOf, newRun, nodeById, reachable, restRoom, type Run, type Votes } from './run';
+import { FLOORS, LAYERS, agreed, depthOf, newRun, nodeById, reachable, restRoom, type Run, type Votes } from './run';
+import { applyFx, canPick, eventDef, eventOf, fxParts, rolled, type EventState } from './events';
+import { EventView, type EventVotes } from './eventview';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -25,6 +27,7 @@ const cam = new Camera();
 const game = new Game();
 const hud = new Hud(game);
 const mapView = new MapView();
+const evView = new EventView();
 const scene = new SceneRenderer();
 
 let run: Run = newRun();
@@ -34,6 +37,10 @@ let choosing = true;
 let votes: Votes = {};
 /** Client: the heroes whose players the host waits for. */
 let voters: number[] = [];
+/** The event the party stands in between the map and the next room; null anywhere else. */
+let ev: EventState | null = null;
+/** The seed of the event whose outcome this player has read and closed: the window stays shut for it. */
+let evShut = -1;
 let view = { w: 0, h: 0, dpr: 1 };
 
 // ------------------------------------------------------------ camera
@@ -189,6 +196,8 @@ function startRun(picks?: number[]) {
   hud.buildAllies();
   choosing = true;
   votes = {};
+  ev = null;
+  showEvent();
   mapView.info = '';
   // a quiet room behind the map so the screen is never empty
   game.loadRoom({ seed: run.seed, depth: 1, floor: 0, type: 'fight' });
@@ -228,20 +237,98 @@ function choose(id: string) {
     showMap(false);
   } else if (n.type === 'forge') {
     // the blacksmith's: everyone upgrades their own discs and goes back to the map when done
-    restRoom(n.type, game.party, game.bank, run.seed + depth * 131);
+    restRoom(n.type, game.party, game.bank);
     mapView.info = '';
     game.forge = depth;
     showMap(false);
     game.onChange();
+  } else if (n.type === 'event') {
+    // everyone reads the scene and the party takes one of its choices; the map waits until then
+    const seed = run.seed + depth * 131, key = eventOf(seed, run.seen);
+    (run.seen ??= []).push(key);
+    ev = { key, seed, votes: {} };
+    choosing = false;
+    mapView.info = '';
+    showMap(false);
+    showEvent();
   } else {
     // the room's picture rides along in the shared text: every screen fills it in from its own art
-    const seed = run.seed + depth * 131, pic = n.type === 'event' ? 'ev_' + eventOf(seed) : 'room_' + n.type;
-    mapView.info = `<i data-art="${pic}" aria-hidden="true"></i><span><b>${ROOM_TYPES[n.type].name}.</b> ${restRoom(n.type, game.party, game.bank, seed)}</span>`;
+    mapView.info = `<i data-art="room_${n.type}" aria-hidden="true"></i><span><b>${ROOM_TYPES[n.type].name}.</b> ${restRoom(n.type, game.party, game.bank)}</span>`;
     hud.buildAllies();
     hud.refresh();
     showMap(true);
   }
   shareMap();
+}
+
+/** Show the event window while the party stands in an event, until this player has read its outcome and closed it. */
+function showEvent() {
+  const open = !!ev && !(ev.done && evShut === ev.seed);
+  $('eventScreen').hidden = !open;
+  if (open) evView.render(ev!, game.bank, game.party.length === 1, eventVotes());
+}
+
+// alone a tap takes the choice; online it is the player's vote, and the party takes it once everyone here picked it
+evView.onPick = opt => {
+  if (!ev || ev.done) return;
+  const me = myHero();
+  if (!game.online) settleEvent(opt);
+  else if (me === null) return;
+  else if (mode === 'host') evVote(me, opt);
+  else {
+    ev = { ...ev, votes: { ...ev.votes, [me]: opt } };
+    showEvent();
+    net.send({ t: 'evote', opt });
+  }
+};
+evView.onLeave = () => {
+  if (ev) evShut = ev.seed;
+  showEvent();
+  showMap(true);
+};
+
+/** Host: a player points at one of the event's choices. */
+function evVote(hero: number, opt: number) {
+  if (!ev || ev.done || !eventDef(ev.key).choices[opt]) return;
+  ev.votes[hero] = opt;
+  const go = agreed(ev.votes, atTable());
+  if (go !== null) settleEvent(go);
+  else { showEvent(); shareMap(); }
+}
+
+/** Take a choice: pay for it, roll its toss-up, and do what comes of it to the party; then the map is open again. */
+function settleEvent(opt: number) {
+  if (!ev || ev.done) return;
+  const c = eventDef(ev.key).choices[opt];
+  if (!c || !canPick(c, game.bank)) return;
+  const won = rolled(c, ev.seed, opt), out = won ? c.win : c.lose!;
+  game.bank.ore -= c.pay ?? 0;
+  applyFx(out.fx, game.party, game.bank, ev.seed);
+  ev.done = { opt, won };
+  choosing = true;
+  votes = {};
+  // what came of it stays on the map too, next to the event's sign
+  const what = fxParts(c.pay ? [{ k: 'ore', n: -c.pay }, ...out.fx] : out.fx, game.party.length === 1).map(p => p.t).join(', ');
+  mapView.info = `<i data-art="room_event" aria-hidden="true"></i><span><b>${eventDef(ev.key).title}.</b> ${what || 'Ушли ни с чем.'}</span>`;
+  hud.buildAllies();
+  game.onChange();
+  showEvent();
+  shareMap();
+}
+
+/** Online: whose face stands on which choice, and whom the party still waits for. Alone there is nothing to show. */
+function eventVotes(): EventVotes | undefined {
+  const table = mode === 'host' ? atTable() : mode === 'client' ? voters : [];
+  if (!ev || table.length < 2) return undefined;
+  const me = myHero(), cast = ev.votes;
+  const nameOf = (h: number) => players.find(p => p.hero === h)?.name ?? HEROES[h].name;
+  const faces: EventVotes['faces'] = {};
+  for (const h of table) if (cast[h] !== undefined) (faces[cast[h]] ??= []).push({ col: HEROES[h].col, name: nameOf(h), me: h === me, face: faceUrl(game.party.find(o => o.i === h) ?? { i: h, def: HEROES[h] }) });
+  const idle = table.filter(h => cast[h] === undefined).map(h => (h === me ? 'ты' : nameOf(h)));
+  const note = idle.length === table.length ? 'Выбор общий: отряд сделает то, что нажмут все.'
+    : idle.length ? `Ещё не выбрали: ${idle.join(', ')}.`
+    : 'Голоса разошлись. Договоритесь и нажмите одно и то же.';
+  return { faces, mine: me !== null ? cast[me] ?? null : null, note };
 }
 
 // alone a click on the map goes there; online it is a vote, and the party goes once everyone here picked the same room
@@ -279,7 +366,7 @@ function settle() {
 /** Host: tell everyone where the party stands on the map, and show it on the host's own map too. */
 function shareMap() {
   if (mode !== 'host' || !started) return;
-  const m: MapState = { run, choosing, info: mapView.info, votes, voters: atTable() };
+  const m: MapState = { run, choosing, info: mapView.info, votes, voters: atTable(), ev };
   net.broadcast({ t: 'map', m });
   if (!$('mapScreen').hidden) showMap(true);
 }
@@ -425,7 +512,7 @@ function leaveOnline() {
   players = [];
   started = false;
   wait('');
-  if (mode !== 'solo') setOnline('menu');
+  if (mode !== 'solo') { setOnline('menu'); ev = null; showEvent(); }
 }
 
 function lobbyView() {
@@ -450,6 +537,8 @@ function pick(id: string, hero: number | null) {
 
 function backToLobby() {
   started = false;
+  ev = null;
+  showEvent();
   hideEnd();
   showMap(false);
   net.broadcast({ t: 'lobbyBack' });
@@ -603,6 +692,7 @@ net.onLeave = id => {
   hud.refresh();
   // the vote goes on without them: the others may already agree
   settle();
+  if (ev && !ev.done) { const go = agreed(ev.votes, atTable()); if (go !== null) settleEvent(go); else shareMap(); }
 };
 
 net.onLost = () => { if (mode === 'client') reconnect(net.code); };
@@ -612,6 +702,7 @@ net.onMsg = (from, m) => {
     if (m.t === 'hello') welcome(from, m.name, m.key);
     else if (m.t === 'pick') pick(from, m.hero);
     else if (m.t === 'vote' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) vote(h, m.id); }
+    else if (m.t === 'evote' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) evVote(h, m.opt); }
     else if (m.t === 'act' && started && ownerOf(m.a.h) === from) game.perform(m.a);
     return;
   }
@@ -628,7 +719,9 @@ net.onMsg = (from, m) => {
   } else if (m.t === 'map') {
     const went = choosing && !m.m.choosing;
     ({ run, choosing, votes, voters } = m.m);
+    ev = m.m.ev ?? null;
     mapView.info = m.m.info;
+    showEvent();
     // the party agreed on a fight and walks in; otherwise the map shows the vote as it stands
     if (went) { hideEnd(); showMap(false); }
     else if ((choosing && $('roomEnd').hidden) || !$('mapScreen').hidden) showMap(true);
@@ -643,7 +736,7 @@ net.onMsg = (from, m) => {
     // the party walked into the blacksmith's: the shop takes the map's place
     if (!shop && hud.atForge) showMap(false);
   } else if (m.t === 'screen') screen(m.title, m.text, m.win, m.lose);
-  else if (m.t === 'lobbyBack') { started = false; wait(''); hideEnd(); showMap(false); lobbyView(); show('lobby'); }
+  else if (m.t === 'lobbyBack') { started = false; ev = null; showEvent(); wait(''); hideEnd(); showMap(false); lobbyView(); show('lobby'); }
 };
 
 /** Host: send the game state to everyone, often while things move, and whenever something changed. */
@@ -664,7 +757,7 @@ function keepSeat(now: number) {
   if (mode !== 'host') return;
   saveSeat({ code: net.code, key: myKey, host: true });
   saveHost({
-    code: net.code, players, started, run, choosing, mapInfo: mapView.info, votes, ending, screen: lastScreen,
+    code: net.code, players, started, run, choosing, mapInfo: mapView.info, votes, ev, ending, screen: lastScreen,
     snap: started && game.S ? snapshot(game) : null,
   });
 }
@@ -683,6 +776,7 @@ async function reopen(code: string) {
     run = s.run;
     choosing = s.choosing;
     votes = s.votes ?? {};
+    ev = s.ev ?? null;
     mapView.info = s.mapInfo;
     applySnapshot(game, s.snap);
     setOnline('host');
@@ -709,6 +803,7 @@ async function reopen(code: string) {
   setTimeout(seatAway, 15_000);
   if (s.ending) showEnd(s.ending);
   else if (choosing) showMap(true);
+  else if (ev) showEvent();
   else if (!game.liveMobs().length || !game.alive().length) game.onRoomEnd(game.alive().length > 0);
 }
 
@@ -838,4 +933,4 @@ $('waitLeave').addEventListener('click', () => { leaveOnline(); hideEnd(); showM
 requestAnimationFrame(frame);
 
 // handle for automated checks
-Object.assign(window, { __dd: { game, cam, hud, scene, ctx, net, sound, get view() { return view; }, get run() { return run; }, get mode() { return mode; } } });
+Object.assign(window, { __dd: { game, cam, hud, scene, ctx, net, sound, choose, get view() { return view; }, get run() { return run; }, get mode() { return mode; }, get ev() { return ev; } } });

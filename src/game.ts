@@ -167,9 +167,10 @@ export function pointAt(w: Pt[], d: number): Pt {
 /**
  * Ore belongs to the whole party: any hero's hit fills the pool, any hero spends from it, and it lasts the whole run.
  * Sparks are each hero's own (`HeroState.sparks`) and last one fight; every hero starts the next one with `boon` of them
- * (the altar's gift, usually none).
+ * (the altar's gift, usually none). An event may also leave the next fight a `shield` for every hero or `rage`: that much
+ * harder blows from its enemies.
  */
-export interface Bank { ore: number; boon?: number }
+export interface Bank { ore: number; boon?: number; shield?: number; rage?: number }
 
 export function newBank(): Bank {
   return { ore: 0, boon: 0 };
@@ -244,9 +245,13 @@ export class Game {
     this.walked = { key: '', n: 0 };
     this.hopped.clear();
     // sparks don't carry over: every fight starts without them, or full after the altar
-    const boon = Math.min(AB_COST, this.bank.boon ?? 0);
-    for (const h of this.party) Object.assign(h, { pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0, chill: 0, fire: 0, boost: false, sparks: boon });
+    const boon = Math.min(AB_COST, this.bank.boon ?? 0), shield = this.bank.shield ?? 0;
+    for (const h of this.party) Object.assign(h, { pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: h.hp > 0 ? shield : 0, flash: 0, chill: 0, fire: 0, boost: false, sparks: boon });
+    // an event's curse: the room's enemies come in angrier
+    if (this.bank.rage) for (const m of L.mobs) m.dmg += this.bank.rage;
     this.bank.boon = 0;
+    delete this.bank.shield;
+    delete this.bank.rage;
     this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [], away: this.online ? this.S?.away ?? [] : [] };
     // every rune starts empty: the players put their heroes on them before the fight
     this.pickActive();

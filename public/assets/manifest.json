@@ -109,9 +109,6 @@
     "btn_main": "ui/btn_main.webp",
     "btn_tile": "ui/btn_tile.webp",
     "btn_turn": "ui/btn_turn.webp",
-    "ev_altar": "ui/ev_altar.webp",
-    "ev_healer": "ui/ev_healer.webp",
-    "ev_trap": "ui/ev_trap.webp",
     "hp_empty": "ui/hp_empty.webp",
     "hp_full": "ui/hp_full.webp",
     "hp_shield": "ui/hp_shield.webp",
@@ -181,5 +178,16 @@
     "fight0": { "file": "music/bfunk.mp3", "loop": 64 },
     "fight1": { "file": "music/march.mp3", "loop": 66.20689655172414 },
     "fight2": { "file": "music/chase.mp3", "loop": 60.95238095238095 }
+  },
+  "events": {
+    "bar": "events/bar.webp",
+    "mimic": "events/mimic.webp",
+    "altar": "events/altar.webp",
+    "doctor": "events/doctor.webp",
+    "gym": "events/gym.webp",
+    "seer": "events/seer.webp",
+    "toilet": "events/toilet.webp",
+    "ogre": "events/ogre.webp",
+    "goblin": "events/goblin.webp"
   }
 }

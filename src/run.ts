@@ -1,6 +1,6 @@
 // Run structure: 3 floors, each a layered branching map of rooms; a path takes 7 rooms ending at the boss.
 
-import { AB_COST, FORGE_ORE, ROOM_TYPES, type RoomType } from './data';
+import { FORGE_ORE, ROOM_TYPES, type RoomType } from './data';
 import type { Bank, HeroState } from './game';
 import { makeRng } from './rng';
 
@@ -11,6 +11,8 @@ export interface Run {
   floor: number;
   path: string[][];
   floors: MapNode[][][];
+  /** The events the party has met this run, so the next event room is a new one; older saves have none. */
+  seen?: string[];
 }
 
 export const FLOORS = 3;
@@ -68,7 +70,7 @@ export function genFloor(seed: number, f: number): MapNode[][] {
 }
 
 export function newRun(seed = Math.floor(Math.random() * 90000) + 10000): Run {
-  return { seed, floor: 0, path: [[], [], []], floors: [0, 1, 2].map(f => genFloor(seed, f)) };
+  return { seed, floor: 0, path: [[], [], []], floors: [0, 1, 2].map(f => genFloor(seed, f)), seen: [] };
 }
 
 export const nodeById = (run: Run, f: number, id: string) => run.floors[f].flat().find(n => n.id === id)!;
@@ -86,10 +88,10 @@ export const runDone = (run: Run) => run.path[FLOORS - 1].length === LAYERS;
 /** Online, the room each player points at on the map, by their hero. */
 export type Votes = Record<number, string>;
 
-/** The room every voter points at, or null while someone hasn't chosen yet or they disagree. */
-export function agreed(votes: Votes, voters: number[]): string | null {
+/** The room (or an event's choice) every voter points at, or null while someone hasn't chosen yet or they disagree. */
+export function agreed<T extends string | number>(votes: Record<number, T>, voters: number[]): T | null {
   const ids = voters.map(h => votes[h]);
-  return ids.length && ids.every(id => id && id === ids[0]) ? ids[0] : null;
+  return ids.length && ids.every(id => id !== undefined && id === ids[0]) ? ids[0] : null;
 }
 
 /** Minutes played so far and the forecast for the whole run. */
@@ -103,12 +105,8 @@ export function minutes(run: Run) {
   return { done, total: done + est };
 }
 
-/** What an event room turns out to be: the altar of sparks, a trapped chest or a wandering healer (their pictures are `ev_…`). */
-export const EVENTS = ['altar', 'trap', 'healer'] as const;
-export const eventOf = (seed: number) => EVENTS[makeRng(seed).int(0, 2)];
-
-/** Rooms without a fight resolve at once; returns what happened, worded for a lone hero or a party. */
-export function restRoom(type: RoomType, party: HeroState[], bank: Bank, seed: number): string {
+/** The camp and the blacksmith's give their gifts at once; returns what happened, worded for a lone hero or a party. */
+export function restRoom(type: RoomType, party: HeroState[], bank: Bank): string {
   const solo = party.length === 1;
   if (type === 'camp') {
     for (const h of party) h.hp = h.hp <= 0 ? Math.ceil(h.max / 2) : Math.min(h.max, h.hp + 8);
@@ -118,17 +116,5 @@ export function restRoom(type: RoomType, party: HeroState[], bank: Bank, seed: n
     bank.ore += FORGE_ORE;
     return solo ? `Кузнец дал ${FORGE_ORE} руды. Прокачать диски можно только у него.` : `Кузнец дал отряду ${FORGE_ORE} руды. Прокачать диски можно только у него, руда общая на всех.`;
   }
-  const ev = eventOf(seed);
-  if (ev === 'altar') {
-    // sparks burn out between fights, so the altar's gift waits for the next one: every hero starts it full
-    bank.boon = AB_COST;
-    return `Алтарь искр: следующий бой ${solo ? 'герой' : 'каждый герой'} начнёт с полным запасом искр (${AB_COST}).`;
-  }
-  if (ev === 'trap') {
-    for (const h of party) if (h.hp > 0) h.hp = Math.max(1, h.hp - 3);
-    bank.ore += 4;
-    return `Ловушка в сундуке: −3 HP${solo ? '' : ' каждому'}, зато внутри 4 руды.`;
-  }
-  for (const h of party) { h.max += 2; if (h.hp > 0) h.hp += 2; }
-  return `Бродячий лекарь: +2 к максимуму здоровья ${solo ? 'герою' : 'всему отряду'}.`;
+  return '';
 }

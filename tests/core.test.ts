@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, mobSize } from '../src/data';
-import { Game, newBank, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
+import { Game, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { MOB_CAP, PARTY_SCALE, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
-import { FLOORS, FORGE_ROWS, LAYERS, agreed, genFloor, newRun, restRoom } from '../src/run';
+import { FLOORS, FORGE_ROWS, LAYERS, agreed, genFloor, newRun } from '../src/run';
 import { makeRng } from '../src/rng';
+import { EVENTS, applyFx, canPick, eventDef, eventOf, fxParts, rolled } from '../src/events';
 
 /** Put every living hero on its own rune, as players do before the fight. */
 const placeAll = (g: Game) => g.alive().forEach((h, k) => g.movePad(h, k));
@@ -464,6 +465,114 @@ describe('run map', () => {
   });
 });
 
+describe('map events', () => {
+  it('gives every event a scene and two to four choices, a toss-up always with its bad side', () => {
+    expect(EVENTS.length).toBeGreaterThanOrEqual(8);
+    expect(new Set(EVENTS.map(e => e.key)).size).toBe(EVENTS.length);
+    for (const e of EVENTS) {
+      expect(e.txt.length).toBeGreaterThan(40);
+      expect(e.choices.length).toBeGreaterThanOrEqual(2);
+      expect(e.choices.length).toBeLessThanOrEqual(4);
+      for (const c of e.choices) {
+        expect(c.win.txt.length).toBeGreaterThan(10);
+        if (c.odds) expect(c.lose?.txt.length).toBeGreaterThan(10);
+      }
+    }
+    // there is something to win and something to lose
+    const all = EVENTS.flatMap(e => e.choices.flatMap(c => [c.win, c.lose].filter(o => o).flatMap(o => fxParts(o!.fx, false))));
+    expect(all.some(p => p.good) && all.some(p => !p.good)).toBe(true);
+  });
+
+  it('shows a run every event once before any comes back, the same on every screen', () => {
+    const seen: string[] = [];
+    for (let k = 0; k < EVENTS.length; k++) seen.push(eventOf(1000 + k * 131, seen));
+    expect(new Set(seen).size).toBe(EVENTS.length);
+    expect(eventOf(77, ['bar'])).toBe(eventOf(77, ['bar']));
+    expect(EVENTS.map(e => e.key)).toContain(eventOf(5, seen));
+  });
+
+  it('rolls a toss-up from the room seed: the same each time, about as often as it says', () => {
+    const c = eventDef('bar').choices[0];
+    expect(rolled(c, 4242, 0)).toBe(rolled(c, 4242, 0));
+    let wins = 0;
+    for (let s = 0; s < 400; s++) if (rolled(c, s, 0)) wins++;
+    expect(wins).toBeGreaterThan(150);
+    expect(wins).toBeLessThan(250);
+    // a sure thing always comes out the same way
+    expect(rolled(eventDef('bar').choices[1], 9, 1)).toBe(true);
+  });
+
+  it('shuts a choice the party cannot pay for', () => {
+    const c = eventDef('doctor').choices[1];
+    expect(c.pay).toBe(4);
+    expect(canPick(c, { ore: 3 })).toBe(false);
+    expect(canPick(c, { ore: 4 })).toBe(true);
+  });
+
+  it('never kills with an event, keeps the fallen down unless it heals them, and keeps the ore at zero or more', () => {
+    const party = newParty(), bank = { ore: 2 };
+    party[0].hp = 3;
+    party[1].hp = 0;
+    applyFx([{ k: 'hp', n: -8 }, { k: 'ore', n: -5 }], party, bank, 1);
+    expect(party[0].hp).toBe(1);
+    expect(party[1].hp).toBe(0);
+    expect(party[2].hp).toBe(party[2].max - 8);
+    expect(bank.ore).toBe(0);
+    applyFx([{ k: 'hp', n: 30 }], party, bank, 1);
+    expect(party[1].hp).toBe(0);
+    expect(party[2].hp).toBe(party[2].max);
+    applyFx([{ k: 'heal' }], party, bank, 1);
+    expect(party.every(h => h.hp === h.max)).toBe(true);
+  });
+
+  it('moves the top of health and the health under it together', () => {
+    const party = newParty([2]), h = party[0], top = h.max;
+    applyFx([{ k: 'max', n: 4 }], party, { ore: 0 }, 1);
+    expect([h.max, h.hp]).toEqual([top + 4, top + 4]);
+    applyFx([{ k: 'max', n: -6 }], party, { ore: 0 }, 1);
+    expect([h.max, h.hp]).toEqual([top - 2, top - 2]);
+  });
+
+  it('hands out a free level or a disc only while there is one to have', () => {
+    const party = newParty([0]), h = party[0];
+    applyFx([{ k: 'up', stat: 'm' }], party, { ore: 0 }, 1);
+    expect(h.up.m).toBe(1);
+    h.up = { m: UP_COST.length, pw: UP_COST.length, e: 0 };
+    applyFx([{ k: 'up' }], party, { ore: 0 }, 7);
+    expect(h.up).toEqual({ m: UP_COST.length, pw: UP_COST.length, e: 1 });
+    applyFx([{ k: 'up', stat: 'm' }], party, { ore: 0 }, 7);
+    expect(h.up.m).toBe(UP_COST.length);
+    h.discs = HAND_MAX - 1;
+    applyFx([{ k: 'disc' }, { k: 'disc' }], party, { ore: 0 }, 1);
+    expect(h.discs).toBe(HAND_MAX);
+  });
+
+  it('leaves its shield and its curse for the next fight only', () => {
+    const g = new Game();
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    const plain = g.S.mobs.map(m => m.dmg);
+    applyFx([{ k: 'shield', n: 6 }, { k: 'rage', n: 1 }], g.party, g.bank, 1);
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    expect(g.party.map(h => h.shield)).toEqual([6, 6, 6]);
+    expect(g.S.mobs.map(m => m.dmg)).toEqual(plain.map(d => d + 1));
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    expect(g.party.map(h => h.shield)).toEqual([0, 0, 0]);
+    expect(g.S.mobs.map(m => m.dmg)).toEqual(plain);
+  });
+
+  it('says what a choice does for a lone hero or for each hero of a party', () => {
+    expect(fxParts([{ k: 'hp', n: -5 }], true)).toEqual([{ t: '−5 HP', good: false }]);
+    expect(fxParts([{ k: 'hp', n: 10 }], false)).toEqual([{ t: '+10 HP каждому', good: true }]);
+    expect(fxParts([{ k: 'ore', n: 8 }], false)).toEqual([{ t: '+8 руды', good: true }]);
+  });
+
+  it('takes an event choice online only once everyone here points at the same one', () => {
+    expect(agreed<number>({ 0: 0 }, [0, 2])).toBeNull();
+    expect(agreed<number>({ 0: 0, 2: 1 }, [0, 2])).toBeNull();
+    expect(agreed<number>({ 0: 0, 2: 0 }, [0, 2])).toBe(0);
+  });
+});
+
 describe('placement and discs', () => {
   const fresh = () => { const g = new Game(); g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' }); return g; };
 
@@ -567,11 +676,8 @@ describe('placement and discs', () => {
     g.loadRoom({ seed: 3, depth: 2, floor: 0, type: 'fight' });
     expect(sparks()).toEqual([0, 0, 0]);
     expect(g.bank.ore).toBe(5);
-    // the altar of sparks is one of the events; find a seed that rolls it
-    let seed = 0;
-    while (!restRoom('event', newParty(), newBank(), seed).startsWith('Алтарь')) seed++;
-    expect(restRoom('event', newParty([2]), newBank(), seed)).toBe(`Алтарь искр: следующий бой герой начнёт с полным запасом искр (${AB_COST}).`);
-    expect(restRoom('event', g.party, g.bank, seed)).toBe(`Алтарь искр: следующий бой каждый герой начнёт с полным запасом искр (${AB_COST}).`);
+    // the disco god's altar: a dance gives full sparks in the next fight, not this one
+    applyFx(eventDef('altar').choices[0].win.fx, g.party, g.bank, 1);
     expect(sparks()).toEqual([0, 0, 0]);
     g.loadRoom({ seed: 4, depth: 3, floor: 0, type: 'fight' });
     expect(sparks()).toEqual([AB_COST, AB_COST, AB_COST]);
