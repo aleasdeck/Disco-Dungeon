@@ -43,11 +43,19 @@ function icon(g: SVGGElement, type: RoomType, x: number, y: number) {
 /** Map size in SVG units: tall, so a phone shows the whole floor without scrolling. */
 const W = 320, H = 560;
 
+/** Online: each player's token on the room they point at, and a line on how the vote stands. */
+export interface MapVotes {
+  pips: Record<string, { col: string; name: string }[]>;
+  /** The room this player points at. */
+  mine: string | null;
+  note: string;
+}
+
 export class MapView {
   info = '';
   onChoose: (id: string) => void = () => {};
 
-  render(run: Run, canChoose: boolean) {
+  render(run: Run, canChoose: boolean, votes?: MapVotes) {
     const f = run.floor, layers = run.floors[f];
     $('mapFloor').innerHTML = `Этаж ${f + 1} <span>${BIOMES[f].name}</span>`;
     const svg = $('map');
@@ -71,7 +79,7 @@ export class MapView {
     for (const n of layers.flat()) {
       const [x, y] = pos[n.id], t = ROOM_TYPES[n.type], g = document.createElementNS(NS, 'g');
       const isR = reach.includes(n.id), isV = path.includes(n.id), isCur = path[path.length - 1] === n.id;
-      g.setAttribute('class', 'mnode' + (isR ? ' reach' : '') + (isV ? ' visited' : '') + (isCur ? ' cur' : ''));
+      g.setAttribute('class', 'mnode' + (isR ? ' reach' : '') + (isV ? ' visited' : '') + (isCur ? ' cur' : '') + (isR && votes?.mine === n.id ? ' mine' : ''));
       const boss = n.type === 'boss';
       const halo = document.createElementNS(NS, 'circle');
       halo.setAttribute('cx', String(x)); halo.setAttribute('cy', String(y)); halo.setAttribute('r', boss ? '30' : '25'); halo.setAttribute('class', 'halo');
@@ -84,6 +92,22 @@ export class MapView {
       lb.setAttribute('x', String(x)); lb.setAttribute('y', String(y + (boss ? 38 : 33))); lb.setAttribute('class', 'mlabel');
       lb.textContent = t.name;
       g.appendChild(lb);
+      // the players' tokens sit on the room's top rim, in their heroes' colours
+      const ps = votes?.pips[n.id] ?? [];
+      ps.forEach((p, k) => {
+        const px = x + (k - (ps.length - 1) / 2) * 19, py = y - (boss ? 24 : 19) - 3;
+        const pg = document.createElementNS(NS, 'g');
+        pg.setAttribute('class', 'pip');
+        const tt = document.createElementNS(NS, 'title');
+        tt.textContent = p.name;
+        const pc = document.createElementNS(NS, 'circle');
+        pc.setAttribute('cx', String(px)); pc.setAttribute('cy', String(py)); pc.setAttribute('r', '9'); pc.setAttribute('fill', p.col);
+        const pt = document.createElementNS(NS, 'text');
+        pt.setAttribute('x', String(px)); pt.setAttribute('y', String(py + 4.5));
+        pt.textContent = p.name.slice(0, 1).toUpperCase();
+        pg.append(tt, pc, pt);
+        g.appendChild(pg);
+      });
       if (isR) {
         g.setAttribute('tabindex', '0');
         g.setAttribute('role', 'button');
@@ -96,5 +120,7 @@ export class MapView {
     // only the result of a rest room shows here; the map itself needs no explaining
     $('mapInfo').innerHTML = this.info;
     $('mapInfo').hidden = !this.info;
+    $('mapVotes').textContent = votes?.note ?? '';
+    $('mapVotes').hidden = !votes;
   }
 }
