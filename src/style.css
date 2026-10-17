@@ -544,6 +544,9 @@ i.ico { display: inline-block; font-style: normal; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .panel-btns { display: flex; gap: 8px; }
 .end-panel, .help-panel { width: min(460px, 100%); text-align: center; }
+/* the HUD's pulses stand still under a full-screen menu or map: every step of one is a frame for the phone to make,
+   and under a blurred backdrop the whole screen is blurred again for it */
+.covered :is(.hud-top, .corner, .turn-btn, .boss-bar), .covered :is(.hud-top, .corner, .turn-btn, .boss-bar) * { animation-play-state: paused !important; }
 /* full screens over the live room: no backdrop blur, which would be recomputed every frame */
 .overlay.solid { background: rgba(14, 10, 7, 0.86); backdrop-filter: none; }
 .muted { color: var(--muted, #b2a38c); font-size: 13px; }
