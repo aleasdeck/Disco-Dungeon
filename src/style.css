@@ -850,7 +850,6 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .statuses .st:has(> img) { background: none; clip-path: none; padding: 0; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
 .mob-card .st:has(> img) { filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5)); }
 .map-info:not([hidden]) { display: flex; align-items: center; gap: 10px; }
-.map-info > i[data-art] { width: 46px; height: 46px; transform: rotate(-5deg); }
 #map .mnode .hit { fill: transparent; }
 #map .mart { pointer-events: none; transform-box: fill-box; transform-origin: 50% 60%; transition: transform 0.15s; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)); }
 #map .mnode.art.reach .mart { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 3px var(--gold)) drop-shadow(0 0 8px var(--gold)); }
@@ -967,4 +966,30 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
   .ev-panel h2 { font-size: 24px; }
   .ev-text { font-size: 17px; }
   .ev-fx { font-size: 16px; }
+}
+
+/* ---------- camp window: the event window's dress, with a cardboard sticker on each slab of what a hero can do by the fire */
+.camp-opt:has(> i[data-art]:not(:empty)) { padding-left: 72px; }
+.camp-opt > i[data-art] { position: absolute; left: 12px; top: 50%; width: 52px; height: 52px; transform: translateY(-50%) rotate(-6deg); filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45)); }
+.camp-opt:has(> .camp-mate) { padding-right: 132px; }
+/* the teammate a bandage goes to: their face and health on the slab's right end */
+.camp-mate { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 6px; width: 112px; }
+.camp-mate img { width: 34px; height: 34px; flex: none; clip-path: var(--cut-face); background: var(--c); }
+.camp-party:not([hidden]) { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.camp-who { display: flex; align-items: center; gap: 6px; font: 17px/1.2 var(--hand); color: var(--muted); }
+.camp-who img { width: 30px; height: 30px; clip-path: var(--cut-face); background: var(--c); }
+.camp-who b { font: 600 15px Oswald, sans-serif; color: var(--text); }
+.camp-who.dead img { filter: grayscale(1) brightness(0.6); }
+#campLeave { justify-self: end; align-self: flex-end; margin-top: 4px; }
+@media (max-height: 520px) and (orientation: landscape) {
+  .art-panel #campScreen .ev-panel { padding: 20px 24px; }
+  .camp-opt:has(> i[data-art]:not(:empty)) { padding-left: 56px; }
+  .camp-opt > i[data-art] { left: 8px; width: 40px; height: 40px; }
+  .camp-who { font-size: 15px; }
+}
+@media (orientation: portrait) and (max-width: 700px) {
+  #campScreen { align-items: start; }
+  .camp-opt:has(> .camp-mate) { padding-right: 96px; }
+  .camp-mate { width: 80px; right: 10px; }
+  .camp-mate img { width: 28px; height: 28px; }
 }

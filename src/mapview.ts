@@ -3,7 +3,7 @@
 import { BIOMES, MOBS, ROOM_TYPES, type RoomType } from './data';
 import type { HeroState } from './game';
 import { uiArt } from './assets';
-import { fillIcons, icon as ico } from './icons';
+import { icon as ico } from './icons';
 import { CASTS } from './room';
 import { FLOORS, reachable, type Run } from './run';
 import { faceUrl, mobFace } from './ui';
@@ -73,7 +73,6 @@ const el = <K extends keyof SVGElementTagNameMap>(parent: Element, tag: K, at: R
 };
 
 export class MapView {
-  info = '';
   onChoose: (id: string) => void = () => {};
 
   render(run: Run, canChoose: boolean, party: MapParty, votes?: MapVotes) {
@@ -168,10 +167,6 @@ export class MapView {
       el(tok, 'circle', { cx: tx, cy: ty, r: 15, fill: h.def.col, class: 'tk-rim' + (h === party.me ? ' me' : '') });
       el(tok, 'image', { href: faceUrl(h), x: tx - 13, y: ty - 13, width: 26, height: 26, 'clip-path': `url(#${id})`, opacity: h.hp > 0 ? 1 : 0.4 });
     });
-    // only the result of a rest room shows here; the map itself needs no explaining
-    $('mapInfo').innerHTML = this.info;
-    $('mapInfo').hidden = !this.info;
-    fillIcons($('mapInfo'));
     $('mapVotes').textContent = votes?.note ?? '';
     $('mapVotes').hidden = !votes;
   }

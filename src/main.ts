@@ -1,5 +1,5 @@
 import './style.css';
-import { COMBAT_ROOMS, HEROES, ROOM_TYPES, WALL_H } from './data';
+import { COMBAT_ROOMS, FORGE_ORE, HEROES, WALL_H } from './data';
 import { Camera } from './camera';
 import { Game, newBank, newParty } from './game';
 import { Net, type Player } from './net';
@@ -15,9 +15,11 @@ import { loadAll } from './assets';
 import { fillIcons } from './icons';
 import { sound, type Track } from './sound';
 import { clearSeat, loadHost, loadSeat, newKey, saveHost, saveSeat, type Ending, type HostSave } from './resume';
-import { FLOORS, LAYERS, agreed, depthOf, newRun, nodeById, reachable, restRoom, type Run, type Votes } from './run';
-import { applyFx, canPick, eventDef, eventOf, fxParts, rolled, type EventState } from './events';
+import { FLOORS, LAYERS, agreed, depthOf, newRun, nodeById, reachable, type Run, type Votes } from './run';
+import { applyFx, canPick, eventDef, eventOf, rolled, type EventState } from './events';
 import { EventView, type EventVotes } from './eventview';
+import { campDo, campLeave, type CampPick, type CampState } from './camp';
+import { CampView } from './campview';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -28,6 +30,7 @@ const game = new Game();
 const hud = new Hud(game);
 const mapView = new MapView();
 const evView = new EventView();
+const campView = new CampView();
 const scene = new SceneRenderer();
 
 let run: Run = newRun();
@@ -41,6 +44,12 @@ let voters: number[] = [];
 let ev: EventState | null = null;
 /** The seed of the event whose outcome this player has read and closed: the window stays shut for it. */
 let evShut = -1;
+/** The camp the party sits at; the map stays open behind it, and the party walks on once everyone voted for a room. */
+let camp: CampState | null = null;
+/** The seed of the camp this player has left for the map: its window stays shut. */
+let campShut = -1;
+/** Client: what this player asked the host to do at the camp, while the answer is on its way. */
+let campAsked: CampPick['k'] | undefined;
 let view = { w: 0, h: 0, dpr: 1 };
 
 // ------------------------------------------------------------ camera
@@ -198,7 +207,8 @@ function startRun(picks?: number[]) {
   votes = {};
   ev = null;
   showEvent();
-  mapView.info = '';
+  camp = null;
+  showCamp();
   // a quiet room behind the map so the screen is never empty
   game.loadRoom({ seed: run.seed, depth: 1, floor: 0, type: 'fight' });
   controls.fit();
@@ -227,18 +237,21 @@ function choose(id: string) {
   const f = run.floor, n = nodeById(run, f, id), depth = depthOf(f, n);
   run.path[f].push(id);
   votes = {};
-  // the party walks on, so the blacksmith's shop closes
+  // the party walks on, so the blacksmith's shop closes, and whoever did nothing at the camp has rested by the fire
   game.forge = 0;
+  if (camp) {
+    campLeave(camp, game.party, game.bank);
+    camp = null;
+    showCamp();
+  }
   if (COMBAT_ROOMS.includes(n.type)) {
     choosing = false;
-    mapView.info = '';
     game.loadRoom({ seed: run.seed + depth * 97 + n.i, depth, floor: f, type: n.type });
     controls.fit();
     showMap(false);
   } else if (n.type === 'forge') {
-    // the blacksmith's: everyone upgrades their own discs and goes back to the map when done
-    restRoom(n.type, game.party, game.bank);
-    mapView.info = '';
+    // the blacksmith's gives the party its ore; everyone upgrades their own discs and goes back to the map when done
+    game.bank.ore += FORGE_ORE;
     game.forge = depth;
     showMap(false);
     game.onChange();
@@ -248,16 +261,52 @@ function choose(id: string) {
     (run.seen ??= []).push(key);
     ev = { key, seed, votes: {} };
     choosing = false;
-    mapView.info = '';
     showMap(false);
     showEvent();
   } else {
-    // the room's picture rides along in the shared text: every screen fills it in from its own art
-    mapView.info = `<i data-art="room_${n.type}" aria-hidden="true"></i><span><b>${ROOM_TYPES[n.type].name}.</b> ${restRoom(n.type, game.party, game.bank)}</span>`;
-    hud.buildAllies();
-    hud.refresh();
-    showMap(true);
+    // the camp: every hero does one thing by the fire in its own window; the map waits behind it for the vote
+    camp = { seed: run.seed + depth * 131, did: {} };
+    showMap(false);
+    showCamp();
   }
+  shareMap();
+}
+
+/** Show the camp window while the party sits at a camp, until this player leaves it for the map. */
+function showCamp() {
+  const open = !!camp && campShut !== camp.seed;
+  $('campScreen').hidden = !open;
+  if (!open) return;
+  const mine = game.online ? myHero() : game.party[0]?.i ?? null, me = game.party.find(h => h.i === mine) ?? null;
+  campView.render(camp!, me, game.party, game.online ? h => players.find(p => p.hero === h.i)?.name ?? h.def.name : undefined, campAsked);
+}
+
+// alone the pick is done at once; online the host does it and tells everyone
+campView.onPick = pick => {
+  if (!camp) return;
+  const me = game.online ? myHero() : game.party[0]?.i ?? null;
+  if (me === null) return;
+  if (mode === 'client') {
+    campAsked = pick.k;
+    showCamp();
+    net.send({ t: 'camp', pick });
+  } else campPick(me, pick);
+};
+campView.onLeave = () => {
+  if (camp) campShut = camp.seed;
+  showCamp();
+  showMap(true);
+};
+
+/** A hero does one thing by the fire; the host (or a lone player) does it and shows everyone what came of it. */
+function campPick(hero: number, pick: CampPick) {
+  const h = game.party.find(o => o.i === hero);
+  if (camp && h && campDo(camp, h, pick, game.party, game.bank)) {
+    hud.buildAllies();
+    game.onChange();
+    showCamp();
+  }
+  // a pick that came too late (a teammate got healed meanwhile) is answered too, so its player can pick again
   shareMap();
 }
 
@@ -307,9 +356,6 @@ function settleEvent(opt: number) {
   ev.done = { opt, won };
   choosing = true;
   votes = {};
-  // what came of it stays on the map too, next to the event's sign
-  const what = fxParts(c.pay ? [{ k: 'ore', n: -c.pay }, ...out.fx] : out.fx, game.party.length === 1).map(p => p.t).join(', ');
-  mapView.info = `<i data-art="room_event" aria-hidden="true"></i><span><b>${eventDef(ev.key).title}.</b> ${what || 'Ушли ни с чем.'}</span>`;
   hud.buildAllies();
   game.onChange();
   showEvent();
@@ -366,7 +412,7 @@ function settle() {
 /** Host: tell everyone where the party stands on the map, and show it on the host's own map too. */
 function shareMap() {
   if (mode !== 'host' || !started) return;
-  const m: MapState = { run, choosing, info: mapView.info, votes, voters: atTable(), ev };
+  const m: MapState = { run, choosing, votes, voters: atTable(), ev, camp };
   net.broadcast({ t: 'map', m });
   if (!$('mapScreen').hidden) showMap(true);
 }
@@ -512,7 +558,7 @@ function leaveOnline() {
   players = [];
   started = false;
   wait('');
-  if (mode !== 'solo') { setOnline('menu'); ev = null; showEvent(); }
+  if (mode !== 'solo') { setOnline('menu'); ev = null; showEvent(); camp = null; showCamp(); }
 }
 
 function lobbyView() {
@@ -703,6 +749,7 @@ net.onMsg = (from, m) => {
     else if (m.t === 'pick') pick(from, m.hero);
     else if (m.t === 'vote' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) vote(h, m.id); }
     else if (m.t === 'evote' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) evVote(h, m.opt); }
+    else if (m.t === 'camp' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) campPick(h, m.pick); }
     else if (m.t === 'act' && started && ownerOf(m.a.h) === from) game.perform(m.a);
     return;
   }
@@ -720,10 +767,13 @@ net.onMsg = (from, m) => {
     const went = choosing && !m.m.choosing;
     ({ run, choosing, votes, voters } = m.m);
     ev = m.m.ev ?? null;
-    mapView.info = m.m.info;
+    camp = m.m.camp ?? null;
+    campAsked = undefined;
     showEvent();
-    // the party agreed on a fight and walks in; otherwise the map shows the vote as it stands
-    if (went) { hideEnd(); showMap(false); }
+    showCamp();
+    // the party agreed on a fight and walks in; at the camp its window stands in for the map until this player leaves
+    // it; otherwise the map shows the vote as it stands
+    if (went || !$('campScreen').hidden) { if (went) hideEnd(); showMap(false); }
     else if ((choosing && $('roomEnd').hidden) || !$('mapScreen').hidden) showMap(true);
   } else if (m.t === 'end') showEnd(m.e);
   else if (m.t === 'snap') {
@@ -733,10 +783,12 @@ net.onMsg = (from, m) => {
     if (ch.party) hud.buildAllies();
     if (ch.room) controls.fit();
     hud.refresh();
+    // health and ore by the fire come with the game state: the camp window and the map's party row show them
+    if (camp) { showCamp(); if (!$('mapScreen').hidden) showMap(true); }
     // the party walked into the blacksmith's: the shop takes the map's place
     if (!shop && hud.atForge) showMap(false);
   } else if (m.t === 'screen') screen(m.title, m.text, m.win, m.lose);
-  else if (m.t === 'lobbyBack') { started = false; ev = null; showEvent(); wait(''); hideEnd(); showMap(false); lobbyView(); show('lobby'); }
+  else if (m.t === 'lobbyBack') { started = false; ev = null; showEvent(); camp = null; showCamp(); wait(''); hideEnd(); showMap(false); lobbyView(); show('lobby'); }
 };
 
 /** Host: send the game state to everyone, often while things move, and whenever something changed. */
@@ -757,7 +809,7 @@ function keepSeat(now: number) {
   if (mode !== 'host') return;
   saveSeat({ code: net.code, key: myKey, host: true });
   saveHost({
-    code: net.code, players, started, run, choosing, mapInfo: mapView.info, votes, ev, ending, screen: lastScreen,
+    code: net.code, players, started, run, choosing, votes, ev, camp, ending, screen: lastScreen,
     snap: started && game.S ? snapshot(game) : null,
   });
 }
@@ -777,7 +829,7 @@ async function reopen(code: string) {
     choosing = s.choosing;
     votes = s.votes ?? {};
     ev = s.ev ?? null;
-    mapView.info = s.mapInfo;
+    camp = s.camp ?? null;
     applySnapshot(game, s.snap);
     setOnline('host');
     game.pickActiveParty();
@@ -802,6 +854,7 @@ async function reopen(code: string) {
   // players get a moment to find their seats again; whoever is still missing after it stops holding the others up
   setTimeout(seatAway, 15_000);
   if (s.ending) showEnd(s.ending);
+  else if (camp) showCamp();
   else if (choosing) showMap(true);
   else if (ev) showEvent();
   else if (!game.liveMobs().length || !game.alive().length) game.onRoomEnd(game.alive().length > 0);
@@ -933,4 +986,4 @@ $('waitLeave').addEventListener('click', () => { leaveOnline(); hideEnd(); showM
 requestAnimationFrame(frame);
 
 // handle for automated checks
-Object.assign(window, { __dd: { game, cam, hud, scene, ctx, net, sound, choose, get view() { return view; }, get run() { return run; }, get mode() { return mode; }, get ev() { return ev; } } });
+Object.assign(window, { __dd: { game, cam, hud, scene, ctx, net, sound, choose, get view() { return view; }, get run() { return run; }, get mode() { return mode; }, get ev() { return ev; }, get camp() { return camp; } } });

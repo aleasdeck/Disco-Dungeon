@@ -3,6 +3,7 @@
 // straight over WebRTC through the PeerJS broker, or through public MQTT brokers when WebRTC can't get
 // through, moving over to a direct link once the relay has helped set one up.
 
+import type { CampPick } from '../camp';
 import type { Action } from '../game';
 import type { Ending } from '../resume';
 import type { MapState, Snapshot } from '../sync';
@@ -28,6 +29,8 @@ export type Msg =
   | { t: 'vote'; id: string }
   /** A player points at one of the event's choices, by its place in the list. */
   | { t: 'evote'; opt: number }
+  /** A player says what their hero does by the camp's fire. */
+  | { t: 'camp'; pick: CampPick }
   /** A cleared room's result: each player reads it and walks over to the map on their own. */
   | { t: 'end'; e: Ending }
   /** A screen the players wait on until the host acts (the end of the run); an empty title hides it. */
