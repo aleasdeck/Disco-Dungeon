@@ -1,13 +1,13 @@
 // Draws one frame of a room: walls, floor, obstacles, resources, discs and miniatures.
 // Everything is drawn in iso space through the camera, so zoom and rotation are free.
 
-import { HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize } from '../data';
+import { WALL_WORDS, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize } from '../data';
 import type { Camera, Vec } from '../camera';
 import { type Disc, type Game, type HeroState } from '../game';
 import { cellAt, floorAt, hazKey, isFloor, type Block, type Decal, type Edge, type Mob, type ResNode } from '../room';
 import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure } from './figures';
 import { circ, ell, fs, mix, pth, rr, type Ctx, type Pt } from './util';
-import { envArt } from '../assets';
+import { GRAFFITI_FONTS, envArt } from '../assets';
 import { settings } from '../settings';
 
 export interface Aim { hero: HeroState; dx: number; dy: number }
@@ -22,6 +22,18 @@ const env = (k: string) => envArt.get(k);
 
 /** Cartoon look: silhouette and detail ink widths, in iso units. */
 const OL = 2.1, DL = 1.1;
+/** Ink on stone blocks: thinner than the room's silhouette, so a block doesn't look cut out of the floor. */
+const BL = 1.2;
+/** Whether the graffiti fonts have loaded; words drawn before that use a fallback face and are drawn again. */
+const fontsReady = () => typeof document === 'undefined' || !document.fonts || GRAFFITI_FONTS.every(f => document.fonts.check(f, 'WЖ'));
+/** At most this many gags on the walls of one room, so each stays a find rather than wallpaper. */
+const MAX_GAGS = 4;
+/** Chalk white, for words and doodles on the walls. */
+const CHALK = '#efeadf';
+/** A gag on a wall line: world coordinate of its middle along the wall, height of its middle, height, and what it shows. */
+interface WallGag { u: number; h: number; size: number; doodle?: string; word?: string; font?: string; tilt: number; flip?: boolean }
+/** The four sides of a cell: neighbour offset, then the side's two corners in cell units. */
+const SIDES: [number, number, number, number, number, number][] = [[0, -1, 0, 0, 1, 0], [1, 0, 1, 0, 1, 1], [0, 1, 0, 1, 1, 1], [-1, 0, 0, 0, 0, 1]];
 /** Stable pseudo-random 0..1 from integers, so stones and cracks stay put between frames. */
 const hr = (a: number, b = 0, d = 0) => {
   let h = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263) ^ Math.imul(d | 0, 1103515245);
@@ -41,15 +53,81 @@ export class SceneRenderer {
   private P = (x: number, y: number, h = 0): Pt => this.cam.iso(x, y, h);
   private get bk() { return this.g.S.biome.art; }
 
-  /** Lay a picture flat on the floor rectangle (x0, y0)-(x1, y1); rot picks which corner its top-left goes to. */
-  private imgOnRect(im: HTMLImageElement, x0: number, y0: number, x1: number, y1: number, rot = 0, h = 0) {
+  /**
+   * Lay a picture, or the part `src` (x, y, w, h in its pixels) of it, flat on the rectangle (x0, y0)-(x1, y1) at height h;
+   * rot picks which corner its top-left goes to.
+   */
+  private imgOnRect(im: HTMLImageElement | HTMLCanvasElement, x0: number, y0: number, x1: number, y1: number, rot = 0, h = 0,
+    src: [number, number, number, number] = [0, 0, im.width, im.height]) {
     const cs: [number, number][] = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
     const o = this.P(...cs[rot % 4], h), a = this.P(...cs[(rot + 1) % 4], h), d = this.P(...cs[(rot + 3) % 4], h);
-    const c = this.c;
+    const c = this.c, [sx, sy, sw, sh] = src;
     c.save();
-    c.transform((a[0] - o[0]) / im.width, (a[1] - o[1]) / im.width, (d[0] - o[0]) / im.height, (d[1] - o[1]) / im.height, o[0], o[1]);
-    c.drawImage(im, 0, 0);
+    c.transform((a[0] - o[0]) / sw, (a[1] - o[1]) / sw, (d[0] - o[0]) / sh, (d[1] - o[1]) / sh, o[0], o[1]);
+    c.drawImage(im, sx, sy, sw, sh, 0, 0, sw, sh);
     c.restore();
+  }
+
+  private mirrored: { src: HTMLImageElement; img: HTMLCanvasElement } | null = null;
+  /** The lava picture beside three mirrored copies of itself, so it tiles without seams; a quarter of it across per cell. */
+  private lavaTex() {
+    const im = env('lava');
+    if (!im) return null;
+    if (this.mirrored?.src !== im) {
+      const w = im.width, h = im.height, img = document.createElement('canvas');
+      img.width = w * 2;
+      img.height = h * 2;
+      const x = img.getContext('2d')!;
+      for (const [fx, fy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+        x.setTransform(fx, 0, 0, fy, fx < 0 ? 2 * w : 0, fy < 0 ? 2 * h : 0);
+        x.drawImage(im, 0, 0);
+      }
+      this.mirrored = { src: im, img };
+    }
+    return this.mirrored.img;
+  }
+
+  private plain = new Map<HTMLImageElement, string>();
+  /** Average colour of a cap picture just inside its rim, away from the ornament in the middle. */
+  private capPlain(cap: HTMLImageElement) {
+    let col = this.plain.get(cap);
+    if (!col) {
+      const n = 16, cv = document.createElement('canvas');
+      cv.width = cv.height = n;
+      const x = cv.getContext('2d', { willReadFrequently: true })!;
+      x.drawImage(cap, cap.width * 0.22, cap.height * 0.22, cap.width * 0.12, cap.height * 0.12, 0, 0, n, n);
+      const d = x.getImageData(0, 0, n, n).data, sum = [0, 0, 0];
+      for (let k = 0; k < d.length; k += 4) for (let ch = 0; ch < 3; ch++) sum[ch] += d[k + ch];
+      col = `rgb(${sum.map(v => Math.round(v / (n * n))).join(',')})`;
+      this.plain.set(cap, col);
+    }
+    return col;
+  }
+
+  private blockSet: { S: object; cells: Set<string>; deco: Set<string> } | null = null;
+  /** Cells taken by stone blocks (icicles stand alone), and the one cell per group of touching blocks that carries the cap's ornament. */
+  private stoneBlocks() {
+    const S = this.g.S;
+    if (this.blockSet?.S === S) return this.blockSet;
+    const cells = new Set(S.blocks.filter(b => !b.ice).map(b => hazKey(b.x0 / TILE, b.y0 / TILE))), deco = new Set<string>(), seen = new Set<string>();
+    for (const k of cells) {
+      if (seen.has(k)) continue;
+      const group: [number, number][] = [], todo = [k];
+      seen.add(k);
+      while (todo.length) {
+        const [a, d] = todo.pop()!.split(',').map(Number);
+        group.push([a, d]);
+        for (const [da, dd] of SIDES) {
+          const n = hazKey(a + da, d + dd);
+          if (cells.has(n) && !seen.has(n)) { seen.add(n); todo.push(n); }
+        }
+      }
+      const ca = group.reduce((t, g) => t + g[0], 0) / group.length, cd = group.reduce((t, g) => t + g[1], 0) / group.length;
+      const mid = group.reduce((m, g) => (Math.hypot(g[0] - ca, g[1] - cd) < Math.hypot(m[0] - ca, m[1] - cd) ? g : m));
+      deco.add(hazKey(mid[0], mid[1]));
+    }
+    this.blockSet = { S, cells, deco };
+    return this.blockSet;
   }
 
   /** Stand a cut-out picture upright with its bottom centre at screen point (x, y), w iso units wide. */
@@ -62,11 +140,149 @@ export class SceneRenderer {
 
   /** A picture flat on a wall: w world units wide, its top edge at height top, centred on world coordinate um along the wall. */
   private onWall(im: HTMLImageElement, at: (u: number, h: number) => Pt, um: number, top: number, w: number) {
-    const o = at(um - w / 2, top), ex = at(um - w / 2 + 1, top), sc = w / im.width, c = this.c;
+    const [m, d] = this.wallFrame(at, um, top), sc = w / im.width, c = this.c;
     c.save();
-    c.transform((ex[0] - o[0]) * sc, (ex[1] - o[1]) * sc, 0, sc, o[0], o[1]);
+    c.transform(d[0] * sc, d[1] * sc, 0, sc, m[0] - (d[0] * w) / 2, m[1] - (d[1] * w) / 2);
     c.drawImage(im, 0, 0);
     c.restore();
+  }
+
+  /** Screen point of world coordinate um along a wall at height h, and the step along the wall that reads left to right on screen. */
+  private wallFrame(at: (u: number, h: number) => Pt, um: number, h: number): [Pt, Pt] {
+    const o = at(um, h), e = at(um + 1, h), d: Pt = [e[0] - o[0], e[1] - o[1]];
+    return [o, d[0] < 0 ? [-d[0], -d[1]] : d];
+  }
+
+  private gagSet: { S: object; stamp: string; lines: Map<string, WallGag[]> } | null = null;
+  /**
+   * A few big gags along the straight runs of wall, laid out once per room: chalk doodles and scratched words, each up to
+   * about two and a half tiles wide, with long bare stretches between them. Keyed by the run's line, so every piece of
+   * wall draws its slice.
+   */
+  private wallGags() {
+    // laid out again once the doodles and the fonts arrive, since both change how wide a gag is
+    const S = this.g.S, stamp = `${envArt.size}:${fontsReady()}`;
+    if (this.gagSet?.S === S && this.gagSet.stamp === stamp) return this.gagSet.lines;
+    const runs = new Map<string, [number, number][]>(), hung = new Map<string, number[]>();
+    for (const e of S.edges) {
+      const along = e.nx !== 0, u0 = Math.min(along ? e.a[1] : e.a[0], along ? e.b[1] : e.b[0]), k = along ? e.j : e.i;
+      const key = `${along ? 'x' : 'y'}${along ? e.a[0] : e.a[1]}:${e.nx},${e.ny}`;
+      if (!runs.has(key)) { runs.set(key, []); hung.set(key, []); }
+      runs.get(key)!.push([u0, u0 + TILE]);
+      // the same rules drawWall uses for where torches and banners hang
+      if (k % 4 === 2 || (k % 4 === 0 && (e.i + e.j) % 3 === 0)) hung.get(key)!.push(u0 + TILE / 2);
+    }
+    // every chalk doodle in the manifest and every word for this floor; each room picks its own few, none twice
+    const words = [...WALL_WORDS.all, ...(WALL_WORDS[this.bk] ?? [])], lines = new Map<string, WallGag[]>();
+    const doodles = [...envArt.keys()].filter(k => k.startsWith('doodle_')).sort(), used = new Set<string>();
+    const fresh = (list: string[], v: number) => {
+      for (let k = 0, i = Math.floor(v * list.length); k < list.length; k++) {
+        const pick = list[(i + k) % list.length];
+        if (!used.has(pick)) { used.add(pick); return pick; }
+      }
+      return undefined;
+    };
+    let seed = Math.imul(S.spec.seed, 31) + S.spec.depth * 7 + S.spec.floor, placed = 0;
+    for (const [key, spans] of runs) {
+      spans.sort((p, q) => p[0] - q[0]);
+      const gags: WallGag[] = [];
+      // walk each unbroken stretch of this line, leaving room at its ends
+      for (let k = 0; k < spans.length;) {
+        let end = spans[k][1];
+        const start = spans[k][0];
+        while (k + 1 < spans.length && spans[k + 1][0] <= end + 0.01) end = spans[++k][1];
+        k++;
+        for (let u = start + 4; u < end - 16 && placed < MAX_GAGS; seed++) {
+          const r = (n: number) => hr(seed, n, 97);
+          if (r(1) < 0.55) { u += 20 + r(2) * 20; continue; }
+          const doodle = doodles.length && r(3) < 0.5;
+          const g: WallGag = doodle
+            // doodles come in all sizes, turned and sometimes mirrored, as if different hands drew them
+            ? { u: 0, h: 14 + r(4) * 4, size: 12 + r(5) * 14, doodle: fresh(doodles, r(6)), tilt: (r(7) - 0.5) * 0.7, flip: r(8) < 0.4 }
+            : { u: 0, h: 14 + r(4) * 4, size: 7 + r(5) * 5, word: fresh(words, r(6)), font: GRAFFITI_FONTS[Math.floor(r(8) * GRAFFITI_FONTS.length)], tilt: (r(7) - 0.5) * 0.4 };
+          if (!g.doodle && !g.word) { u += 20; continue; }
+          const w = Math.min(end - u - 2, this.gagWidth(g));
+          if (w < 12) break;
+          // keep clear of torches and banners
+          const t = hung.get(key)!.find(c => c + 6 > u && c - 6 < u + w);
+          if (t !== undefined) { u = t + 6; continue; }
+          g.u = u + w / 2;
+          gags.push(g);
+          placed++;
+          u += w + 40 + r(9) * 24;
+        }
+      }
+      lines.set(key, gags);
+    }
+    this.gagSet = { S, stamp, lines };
+    return lines;
+  }
+
+  /** Width of a gag along the wall in world units, at its natural proportions. */
+  private gagWidth(g: WallGag) {
+    const im = g.doodle ? env(g.doodle) : this.chalkWord(g.word!, g.font!);
+    if (!im) return 0;
+    const lines = g.word ? g.word.split('\n').length : 1;
+    return Math.min(40, (im.width / im.height) * g.size * lines);
+  }
+
+  private words = new Map<string, HTMLCanvasElement>();
+  /** A word written in white chalk or scratched into the stone: re-traced a couple of times, with dry streaks knocked out. */
+  private chalkWord(text: string, font: string) {
+    const key = `${font}|${text}|${fontsReady()}`;
+    let cv = this.words.get(key);
+    if (cv) return cv;
+    const lines = text.split('\n'), px = 96, pad = 16, f = font.replace(/\d+px/, `${px}px`);
+    cv = document.createElement('canvas');
+    const x = cv.getContext('2d')!;
+    x.font = f;
+    cv.width = Math.ceil(Math.max(...lines.map(l => x.measureText(l).width))) + pad * 2;
+    cv.height = Math.ceil(lines.length * px * 0.95) + pad * 2;
+    x.font = f;
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.fillStyle = CHALK;
+    for (const [dx, dy, a] of [[0, 0, 1], [2.5, -1.5, 0.5], [-2, 2, 0.4]]) {
+      x.globalAlpha = a;
+      lines.forEach((l, n) => x.fillText(l, cv!.width / 2 + dx, pad + px * 0.95 * (n + 0.5) + dy));
+    }
+    x.globalAlpha = 1;
+    x.globalCompositeOperation = 'destination-out';
+    x.strokeStyle = 'rgba(0,0,0,.6)';
+    x.lineWidth = 2;
+    x.beginPath();
+    const n = Math.round((cv.width * cv.height) / 180);
+    for (let k = 0; k < n; k++) {
+      const sx = hr(k, text.length, 13) * cv.width, sy = hr(k, text.length, 17) * cv.height, len = 5 + hr(k, 3, 19) * 12;
+      x.moveTo(sx, sy);
+      x.lineTo(sx + len, sy - len * 0.45);
+    }
+    x.stroke();
+    this.words.set(key, cv);
+    return cv;
+  }
+
+  /** The slices of this line's gags that fall on the piece of wall from u0 to u1, clipped to its face. */
+  private wallGraffiti(e: Edge, face: Pt[], at: (u: number, h: number) => Pt, u0: number, u1: number) {
+    const along = e.nx !== 0, gags = this.wallGags().get(`${along ? 'x' : 'y'}${along ? e.a[0] : e.a[1]}:${e.nx},${e.ny}`);
+    if (!gags?.length) return;
+    const c = this.c;
+    let clipped = false;
+    for (const g of gags) {
+      const w = this.gagWidth(g);
+      if (!w || g.u + w / 2 < u0 || g.u - w / 2 > u1) continue;
+      const im = g.doodle ? env(g.doodle)! : this.chalkWord(g.word!, g.font!);
+      if (!clipped) { c.save(); pth(c, face); c.clip(); clipped = true; }
+      const [m, d] = this.wallFrame(at, g.u, g.h), h = (w * im.height) / im.width;
+      c.save();
+      c.transform(d[0], d[1], 0, 1, m[0], m[1]);
+      c.rotate(g.tilt);
+      if (g.flip) c.scale(-1, 1);
+      c.globalAlpha = g.word ? 0.9 : 0.85;
+      c.drawImage(im, -w / 2, -h / 2, w, h);
+      c.restore();
+    }
+    if (clipped) c.restore();
   }
 
   /** Brick texture on a vertical face, repeating along world coordinate u; the strip's height spans fullH (the face's own height unless given), top edge at the top of the face. */
@@ -202,6 +418,7 @@ export class SceneRenderer {
     const wt = env(`wall_${this.bk}`);
     if (wt) this.wallTex(wt, [A, Bp, Bt, At], at, u0, u0 + TILE, H, 0.06 + 0.2 * (0.5 + 0.5 * this.cam.sideways(-e.nx, -e.ny)));
     else this.stones([A, Bp, Bt, At], at, u0, u0 + TILE, H, base, line);
+    this.wallGraffiti(e, [A, Bp, Bt, At], at, u0, u0 + TILE);
     pth(c, [At, Bt, P(bx, by, H + 4), P(ax, ay, H + 4)]);
     c.fillStyle = B.cap;
     c.fill();
@@ -407,14 +624,19 @@ export class SceneRenderer {
       }
       c.stroke();
     }
+    // touching lava cells are one pool: one picture running across them, inked only along the pool's edge
+    const lava = B.haz === 'lava', lv = lava ? this.lavaTex() : null;
     for (const [i, j] of hazard) {
-      const x0 = i * TILE + gap, y0 = j * TILE + gap, x1 = (i + 1) * TILE - gap, y1 = (j + 1) * TILE - gap;
-      const q: Pt[] = [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)];
-      const lv = B.haz === 'lava' ? env('lava') : undefined;
-      if (lv) { this.imgOnRect(lv, x0, y0, x1, y1, Math.floor(hr(i, j, 51) * 4)); pth(c, q); c.strokeStyle = INK; c.lineWidth = 0.9; c.stroke(); continue; }
-      pth(c, q);
-      fs(c, B.haz === 'lava' ? '#ef6a24' : '#4a3f38', 0.9);
-      if (B.haz === 'lava') {
+      if (lava) {
+        const x0 = i * TILE, y0 = j * TILE, x1 = x0 + TILE, y1 = y0 + TILE;
+        if (lv) {
+          const cw = lv.width / 4, ch = lv.height / 4;
+          this.imgOnRect(lv, x0, y0, x1, y1, 0, 0, [(((i % 4) + 4) % 4) * cw, (((j % 4) + 4) % 4) * ch, cw, ch]);
+          continue;
+        }
+        pth(c, [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)]);
+        c.fillStyle = '#ef6a24';
+        c.fill();
         // flat molten swirls with an inked rim, and bubbles that pop
         for (const [ox, oy, r] of [[5, 6, 3], [11, 10, 2.4]]) {
           const [bx, by] = P(i * TILE + ox, j * TILE + oy);
@@ -422,7 +644,12 @@ export class SceneRenderer {
         }
         const ph = (t * 0.8 + i * 0.37 + j * 0.51) % 1, [bx, by] = P(i * TILE + 10, j * TILE + 5);
         circ(c, bx, by - ph * 1.5, 0.5 + ph * 1.6); c.fillStyle = `rgba(255,240,170,${1 - ph})`; c.fill();
-      } else {
+        continue;
+      }
+      const x0 = i * TILE + gap, y0 = j * TILE + gap, x1 = (i + 1) * TILE - gap, y1 = (j + 1) * TILE - gap;
+      pth(c, [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)]);
+      fs(c, '#4a3f38', 0.9);
+      {
         // iron spikes: a lit face and a dark face, inked
         for (const [ox, oy] of [[5, 5], [11, 6], [7, 11], [12, 12]]) {
           const [sx, sy] = P(i * TILE + ox, j * TILE + oy);
@@ -433,6 +660,27 @@ export class SceneRenderer {
         }
       }
     }
+    if (lava && hazard.length) {
+      c.beginPath();
+      for (const [i, j] of hazard) for (const [di, dj, ax, ay, bx, by] of SIDES) {
+        if (S.haz.has(hazKey(i + di, j + dj))) continue;
+        c.moveTo(...P((i + ax) * TILE, (j + ay) * TILE)); c.lineTo(...P((i + bx) * TILE, (j + by) * TILE));
+      }
+      c.strokeStyle = INK;
+      c.lineWidth = BL;
+      c.lineCap = 'round';
+      c.stroke();
+    }
+    // stone blocks' shadows as one shape, so blocks standing together don't darken each other's
+    c.beginPath();
+    for (const b of S.blocks) {
+      if (b.ice) continue;
+      const fp = [P(b.x0, b.y0), P(b.x1, b.y0), P(b.x1, b.y1), P(b.x0, b.y1)];
+      fp.forEach(([x, y], k) => (k ? c.lineTo(x + 4, y + 2.5) : c.moveTo(x + 4, y + 2.5)));
+      c.closePath();
+    }
+    c.fillStyle = 'rgba(15,8,4,.35)';
+    c.fill();
     for (const dc of S.decals) {
       if (this.decor.has(dc)) continue;
       const [dx, dy] = P(dc.x, dc.y);
@@ -611,10 +859,8 @@ export class SceneRenderer {
     if (b.ice) return this.drawIcicle(b);
     const { c, P, cam } = this;
     const B = this.g.S.biome, H = 24, wt = env(`wall_${this.bk}`), cap = wt && env(`cap_${this.bk}`);
-    const fp: Pt[] = [P(b.x0, b.y0), P(b.x1, b.y0), P(b.x1, b.y1), P(b.x0, b.y1)];
-    pth(c, fp.map(([x, y]) => [x + 4, y + 2.5] as Pt));
-    c.fillStyle = 'rgba(15,8,4,.35)';
-    c.fill();
+    // blocks standing side by side are one pillar: no wall, cap edge or ink line between them
+    const i = b.x0 / TILE, j = b.y0 / TILE, bs = this.stoneBlocks(), solid = (a: number, d: number) => bs.cells.has(hazKey(a, d));
     const faces: { a: Vec; b: Vec; n: Vec }[] = [
       { a: [b.x1, b.y0], b: [b.x1, b.y1], n: [1, 0] },
       { a: [b.x0, b.y1], b: [b.x1, b.y1], n: [0, 1] },
@@ -622,35 +868,74 @@ export class SceneRenderer {
       { a: [b.x0, b.y0], b: [b.x1, b.y0], n: [0, -1] },
     ];
     for (const f of faces) {
-      if (cam.facing(f.n[0], f.n[1]) <= 1e-6) continue;
+      if (cam.facing(f.n[0], f.n[1]) <= 1e-6 || solid(i + f.n[0], j + f.n[1])) continue;
       const face: Pt[] = [P(...f.a), P(...f.b), P(...f.b, H), P(...f.a, H)];
       const alongX = f.a[1] === f.b[1], u0 = alongX ? f.a[0] : f.a[1], u1 = alongX ? f.b[0] : f.b[1];
       const at = (u: number, h: number) => (alongX ? P(u, f.a[1], h) : P(f.a[0], u, h));
       // a pillar is built from the same bricks as the floor's walls, at the same scale, so it turns with the room
       if (wt) this.wallTex(wt, face, at, u0, u1, H, 0.06 + 0.2 * (0.5 + 0.5 * cam.sideways(f.n[0], f.n[1])), WALL_H);
       else this.stones(face, at, u0, u1, H, this.shade(f.n, B.w), (alongX ? f.a[1] : f.a[0]) * 3 + 5, 8);
-      pth(c, face); c.strokeStyle = INK; c.lineWidth = OL; c.stroke();
+      // ink along the face's foot and top, and up an end unless the same face runs on into the next block
+      const [dx, dy] = alongX ? [1, 0] : [0, 1];
+      const runs = (s: number) => solid(i + dx * s, j + dy * s) && !solid(i + dx * s + f.n[0], j + dy * s + f.n[1]);
+      c.beginPath();
+      c.moveTo(...P(...f.a)); c.lineTo(...P(...f.b));
+      c.moveTo(...P(...f.a, H)); c.lineTo(...P(...f.b, H));
+      if (!runs(-1)) { c.moveTo(...P(...f.a)); c.lineTo(...P(...f.a, H)); }
+      if (!runs(1)) { c.moveTo(...P(...f.b)); c.lineTo(...P(...f.b, H)); }
+      c.strokeStyle = INK; c.lineWidth = BL; c.lineCap = 'round'; c.stroke();
     }
-    const top: Pt[] = [P(b.x0, b.y0, H), P(b.x1, b.y0, H), P(b.x1, b.y1, H), P(b.x0, b.y1, H)];
-    if (cap) {
-      this.imgOnRect(cap, b.x0, b.y0, b.x1, b.y1, 0, H);
-      pth(c, top); c.strokeStyle = INK; c.lineWidth = OL; c.stroke();
-      return;
+    if (cap) this.capTop(cap, b, i, j, solid, bs.deco.has(hazKey(i, j)), H);
+    else {
+      pth(c, [P(b.x0, b.y0, H), P(b.x1, b.y0, H), P(b.x1, b.y1, H), P(b.x0, b.y1, H)]);
+      c.fillStyle = B.cap;
+      c.fill();
+      if (b.v & 1) {
+        c.strokeStyle = INK; c.lineWidth = 0.9; c.beginPath();
+        c.moveTo(...P(b.x0 + 3, b.y0 + 8, H)); c.lineTo(...P(b.x0 + 7, b.y0 + 9, H)); c.lineTo(...P(b.x0 + 9, b.y0 + 7, H)); c.lineTo(...P(b.x0 + 13, b.y0 + 9, H));
+        c.stroke();
+      }
+      if (b.v & 2) { const [mx, my] = P(b.x0 + 4, b.y0 + 12, H); ell(c, mx, my, 4.4, 1.8); fs(c, '#6f8f3a', 0.9); ell(c, mx - 1, my - 0.4, 2, 0.7); c.fillStyle = '#93b350'; c.fill(); }
+      if (b.v & 4) {
+        const [kx, ky] = P(b.x0 + 9, b.y0 + 7, H);
+        ell(c, kx, ky - 2, 3.2, 2.8); fs(c, '#efe6cc', 0.9);
+        rr(c, kx - 1.6, ky - 0.4, 3.2, 1.8, 0.5); fs(c, '#efe6cc', 0.8);
+        circ(c, kx - 1.1, ky - 2.2, 0.75); c.fillStyle = INK; c.fill(); circ(c, kx + 1.1, ky - 2.2, 0.75); c.fill();
+      }
     }
-    pth(c, top);
-    fs(c, B.cap, OL);
-    if (b.v & 1) {
-      c.strokeStyle = INK; c.lineWidth = 0.9; c.beginPath();
-      c.moveTo(...P(b.x0 + 3, b.y0 + 8, H)); c.lineTo(...P(b.x0 + 7, b.y0 + 9, H)); c.lineTo(...P(b.x0 + 9, b.y0 + 7, H)); c.lineTo(...P(b.x0 + 13, b.y0 + 9, H));
-      c.stroke();
+    // the cap is inked only along the pillar's outer edge
+    c.beginPath();
+    for (const [di, dj, ax, ay, bx, by] of SIDES) {
+      if (solid(i + di, j + dj)) continue;
+      c.moveTo(...P(b.x0 + ax * TILE, b.y0 + ay * TILE, H)); c.lineTo(...P(b.x0 + bx * TILE, b.y0 + by * TILE, H));
     }
-    if (b.v & 2) { const [mx, my] = P(b.x0 + 4, b.y0 + 12, H); ell(c, mx, my, 4.4, 1.8); fs(c, '#6f8f3a', 0.9); ell(c, mx - 1, my - 0.4, 2, 0.7); c.fillStyle = '#93b350'; c.fill(); }
-    if (b.v & 4) {
-      const [kx, ky] = P(b.x0 + 9, b.y0 + 7, H);
-      ell(c, kx, ky - 2, 3.2, 2.8); fs(c, '#efe6cc', 0.9);
-      rr(c, kx - 1.6, ky - 0.4, 3.2, 1.8, 0.5); fs(c, '#efe6cc', 0.8);
-      circ(c, kx - 1.1, ky - 2.2, 0.75); c.fillStyle = INK; c.fill(); circ(c, kx + 1.1, ky - 2.2, 0.75); c.fill();
-    }
+    c.strokeStyle = INK; c.lineWidth = BL; c.lineCap = 'round'; c.stroke();
+  }
+
+  /**
+   * The cap of one block. A block on its own gets the whole picture; in a group each cell gets the colour of its plain middle,
+   * the picture's rim along the sides that face out, its corners where two such sides meet, and one cell per group the
+   * ornament from the picture's centre.
+   */
+  private capTop(cap: HTMLImageElement, b: Block, i: number, j: number, solid: (a: number, d: number) => boolean, deco: boolean, H: number) {
+    const up = !solid(i, j - 1), dn = !solid(i, j + 1), lf = !solid(i - 1, j), rt = !solid(i + 1, j);
+    const { x0, y0, x1, y1 } = b;
+    if (up && dn && lf && rt) { this.imgOnRect(cap, x0, y0, x1, y1, 0, H); return; }
+    const w = cap.width, h = cap.height, r = 0.2, R = TILE * r;
+    const part = (sx: number, sy: number, sw: number, sh: number, tx0: number, ty0: number, tx1: number, ty1: number) =>
+      this.imgOnRect(cap, tx0, ty0, tx1, ty1, 0, H, [sx * w, sy * h, sw * w, sh * h]);
+    pth(this.c, [this.P(x0, y0, H), this.P(x1, y0, H), this.P(x1, y1, H), this.P(x0, y1, H)]);
+    this.c.fillStyle = this.capPlain(cap);
+    this.c.fill();
+    if (up) part(r, 0, 1 - 2 * r, r, x0, y0, x1, y0 + R);
+    if (dn) part(r, 1 - r, 1 - 2 * r, r, x0, y1 - R, x1, y1);
+    if (lf) part(0, r, r, 1 - 2 * r, x0, y0, x0 + R, y1);
+    if (rt) part(1 - r, r, r, 1 - 2 * r, x1 - R, y0, x1, y1);
+    if (up && lf) part(0, 0, r, r, x0, y0, x0 + R, y0 + R);
+    if (up && rt) part(1 - r, 0, r, r, x1 - R, y0, x1, y0 + R);
+    if (dn && lf) part(0, 1 - r, r, r, x0, y1 - R, x0 + R, y1);
+    if (dn && rt) part(1 - r, 1 - r, r, r, x1 - R, y1 - R, x1, y1);
+    if (deco) part(0.3, 0.3, 0.4, 0.4, x0 + 0.3 * TILE, y0 + 0.3 * TILE, x1 - 0.3 * TILE, y1 - 0.3 * TILE);
   }
 
   /**
