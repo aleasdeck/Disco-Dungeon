@@ -418,10 +418,13 @@ export class Hud {
     $('fHpBar').style.width = hpPct + '%';
     $('fShBar').style.left = hpPct + '%';
     $('fShBar').style.width = shPct + '%';
+    // where each chunk starts, for the painted bar: it shows its slice of the whole blade picture
+    $('fShBar').style.setProperty('--x', String(hpPct));
     // a blow that gets past the shield takes all of it first: the whole shield chunk is hatched then
     $('fShBar').classList.toggle('risk', inc > 0);
     $('fRisk').style.left = hpPct - risk + '%';
     $('fRisk').style.width = risk + '%';
+    $('fRisk').style.setProperty('--x', String(hpPct - risk));
     $('fHp').textContent = `${Math.max(0, h.hp)}/${h.max}`;
     $('fShBadge').hidden = h.shield <= 0;
     $('fShield').textContent = String(h.shield);

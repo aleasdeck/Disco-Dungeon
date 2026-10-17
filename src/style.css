@@ -744,7 +744,7 @@ i.ico { display: inline-block; font-style: normal; }
 /* ---------- painted cardboard plates and icons (public/assets/ui): each takes over from the drawn one once its picture loads */
 /* the turn button is a mustard blade (btn_turn): low on the left, its top edge rising to a sharp corner on the right; the box is
    taller and the words sit low and left, in the blade's body, tilted along the rising edge */
-.art-btn_turn .turn-btn { height: 100px; width: 380px; padding: 24px 74px 4px 26px; filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)); }
+.art-btn_turn .turn-btn { height: 115px; width: 360px; padding: 34px 70px 6px 26px; filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)); }
 .art-btn_turn .tb-plate { clip-path: none; background: var(--ui-btn_turn) center / 100% 100% no-repeat; transition: filter 0.2s; }
 .art-btn_turn .tb-plate::before, .art-btn_turn .tb-plate::after { display: none; }
 .art-btn_turn .turn-btn b, .art-btn_turn .turn-btn small { transform: rotate(-3deg); }
@@ -758,16 +758,17 @@ i.ico { display: inline-block; font-style: normal; }
 @keyframes lit-art { 50% { filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 28px rgba(255, 210, 90, 1)); } }
 @media (prefers-reduced-motion: reduce) { .art-btn_turn .turn-btn.lit { animation: none; } }
 @media (max-height: 520px) and (orientation: landscape) {
-  .art-btn_turn .turn-btn { width: 232px; height: 62px; padding: 14px 44px 2px 14px; }
+  .art-btn_turn .turn-btn { width: 220px; height: 70px; padding: 20px 42px 2px 14px; }
   .art-btn_turn .tb-who { top: -8px; right: 14%; }
 }
 /* the upright phone: the blade runs above the health and is cut round the ability gem; the ink edge follows the cut */
 @media (orientation: portrait) and (max-width: 700px) {
   .art-btn_turn .turn-btn {
-    width: auto; height: 68px; padding: 18px 86px 8px 24px; filter: var(--outline) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5));
+    width: auto; height: 76px; padding: 24px 86px 6px 22px; filter: var(--outline) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5));
     --plate: polygon(0 0, 100% 0, 100% calc(100% - 40px), calc(100% - 9px) calc(100% - 37px), calc(100% - 90px) calc(100% - 31px), calc(100% - 104px) 100%, 0 100%);
   }
   .art-btn_turn .tb-plate { clip-path: var(--plate); }
+  .art-btn_turn .turn-btn b { font-size: 20px; }
   .art-btn_turn .turn-btn.long b { font-size: 15px; }
   .art-btn_turn .turn-btn.lit { filter: var(--outline) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px rgba(255, 200, 80, 0.8)); animation: none; }
   .art-btn_turn .tb-who { top: -8px; right: 12px; }
@@ -788,7 +789,7 @@ i.ico { display: inline-block; font-style: normal; }
 .art-btn_gem .ability.on { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px var(--ab)); }
 .art-btn_gem .ability b { padding: 2px 5px; background: rgba(18, 12, 9, 0.6); }
 /* the ability's own picture fills the gem instead of its name */
-.ability .ab-ico { position: absolute; inset: 16%; z-index: 1; pointer-events: none; }
+.ability .ab-ico { position: absolute; inset: 17%; z-index: 1; pointer-events: none; }
 .ability .ab-ico:empty { display: none; }
 .ability:has(.ab-ico img) b { display: none; }
 
@@ -848,26 +849,31 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 @media (prefers-reduced-motion: reduce) { #map .mnode.art.reach .mart { animation: none; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 3px var(--gold)) drop-shadow(0 0 8px var(--gold)); } }
 
 /* the HP bar and the sparks as cardboard: a die-cut wedge with the health printed into its groove, and three crystal shards */
-/* the health plate is a hand-cut wedge (art/ui/bar_hp.py) stretched whole: low on the left, sweeping up to its right corner;
-   the fill is clipped to its groove, so the box of .track is the groove's bounding box and the widths stay plain percentages */
-.art-bar_hp .corner .hpbar { height: auto; aspect-ratio: 1024 / 220; background: var(--ui-bar_hp) center / 100% 100% no-repeat; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
-.art-bar_hp .corner .hpbar .track {
-  inset: 16% 3.8% 11.2% 8.5%; background: #2a2117;
-  clip-path: polygon(0 58.4%, 53% 55.6%, 61.6% 49.5%, 70.1% 39.8%, 81.5% 25.4%, 89.5% 13%, 97.3% 0, 100% 68.7%, 98.1% 77.6%, 84.9% 83.1%, 70.1% 90.9%, 58.7% 96.4%, 41.6% 98.9%, 0 100%);
-}
-.art-bar_hp .corner .hpbar.shielded .track { box-shadow: none; }
-/* the number sits in the groove's low run, the shield on the plate's left end */
-.art-bar_hp .corner .hp-num { inset: 58.5% 3.8% 11.2% 8.5%; }
-.art-bar_hp .corner .sh-badge { top: 73%; }
-.art-bar_hp .track i { background: radial-gradient(rgba(0, 0, 0, 0.16) 0.8px, transparent 1.3px) 0 0 / 4px 4px, linear-gradient(#e0414f 0 78%, #a82634 78%); }
-.art-bar_hp .track s:not(.risk) { background: radial-gradient(rgba(0, 0, 0, 0.12) 0.8px, transparent 1.3px) 0 0 / 4px 4px, linear-gradient(#a9d6f3 0 78%, #5f9fcb 78%); }
+/* health is a jagged blade with no plate under it (hp_empty, hp_full, hp_shield: one shape, stretched whole). The red runs
+   from x 17 to 993 of 1024, so .track is that span and the fills stay plain percentages of it; each fill shows the same
+   picture at the blade's full size (cqw/cqh of the track), shifted by where the fill starts (--x, set with it) */
+.art-hp_empty.art-hp_full .corner .hpbar { height: auto; aspect-ratio: 1024 / 176; background: var(--ui-hp_empty) center / 100% 100% no-repeat; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
+.art-hp_empty.art-hp_full .corner .hpbar .track { inset: 0 3.03% 0 1.66%; clip-path: none; background: none; container-type: size; }
+.art-hp_empty.art-hp_full .corner .hpbar.shielded .track { box-shadow: none; }
+.art-hp_empty.art-hp_full .corner .track > * { background: var(--ui-hp_full) calc(-1.742cqw - var(--x, 0) * 1cqw) 0 / 104.92cqw 100cqh no-repeat; }
+.art-hp_empty.art-hp_full .corner .track s { background-image: var(--ui-hp_shield); }
+.art-hp_empty.art-hp_full .corner .track s.risk, .art-hp_empty.art-hp_full .corner .track em { filter: brightness(1.7) saturate(0.5); }
+/* the number sits in the blade's thick middle; the shield badge hangs off its thin left point */
+.art-hp_empty.art-hp_full .corner .hp-num { inset: 12% 20% 22% 20%; }
+.art-hp_empty.art-hp_full .corner .sh-badge { left: -20px; top: 40%; }
 .art-ico_shield .sh-badge { clip-path: none; background: var(--ui-ico_shield) center / contain no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); text-shadow: 1px 1px 0 #120c09, -1px -1px 0 #120c09, 1px -1px 0 #120c09, -1px 1px 0 #120c09; }
-.art-spk_on.art-spk_off .spk { background: none; clip-path: none; box-shadow: none; padding: 0; gap: 0; height: 28px; margin: -4px 18px 0 4px; }
-.art-spk_on.art-spk_off .spk i { flex: 1; margin-right: -6px; background: var(--ui-spk_off) center / 100% 100% no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
-.art-spk_on.art-spk_off .spk i.on { background-image: var(--ui-spk_on); }
-.art-spk_on.art-spk_off .spk.full i { background-image: var(--ui-spk_on); filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 6px #c9a8ff); }
-@media (max-height: 520px) and (orientation: landscape) { .art-spk_on.art-spk_off .spk { height: 17px; margin-right: 12px; } }
-@media (orientation: portrait) and (max-width: 700px) { .art-spk_on.art-spk_off .spk { height: 18px; margin-right: 6px; } }
+.art-spk_1_on .spk { background: none; clip-path: none; box-shadow: none; padding: 0; gap: 0; height: 28px; margin: -4px 18px 0 4px; }
+.art-spk_1_on .spk i { flex: 1; margin-right: -6px; background: center / 100% 100% no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
+/* three different shards, lit and dark in the same shape */
+.art-spk_1_off .spk i:nth-child(1) { background-image: var(--ui-spk_1_off); }
+.art-spk_2_off .spk i:nth-child(2) { background-image: var(--ui-spk_2_off); }
+.art-spk_3_off .spk i:nth-child(3) { background-image: var(--ui-spk_3_off); }
+.art-spk_1_on .spk i.on:nth-child(1) { background-image: var(--ui-spk_1_on); }
+.art-spk_2_on .spk i.on:nth-child(2) { background-image: var(--ui-spk_2_on); }
+.art-spk_3_on .spk i.on:nth-child(3) { background-image: var(--ui-spk_3_on); }
+.art-spk_1_on .spk.full i { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 6px #c9a8ff); }
+@media (max-height: 520px) and (orientation: landscape) { .art-spk_1_on .spk { height: 17px; margin-right: 12px; } }
+@media (orientation: portrait) and (max-width: 700px) { .art-spk_1_on .spk { height: 18px; margin-right: 6px; } }
 
 /* the menus stand on a painted disco dungeon instead of the dimmed room */
 .art-menu_bg .overlay.solid { background: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_bg) center / cover no-repeat; }
