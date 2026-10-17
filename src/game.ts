@@ -85,10 +85,11 @@ export type Action =
 const STEP = 1 / 120;
 
 /**
- * Enemy turn pacing, in seconds: a pause before the first enemy goes, a cell of walking, the beat an enemy
- * that stays put takes before it acts, and the pause after an enemy acts before the next one starts.
+ * Enemy turn pacing, in seconds: a pause before the first enemy goes (the "Ход врагов" banner has the stage),
+ * a cell of walking, the beat an enemy that stays put takes before it acts, and the pause after an enemy acts
+ * before the next one starts.
  */
-const LEAD = 0.3, CELL_T = 0.14, BEAT = 0.18, AFTER = 0.35;
+const LEAD = 1, CELL_T = 0.14, BEAT = 0.18, AFTER = 0.35;
 
 type Pt = { x: number; y: number };
 
