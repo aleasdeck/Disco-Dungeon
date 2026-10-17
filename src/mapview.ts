@@ -52,7 +52,7 @@ const R_ROOM = 23, R_BOSS = 27;
 
 /** Online: each player's face on the room they point at, and a line on how the vote stands. */
 export interface MapVotes {
-  pips: Record<string, { col: string; name: string; face: string }[]>;
+  pips: Record<string, { hero: number; col: string; name: string; face: string }[]>;
   /** The room this player points at. */
   mine: string | null;
   note: string;
@@ -146,7 +146,7 @@ export class MapView {
         const pg = el(g, 'g', { class: 'pip' });
         el(pg, 'title', {}).textContent = p.name;
         el(el(el(pg, 'defs', {}), 'clipPath', { id }), 'circle', { cx: px, cy: py, r: 11 });
-        el(pg, 'circle', { cx: px, cy: py, r: 13, fill: p.col });
+        el(pg, 'circle', { cx: px, cy: py, r: 13, fill: p.col, class: p.hero === party.me?.i ? 'me' : '' });
         el(pg, 'image', { href: p.face, x: px - 11, y: py - 11, width: 22, height: 22, 'clip-path': `url(#${id})` });
       });
       g.setAttribute('tabindex', '0');
@@ -156,8 +156,10 @@ export class MapView {
       g.addEventListener('click', () => { if (isR) this.onChoose(n.id); });
       g.addEventListener('keydown', e => { if (isR && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); this.onChoose(n.id); } });
     }
-    // the party's token: the heroes' faces on the room they are in, or at the stairs before the first room
-    const at = path.length ? pos[path[path.length - 1]] : gate, hs = party.heroes;
+    // the party's token: the heroes' faces on the room they are in, or at the stairs before the first room;
+    // a hero whose player has picked a room already stands on that room instead
+    const voted = new Set(Object.values(votes?.pips ?? {}).flat().map(p => p.hero));
+    const at = path.length ? pos[path[path.length - 1]] : gate, hs = party.heroes.filter(h => !voted.has(h.i));
     const tok = el(svg, 'g', { class: 'token' });
     hs.forEach((h, k) => {
       const tx = at[0] + (k - (hs.length - 1) / 2) * 15, ty = at[1] - (path.length ? 2 : 8), id = 'tokFace' + k;

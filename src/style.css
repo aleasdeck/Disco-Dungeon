@@ -662,6 +662,7 @@ i.ico { display: inline-block; font-style: normal; }
 #map .mnode.reach:hover .disc, #map .mnode.reach:focus .disc { stroke: var(--gold); }
 #map .mnode.mine .halo { stroke: var(--text); stroke-width: 3.5; }
 #map .pip circle { stroke: var(--ink); stroke-width: 2.5; }
+#map .pip circle.me { stroke: var(--gold-1); stroke-width: 3; }
 #map .mlabel { fill: var(--muted); font: 14px var(--hand); text-anchor: middle; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
 .map-info { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
 .map-info b { color: var(--text); }
