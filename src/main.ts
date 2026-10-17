@@ -9,9 +9,9 @@ import { bindSettings, lobbyStatus, renderCollection, renderHeroSelect, renderLo
 import { Input } from './input';
 import { Hud } from './ui';
 import { hl } from './hl';
-import { MapView, type MapVotes } from './mapview';
+import { MapView, type MapParty, type MapVotes } from './mapview';
 import { SceneRenderer } from './draw/scene';
-import { loadSprites } from './assets';
+import { loadSprites, sprites } from './assets';
 import { clearSeat, loadHost, loadSeat, newKey, saveHost, saveSeat, type Ending, type HostSave } from './resume';
 import { FLOORS, LAYERS, agreed, depthOf, newRun, nodeById, reachable, restRoom, type Run, type Votes } from './run';
 
@@ -23,6 +23,7 @@ const cam = new Camera();
 const game = new Game();
 const hud = new Hud(game);
 const mapView = new MapView();
+mapView.art = () => game.party.every(h => sprites.has(h.def.key));
 const scene = new SceneRenderer();
 
 let run: Run = newRun();
@@ -112,7 +113,7 @@ function showMap(open: boolean) {
   $('mapScreen').hidden = !open;
   $('mapClose').hidden = choosing;
   if (open) {
-    mapView.render(run, choosing, mapVotes());
+    mapView.render(run, choosing, mapParty(), mapVotes());
     // on a short screen the map scrolls; bring the rooms to choose from into view
     if (!was) document.querySelector('#map .mnode.reach, #map .mnode.cur')?.scrollIntoView({ block: 'center' });
   }
@@ -276,6 +277,12 @@ function shareMap() {
   const m: MapState = { run, choosing, info: mapView.info, votes, voters: atTable() };
   net.broadcast({ t: 'map', m });
   if (!$('mapScreen').hidden) showMap(true);
+}
+
+/** Who walks the map, this screen's own hero first, and the party's ore. */
+function mapParty(): MapParty {
+  const mine = game.online ? myHero() : game.party[0]?.i ?? null, me = game.party.find(h => h.i === mine) ?? null;
+  return { heroes: me ? [me, ...game.party.filter(h => h !== me)] : game.party, me, ore: game.bank.ore };
 }
 
 /** Online: whose token stands on which room, and whom the party still waits for. Alone there is nothing to show. */

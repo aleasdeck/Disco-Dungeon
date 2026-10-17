@@ -1,7 +1,11 @@
 // Run map overlay: the current floor's branching rooms as an SVG, climbing from the entrance at the bottom to the boss on top.
 
-import { BIOMES, ROOM_TYPES, type RoomType } from './data';
-import { reachable, type Run } from './run';
+import { BIOMES, MOBS, ROOM_TYPES, type RoomType } from './data';
+import type { HeroState } from './game';
+import { icon as ico } from './icons';
+import { CASTS } from './room';
+import { FLOORS, reachable, type Run } from './run';
+import { drawPortrait, mobFace } from './ui';
 
 const NS = 'http://www.w3.org/2000/svg';
 const $ = (id: string) => document.getElementById(id)!;
@@ -40,8 +44,8 @@ function icon(g: SVGGElement, type: RoomType, x: number, y: number) {
   if (type === 'boss') el('path', { d: `M${x - 9} ${y + 6}L${x - 10} ${y - 6}L${x - 4} ${y - 1}L${x} ${y - 9}L${x + 4} ${y - 1}L${x + 10} ${y - 6}L${x + 9} ${y + 6}Z`, fill: '#ffd34d', ...st });
 }
 
-/** Map size in SVG units: tall, so a phone shows the whole floor without scrolling. */
-const W = 320, H = 560;
+/** Map size in SVG units: tall, so a phone shows the whole floor without scrolling; the entrance sits under the first row. */
+const W = 320, H = 600;
 
 /** Online: each player's token on the room they point at, and a line on how the vote stands. */
 export interface MapVotes {
@@ -51,76 +55,160 @@ export interface MapVotes {
   note: string;
 }
 
+/** Who walks the map: the heroes (this screen's own first) and the party's ore. */
+export interface MapParty {
+  heroes: HeroState[];
+  me: HeroState | null;
+  ore: number;
+}
+
+/** A hero's face as a picture, drawn once per hero (and again once its art loads). */
+const faces = new Map<string, string>();
+function heroFace(h: HeroState) {
+  const cv = document.createElement('canvas');
+  drawPortrait(cv, h);
+  return cv.toDataURL();
+}
+function faceOf(h: HeroState, art: boolean) {
+  const key = h.def.key + (art ? '+' : '');
+  let url = faces.get(key);
+  if (!url) { url = heroFace(h); faces.set(key, url); }
+  return url;
+}
+
+const el = <K extends keyof SVGElementTagNameMap>(parent: Element, tag: K, at: Record<string, string | number>) => {
+  const e = document.createElementNS(NS, tag);
+  for (const k in at) e.setAttribute(k, String(at[k]));
+  parent.appendChild(e);
+  return e;
+};
+
 export class MapView {
   info = '';
   onChoose: (id: string) => void = () => {};
+  /** Whether the hero pictures have loaded: the faces are drawn again once they have. */
+  art = () => false;
+  /** The room whose card is open under the map. */
+  private peek: string | null = null;
+  /** How the last press on the map came: a touch shows what is in a room first, a mouse goes straight in. */
+  private touch = false;
 
-  render(run: Run, canChoose: boolean, votes?: MapVotes) {
-    const f = run.floor, layers = run.floors[f];
-    $('mapFloor').innerHTML = `Этаж ${f + 1} <span>${BIOMES[f].name}</span>`;
+  constructor() {
+    $('map').addEventListener('pointerdown', e => { this.touch = e.pointerType !== 'mouse'; });
+  }
+
+  render(run: Run, canChoose: boolean, party: MapParty, votes?: MapVotes) {
+    const f = run.floor, layers = run.floors[f], art = this.art();
+    // the floor, and the whole run as three gems: done, here, ahead
+    const dots = Array.from({ length: FLOORS }, (_, k) => `<i class="${k < f ? 'done' : k === f ? 'cur' : ''}"></i>`).join('');
+    $('mapFloor').innerHTML = `Этаж ${f + 1}<em class="fl-dots" title="Этаж ${f + 1} из ${FLOORS}">${dots}</em><span>${BIOMES[f].name}</span>`;
+    this.partyRow(party, art);
     const svg = $('map');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.innerHTML = '';
     // layer 0 at the bottom; rooms of a layer spread across, zigzagging a little so the paths read
     const pos: Record<string, [number, number]> = {};
     layers.forEach((L, l) => L.forEach((n, i) => {
-      pos[n.id] = [W / 2 + (i - (L.length - 1) / 2) * 104 + (l % 2 ? 8 : -8) * (L.length > 1 ? 1 : 0), H - 46 - l * ((H - 104) / (layers.length - 1))];
+      pos[n.id] = [W / 2 + (i - (L.length - 1) / 2) * 104 + (l % 2 ? 8 : -8) * (L.length > 1 ? 1 : 0), H - 86 - l * ((H - 144) / (layers.length - 1))];
     }));
-    const path = run.path[f], reach = canChoose ? reachable(run, f) : [];
-    const gl = document.createElementNS(NS, 'g');
-    svg.appendChild(gl);
+    const path = run.path[f], reach = canChoose ? reachable(run, f) : [], gate: [number, number] = [W / 2, H - 22];
+    if (this.peek && !pos[this.peek]) this.peek = null;
+    const gl = el(svg, 'g', {});
+    const edge = (a: [number, number], b: [number, number], cls: string) =>
+      el(gl, 'path', { d: `M${a[0]} ${a[1]}C${a[0]} ${(a[1] + b[1]) / 2} ${b[0]} ${(a[1] + b[1]) / 2} ${b[0]} ${b[1]}`, class: cls });
+    // from the stairs to the first row; the way the party came glows, the rooms it passed by fade
+    for (const n of layers[0]) edge(gate, pos[n.id], path[0] === n.id ? 'edge walked' : path.length ? 'edge past' : 'edge');
     for (const n of layers.flat()) for (const id of n.next) {
-      const [x1, y1] = pos[n.id], [x2, y2] = pos[id];
       const walked = path.includes(n.id) && path.indexOf(id) === path.indexOf(n.id) + 1;
-      const ln = document.createElementNS(NS, 'path');
-      ln.setAttribute('d', `M${x1} ${y1}C${x1} ${(y1 + y2) / 2} ${x2} ${(y1 + y2) / 2} ${x2} ${y2}`);
-      ln.setAttribute('class', walked ? 'edge walked' : 'edge');
-      gl.appendChild(ln);
+      edge(pos[n.id], pos[id], walked ? 'edge walked' : n.l < path.length - 1 || (n.l === path.length - 1 && !path.includes(n.id)) ? 'edge past' : 'edge');
     }
+    const st = el(svg, 'g', { class: 'gate' });
+    el(st, 'path', { d: `M${gate[0] - 15} ${gate[1] + 8}h30l-4-6h-22zM${gate[0] - 11} ${gate[1] + 2}h22l-4-6h-14z` });
     for (const n of layers.flat()) {
-      const [x, y] = pos[n.id], t = ROOM_TYPES[n.type], g = document.createElementNS(NS, 'g');
+      const [x, y] = pos[n.id], t = ROOM_TYPES[n.type], g = el(svg, 'g', {});
       const isR = reach.includes(n.id), isV = path.includes(n.id), isCur = path[path.length - 1] === n.id;
-      g.setAttribute('class', 'mnode' + (isR ? ' reach' : '') + (isV ? ' visited' : '') + (isCur ? ' cur' : '') + (isR && votes?.mine === n.id ? ' mine' : ''));
-      const boss = n.type === 'boss';
-      const halo = document.createElementNS(NS, 'circle');
-      halo.setAttribute('cx', String(x)); halo.setAttribute('cy', String(y)); halo.setAttribute('r', boss ? '30' : '25'); halo.setAttribute('class', 'halo');
-      g.appendChild(halo);
-      const c = document.createElementNS(NS, 'circle');
-      c.setAttribute('cx', String(x)); c.setAttribute('cy', String(y)); c.setAttribute('r', boss ? '24' : '19'); c.setAttribute('fill', t.col); c.setAttribute('class', 'disc');
-      g.appendChild(c);
-      icon(g, n.type, x, y);
-      const lb = document.createElementNS(NS, 'text');
-      lb.setAttribute('x', String(x)); lb.setAttribute('y', String(y + (boss ? 38 : 33))); lb.setAttribute('class', 'mlabel');
-      lb.textContent = t.name;
-      g.appendChild(lb);
+      const past = !isV && n.l < path.length;
+      g.setAttribute('class', 'mnode' + (isR ? ' reach' : '') + (isV ? ' visited' : '') + (isCur ? ' cur' : '') + (past ? ' past' : '')
+        + (isR && votes?.mine === n.id ? ' mine' : '') + (this.peek === n.id ? ' peek' : ''));
+      g.dataset.id = n.id;
+      const boss = n.type === 'boss', r = boss ? 24 : 19;
+      el(g, 'circle', { cx: x, cy: y, r: r + 6, class: 'halo' });
+      el(g, 'circle', { cx: x, cy: y, r, fill: t.col, class: 'disc' });
+      if (boss) {
+        // who waits at the top: the floor's boss in a round frame, a crown on top
+        const clip = el(el(g, 'defs', {}), 'clipPath', { id: 'bossFace' });
+        el(clip, 'circle', { cx: x, cy: y, r: r - 2 });
+        el(g, 'image', { href: mobFace(CASTS[f].boss), x: x - r, y: y - r, width: r * 2, height: r * 2, 'clip-path': 'url(#bossFace)', preserveAspectRatio: 'xMidYMid slice' });
+        el(g, 'circle', { cx: x, cy: y, r, class: 'rim' });
+        el(g, 'path', { d: `M${x - 11} ${y - r + 3}L${x - 12} ${y - r - 9}L${x - 5} ${y - r - 3}L${x} ${y - r - 12}L${x + 5} ${y - r - 3}L${x + 12} ${y - r - 9}L${x + 11} ${y - r + 3}Z`, class: 'crown' });
+      } else icon(g, n.type, x, y);
+      el(g, 'text', { x, y: y + r + 14, class: 'mlabel' }).textContent = t.name;
       // the players' tokens sit on the room's top rim, in their heroes' colours
       const ps = votes?.pips[n.id] ?? [];
       ps.forEach((p, k) => {
-        const px = x + (k - (ps.length - 1) / 2) * 19, py = y - (boss ? 24 : 19) - 3;
-        const pg = document.createElementNS(NS, 'g');
-        pg.setAttribute('class', 'pip');
-        const tt = document.createElementNS(NS, 'title');
-        tt.textContent = p.name;
-        const pc = document.createElementNS(NS, 'circle');
-        pc.setAttribute('cx', String(px)); pc.setAttribute('cy', String(py)); pc.setAttribute('r', '9'); pc.setAttribute('fill', p.col);
-        const pt = document.createElementNS(NS, 'text');
-        pt.setAttribute('x', String(px)); pt.setAttribute('y', String(py + 4.5));
-        pt.textContent = p.name.slice(0, 1).toUpperCase();
-        pg.append(tt, pc, pt);
-        g.appendChild(pg);
+        const px = x + (k - (ps.length - 1) / 2) * 19, py = y - r - 3;
+        const pg = el(g, 'g', { class: 'pip' });
+        el(pg, 'title', {}).textContent = p.name;
+        el(pg, 'circle', { cx: px, cy: py, r: 9, fill: p.col });
+        el(pg, 'text', { x: px, y: py + 4.5 }).textContent = p.name.slice(0, 1).toUpperCase();
       });
-      if (isR) {
-        g.setAttribute('tabindex', '0');
-        g.setAttribute('role', 'button');
-        g.setAttribute('aria-label', t.name);
-        g.addEventListener('click', () => this.onChoose(n.id));
-        g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.onChoose(n.id); } });
-      }
-      svg.appendChild(g);
+      g.setAttribute('tabindex', '0');
+      g.setAttribute('role', 'button');
+      g.setAttribute('aria-label', t.name + (isR ? '' : isV ? ', пройдена' : ''));
+      g.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') this.show(n.id, run, canChoose); });
+      g.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && this.peek === n.id) this.show(null, run, canChoose); });
+      g.addEventListener('click', () => {
+        // a touch opens the room's card first and the second tap goes in; a mouse sees the card on hover already
+        if (isR && (!this.touch || this.peek === n.id)) { this.peek = null; this.onChoose(n.id); }
+        else this.show(n.id, run, canChoose);
+      });
+      g.addEventListener('keydown', e => { if (isR && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); this.peek = null; this.onChoose(n.id); } });
+      // the keyboard sees the card as it moves along; a tap also focuses the room, but the tap itself decides
+      g.addEventListener('focus', () => { if (g.matches(':focus-visible') && this.peek !== n.id) this.show(n.id, run, canChoose); });
     }
+    // the party's token: the heroes' faces on the room they are in, or at the stairs before the first room
+    const at = path.length ? pos[path[path.length - 1]] : gate, hs = party.heroes;
+    const tok = el(svg, 'g', { class: 'token' });
+    hs.forEach((h, k) => {
+      const tx = at[0] + (k - (hs.length - 1) / 2) * 15, ty = at[1] - (path.length ? 2 : 8), id = 'tokFace' + k;
+      const clip = el(el(tok, 'defs', {}), 'clipPath', { id });
+      el(clip, 'circle', { cx: tx, cy: ty, r: 13 });
+      el(tok, 'circle', { cx: tx, cy: ty, r: 15, fill: h.def.col, class: 'tk-rim' + (h === party.me ? ' me' : '') });
+      el(tok, 'image', { href: faceOf(h, art), x: tx - 13, y: ty - 13, width: 26, height: 26, 'clip-path': `url(#${id})`, opacity: h.hp > 0 ? 1 : 0.4 });
+    });
+    this.card(run, canChoose);
     // only the result of a rest room shows here; the map itself needs no explaining
     $('mapInfo').innerHTML = this.info;
     $('mapInfo').hidden = !this.info;
     $('mapVotes').textContent = votes?.note ?? '';
     $('mapVotes').hidden = !votes;
+  }
+
+  /** Open (or close) the card of a room under the map. */
+  private show(id: string | null, run: Run, canChoose: boolean) {
+    this.peek = id;
+    document.querySelectorAll<SVGGElement>('#map .mnode').forEach(g => g.classList.toggle('peek', g.dataset.id === id));
+    this.card(run, canChoose);
+  }
+
+  /** What is in the room picked on the map, and on a phone the button that goes there. */
+  private card(run: Run, canChoose: boolean) {
+    const box = $('mapPeek'), f = run.floor, n = this.peek ? run.floors[f].flat().find(o => o.id === this.peek) : undefined;
+    box.classList.toggle('off', !n);
+    if (!n) { box.innerHTML = ''; return; }
+    const t = ROOM_TYPES[n.type], go = canChoose && reachable(run, f).includes(n.id);
+    const txt = n.type === 'boss' ? `${MOBS[CASTS[f].boss].name} со свитой.` : t.txt;
+    box.innerHTML = `<p><b>${t.name}.</b> ${txt}</p>` + (go && this.touch ? `<button class="btn big" id="mapGo">Идём</button>` : '');
+    box.querySelector('#mapGo')?.addEventListener('click', () => { this.peek = null; this.onChoose(n.id); });
+  }
+
+  /** The heroes' health and the party's ore over the map: enough to choose between a camp and a fight. */
+  private partyRow(party: MapParty, art: boolean) {
+    const box = $('mapParty');
+    box.innerHTML = party.heroes.map(h => {
+      const hp = Math.max(0, h.hp), pct = (hp / h.max) * 100;
+      return `<div class="mp-hero${h.hp <= 0 ? ' dead' : ''}${h === party.me ? ' me' : ''}" style="--c:${h.def.col}" title="${h.def.name}: ${hp} из ${h.max}">`
+        + `<img src="${faceOf(h, art)}" alt=""><span class="mp-hp"><i style="width:${pct}%"></i><u>${h.hp > 0 ? `${hp}/${h.max}` : 'пал'}</u></span></div>`;
+    }).join('') + `<div class="mp-ore" title="Руда отряда">${ico('ore')}<b>${party.ore}</b></div>`;
   }
 }
