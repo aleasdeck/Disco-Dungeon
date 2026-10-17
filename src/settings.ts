@@ -8,10 +8,15 @@ export interface Settings {
   aimLine: boolean;
   /** The hero last picked for the campaign, an index into HEROES. */
   hero: number;
+  /** Music and sound effect volumes, 0 to 1. */
+  music: number;
+  sfx: number;
+  /** All sound off, by the top bar's speaker button. */
+  muted: boolean;
 }
 
 const KEY = 'discodungeon.settings';
-const defaults: Settings = { name: '', quality: 'auto', aimLine: true, hero: 0 };
+const defaults: Settings = { name: '', quality: 'auto', aimLine: true, hero: 0, music: 0.7, sfx: 0.85, muted: false };
 
 function load(): Settings {
   try {

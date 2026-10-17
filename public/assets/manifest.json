@@ -130,11 +130,13 @@
     "ico_map": "ui/ico_map.webp",
     "ico_menu": "ui/ico_menu.webp",
     "ico_move": "ui/ico_move.webp",
+    "ico_mute": "ui/ico_mute.webp",
     "ico_ore": "ui/ico_ore.webp",
     "ico_plug": "ui/ico_plug.webp",
     "ico_rage": "ui/ico_rage.webp",
     "ico_shield": "ui/ico_shield.webp",
     "ico_slam": "ui/ico_slam.webp",
+    "ico_sound": "ui/ico_sound.webp",
     "ico_spark": "ui/ico_spark.webp",
     "ico_summon": "ui/ico_summon.webp",
     "logo": "ui/logo.webp",
@@ -172,5 +174,12 @@
     "up_dmg": "ui/up_dmg.webp",
     "up_speed": "ui/up_speed.webp",
     "win": "ui/win.webp"
+  },
+  "music": {
+    "menu": { "file": "music/funk.mp3", "loop": 48.813559322033896 },
+    "calm": { "file": "music/lounge.mp3", "loop": 108.67924528301887 },
+    "fight0": { "file": "music/bfunk.mp3", "loop": 64 },
+    "fight1": { "file": "music/march.mp3", "loop": 66.20689655172414 },
+    "fight2": { "file": "music/chase.mp3", "loop": 60.95238095238095 }
   }
 }

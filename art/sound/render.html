@@ -1,0 +1,82 @@
+<!doctype html><meta charset="utf-8"><body><script type="module">
+import { Mix } from './synth.js';
+import * as Synth from './synth.js';
+import { SONGS } from './music.js';
+import { PACKS, EVENTS, SCENE } from './sfx.js';
+function wav(chs, sr) {
+  const n = chs[0].length, buf = new ArrayBuffer(44 + n * 4), v = new DataView(buf);
+  const w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  w(0, 'RIFF'); v.setUint32(4, 36 + n * 4, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true); v.setUint16(22, 2, true); v.setUint32(24, sr, true); v.setUint32(28, sr * 4, true);
+  v.setUint16(32, 4, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 4, true);
+  let o = 44, peak = 0;
+  for (let i = 0; i < n; i++) for (const c of chs) { peak = Math.max(peak, Math.abs(c[i])); const s = Math.max(-1, Math.min(1, c[i])); v.setInt16(o, s * 32767, true); o += 2; }
+  return { buf, peak };
+}
+function b64(buf) { let s = ''; const u = new Uint8Array(buf); for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); }
+/**
+ * One pass of a song and its tail, dry (the master's dynamics come after, in post.py), as raw stereo float32:
+ * the tail is laid back over the start there, so the loop runs on without a seam.
+ */
+window.renderSong = async (name, { tail = 4 } = {}) => {
+  const def = SONGS[name], sr = 44100, L = def.bars * 16 * (60 / def.bpm / 4);
+  const N = Math.ceil((L + tail) * sr);
+  const ctx = new OfflineAudioContext(2, N, sr);
+  const mix = new Mix(ctx, { bpm: def.bpm, loop: L, limit: false });
+  const t0 = performance.now();
+  // notes are queued and put into the graph a second ahead of the render, so it never holds more than it plays
+  const q = [];
+  const S = new Proxy(Synth, { get: (o, k) => typeof o[k] === 'function' && /^[a-z]/.test(k) && !['n', 'mtof'].includes(k)
+    ? (...a) => { q.push([a[2], () => o[k](...a)]); } : o[k] });
+  def.play(mix, 0, S);
+  q.sort((x, y) => x[0] - y[0]);
+  let i = 0;
+  const feed = until => { while (i < q.length && q[i][0] < until) q[i++][1](); };
+  feed(1);
+  for (let s = 0.5; s < N / sr - 0.01; s += 0.5) ctx.suspend(s).then(() => { feed(s + 1); ctx.resume(); });
+  const out = await ctx.startRendering();
+  const a = out.getChannelData(0), b = out.getChannelData(1), il = new Float32Array(N * 2);
+  let peak = 0;
+  for (let k = 0; k < N; k++) { il[2 * k] = a[k]; il[2 * k + 1] = b[k]; peak = Math.max(peak, Math.abs(a[k]), Math.abs(b[k])); }
+  return { data: b64(il.buffer), peak, L, ms: performance.now() - t0 };
+};
+
+/** Each sound of each set rendered alone: its peak and loudness while it sounds (RMS over the loudest 100 ms). */
+window.fxLevels = async () => {
+  const sr = 44100, res = {};
+  for (const [pk, pack] of Object.entries(PACKS)) for (const [ev] of EVENTS) {
+    const ctx = new OfflineAudioContext(1, sr * 3, sr), lfos = {};
+    const c = { ctx, lfo: (n, r, d) => lfos[n] ??= (() => { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = r; g.gain.value = d; o.connect(g); o.start(0); return g; })() };
+    try { pack.fx[ev](c, ctx.destination, 0.05, 0.8); } catch (e) { res[pk + '.' + ev] = 'ERR ' + e.message; continue; }
+    const x = (await ctx.startRendering()).getChannelData(0);
+    let peak = 0, best = 0, last = 0;
+    const W = 4410;
+    for (let i = 0; i < x.length; i++) { const a = Math.abs(x[i]); peak = Math.max(peak, a); if (a > 0.001) last = i; }
+    for (let i = 0; i + W < x.length; i += 441) { let e = 0; for (let k = i; k < i + W; k++) e += x[k] * x[k]; best = Math.max(best, e / W); }
+    res[pk + '.' + ev] = [peak.toFixed(2), (10 * Math.log10(best + 1e-12)).toFixed(1), (last / sr).toFixed(2)];
+  }
+  return res;
+};
+
+/** A stretch of bars of one pass, for checking the parts: no loop, only the named channels. */
+window.renderPart = async (name, { from = 0, to = 4, only } = {}) => {
+  const def = SONGS[name], sr = 44100, bar = 16 * (60 / def.bpm / 4), dur = (to - from) * bar + 1;
+  const ctx = new OfflineAudioContext(2, Math.ceil(dur * sr), sr);
+  const mix = new Mix(ctx, { bpm: def.bpm });
+  const q = [];
+  const S = new Proxy(Synth, { get: (o, k) => typeof o[k] === 'function' && /^[a-z]/.test(k) && !['n', 'mtof'].includes(k)
+    ? (...a) => { q.push([a[2], () => o[k](...a)]); } : o[k] });
+  def.play(mix, -from * bar, S);
+  if (only) for (const [k, c] of Object.entries(mix.ch)) if (!only.includes(k)) c.input.gain.value = 0;
+  q.sort((x, y) => x[0] - y[0]);
+  let i = 0;
+  while (i < q.length && q[i][0] < 0) i++;
+  const feed = until => { while (i < q.length && q[i][0] < until) q[i++][1](); };
+  feed(1);
+  for (let s = 0.5; s < dur - 0.01; s += 0.5) ctx.suspend(s).then(() => { feed(s + 1); ctx.resume(); });
+  const out = await ctx.startRendering();
+  const { buf, peak } = wav([out.getChannelData(0), out.getChannelData(1)], sr);
+  return { data: b64(buf), peak };
+};
+window.ready = true;
+</script>

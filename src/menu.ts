@@ -3,6 +3,7 @@
 import { BIOMES, HEROES, MOB_HP_MUL, MOBS, fullHit, type MobKind } from './data';
 import { drawPortrait, mobIcon } from './ui';
 import { saveSettings, settings } from './settings';
+import { sound } from './sound';
 import type { Player } from './net';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -78,13 +79,19 @@ export function renderHeroSelect(picked: number, onPick: (hero: number) => void)
 
 export function bindSettings(onChange: () => void) {
   const name = $<HTMLInputElement>('setName'), aim = $<HTMLInputElement>('setAim');
+  const vols = [[$<HTMLInputElement>('setMusic'), 'music'], [$<HTMLInputElement>('setSfx'), 'sfx']] as const;
   const sync = () => {
     name.value = settings.name;
     aim.checked = settings.aimLine;
+    for (const [el, k] of vols) el.value = String(Math.round(settings[k] * 100));
     document.querySelectorAll<HTMLInputElement>('input[name=quality]').forEach(r => { r.checked = r.value === settings.quality; });
   };
   name.addEventListener('input', () => { settings.name = name.value.trim(); saveSettings(); });
   aim.addEventListener('change', () => { settings.aimLine = aim.checked; saveSettings(); });
+  for (const [el, k] of vols) {
+    el.addEventListener('input', () => { settings[k] = Number(el.value) / 100; sound.volumes(); });
+    el.addEventListener('change', () => { saveSettings(); if (k === 'sfx') sound.play('ore'); });
+  }
   document.querySelectorAll<HTMLInputElement>('input[name=quality]').forEach(r => r.addEventListener('change', () => {
     if (r.checked) { settings.quality = r.value as typeof settings.quality; saveSettings(); onChange(); }
   }));

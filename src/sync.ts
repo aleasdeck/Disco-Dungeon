@@ -2,7 +2,7 @@
 // Rooms are rebuilt from their spec (generation is seeded), so only what changes travels.
 
 import { AB_COST, HEROES } from './data';
-import type { Bank, Disc, Float, Game, HeroState, Phase, Spark, State } from './game';
+import type { Bank, Cue, Disc, Float, Game, HeroState, Phase, Spark, State } from './game';
 import type { Mob, RoomSpec } from './room';
 import type { Run, Votes } from './run';
 
@@ -41,6 +41,8 @@ export interface Snapshot {
   haz: string[];
   /** Depth of the blacksmith's the party is at, 0 elsewhere: everyone upgrades their own hero's discs there. */
   forge?: number;
+  /** The sounds the host made outside the physics lately (the enemies' blows, the turns starting): sent along, never saved. */
+  cues?: Cue[];
 }
 
 export function snapshot(g: Game): Snapshot {
@@ -110,7 +112,7 @@ export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boo
   g.forge = s.forge ?? 0;
   g.pickActive();
   // a client brings the host's state up to now; the host reopening its own saved game just carries on counting from it
-  if (g.send) g.synced(s.tick ?? g.tick, own);
+  if (g.send) { g.synced(s.tick ?? g.tick, own); g.hearCues(s.cues ?? [], room); }
   else g.tick = s.tick ?? g.tick;
   return { party, room };
 }

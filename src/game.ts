@@ -4,6 +4,7 @@
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, CRIT_COS, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
 import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { mulberry32 } from './rng';
+import type { Sfx } from './audio/sfx';
 import { cellAt, cellCentre, generate, hazKey, isFloor, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
@@ -130,6 +131,12 @@ const LEAD = 1, CELL_T = 0.14, BEAT = 0.18, AFTER = 0.35;
 /** Seconds a hero takes to hop over to where its last disc stopped. */
 const HOP_T = 0.45;
 
+/** Host: the sounds it sends along with its snapshots are the ones of this many milliseconds back. */
+const CUE_MS = 2000;
+
+/** A sound the host made outside the physics, for the clients: its number (they go up), which, how hard, and whose action it was. */
+export type Cue = [n: number, ev: Sfx, p: number, h?: number];
+
 /** Lines the enemy-turn journal keeps. */
 const LOG_MAX = 40;
 
@@ -187,6 +194,18 @@ export class Game {
   bank: Bank = newBank();
   onChange: () => void = () => {};
   onRoomEnd: (win: boolean) => void = () => {};
+  /** A sound to play now; p is how hard, 0 to 1. */
+  onSound: (ev: Sfx, p: number) => void = () => {};
+  /** Host: the sounds of the last CUE_MS made outside the physics; online clients play them from the snapshots. */
+  cues: Cue[] = [];
+  /** Online client: the last of the host's sounds played here. */
+  heardCue = 0;
+  /** The last physics step whose sounds were played: steps played again after a snapshot stay quiet. */
+  private heard = 0;
+  private inStep = false;
+  /** The enemy making its move, the cells it has put down on so far, and the turn each hero last landed after its hop. */
+  private walked = { key: '', n: 0 };
+  private hopped = new Map<number, number>();
   /** Which heroes this screen may move, aim and select (online: only the player's own). */
   canControl: (h: HeroState) => boolean = () => true;
   /** Online: placement ends when every hero's player is ready, and heroes cannot swap runes. */
@@ -222,6 +241,8 @@ export class Game {
     const L = generate(spec);
     this.forge = 0;
     this.pickup.clear();
+    this.walked = { key: '', n: 0 };
+    this.hopped.clear();
     // sparks don't carry over: every fight starts without them, or full after the altar
     const boon = Math.min(AB_COST, this.bank.boon ?? 0);
     for (const h of this.party) Object.assign(h, { pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0, chill: 0, fire: 0, boost: false, sparks: boon });
@@ -236,6 +257,8 @@ export class Game {
 
   /** Online client: rebuild a room from its spec (rooms are generated from the seed), state comes from the host. */
   showRoom(spec: RoomSpec) {
+    this.walked = { key: '', n: 0 };
+    this.hopped.clear();
     this.S = { ...generate(spec), spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [], away: [] };
     this.pickActive();
   }
@@ -308,6 +331,7 @@ export class Game {
     if (!this.canPlace(h) || !S.pads[pi] || h.pad === pi) return false;
     const other = S.heroes.find(o => o.pad === pi && o.hp > 0);
     if (other && (this.online || h.pad === null)) return false;
+    this.sfx('step', 0.9, h.i);
     if (this.send) { this.send({ k: 'move', h: h.i, pad: pi }); return true; }
     const first = h.pad === null;
     if (other) other.pad = h.pad;
@@ -335,6 +359,7 @@ export class Game {
       this.seatAway();
     }
     S.phase = 'throw';
+    this.sfx('yourTurn');
     this.pickIntents();
     this.onChange();
   }
@@ -370,6 +395,7 @@ export class Game {
     if (S.phase === 'place' && this.online && S.ready.length && this.everyoneReady()) {
       this.seatAway();
       S.phase = 'throw';
+      this.sfx('yourTurn');
       this.pickIntents();
     }
     this.onChange();
@@ -421,6 +447,7 @@ export class Game {
     if (S.phase !== 'throw' || h.hand <= 0 || !p || h.hp <= 0 || this.ended(h)) return;
     const L = Math.hypot(dx, dy);
     if (L < 4) return;
+    this.sfx('launch', Math.min(1, L / 60), h.i);
     if (this.send) { this.send({ k: 'throw', h: h.i, dx, dy }); return; }
     const s = this.power(h);
     S.discs.push({
@@ -524,6 +551,7 @@ export class Game {
 
   useAbility(h = this.hero) {
     if (!this.canUseAbility(h)) return;
+    this.sfx('ability', 0.7, h.i);
     if (this.send) { this.send({ k: 'ability', h: h.i }); return; }
     h.sparks -= AB_COST;
     h.boost = true;
@@ -792,9 +820,39 @@ export class Game {
     for (let i = 0, n = 5 + 3 * q; i < n; i++) add(kinds[Math.floor(this.fx() * kinds.length)], 1.1 + this.fx() * 1.2, Math.PI * 1.3, 65, 0.9 + this.fx() * 0.4);
   }
 
-  hurtMob(m: Mob, n: number, col = '#fff', pierce = false) {
+  /**
+   * Play a sound. Every screen runs the physics itself, so the physics' sounds play on each (once: a step played again
+   * after a snapshot stays quiet); everything else only the host runs, and it sends those sounds along with its snapshots.
+   * `h` is the hero whose player's action it was: that player heard it already.
+   */
+  private sfx(ev: Sfx, p = 0.7, h?: number) {
+    if (this.inStep) { if (this.tick > this.heard) this.onSound(ev, p); return; }
+    this.onSound(ev, p);
+    if (this.send) return;
+    this.cues = this.recentCues();
+    const n = Math.max(Date.now(), (this.cues[this.cues.length - 1]?.[0] ?? 0) + 1);
+    this.cues.push(h === undefined ? [n, ev, p] : [n, ev, p, h]);
+  }
+
+  /** Host: the sounds to send along with a snapshot. */
+  recentCues() {
+    const now = Date.now();
+    return this.cues.filter(c => c[0] > now - CUE_MS);
+  }
+
+  /** Online client: play the host's sounds a snapshot brings that haven't been played here; `quiet` only counts them. */
+  hearCues(cues: Cue[], quiet: boolean) {
+    for (const [n, ev, p, h] of cues) {
+      if (n <= this.heardCue) continue;
+      // a new room's first snapshot only says where the count is
+      if (!quiet && (h == null || !this.canControl(this.heroOf(h)))) this.onSound(ev, p);
+      this.heardCue = n;
+    }
+  }
+
+  hurtMob(m: Mob, n: number, col = '#fff', pierce = false, p = 0.6) {
     if (m.hp <= 0) return;
-    if (m.armor && !pierce && n < m.armor) { this.float(m.x, m.y, 'броня', '#c7cbe0'); return; }
+    if (m.armor && !pierce && n < m.armor) { this.float(m.x, m.y, 'броня', '#c7cbe0'); this.sfx('armor'); return; }
     m.hp -= n;
     m.flash = 0.15;
     this.float(m.x, m.y, '-' + n, col);
@@ -803,6 +861,7 @@ export class Game {
       const up = Math.max(1, Math.round(3 * this.S.dmgMul));
       m.rage = true; m.dmg += up; this.float(m.x, m.y - 12, `ЯРОСТЬ +${up}`, '#ff7a3d'); this.burst(m.x, m.y, '#ff7a3d', 18);
     }
+    this.sfx(m.hp <= 0 ? 'kill' : 'hit', p);
     if (m.hp <= 0) {
       m.dead = 0.001; this.burst(m.x, m.y, '#ffd34d', 22); this.float(m.x, m.y - 6, 'повержен', '#ffd34d');
       if (m.burn > 0) this.spreadFire(m);
@@ -856,6 +915,7 @@ export class Game {
     if (from) this.knock(h, p.x, p.y, from.x, from.y, kp, 0.06);
     else if (dmg) this.knock(h, p.x, p.y, p.x, p.y, kp * 0.7);
     this.float(p.x, p.y, dmg ? `-${dmg}${why ? ' ' + why : ''}` : 'блок', dmg ? '#ff4d6a' : '#3fc4b6');
+    this.sfx(dmg ? 'hurt' : 'armor');
     if (dmg) { this.burst(p.x, p.y, '#ff4d6a', 10); S.shake = 0.2; }
     if (h.hp <= 0) { this.float(p.x, p.y - 6, 'пал', '#ff4d6a'); h.hand = 0; }
     return blk;
@@ -905,10 +965,11 @@ export class Game {
     return d.rico > 0 ? 1 : d.e;
   }
 
-  /** A bounce off a wall or a block. */
-  private bounced(d: Disc) {
+  /** A bounce off a wall or a block at speed v: it clacks, louder the harder. */
+  private bounced(d: Disc, v = Math.hypot(d.vx, d.vy)) {
     d.bounces++;
     if (d.rico > 0) d.rico--;
+    if (v > 15) this.sfx('wall', Math.min(1, v / 300));
   }
 
   inBlock(x: number, y: number, r: number) {
@@ -920,6 +981,7 @@ export class Game {
     const S = this.S;
     let changed = false;
     this.tick++;
+    this.inStep = true;
     this.fx = mulberry32(Math.imul(this.tick, 0x9e3779b1));
     const born = S.sparks.length;
     for (const d of this.bodies()) {
@@ -936,6 +998,7 @@ export class Game {
       if (pitAt(S.pits, d.x, d.y)) {
         d.fall = 0.001; d.vx = d.vy = 0;
         this.float(d.x, d.y, 'провал', '#c7cbe0');
+        this.sfx('pit');
         this.hurtHero(d.hero, 2);
         changed = true;
         continue;
@@ -944,16 +1007,16 @@ export class Game {
         if (b.ice && b.hp! <= 0) continue;
         const vn = this.bounceBox(d, b, this.keep(d));
         if (vn <= 0) continue;
-        this.bounced(d);
+        this.bounced(d, vn);
         if (!b.ice || vn <= 30) continue;
         // icicles chip like mobs take damage, and shatter at zero
         const x = (b.x0 + b.x1) / 2, y = (b.y0 + b.y1) / 2;
         b.hp = Math.max(0, b.hp! - Math.ceil((d.m * vn) / 120));
-        if (b.hp > 0) this.chips('ice', x, y, 8, d, 1);
-        else { this.float(x, y, 'дзынь!', '#bfe9ff'); this.chips('ice', x, y, 0, d, 1, true); this.S.shake = Math.max(this.S.shake, 0.12); }
+        if (b.hp > 0) { this.chips('ice', x, y, 8, d, 1); this.sfx('ice'); }
+        else { this.float(x, y, 'дзынь!', '#bfe9ff'); this.chips('ice', x, y, 0, d, 1, true); this.S.shake = Math.max(this.S.shake, 0.12); this.sfx('shatter'); }
         changed = true;
       }
-      for (const b of S.rock) if (this.bounceBox(d, b, this.keep(d)) > 0) this.bounced(d);
+      for (const b of S.rock) { const vn = this.bounceBox(d, b, this.keep(d)); if (vn > 0) this.bounced(d, vn); }
       for (const n of S.nodes) {
         if (n.left <= 0) continue;
         // a resource soaks up most of the disc's run: collecting costs the throw
@@ -970,6 +1033,7 @@ export class Game {
         if (n.k === 'spk') { const got = Math.min(q, AB_COST - h.sparks); h.sparks += got; this.float(n.x, n.y, got ? `+${got} искр${got > 1 ? 'ы' : 'а'}` : 'искры полны', '#c9a8ff'); }
         if (n.k === 'herb') { const hl = Math.min(h.max - h.hp, 1 + 2 * q); h.hp += hl; this.float(n.x, n.y, hl ? `+${hl} HP` : 'HP полное', '#7be39a'); }
         this.chips(n.k, n.x, n.y, n.r, d, q);
+        this.sfx(n.k === 'spk' ? 'sparks' : n.k);
         if (n.left <= 0) this.float(n.x, n.y - 6, 'истощено', '#c7cbe0');
         changed = true;
       }
@@ -985,10 +1049,10 @@ export class Game {
         if (crit) dmg = Math.ceil(dmg * CRIT);
         if (d.hero.i === 1) dmg += Math.min(d.bounces, 4);
         if (d.charged) { dmg *= 2; d.charged = false; }
-        if (crit && m.hp > 0) this.float(m.x, m.y - 24, 'ТОЧНО!', '#ffe27a');
+        if (crit && m.hp > 0) { this.float(m.x, m.y - 24, 'ТОЧНО!', '#ffe27a'); this.sfx('crit'); }
         // the ability goes first: fire on an enemy this very hit kills leaps on to the next one
         if (d.ab) this.abilityHit(d, m);
-        this.hurtMob(m, dmg);
+        this.hurtMob(m, dmg, '#fff', false, Math.min(1, vn / 250));
         this.burst(d.x, d.y, d.hero.def.col, 8);
         // the figure rocks away from the disc, a big one less; a sure hit or a kill shakes the table
         this.knock(m, m.x, m.y, d.x, d.y, Math.min(1, 0.3 + vn / 260) * Math.min(1, (7 / m.r) ** 0.6));
@@ -1015,9 +1079,12 @@ export class Game {
         const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
         this.float(mx, my, 'ЗВОН ×2', '#b893ff');
         this.burst(mx, my, '#b893ff', 10);
-      }
+        this.sfx('clink', Math.min(1, -rv / 300));
+      } else if (-rv > 15) this.sfx('wall', Math.min(1, -rv / 400));
     }
     for (let k = born; k < S.sparks.length; k++) S.sparks[k].b = this.tick;
+    this.inStep = false;
+    this.heard = Math.max(this.heard, this.tick);
     if (changed) this.onChange();
   }
 
@@ -1115,6 +1182,7 @@ export class Game {
   /** The enemy turn begins: burning heroes smoulder, then the enemies take their moves one at a time. */
   private mobsStart() {
     const S = this.S;
+    this.sfx('enemyTurn');
     for (const h of this.alive()) {
       if (h.fire <= 0) continue;
       h.fire--;
@@ -1318,6 +1386,7 @@ export class Game {
     if (m.hp <= 0 || !it) return;
     if (it.t === 'slam') {
       m.flash = 0.12; S.shake = 0.3;
+      this.sfx('slam');
       this.float(m.x, m.y - 10, it.chill ? 'МЕТЕЛЬ' : 'УДАР ОБ ПОЛ', it.chill ? '#bfe6ff' : '#ffd34d');
       this.note(`${m.name}: ${it.chill ? 'метель' : 'удар'} по всем на ${it.dmg}`);
       for (const h of this.alive()) {
@@ -1333,10 +1402,12 @@ export class Game {
       const hl = Math.min(o.max - o.hp, it.dmg);
       o.hp += hl;
       this.float(o.x, o.y, `+${hl}`, '#7be39a'); this.burst(o.x, o.y, '#9fe3ff', 12);
+      this.sfx('herb');
       this.note(`${m.name} ${did(d, 'подлечил')} ${MOBS[o.k].acc} на ${hl}`);
     } else if (it.t === 'summon') {
       const kind = d.acts!.find(a => a.k === 'summon')!.kind!, mi = S.mobs.indexOf(m), n = it.spots?.length ?? 0;
       this.float(m.x, m.y - 10, 'призыв!', '#c9a8ff');
+      this.sfx('ability');
       this.note(`${m.name} ${did(d, 'призвал')} ${MOBS[kind].acc.toLowerCase()}${n > 1 ? ' ×' + n : ''}`);
       for (const p of it.spots ?? []) {
         // a disc may have come to rest on the circle; the mob still rises, the disc is long gone by then
@@ -1347,10 +1418,12 @@ export class Game {
       }
     } else if (it.t === 'heat') {
       this.float(m.x, m.y - 10, 'РАСКАЛЯЕТ ПОЛ', '#ff7a3d');
+      this.sfx('ability');
       this.note(`${m.name} ${did(d, 'раскалил')} пол`);
       for (const p of it.spots ?? []) { S.haz.add(hazKey(Math.floor(p.x / TILE), Math.floor(p.y / TILE))); this.burst(p.x, p.y, '#ff7a3d', 10); }
     } else if (it.t === 'charge') {
       this.float(m.x, m.y - 10, 'фитиль горит', '#ffb070');
+      this.sfx('launch', 0.3);
       this.note(`${m.name} ${did(d, 'поджёг', 'подожгла')} фитиль`);
     } else if (it.t === 'move') {
       // walled off, it stayed put: nothing to tell
@@ -1391,6 +1464,7 @@ export class Game {
     S.done = [];
     for (const h of S.heroes) { h.shield = 0; h.thrown = false; h.boost = false; h.hand = h.hp > 0 ? h.discs : 0; if (h.chill > 0) h.chill--; }
     S.phase = 'throw';
+    this.sfx('yourTurn');
     this.pickActive();
     this.pickIntents();
     if (this.rage() > 0) { this.float(S.Wx / 2, S.Wy / 2, `ВРАГИ ЗВЕРЕЮТ +${this.rage()}`, '#ff4d6a'); S.shake = Math.max(S.shake, 0.15); }
@@ -1399,6 +1473,7 @@ export class Game {
 
   private finish() {
     this.S.phase = 'over';
+    this.sfx(this.alive().length > 0 ? 'win' : 'lose');
     this.onChange();
     this.onRoomEnd(this.alive().length > 0);
   }
@@ -1445,11 +1520,22 @@ export class Game {
       m.hop = m.hp > 0 && u < 1 ? Math.sin(Math.PI * u) * 4 : 0;
       return;
     }
+    const n = w.length - 1;
+    this.putDown(m, S.clock >= T ? n : Math.floor((S.clock / T) * n));
     if (S.clock >= T) { m.x = m.tx; m.y = m.ty; m.hop = 0; return; }
-    const n = w.length - 1, at = Math.min(n - 1e-6, (S.clock / T) * n), k = Math.floor(at), f = at - k, e = f * f * (3 - 2 * f);
+    const at = Math.min(n - 1e-6, (S.clock / T) * n), k = Math.floor(at), f = at - k, e = f * f * (3 - 2 * f);
     m.x = w[k].x + (w[k + 1].x - w[k].x) * e;
     m.y = w[k].y + (w[k + 1].y - w[k].y) * e;
     m.hop = Math.sin(Math.PI * f) * 6;
+  }
+
+  /** The walker has put down on its `n`th cell: a knock on the board for each, once, however the snapshots set the clock back. */
+  private putDown(m: Mob, n: number) {
+    const key = `${this.S.turn}:${this.S.actor}`;
+    if (key !== this.walked.key) this.walked = { key, n: 0 };
+    if (n <= this.walked.n) return;
+    this.walked.n = n;
+    this.onSound('step', n % 2 ? 0.35 : 0.6);
   }
 
   /**
@@ -1490,6 +1576,9 @@ export class Game {
     this.lags = this.lags.filter(l => now - l.at < LAG_WINDOW);
     if (this.lags.some(l => lag - l.lag > (RESYNC_MS / 1000) / STEP)) this.lags = [];
     this.lags.push({ at: now, lag });
+    // the host started its count over: so does what was heard; joining, or waking up far behind, the catch-up plays in silence
+    if (tick < this.heard - 2 * REPLAY) this.heard = tick;
+    if (tick - was > REPLAY) this.heard = Math.max(this.heard, this.hostTick());
     this.tick = tick;
     this.rollOn();
     // hits this screen had already played come again as the discs are played on: their sparks fly on as they were
@@ -1525,6 +1614,7 @@ export class Game {
       if (h.from && (h.leap += dt / HOP_T) >= 1) {
         h.from = null;
         h.leap = 0;
+        if (this.hopped.get(h.i) !== S.turn) { this.hopped.set(h.i, S.turn); this.onSound('step', 0.9); }
         // landed on its disc: it picks the disc up
         const d = this.pickup.get(h);
         if (d) d.gone = true;
