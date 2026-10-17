@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Camera } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, mobSize } from '../src/data';
-import { Game, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
+import { Game, newBank, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { MOB_CAP, PARTY_SCALE, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Layout } from '../src/room';
 import { FLOORS, FORGE_ROWS, LAYERS, agreed, genFloor, newRun, restRoom } from '../src/run';
@@ -435,22 +435,26 @@ describe('placement and discs', () => {
     expect(g.bank.ore).toBe(ore);
   });
 
-  it('starts every fight without sparks, except the altar gift for the next one', () => {
-    const g = fresh();
-    g.bank.sparks = 7;
+  it('starts every fight without sparks, except full ones for every hero after the altar', () => {
+    const g = fresh(), sparks = () => g.party.map(h => h.sparks);
+    for (const h of g.party) h.sparks = 2;
     g.bank.ore = 5;
     g.loadRoom({ seed: 3, depth: 2, floor: 0, type: 'fight' });
-    expect(g.bank.sparks).toBe(0);
+    expect(sparks()).toEqual([0, 0, 0]);
     expect(g.bank.ore).toBe(5);
     // the altar of sparks is one of the events; find a seed that rolls it
     let seed = 0;
-    while (!restRoom('event', newParty(), { ore: 0, sparks: 0 }, seed).startsWith('Алтарь')) seed++;
-    restRoom('event', g.party, g.bank, seed);
-    expect(g.bank.sparks).toBe(0);
+    while (!restRoom('event', newParty(), newBank(), seed).startsWith('Алтарь')) seed++;
+    expect(restRoom('event', newParty([2]), newBank(), seed)).toBe(`Алтарь искр: следующий бой герой начнёт с полным запасом искр (${AB_COST}).`);
+    expect(restRoom('event', g.party, g.bank, seed)).toBe(`Алтарь искр: следующий бой каждый герой начнёт с полным запасом искр (${AB_COST}).`);
+    expect(sparks()).toEqual([0, 0, 0]);
     g.loadRoom({ seed: 4, depth: 3, floor: 0, type: 'fight' });
-    expect(g.bank.sparks).toBe(4);
+    expect(sparks()).toEqual([AB_COST, AB_COST, AB_COST]);
+    // full sparks pay for the ability right away
+    placeAll(g); g.startFight();
+    expect(g.party.every(h => g.canUseAbility(h))).toBe(true);
     g.loadRoom({ seed: 5, depth: 4, floor: 0, type: 'fight' });
-    expect(g.bank.sparks).toBe(0);
+    expect(sparks()).toEqual([0, 0, 0]);
   });
   it('ends the fight the moment the last enemy falls, with throws still left', () => {
     const g = fresh();
@@ -564,6 +568,18 @@ describe('online play', () => {
     host.forge = 0;
     applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
     expect(cli.forge).toBe(0);
+  });
+
+  it('loads a save from before sparks were each hero\'s own, sharing the party\'s pool out', () => {
+    const { host } = pair();
+    const old = JSON.parse(JSON.stringify(snapshot(host)));
+    for (const h of old.heroes) delete h.sparks;
+    old.bank = { ore: 6, sparks: 4, boon: 0 };
+    const back = new Game();
+    applySnapshot(back, old);
+    expect(back.party.map(h => h.sparks)).toEqual([AB_COST, 4 - AB_COST]);
+    expect(back.bank.ore).toBe(6);
+    expect(JSON.parse(JSON.stringify(snapshot(back))).bank).toEqual({ ore: 6, boon: 0 });
   });
 
   it('lets a client control only its own hero', () => {
@@ -732,6 +748,29 @@ describe('pressure in a fight', () => {
     expect(straight.dmg).toBe(Math.ceil(banked.dmg * CRIT));
   });
 
+  it('a spark crystal fills the sparks of the hero who threw the disc, never past the cost of the ability', () => {
+    const g = arena(['archer']), [a, b] = g.party;
+    const n = { k: 'spk' as const, name: 'Кристалл искр', r: 6, ch: 3, x: 88, y: 88, left: 9, hit: 0 };
+    g.S.nodes = [n];
+    const hit = (h: HeroState) => {
+      g.S.floats = [];
+      g.S.discs = [{ ...disc(g, n.x, n.y + n.r + 6.5, 0, -200), hero: h }];
+      g.step(1 / 60);
+      return g.S.floats.map(f => f.txt);
+    };
+    // a hard hit chips off two, the next only what is still missing
+    expect(hit(b)).toContain('+2 искры');
+    expect(hit(b)).toContain('+1 искра');
+    expect(b.sparks).toBe(AB_COST);
+    expect(hit(b)).toContain('искры полны');
+    expect(b.sparks).toBe(AB_COST);
+    expect(a.sparks).toBe(0);
+    expect(g.canUseAbility(a)).toBe(false);
+    expect(g.canUseAbility(b)).toBe(true);
+    // the crystal still gives one charge less for the hit that found the hero full
+    expect(n.left).toBe(6);
+  });
+
   it('a resource soaks up the disc, so collecting costs the throw', () => {
     const g = arena(['archer']);
     const n = { k: 'ore' as const, name: 'Рудная жила', r: 7, ch: 3, x: 88, y: 88, left: 3, hit: 0 };
@@ -767,19 +806,22 @@ describe('hero abilities work through the discs', () => {
     return d;
   };
 
-  it('goes on before a throw, costs sparks, and lasts to the end of the turn', () => {
-    const g = arena(['archer']), h = byKey(g, 'bastion');
+  it('goes on before a throw, costs the hero\'s own sparks, and lasts to the end of the turn', () => {
+    const g = arena(['archer']), h = byKey(g, 'bastion'), other = byKey(g, 'ash');
     expect(g.canUseAbility(h)).toBe(false);
-    g.bank.sparks = AB_COST * 2;
+    h.sparks = AB_COST;
+    // sparks are the hero's own: the others can't spend them
+    expect(g.canUseAbility(other)).toBe(false);
     g.useAbility(h);
     expect(h.boost).toBe(true);
-    expect(g.bank.sparks).toBe(AB_COST);
+    expect(h.sparks).toBe(0);
     // once a turn: a second press would only waste sparks
+    h.sparks = AB_COST;
     expect(g.canUseAbility(h)).toBe(false);
     g.throwDisc(h, 0, -40);
     expect(g.S.discs[0].ab).toBe(true);
     // a hero with no disc left in hand has nothing to carry it
-    const other = byKey(g, 'ash');
+    other.sparks = AB_COST;
     g.throwDisc(other, 0, -40);
     expect(g.canUseAbility(other)).toBe(false);
     const t0 = g.S.turn;
@@ -831,7 +873,7 @@ describe('hero abilities work through the discs', () => {
     const bounces = (ab: boolean) => {
       const g = arena(['archer']), h = byKey(g, 'ricochet');
       g.S.mobs[0].x = g.S.mobs[0].y = 8; // out of the way, in the corner
-      g.bank.sparks = AB_COST;
+      h.sparks = AB_COST;
       if (ab) g.useAbility(h);
       g.throwDisc(h, 0.3, -5);
       const d = g.S.discs[0];
@@ -867,8 +909,10 @@ describe('hero abilities work through the discs', () => {
     cli.online = true;
     cli.send = a => sent.push(a);
     cli.canControl = o => o.i === 2;
-    host.bank.sparks = AB_COST;
+    host.heroOf(2).sparks = AB_COST;
     applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    expect(cli.heroOf(2).sparks).toBe(AB_COST);
+    expect(cli.heroOf(0).sparks).toBe(0);
     cli.useAbility(cli.heroOf(2));
     expect(cli.heroOf(2).boost).toBe(false);
     expect(sent).toEqual([{ k: 'ability', h: 2 }]);
@@ -876,7 +920,7 @@ describe('hero abilities work through the discs', () => {
     host.S.mobs[0].burn = 5;
     applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
     expect(cli.heroOf(2).boost).toBe(true);
-    expect(cli.bank.sparks).toBe(0);
+    expect(cli.heroOf(2).sparks).toBe(0);
     expect(cli.S.mobs[0].burn).toBe(5);
   });
 });

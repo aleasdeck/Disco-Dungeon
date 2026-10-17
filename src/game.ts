@@ -32,6 +32,8 @@ export interface HeroState {
   fire: number;
   /** The ability is on for the rest of this turn: the discs thrown now shield, set on fire or keep their speed. */
   boost: boolean;
+  /** Sparks for the ability, 0 to AB_COST: each hero gathers its own with its discs, and they last one fight. */
+  sparks: number;
   /** The last knock it took: the figure rocks on its stand for a moment. */
   knock?: Knock;
 }
@@ -127,13 +129,14 @@ export function pointAt(w: Pt[], d: number): Pt {
 }
 
 /**
- * Ore and sparks belong to the whole party: any hero's hit fills the pool, any hero spends from it.
- * Ore lasts the whole run; sparks are for one fight only, and every fight starts with `boon` of them (usually none).
+ * Ore belongs to the whole party: any hero's hit fills the pool, any hero spends from it, and it lasts the whole run.
+ * Sparks are each hero's own (`HeroState.sparks`) and last one fight; every hero starts the next one with `boon` of them
+ * (the altar's gift, usually none).
  */
-export interface Bank { ore: number; sparks: number; boon?: number }
+export interface Bank { ore: number; boon?: number }
 
 export function newBank(): Bank {
-  return { ore: 0, sparks: 0, boon: 0 };
+  return { ore: 0, boon: 0 };
 }
 
 /** A fresh party; `picks` lists which heroes (by index into HEROES) take part, all of them by default. */
@@ -144,7 +147,7 @@ export function newParty(picks: number[] = HEROES.map((_, i) => i)): HeroState[]
 function heroStart() {
   return {
     hp: 22, max: 22, shield: 0, up: { m: 0, pw: 0, e: 0 }, discs: HAND_START,
-    pad: null as number | null, at: null as Pt | null, from: null as Pt | null, leap: 0, hand: HAND_START, thrown: false, flash: 0, chill: 0, fire: 0, boost: false,
+    pad: null as number | null, at: null as Pt | null, from: null as Pt | null, leap: 0, hand: HAND_START, thrown: false, flash: 0, chill: 0, fire: 0, boost: false, sparks: 0,
   };
 }
 
@@ -152,7 +155,9 @@ export class Game {
   S!: State;
   act = 0;
   party: HeroState[] = newParty();
-  bank: Bank = newBank();
+  private kept = this.withSparks(newBank());
+  get bank(): Bank & { readonly sparks: number } { return this.kept; }
+  set bank(b: Bank) { this.kept = this.withSparks(b); }
   onChange: () => void = () => {};
   onRoomEnd: (win: boolean) => void = () => {};
   /** Which heroes this screen may move, aim and select (online: only the player's own). */
@@ -170,15 +175,24 @@ export class Game {
   /** Host: the disc each hero is hopping over to; it picks the disc up once it lands. */
   private pickup = new Map<HeroState, Disc>();
 
+  /**
+   * Temporary, until the HUD reads sparks off the hero: `bank.sparks` gives the selected hero's own, where the party's pool
+   * used to be. Not enumerable, so snapshots and saves never carry it.
+   */
+  private withSparks(b: Bank) {
+    Object.defineProperty(b, 'sparks', { get: () => (this.S ? this.hero?.sparks ?? 0 : 0), configurable: true });
+    return b as Bank & { readonly sparks: number };
+  }
+
   /** Start a fight in a new room; unless the spec says otherwise, the room is built for the party's size. */
   loadRoom(spec: RoomSpec) {
     spec = { ...spec, heroes: spec.heroes ?? this.party.length };
     const L = generate(spec);
     this.forge = 0;
     this.pickup.clear();
-    for (const h of this.party) Object.assign(h, { pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0, chill: 0, fire: 0, boost: false });
-    // sparks don't carry over: every fight starts afresh
-    this.bank.sparks = this.bank.boon ?? 0;
+    // sparks don't carry over: every fight starts without them, or full after the altar
+    const boon = Math.min(AB_COST, this.bank.boon ?? 0);
+    for (const h of this.party) Object.assign(h, { pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: 0, flash: 0, chill: 0, fire: 0, boost: false, sparks: boon });
     this.bank.boon = 0;
     this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [] };
     // every rune starts empty: the players put their heroes on them before the fight
@@ -392,15 +406,15 @@ export class Game {
     this.onChange();
   }
 
-  /** An ability works through the discs thrown after it, so it needs a disc still in hand, and it goes on once a turn. */
+  /** An ability works through the discs thrown after it, so it needs a disc still in hand, and it goes on once a turn on the hero's own sparks. */
   canUseAbility(h = this.hero) {
-    return this.S.phase === 'throw' && h.hp > 0 && h.hand > 0 && !h.boost && this.bank.sparks >= AB_COST && this.liveMobs().length > 0;
+    return this.S.phase === 'throw' && h.hp > 0 && h.hand > 0 && !h.boost && h.sparks >= AB_COST && this.liveMobs().length > 0;
   }
 
   useAbility(h = this.hero) {
     if (!this.canUseAbility(h)) return;
     if (this.send) { this.send({ k: 'ability', h: h.i }); return; }
-    this.bank.sparks -= AB_COST;
+    h.sparks -= AB_COST;
     h.boost = true;
     const p = this.spot(h);
     if (p) {
@@ -787,7 +801,8 @@ export class Game {
         n.left--;
         n.hit = 0.2;
         if (n.k === 'ore') { this.bank.ore += q; this.float(n.x, n.y, `+${q} руда`, '#ffb070'); }
-        if (n.k === 'spk') { this.bank.sparks += q; this.float(n.x, n.y, `+${q} искр${q > 1 ? 'ы' : 'а'}`, '#c9a8ff'); }
+        // sparks go to the hero who threw the disc, up to what one ability costs
+        if (n.k === 'spk') { const got = Math.min(q, AB_COST - h.sparks); h.sparks += got; this.float(n.x, n.y, got ? `+${got} искр${got > 1 ? 'ы' : 'а'}` : 'искры полны', '#c9a8ff'); }
         if (n.k === 'herb') { const hl = Math.min(h.max - h.hp, 1 + 2 * q); h.hp += hl; this.float(n.x, n.y, hl ? `+${hl} HP` : 'HP полное', '#7be39a'); }
         this.chips(n.k, n.x, n.y, n.r, d, q);
         if (n.left <= 0) this.float(n.x, n.y - 6, 'истощено', '#c7cbe0');

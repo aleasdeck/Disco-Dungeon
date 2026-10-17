@@ -1,7 +1,7 @@
 // Online play: the host's game state as plain data, and applying it on a client.
 // Rooms are rebuilt from their spec (generation is seeded), so only what changes travels.
 
-import { HEROES } from './data';
+import { AB_COST, HEROES } from './data';
 import type { Bank, Disc, Float, Game, HeroState, Phase, Spark } from './game';
 import type { Mob, RoomSpec } from './room';
 import type { Run, Votes } from './run';
@@ -27,7 +27,8 @@ export interface Snapshot {
   discs: (Omit<Disc, 'hero'> & { hero: number })[];
   floats: Float[];
   sparks: Spark[];
-  bank: Bank;
+  /** Saves from before sparks were each hero's own hold the party's pool here, and their heroes have none. */
+  bank: Bank & { sparks?: number };
   /** Hazard tiles change mid-fight: lava from slimes and the forge boss. */
   haz: string[];
   /** Depth of the blacksmith's the party is at, 0 elsewhere: everyone upgrades their own hero's discs there. */
@@ -68,12 +69,21 @@ const sameSpec = (a: RoomSpec, b: RoomSpec) => a.seed === b.seed && a.depth === 
 /** Make the client's game match the host's. Returns true when the party or the room changed (the HUD and camera need a rebuild). */
 export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boolean } {
   let party = false, room = false;
-  if (g.party.length !== s.heroes.length || g.party.some((h, k) => h.i !== s.heroes[k].i)) {
-    g.party = s.heroes.map(h => ({ ...h, def: HEROES[h.i] }));
+  // an old save: the party's pool is shared out hero by hero, as much as each can hold
+  const { sparks: _pool, ...bank } = s.bank;
+  let pool = s.bank.sparks ?? 0;
+  const heroes = s.heroes.map(h => {
+    if ((h as Partial<HeroSnap>).sparks !== undefined) return h;
+    const n = Math.min(AB_COST, pool);
+    pool -= n;
+    return { ...h, sparks: n };
+  });
+  if (g.party.length !== heroes.length || g.party.some((h, k) => h.i !== heroes[k].i)) {
+    g.party = heroes.map(h => ({ ...h, def: HEROES[h.i] }));
     party = true;
   } else {
     // keep the same objects so discs and the HUD can hold on to them
-    g.party.forEach((h, k) => Object.assign(h, s.heroes[k]));
+    g.party.forEach((h, k) => Object.assign(h, heroes[k]));
   }
   if (!g.S || !sameSpec(g.S.spec, s.spec)) { g.showRoom(s.spec); room = true; }
   const S = g.S;
@@ -85,7 +95,7 @@ export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boo
   S.nodes.forEach((n, k) => { if (s.nodes[k]) [n.left, n.hit] = s.nodes[k]; });
   if (s.ice) S.blocks.filter(b => b.ice).forEach((b, k) => { if (s.ice![k] !== undefined) b.hp = s.ice![k]; });
   S.discs = s.discs.map(d => ({ ...d, hero: g.heroOf(d.hero) }));
-  Object.assign(g.bank, s.bank);
+  Object.assign(g.bank, bank);
   if (s.haz) S.haz = new Set(s.haz);
   g.forge = s.forge ?? 0;
   g.pickActive();

@@ -1,6 +1,6 @@
 // Run structure: 3 floors, each a layered branching map of rooms; a path takes 7 rooms ending at the boss.
 
-import { FORGE_ORE, ROOM_TYPES, type RoomType } from './data';
+import { AB_COST, FORGE_ORE, ROOM_TYPES, type RoomType } from './data';
 import type { Bank, HeroState } from './game';
 import { makeRng } from './rng';
 
@@ -117,9 +117,9 @@ export function restRoom(type: RoomType, party: HeroState[], bank: Bank, seed: n
   const R = makeRng(seed);
   const roll = R.int(0, 2);
   if (roll === 0) {
-    // sparks burn out between fights, so the altar's gift waits for the next one
-    bank.boon = (bank.boon ?? 0) + 4;
-    return 'Алтарь искр: следующий бой начнётся с 4 искрами.';
+    // sparks burn out between fights, so the altar's gift waits for the next one: every hero starts it full
+    bank.boon = AB_COST;
+    return `Алтарь искр: следующий бой ${solo ? 'герой' : 'каждый герой'} начнёт с полным запасом искр (${AB_COST}).`;
   }
   if (roll === 1) {
     for (const h of party) if (h.hp > 0) h.hp = Math.max(1, h.hp - 3);
