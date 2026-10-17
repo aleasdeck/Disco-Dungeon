@@ -42,6 +42,13 @@ export interface Biome {
   art: string;
 }
 
+/** Words sprayed on the walls, by the floor's art key; a line break splits a word over two lines. */
+export const WALL_WORDS: Record<string, string[]> = {
+  prison: ['ТУТ БЫЛ\nВАСЯ', 'ЛОХ', 'ЖОПА', 'ХУЙ', 'ЦОЙ\nЖИВ', 'МАМА\nПРОСТИ', 'КОРОЛЬ\nЛОХ', 'ДЕМБЕЛЬ\n96'],
+  ice: ['ХОЛОДНО\nБЛИН', 'ЖОПА\nМЁРЗНЕТ', 'ЛИЧ\nЛОХ', 'ЦОЙ\nЖИВ', 'ХУЙ', 'ТУТ БЫЛ\nВАСЯ', 'ЙЕТИ\nСУКА'],
+  forge: ['ЖАРКО\nКАК В АДУ', 'КУЗНЕЦ\nЛОХ', 'ХУЙ', 'ТУТ БЫЛ\nВАСЯ', 'ЦОЙ\nЖИВ', 'ЖОПА', 'ЗДЕСЬ\nНЕ ССАТЬ'],
+};
+
 export const BIOMES: Biome[] = [
   { name: 'Тюремные казематы', f: ['#6f6a64', '#79736b'], g: '#3b3631', w: ['#4a433c', '#5a5148'], cap: '#857b6e', mu: 70, haz: 'spikes', hazDmg: 3, bg: ['#2d2621', '#0e0b09'], torch: '255,160,70', art: 'prison' },
   { name: 'Ледяной склеп', f: ['#7c878c', '#869197'], g: '#4f6a74', w: ['#4a6470', '#56717e'], cap: '#a3bfc9', mu: 65, iceMu: 20, haz: 'spikes', hazDmg: 3, bg: ['#1f2d34', '#0a1013'], torch: '150,220,255', art: 'ice' },

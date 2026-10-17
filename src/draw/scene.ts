@@ -1,13 +1,13 @@
 // Draws one frame of a room: walls, floor, obstacles, resources, discs and miniatures.
 // Everything is drawn in iso space through the camera, so zoom and rotation are free.
 
-import { HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize } from '../data';
+import { WALL_WORDS, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize } from '../data';
 import type { Camera, Vec } from '../camera';
 import { type Disc, type Game, type HeroState } from '../game';
 import { cellAt, floorAt, hazKey, isFloor, type Block, type Decal, type Edge, type Mob, type ResNode } from '../room';
 import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure } from './figures';
 import { circ, ell, fs, mix, pth, rr, type Ctx, type Pt } from './util';
-import { envArt } from '../assets';
+import { GRAFFITI_FONTS, envArt } from '../assets';
 import { settings } from '../settings';
 
 export interface Aim { hero: HeroState; dx: number; dy: number }
@@ -24,6 +24,10 @@ const env = (k: string) => envArt.get(k);
 const OL = 2.1, DL = 1.1;
 /** Ink on stone blocks: thinner than the room's silhouette, so a block doesn't look cut out of the floor. */
 const BL = 1.2;
+/** Chalk doodles from the manifest, any of which may turn up on any floor's walls. */
+const DOODLES = ['doodle_tally', 'doodle_skull', 'doodle_heart', 'doodle_peek', 'doodle_king', 'doodle_rat'];
+/** Spray-can colours for words on the walls. */
+const SPRAY = ['#ff5fa2', '#a8e05a', '#f4efe2', '#ff4b3a', '#ffd23f', '#58c8f2'];
 /** The four sides of a cell: neighbour offset, then the side's two corners in cell units. */
 const SIDES: [number, number, number, number, number, number][] = [[0, -1, 0, 0, 1, 0], [1, 0, 1, 0, 1, 1], [0, 1, 0, 1, 1, 1], [-1, 0, 0, 0, 0, 1]];
 /** Stable pseudo-random 0..1 from integers, so stones and cracks stay put between frames. */
@@ -132,10 +136,49 @@ export class SceneRenderer {
 
   /** A picture flat on a wall: w world units wide, its top edge at height top, centred on world coordinate um along the wall. */
   private onWall(im: HTMLImageElement, at: (u: number, h: number) => Pt, um: number, top: number, w: number) {
-    const o = at(um - w / 2, top), ex = at(um - w / 2 + 1, top), sc = w / im.width, c = this.c;
+    const [m, d] = this.wallFrame(at, um, top), sc = w / im.width, c = this.c;
     c.save();
-    c.transform((ex[0] - o[0]) * sc, (ex[1] - o[1]) * sc, 0, sc, o[0], o[1]);
+    c.transform(d[0] * sc, d[1] * sc, 0, sc, m[0] - (d[0] * w) / 2, m[1] - (d[1] * w) / 2);
     c.drawImage(im, 0, 0);
+    c.restore();
+  }
+
+  /** Screen point of world coordinate um along a wall at height h, and the step along the wall that reads left to right on screen. */
+  private wallFrame(at: (u: number, h: number) => Pt, um: number, h: number): [Pt, Pt] {
+    const o = at(um, h), e = at(um + 1, h), d: Pt = [e[0] - o[0], e[1] - o[1]];
+    return [o, d[0] < 0 ? [-d[0], -d[1]] : d];
+  }
+
+  /** A gag on a piece of wall: one of the floor's words in spray paint, or a chalk doodle. */
+  private graffiti(at: (u: number, h: number) => Pt, um: number, seed: number) {
+    const doodles = DOODLES.map(k => env(k)).filter((im): im is HTMLImageElement => !!im);
+    if (doodles.length && hr(seed, 3, 91) < 0.4) {
+      const im = doodles[Math.floor(hr(seed, 4, 91) * doodles.length)];
+      this.onWall(im, at, um + (hr(seed, 5, 91) - 0.5) * 2, 27 - hr(seed, 6, 91) * 4, 9 + hr(seed, 7, 91) * 3);
+      return;
+    }
+    const words = WALL_WORDS[this.bk] ?? [];
+    if (!words.length) return;
+    const lines = words[Math.floor(hr(seed, 8, 91) * words.length)].split('\n');
+    const [o, d] = this.wallFrame(at, um, 17 - hr(seed, 9, 91) * 5), c = this.c;
+    const face = GRAFFITI_FONTS[Math.floor(hr(seed, 12, 91) * GRAFFITI_FONTS.length)];
+    c.save();
+    c.transform(d[0], d[1], 0, 1, o[0], o[1]);
+    c.rotate((hr(seed, 11, 91) - 0.5) * 0.25);
+    let size = 5.8;
+    c.font = `${size}px "${face}"`;
+    // fit the widest line inside the piece of wall, with room for the spray's overspill and the tilt
+    const widest = Math.max(...lines.map(l => c.measureText(l).width));
+    if (widest > 10.5) { size *= 10.5 / widest; c.font = `${size}px "${face}"`; }
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillStyle = SPRAY[Math.floor(hr(seed, 10, 91) * SPRAY.length)];
+    // a dark edge keeps light paint readable on a pale wall
+    c.strokeStyle = 'rgba(20,10,5,.55)';
+    c.lineWidth = size * 0.14;
+    c.lineJoin = 'round';
+    c.globalAlpha *= 0.92;
+    lines.forEach((l, n) => { const y = (n - (lines.length - 1) / 2) * size; c.strokeText(l, 0, y); c.fillText(l, 0, y); });
     c.restore();
   }
 
@@ -299,7 +342,7 @@ export class SceneRenderer {
       pth(c, [[mx + 2.5, my], [mx + 5.5, my], [mx + 5.8, my + 15], [mx + 3, my + 12.5]]); c.fillStyle = '#6e2628'; c.fill();
       pth(c, cloth); c.lineWidth = DL + 0.4; c.strokeStyle = INK; c.stroke();
       circ(c, mx, my + 6, 2.6); fs(c, '#e2b54a', DL);
-    }
+    } else if (hr(e.i, e.j, 91) < 0.7) this.graffiti(at, u0 + TILE / 2, e.i * 131 + e.j * 7 + (along ? 1 : 0));
   }
 
   /**
