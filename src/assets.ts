@@ -17,8 +17,8 @@ interface ManifestEntry { file: string; facing?: 'left' | 'right' }
 export const sprites = new Map<string, Sprite>();
 /** Room art by key: floor slabs, brickwork, torches, pillars, resources, disc tops (keys in the README). */
 export const envArt = new Map<string, HTMLImageElement>();
-/** Spray-paint faces for words on the walls (Google Fonts, loaded in index.html). */
-export const GRAFFITI_FONTS = ['Rubik Spray Paint', 'Rubik Wet Paint'];
+/** Hand-drawn faces with Cyrillic for words scratched and chalked on the walls (Google Fonts, linked in index.html). */
+export const GRAFFITI_FONTS = ['700 20px "Amatic SC"', '700 20px "Caveat"', '400 20px "Neucha"'];
 
 export async function loadSprites(onLoad: () => void): Promise<void> {
   const base = import.meta.env.BASE_URL;
@@ -47,6 +47,6 @@ export async function loadSprites(onLoad: () => void): Promise<void> {
     })),
     ...Object.entries(env).map(([key, file]) => load(file, img => envArt.set(key, img))),
     // the wall graffiti fonts, with their Cyrillic letters, before the room is drawn with them
-    ...GRAFFITI_FONTS.map(f => document.fonts?.load(`20px "${f}"`, 'ЖОПА').then(onLoad, () => {})),
+    ...GRAFFITI_FONTS.map(f => document.fonts?.load(f, 'ЖОПА').then(onLoad, () => {})),
   ]);
 }

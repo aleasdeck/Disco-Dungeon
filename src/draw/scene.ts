@@ -26,8 +26,12 @@ const OL = 2.1, DL = 1.1;
 const BL = 1.2;
 /** Chalk doodles from the manifest, any of which may turn up on any floor's walls. */
 const DOODLES = ['doodle_tally', 'doodle_skull', 'doodle_heart', 'doodle_peek', 'doodle_king', 'doodle_rat'];
-/** Spray-can colours for words on the walls. */
-const SPRAY = ['#ff5fa2', '#a8e05a', '#f4efe2', '#ff4b3a', '#ffd23f', '#58c8f2'];
+/** Whether the graffiti fonts have loaded; words drawn before that use a fallback face and are drawn again. */
+const fontsReady = () => typeof document === 'undefined' || !document.fonts || GRAFFITI_FONTS.every(f => document.fonts.check(f, 'Ж'));
+/** Chalk white, for words and doodles on the walls. */
+const CHALK = '#efeadf';
+/** A gag on a wall line: world coordinate of its middle along the wall, height of its middle, height, and what it shows. */
+interface WallGag { u: number; h: number; size: number; doodle?: string; word?: string; font?: string; tilt: number }
 /** The four sides of a cell: neighbour offset, then the side's two corners in cell units. */
 const SIDES: [number, number, number, number, number, number][] = [[0, -1, 0, 0, 1, 0], [1, 0, 1, 0, 1, 1], [0, 1, 0, 1, 1, 1], [-1, 0, 0, 0, 0, 1]];
 /** Stable pseudo-random 0..1 from integers, so stones and cracks stay put between frames. */
@@ -149,37 +153,123 @@ export class SceneRenderer {
     return [o, d[0] < 0 ? [-d[0], -d[1]] : d];
   }
 
-  /** A gag on a piece of wall: one of the floor's words in spray paint, or a chalk doodle. */
-  private graffiti(at: (u: number, h: number) => Pt, um: number, seed: number) {
-    const doodles = DOODLES.map(k => env(k)).filter((im): im is HTMLImageElement => !!im);
-    if (doodles.length && hr(seed, 3, 91) < 0.4) {
-      const im = doodles[Math.floor(hr(seed, 4, 91) * doodles.length)];
-      this.onWall(im, at, um + (hr(seed, 5, 91) - 0.5) * 2, 27 - hr(seed, 6, 91) * 4, 9 + hr(seed, 7, 91) * 3);
-      return;
+  private gagSet: { S: object; stamp: string; lines: Map<string, WallGag[]> } | null = null;
+  /**
+   * Gags along every straight run of wall, laid out once per room: chalk doodles and scratched words, each up to about
+   * two tiles wide, with bare stretches between them. Keyed by the run's line, so every piece of wall draws its slice.
+   */
+  private wallGags() {
+    // laid out again once the doodles and the fonts arrive, since both change how wide a gag is
+    const S = this.g.S, stamp = `${envArt.size}:${fontsReady()}`;
+    if (this.gagSet?.S === S && this.gagSet.stamp === stamp) return this.gagSet.lines;
+    const runs = new Map<string, [number, number][]>(), torches = new Map<string, number[]>();
+    for (const e of S.edges) {
+      const along = e.nx !== 0, u0 = Math.min(along ? e.a[1] : e.a[0], along ? e.b[1] : e.b[0]);
+      const key = `${along ? 'x' : 'y'}${along ? e.a[0] : e.a[1]}:${e.nx},${e.ny}`;
+      if (!runs.has(key)) { runs.set(key, []); torches.set(key, []); }
+      runs.get(key)!.push([u0, u0 + TILE]);
+      // the same rule drawWall uses for where torches hang
+      if ((along ? e.j : e.i) % 4 === 2) torches.get(key)!.push(u0 + TILE / 2);
     }
-    const words = WALL_WORDS[this.bk] ?? [];
-    if (!words.length) return;
-    const lines = words[Math.floor(hr(seed, 8, 91) * words.length)].split('\n');
-    const [o, d] = this.wallFrame(at, um, 17 - hr(seed, 9, 91) * 5), c = this.c;
-    const face = GRAFFITI_FONTS[Math.floor(hr(seed, 12, 91) * GRAFFITI_FONTS.length)];
-    c.save();
-    c.transform(d[0], d[1], 0, 1, o[0], o[1]);
-    c.rotate((hr(seed, 11, 91) - 0.5) * 0.25);
-    let size = 5.8;
-    c.font = `${size}px "${face}"`;
-    // fit the widest line inside the piece of wall, with room for the spray's overspill and the tilt
-    const widest = Math.max(...lines.map(l => c.measureText(l).width));
-    if (widest > 10.5) { size *= 10.5 / widest; c.font = `${size}px "${face}"`; }
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
-    c.fillStyle = SPRAY[Math.floor(hr(seed, 10, 91) * SPRAY.length)];
-    // a dark edge keeps light paint readable on a pale wall
-    c.strokeStyle = 'rgba(20,10,5,.55)';
-    c.lineWidth = size * 0.14;
-    c.lineJoin = 'round';
-    c.globalAlpha *= 0.92;
-    lines.forEach((l, n) => { const y = (n - (lines.length - 1) / 2) * size; c.strokeText(l, 0, y); c.fillText(l, 0, y); });
-    c.restore();
+    const words = WALL_WORDS[this.bk] ?? [], doodles = DOODLES.filter(k => env(k)), lines = new Map<string, WallGag[]>();
+    let seed = 1;
+    for (const [key, spans] of runs) {
+      spans.sort((p, q) => p[0] - q[0]);
+      const gags: WallGag[] = [];
+      // walk each unbroken stretch of this line, leaving room at its ends
+      for (let k = 0; k < spans.length;) {
+        let end = spans[k][1];
+        const start = spans[k][0];
+        while (k + 1 < spans.length && spans[k + 1][0] <= end + 0.01) end = spans[++k][1];
+        k++;
+        for (let u = start + 3; u < end - 12; seed++) {
+          const r = (n: number) => hr(seed, n, 97);
+          if (r(1) < 0.35) { u += 8 + r(2) * 10; continue; }
+          const doodle = doodles.length && r(3) < 0.45;
+          const g: WallGag = doodle
+            ? { u: 0, h: 13 + r(4) * 3, size: 12 + r(5) * 5, doodle: doodles[Math.floor(r(6) * doodles.length)], tilt: (r(7) - 0.5) * 0.12 }
+            : { u: 0, h: 13 + r(4) * 4, size: 6 + r(5) * 2.5, word: words[Math.floor(r(6) * words.length)], font: GRAFFITI_FONTS[Math.floor(r(8) * GRAFFITI_FONTS.length)], tilt: (r(7) - 0.5) * 0.3 };
+          if (!g.doodle && !g.word) { u += 10; continue; }
+          const w = Math.min(end - u - 2, this.gagWidth(g));
+          if (w < 8) break;
+          // keep clear of the torches
+          const torch = torches.get(key)!.find(t => t + 5 > u && t - 5 < u + w);
+          if (torch !== undefined) { u = torch + 5; continue; }
+          g.u = u + w / 2;
+          gags.push(g);
+          u += w + 4 + r(9) * 8;
+        }
+      }
+      lines.set(key, gags);
+    }
+    this.gagSet = { S, stamp, lines };
+    return lines;
+  }
+
+  /** Width of a gag along the wall in world units, at its natural proportions. */
+  private gagWidth(g: WallGag) {
+    const im = g.doodle ? env(g.doodle) : this.chalkWord(g.word!, g.font!);
+    if (!im) return 0;
+    const lines = g.word ? g.word.split('\n').length : 1;
+    return Math.min(30, (im.width / im.height) * g.size * lines);
+  }
+
+  private words = new Map<string, HTMLCanvasElement>();
+  /** A word written in white chalk or scratched into the stone: re-traced a couple of times, with dry streaks knocked out. */
+  private chalkWord(text: string, font: string) {
+    const key = `${font}|${text}|${fontsReady()}`;
+    let cv = this.words.get(key);
+    if (cv) return cv;
+    const lines = text.split('\n'), px = 96, pad = 16, f = font.replace(/\d+px/, `${px}px`);
+    cv = document.createElement('canvas');
+    const x = cv.getContext('2d')!;
+    x.font = f;
+    cv.width = Math.ceil(Math.max(...lines.map(l => x.measureText(l).width))) + pad * 2;
+    cv.height = Math.ceil(lines.length * px * 0.95) + pad * 2;
+    x.font = f;
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.fillStyle = CHALK;
+    for (const [dx, dy, a] of [[0, 0, 1], [2.5, -1.5, 0.5], [-2, 2, 0.4]]) {
+      x.globalAlpha = a;
+      lines.forEach((l, n) => x.fillText(l, cv!.width / 2 + dx, pad + px * 0.95 * (n + 0.5) + dy));
+    }
+    x.globalAlpha = 1;
+    x.globalCompositeOperation = 'destination-out';
+    x.strokeStyle = 'rgba(0,0,0,.6)';
+    x.lineWidth = 2;
+    x.beginPath();
+    const n = Math.round((cv.width * cv.height) / 180);
+    for (let k = 0; k < n; k++) {
+      const sx = hr(k, text.length, 13) * cv.width, sy = hr(k, text.length, 17) * cv.height, len = 5 + hr(k, 3, 19) * 12;
+      x.moveTo(sx, sy);
+      x.lineTo(sx + len, sy - len * 0.45);
+    }
+    x.stroke();
+    this.words.set(key, cv);
+    return cv;
+  }
+
+  /** The slices of this line's gags that fall on the piece of wall from u0 to u1, clipped to its face. */
+  private wallGraffiti(e: Edge, face: Pt[], at: (u: number, h: number) => Pt, u0: number, u1: number) {
+    const along = e.nx !== 0, gags = this.wallGags().get(`${along ? 'x' : 'y'}${along ? e.a[0] : e.a[1]}:${e.nx},${e.ny}`);
+    if (!gags?.length) return;
+    const c = this.c;
+    let clipped = false;
+    for (const g of gags) {
+      const w = this.gagWidth(g);
+      if (!w || g.u + w / 2 < u0 || g.u - w / 2 > u1) continue;
+      const im = g.doodle ? env(g.doodle)! : this.chalkWord(g.word!, g.font!);
+      if (!clipped) { c.save(); pth(c, face); c.clip(); clipped = true; }
+      const [m, d] = this.wallFrame(at, g.u, g.h), h = (w * im.height) / im.width;
+      c.save();
+      c.transform(d[0], d[1], 0, 1, m[0], m[1]);
+      c.rotate(g.tilt);
+      c.globalAlpha = g.word ? 0.9 : 0.85;
+      c.drawImage(im, -w / 2, -h / 2, w, h);
+      c.restore();
+    }
+    if (clipped) c.restore();
   }
 
   /** Brick texture on a vertical face, repeating along world coordinate u; the strip's height spans fullH (the face's own height unless given), top edge at the top of the face. */
@@ -315,6 +405,7 @@ export class SceneRenderer {
     const wt = env(`wall_${this.bk}`);
     if (wt) this.wallTex(wt, [A, Bp, Bt, At], at, u0, u0 + TILE, H, 0.06 + 0.2 * (0.5 + 0.5 * this.cam.sideways(-e.nx, -e.ny)));
     else this.stones([A, Bp, Bt, At], at, u0, u0 + TILE, H, base, line);
+    this.wallGraffiti(e, [A, Bp, Bt, At], at, u0, u0 + TILE);
     pth(c, [At, Bt, P(bx, by, H + 4), P(ax, ay, H + 4)]);
     c.fillStyle = B.cap;
     c.fill();
@@ -342,7 +433,7 @@ export class SceneRenderer {
       pth(c, [[mx + 2.5, my], [mx + 5.5, my], [mx + 5.8, my + 15], [mx + 3, my + 12.5]]); c.fillStyle = '#6e2628'; c.fill();
       pth(c, cloth); c.lineWidth = DL + 0.4; c.strokeStyle = INK; c.stroke();
       circ(c, mx, my + 6, 2.6); fs(c, '#e2b54a', DL);
-    } else if (hr(e.i, e.j, 91) < 0.7) this.graffiti(at, u0 + TILE / 2, e.i * 131 + e.j * 7 + (along ? 1 : 0));
+    }
   }
 
   /**
