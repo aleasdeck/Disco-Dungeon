@@ -102,8 +102,8 @@ export interface MobDef {
   txt: string;
 }
 
-/** Every enemy is in the room from the start (no reinforcements), so all of them get this much more HP. */
-export const MOB_HP_MUL = 1.15;
+/** Every enemy is in the room from the start (no reinforcements) and a room holds only a few, so each gets this much more HP. */
+export const MOB_HP_MUL = 1.25;
 
 export const MOBS: Record<MobKind, MobDef> = {
   skel: { name: 'Скелет', floor: 0, hp: 9, r: 7, speed: 34, reach: 30, dmg: 4, fig: 31, txt: 'Идёт к ближайшему герою и бьёт вблизи.' },
@@ -225,7 +225,7 @@ export const FORGE_ORE = 5;
 export type RoomType = 'fight' | 'elite' | 'treasure' | 'camp' | 'forge' | 'event' | 'boss';
 
 export const ROOM_TYPES: Record<RoomType, { name: string; col: string; min: number; txt: string }> = {
-  fight: { name: 'Бой', col: '#c2364f', min: 2, txt: 'Обычные мобы, одна рудная жила и пара кристаллов.' },
+  fight: { name: 'Бой', col: '#c2364f', min: 2, txt: 'Обычные мобы, рудная жила, кристалл искр и грибы.' },
   elite: { name: 'Элитный бой', col: '#7a1d33', min: 3, txt: 'Сильный враг этажа и свита. Две рудные жилы вместо одной.' },
   treasure: { name: 'Рудная пещера', col: '#d39612', min: 1.5, txt: 'Три рудные жилы и всего два моба.' },
   camp: { name: 'Костёр', col: '#e8642c', min: 0.5, txt: 'Отряд лечится на 8 HP. Павшие встают с половиной здоровья.' },

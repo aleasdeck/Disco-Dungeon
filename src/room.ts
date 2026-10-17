@@ -203,13 +203,16 @@ export interface Tier {
 }
 
 export const TIERS: Tier[] = [
-  { gw: [10, 11], gh: [8, 9], shapes: ['rect'], blocks: [1, 2], blockKinds: 1, pits: [0, 0], haz: [0, 0], mobs: [2, 3] },
-  { gw: [11, 12], gh: [9, 9], shapes: ['rect', 'corner'], blocks: [2, 2], blockKinds: 3, pits: [0, 0], haz: [2, 2], mobs: [3, 3] },
-  { gw: [12, 13], gh: [10, 10], shapes: ['corner', 'alcove'], blocks: [2, 3], blockKinds: 4, pits: [0, 0], haz: [3, 4], mobs: [3, 4] },
-  { gw: [13, 14], gh: [10, 11], shapes: ['alcove', 'funnel', 'corner'], blocks: [3, 4], blockKinds: 4, pits: [0, 1], haz: [5, 6], mobs: [4, 5] },
-  { gw: [14, 15], gh: [11, 12], shapes: ['funnel', 'cross', 'alcove'], blocks: [4, 5], blockKinds: 5, pits: [1, 2], haz: [6, 8], mobs: [5, 6] },
+  { gw: [10, 11], gh: [8, 9], shapes: ['rect'], blocks: [1, 1], blockKinds: 1, pits: [0, 0], haz: [0, 0], mobs: [2, 2] },
+  { gw: [11, 12], gh: [9, 9], shapes: ['rect', 'corner'], blocks: [1, 2], blockKinds: 3, pits: [0, 0], haz: [1, 1], mobs: [2, 3] },
+  { gw: [12, 13], gh: [10, 10], shapes: ['corner', 'alcove'], blocks: [1, 2], blockKinds: 4, pits: [0, 0], haz: [1, 2], mobs: [2, 3] },
+  { gw: [13, 14], gh: [10, 11], shapes: ['alcove', 'funnel', 'corner'], blocks: [2, 2], blockKinds: 4, pits: [0, 1], haz: [2, 3], mobs: [3, 3] },
+  { gw: [14, 15], gh: [11, 12], shapes: ['funnel', 'cross', 'alcove'], blocks: [2, 3], blockKinds: 5, pits: [1, 1], haz: [3, 3], mobs: [3, 4] },
 ];
-export const BOSS_TIER: Tier = { gw: [14, 15], gh: [12, 12], shapes: ['rect', 'cross'], blocks: [2, 3], blockKinds: 3, pits: [0, 0], haz: [4, 6], mobs: [3, 3] };
+export const BOSS_TIER: Tier = { gw: [14, 15], gh: [12, 12], shapes: ['rect', 'cross'], blocks: [1, 2], blockKinds: 3, pits: [0, 0], haz: [2, 3], mobs: [3, 3] };
+
+/** Most enemies a room starts with: past this a room is a crowd, not a fight. */
+export const MOB_CAP = 5;
 
 /** Map row (0 = entrance) to its tier; the rest rows in the middle borrow the tier of the row before. */
 export function tierOf(spec: RoomSpec): { tier: Tier; t: number } {
@@ -344,21 +347,31 @@ function mobPool(f: number, t: number): MobKind[] {
 const SOLO: MobKind[] = ['golem', 'necro', 'witch', 'yeti', 'bomber'];
 
 /**
- * Resources in each kind of fight room. Ore is scarce, so a party can't buy every upgrade in one run;
- * an elite fight pays a second vein, the ore cave the most.
+ * Resources in each kind of fight room: one of each, so the floor stays clear. Ore is scarce, so a party can't buy
+ * every upgrade in one run; an elite fight pays a second vein, the ore cave the most.
  */
 export const NODE_SETS: Partial<Record<RoomType, NodeKind[]>> = {
-  fight: ['ore', 'spk', 'spk', 'herb'],
-  elite: ['ore', 'ore', 'spk', 'spk', 'herb'],
-  boss: ['ore', 'spk', 'spk', 'herb'],
-  treasure: ['ore', 'ore', 'ore', 'spk', 'spk', 'herb', 'herb'],
+  fight: ['ore', 'spk', 'herb'],
+  elite: ['ore', 'ore', 'spk', 'herb'],
+  boss: ['ore', 'spk', 'herb'],
+  treasure: ['ore', 'ore', 'ore', 'spk', 'herb'],
 };
 
 /** How much every enemy's HP grows per room of the run (on top of MOB_HP_MUL). */
 export const HP_STEP = 0.065;
 
-/** Extra damage per hit: one more on every floor, and one more in the last rooms before the boss. */
-export const dmgBonus = (f: number, t: number) => f + (t >= 3 ? 1 : 0);
+/**
+ * The first floor gets no floor bonus, so next to the later floors its rooms looked bare: it adds a block cluster
+ * to every room, a hazard tile to every room after the first and an enemy from the third row on (the boss included).
+ */
+export const firstFloorExtra = (f: number, t: number) =>
+  f > 0 ? { blocks: 0, haz: 0, mobs: 0 } : { blocks: 1, haz: t > 0 ? 1 : 0, mobs: t >= 2 ? 1 : 0 };
+
+/** Past the first floor rooms hold fewer enemies than they used to, so each one there is tougher: this much more HP (on top of MOB_HP_MUL) and one more damage. */
+export const LATER_HP = 1.2;
+
+/** Extra damage per hit: two on the second floor and one more on each floor after it, and one more in the last rooms before the boss. */
+export const dmgBonus = (f: number, t: number) => (f > 0 ? f + 1 : 0) + (t >= 3 ? 1 : 0);
 
 export function generate(spec: RoomSpec): Layout {
   const R = makeRng(spec.seed * 31 + spec.depth);
@@ -366,6 +379,7 @@ export function generate(spec: RoomSpec): Layout {
   const d = spec.depth;
   const type = spec.type, f = spec.floor;
   const { tier, t } = tierOf(spec);
+  const extra = firstFloorExtra(f, t);
   const roll = (r: Range) => ri(r[0], r[1]);
   const gw = roll(tier.gw), gh = roll(tier.gh);
   const { shape, floor } = carve(gw, gh, R, tier.shapes);
@@ -416,42 +430,37 @@ export function generate(spec: RoomSpec): Layout {
 
   const blocks: Block[] = [];
   const SHAPES = BLOCK_SHAPES.slice(0, tier.blockKinds);
-  for (let i = 0, n = roll(tier.blocks); i < n; i++) {
+  const cluster = (cell: (i: number, j: number) => Block) => {
     for (let tr = 0; tr < 40; tr++) {
       const tx = ri(1, gw - 4), ty = ri(1, gh - 4), sh = pick(SHAPES);
-      const cells = sh.map(([a, b]) => ({ x0: (tx + a) * TILE, y0: (ty + b) * TILE, x1: (tx + a + 1) * TILE, y1: (ty + b + 1) * TILE, v: ri(0, 7) }));
+      const cells = sh.map(([a, b]) => cell(tx + a, ty + b));
       // blocks keep a free tile between themselves and the rock so discs can't get wedged
       if (cells.every(c => free(c.x0 + 8, c.y0 + 8, 11, 4) && clearOfRock(geo, c.x0 + 8, c.y0 + 8, 20))) {
         for (const c of cells) { blocks.push(c); objs.push({ x: c.x0 + 8, y: c.y0 + 8, r: 11 }); take(c.x0 / TILE, c.y0 / TILE); }
-        break;
+        return;
       }
     }
-  }
-
-  // ice caves: icicles, big and small, rise from the floor on top of the stone blocks; same one-tile footprint, same bounce
-  if (biome.iceMu !== undefined) {
-    for (let i = 0, n = roll(tier.blocks); i < n; i++) {
-      for (let tr = 0; tr < 40; tr++) {
-        const tx = ri(1, gw - 4), ty = ri(1, gh - 4), sh = pick(SHAPES);
-        const cells = sh.map(([a, b]) => {
-          const v = ri(0, 7), big = v % 2 === 0, max = big ? ICICLE_HP.big : ICICLE_HP.small;
-          return { x0: (tx + a) * TILE, y0: (ty + b) * TILE, x1: (tx + a + 1) * TILE, y1: (ty + b + 1) * TILE, v, ice: true, big, hp: max, max };
-        });
-        if (cells.every(c => free(c.x0 + 8, c.y0 + 8, 11, 4) && clearOfRock(geo, c.x0 + 8, c.y0 + 8, 20))) {
-          for (const c of cells) { blocks.push(c); objs.push({ x: c.x0 + 8, y: c.y0 + 8, r: 11 }); take(c.x0 / TILE, c.y0 / TILE); }
-          break;
-        }
-      }
-    }
-  }
+  };
+  const box = (i: number, j: number) => ({ x0: i * TILE, y0: j * TILE, x1: (i + 1) * TILE, y1: (j + 1) * TILE });
+  const stone = (i: number, j: number): Block => ({ ...box(i, j), v: ri(0, 7) });
+  const icicle = (i: number, j: number): Block => {
+    const v = ri(0, 7), big = v % 2 === 0, max = big ? ICICLE_HP.big : ICICLE_HP.small;
+    return { ...box(i, j), v, ice: true, big, hp: max, max };
+  };
+  // ice caves get one cluster more, and most of them are icicles, big and small, rising from the floor:
+  // same one-tile footprint and bounce as stone, but discs can shatter them
+  const icy = biome.iceMu !== undefined;
+  const nBlocks = roll(tier.blocks) + extra.blocks + (icy ? 1 : 0), nIce = icy ? Math.ceil(nBlocks / 2) : 0;
+  for (let k = 0; k < nBlocks - nIce; k++) cluster(stone);
+  for (let k = 0; k < nIce; k++) cluster(icicle);
 
   const decals: Decal[] = [];
-  for (let i = 0, n = ri(8, 14); i < n; i++) {
+  for (let i = 0, n = ri(3, 6); i < n; i++) {
     const d0 = { x: 8 + R.next() * (Wx - 16), y: 8 + R.next() * (Wy - 16), k: ri(0, 2), a: R.next() * 3 };
     if (clearOfRock(geo, d0.x, d0.y, 5)) decals.push(d0);
   }
 
-  const hpMul = MOB_HP_MUL * (1 + HP_STEP * (d - 1)), dmgAdd = dmgBonus(f, t);
+  const hpMul = MOB_HP_MUL * (1 + HP_STEP * (d - 1)) * (f > 0 ? LATER_HP : 1), dmgAdd = dmgBonus(f, t);
   const pool = mobPool(f, t), cast = CASTS[Math.min(f, CASTS.length - 1)];
   const solo = (k: MobKind) => SOLO.includes(k) || (t === 0 && isRanged(k));
   const draw = (n: number, has: MobKind[] = []) => {
@@ -467,10 +476,10 @@ export function generate(spec: RoomSpec): Layout {
     }
     return out;
   };
-  const count = Math.min(roll(tier.mobs) + f, 7);
+  const count = Math.min(roll(tier.mobs) + f + extra.mobs, MOB_CAP);
   let mk: MobKind[];
   if (type === 'treasure') mk = cast.early.filter((k, i, a) => a.indexOf(k) === i).slice(0, 2);
-  else if (type === 'boss') mk = [cast.boss, ...draw(2 + f, SOLO)];
+  else if (type === 'boss') mk = [cast.boss, ...draw(1 + f + extra.mobs, SOLO)];
   else if (type === 'elite') mk = [cast.elite, ...draw(count - 1, [cast.elite])];
   else mk = draw(count);
   const mobs: Mob[] = [];
@@ -496,7 +505,7 @@ export function generate(spec: RoomSpec): Layout {
     const cx = tx * TILE + 8, cy = ty * TILE + 8;
     return isFloor(geo, tx, ty) && !haz.has(hazKey(tx, ty)) && hazZone(cx, cy) && pads.every(p => Math.hypot(p.x - cx, p.y - cy) > 26) && objs.every(o => Math.hypot(o.x - cx, o.y - cy) > o.r + 4);
   };
-  const nHaz = roll(tier.haz) + (t === 0 ? 2 * Math.min(f, 1) : Math.round(f * 1.5));
+  const nHaz = roll(tier.haz) + (t === 0 ? Math.min(f, 1) : f) + extra.haz;
   // before the boss a strip of three tiles cuts the room
   if (t === TIERS.length - 1 && type !== 'treasure') {
     for (let tr = 0; tr < 60; tr++) {
