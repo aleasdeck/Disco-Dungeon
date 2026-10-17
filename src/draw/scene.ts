@@ -4,7 +4,7 @@
 import { WALL_WORDS, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize } from '../data';
 import type { Camera, Vec } from '../camera';
 import { type Disc, type Game, type HeroState } from '../game';
-import { cellAt, floorAt, hazKey, isFloor, type Block, type Decal, type Edge, type Mob, type ResNode } from '../room';
+import { cellAt, floorAt, hazKey, isFloor, pitAt, type Block, type Decal, type Edge, type Mob, type Pit, type ResNode } from '../room';
 import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure } from './figures';
 import { circ, ell, fs, mix, pth, rr, type Ctx, type Pt } from './util';
 import { GRAFFITI_FONTS, envArt } from '../assets';
@@ -22,6 +22,8 @@ const env = (k: string) => envArt.get(k);
 
 /** Cartoon look: silhouette and detail ink widths, in iso units. */
 const OL = 2.1, DL = 1.1;
+/** How deep the walls of a hole in the floor show before the dark swallows them. */
+const PIT_D = 30;
 /** Ink on stone blocks: thinner than the room's silhouette, so a block doesn't look cut out of the floor. */
 const BL = 1.2;
 /** Whether the graffiti fonts have loaded; words drawn before that use a fallback face and are drawn again. */
@@ -725,11 +727,7 @@ export class SceneRenderer {
     c.beginPath();
     for (const e of S.edges) { c.moveTo(...P(...e.a)); c.lineTo(...P(...e.b)); }
     c.stroke();
-    for (const p of S.pits) {
-      const [sx, sy] = P(p.x, p.y);
-      ell(c, sx, sy, p.r * 1.27 + 1.5, p.r * 0.64 + 1); fs(c, '#2e2620', 1.1);
-      ell(c, sx, sy + 0.5, p.r * 1.2, p.r * 0.58); c.fillStyle = '#070403'; c.fill();
-    }
+    for (const p of S.pits) this.drawPit(p);
     if (B.mu < 30) {
       c.strokeStyle = 'rgba(255,255,255,.5)';
       c.lineWidth = 0.8;
@@ -764,6 +762,57 @@ export class SceneRenderer {
       c.lineWidth = 0.8;
       c.stroke();
     });
+  }
+
+  /** The opening of a hole in the floor, on screen. */
+  private mouth(p: Pit): Pt[] {
+    const P = this.P, x0 = p.i * TILE, y0 = p.j * TILE, x1 = x0 + p.s * TILE, y1 = y0 + p.s * TILE;
+    return [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)];
+  }
+
+  /**
+   * A square hole in the floor: the far walls of the shaft, in the room's own masonry, sink into the dark in flat bands,
+   * and the opening is inked like the edge of the room. A bigger hole shows more of the black below.
+   */
+  private drawPit(p: Pit) {
+    const { c, P, cam } = this;
+    const B = this.g.S.biome, D = PIT_D, mouth = this.mouth(p), wt = env(`wall_${this.bk}`);
+    const x0 = p.i * TILE, y0 = p.j * TILE, x1 = x0 + p.s * TILE, y1 = y0 + p.s * TILE;
+    c.save();
+    pth(c, mouth);
+    c.fillStyle = '#070403';
+    c.fill();
+    c.clip();
+    // each side's face, turned into the hole; only the ones looking at the viewer show
+    const all: { a: Vec; b: Vec; n: Vec }[] = [
+      { a: [x0, y0], b: [x1, y0], n: [0, 1] }, { a: [x1, y0], b: [x1, y1], n: [-1, 0] },
+      { a: [x0, y1], b: [x1, y1], n: [0, -1] }, { a: [x0, y0], b: [x0, y1], n: [1, 0] },
+    ];
+    const sides = all.filter(f => cam.facing(f.n[0], f.n[1]) > 1e-6);
+    for (const f of sides) {
+      const alongX = f.n[1] !== 0, u0 = alongX ? f.a[0] : f.a[1], u1 = alongX ? f.b[0] : f.b[1];
+      const face: Pt[] = [P(...f.a), P(...f.b), P(...f.b, -D), P(...f.a, -D)];
+      const at = (u: number, h: number) => (alongX ? P(u, f.a[1], h - D) : P(f.a[0], u, h - D));
+      if (wt) this.wallTex(wt, face, at, u0, u1, D, 0.3 + 0.2 * (0.5 + 0.5 * cam.sideways(f.n[0], f.n[1])), WALL_H);
+      else { pth(c, face); c.fillStyle = mix(this.shade(f.n, B.w), '#000000', 0.4); c.fill(); }
+      // darker the deeper, in flat cel bands, then black
+      for (const [h0, h1, a] of [[3, 8, 0.35], [8, 14, 0.6], [14, D, 0.85]]) {
+        pth(c, [P(...f.a, -h0), P(...f.b, -h0), P(...f.b, -h1), P(...f.a, -h1)]);
+        c.fillStyle = `rgba(7,4,3,${a})`;
+        c.fill();
+      }
+    }
+    // the far corner where two walls meet, inked down into the dark
+    const ends = sides.flatMap(f => [f.a, f.b]), corner = ends.find((v, k) => ends.findIndex(o => o[0] === v[0] && o[1] === v[1]) !== k);
+    if (corner) {
+      c.beginPath(); c.moveTo(...P(...corner)); c.lineTo(...P(...corner, -12));
+      c.strokeStyle = INK; c.lineWidth = DL; c.stroke();
+    }
+    c.restore();
+    pth(c, mouth);
+    c.strokeStyle = INK;
+    c.lineWidth = OL;
+    c.stroke();
   }
 
   /** Glowing summon circles and tiles about to turn to lava, a turn ahead; drawn over the figures so nothing hides them. */
@@ -1001,6 +1050,17 @@ export class SceneRenderer {
   }
 
   private drawDisc(d: Disc) {
+    const hole = d.fall ? pitAt(this.g.S.pits, d.x, d.y) : undefined;
+    if (!hole) return this.drawPuck(d);
+    // a disc going down a hole sinks behind its near rim
+    this.c.save();
+    pth(this.c, this.mouth(hole));
+    this.c.clip();
+    this.drawPuck(d);
+    this.c.restore();
+  }
+
+  private drawPuck(d: Disc) {
     const { c, P } = this;
     let s = 1, hh = 0;
     if (d.fall) { s = Math.max(0, 1 - d.fall * 2); hh = -d.fall * 20; }

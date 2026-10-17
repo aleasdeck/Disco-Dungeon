@@ -2,7 +2,7 @@
 // Rendering and input live elsewhere; this module only changes state.
 
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, CRIT_COS, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
-import { cellAt, cellCentre, generate, hazKey, isFloor, muAt, newMob, partyScale, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
+import { cellAt, cellCentre, generate, hazKey, isFloor, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
 
@@ -341,7 +341,7 @@ export class Game {
         for (const n of S.nodes) if (n.left > 0 && this.bounceStatic(d, n) > 0) hitWall = true;
         const m = S.mobs.find(o => this.solid(o) && Math.hypot(d.x - o.x, d.y - o.y) < d.r + o.r);
         if (m) { path.push([d.x, d.y]); return { path, bounces, hit: m }; }
-        if (S.pits.some(o => Math.hypot(d.x - o.x, d.y - o.y) < o.r - 2)) { path.push([d.x, d.y]); return { path, bounces, hit: null }; }
+        if (pitAt(S.pits, d.x, d.y)) { path.push([d.x, d.y]); return { path, bounces, hit: null }; }
         if (hitWall) {
           bounces.push([d.x, d.y]);
           path.push([d.x, d.y]);
@@ -554,7 +554,7 @@ export class Game {
         const dist = 26 + (k >> 1) * 8, side = k % 2 ? 1 : -1;
         const x = p.x + (dx / L) * dist - (dy / L) * side * 9 * (got ? 1 : 0.4), y = p.y + (dy / L) * dist + (dx / L) * side * 9 * (got ? 1 : 0.4);
         const i = Math.floor(x / TILE), j = Math.floor(y / TILE), cx = i * TILE + 8, cy = j * TILE + 8;
-        if (!isFloor(S, i, j) || S.haz.has(hazKey(i, j)) || spots.some(o => o.x === cx && o.y === cy)) continue;
+        if (!isFloor(S, i, j) || S.haz.has(hazKey(i, j)) || pitAt(S.pits, cx, cy) || spots.some(o => o.x === cx && o.y === cy)) continue;
         if (stands.some(q => Math.hypot(q.x - cx, q.y - cy) < 20) || standing(S.blocks).some(b => cx > b.x0 && cx < b.x1 && cy > b.y0 && cy < b.y1)) continue;
         spots.push({ x: cx, y: cy });
         got++;
@@ -697,7 +697,7 @@ export class Game {
       if (d.y < d.r) { d.y = d.r; d.vy = -d.vy * this.keep(d); this.bounced(d); }
       if (d.x > S.Wx - d.r) { d.x = S.Wx - d.r; d.vx = -d.vx * this.keep(d); this.bounced(d); }
       if (d.y > S.Wy - d.r) { d.y = S.Wy - d.r; d.vy = -d.vy * this.keep(d); this.bounced(d); }
-      if (S.pits.some(p => Math.hypot(d.x - p.x, d.y - p.y) < p.r - 2)) {
+      if (pitAt(S.pits, d.x, d.y)) {
         d.fall = 0.001; d.vx = d.vy = 0;
         this.float(d.x, d.y, 'провал', '#c7cbe0');
         this.hurtHero(d.hero, 2);
@@ -976,11 +976,7 @@ export class Game {
     };
     for (const b of standing(S.blocks)) mark(Math.floor(b.x0 / TILE), Math.floor(b.y0 / TILE));
     for (const n of S.nodes) if (n.left > 0) mark(Math.floor(n.x / TILE), Math.floor(n.y / TILE));
-    for (const p of S.pits) {
-      for (let j = Math.floor((p.y - p.r) / TILE); j <= Math.floor((p.y + p.r) / TILE); j++) for (let i = Math.floor((p.x - p.r) / TILE); i <= Math.floor((p.x + p.r) / TILE); i++) {
-        if (Math.hypot(p.x - (i * TILE + 8), p.y - (j * TILE + 8)) < p.r + 4) mark(i, j);
-      }
-    }
+    for (const p of S.pits) mark(p.i, p.j, p.s);
     if (mobs) for (const o of S.mobs) {
       if (o === self || o.hp <= 0) continue;
       mark(...cellAt(o.tx, o.ty, mobSize(o.k)), mobSize(o.k));
