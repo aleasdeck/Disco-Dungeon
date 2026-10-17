@@ -12,6 +12,16 @@ export const HAND_START = 1;
 export const HAND_MAX = 3;
 export const HAND_COST = [8, 16];
 export const AB_COST = 3;
+/**
+ * An ability works through the hero's discs: it is switched on for the rest of the turn and every disc thrown after it carries it.
+ * Bastion's hits shield the whole party, Ash's pile fire on the enemy (it burns that much and dies down by one each turn),
+ * Ricochet's discs keep all their speed for a run of bounces, off enemies too.
+ */
+export const AB_SHIELD = 3;
+export const AB_BURN = 4;
+export const AB_BOUNCES = 8;
+/** While a Ricochet disc still has sure bounces left it never rolls slower than this. */
+export const AB_SPEED = 180;
 /** Ore for each level of a disc stat; a party can't buy everything in one run, so it has to choose. */
 export const UP_COST = [3, 4, 6];
 
@@ -41,6 +51,40 @@ export interface Biome {
   /** Suffix of this floor's room art in the manifest: slab_<art>_0..7, wall_<art>, pillar_<art>. */
   art: string;
 }
+
+/**
+ * Words chalked on the walls: `all` on every floor, plus the floor's own list by its art key.
+ * A line break splits a word over two lines.
+ */
+export const WALL_WORDS: Record<string, string[]> = {
+  all: [
+    'KILROY\nWAS HERE', 'WTF', 'LOSER', 'FUCK', 'FUCK\nTHIS', 'BUTT', 'LOL', 'YOLO', 'NO HOPE', 'HELP', 'RUN', 'TURN\nBACK',
+    "IT'S A\nTRAP", 'GAME\nOVER', 'NOOB', 'GIT GUD', 'TRY\nAGAIN', 'DEAD\nEND', 'SEND\nHELP', 'I WAS\nHERE', 'NOBODY\nCARES',
+    'NICE\nBUTT', 'WASH ME', 'BITE ME', 'KISS\nMY ASS', 'SUCKS', 'BOO', 'FREE\nHUGS', 'NO EXIT', 'THIS\nWAY', 'WRONG\nWAY',
+    "DON'T\nLOOK UP", 'BEHIND\nYOU', 'DIG\nHERE', 'DAY 1', 'BORED', 'OUCH', 'OOPS', 'SHH', 'LOOT IS\nA LIE', 'NO\nREFUNDS',
+    'BEER\nTOMORROW', 'PEE\nHERE', 'SMELLS\nLIKE FEET', 'HEROES\nSUCK', 'MIND\nTHE DISC', 'ROLL\nFOR DMG', 'NAT 1', 'CRIT!',
+    'MISSED', 'SO CLOSE', 'NOT\nTODAY', 'WHO\nFARTED?', 'FART\nZONE', 'BRB', 'AFK', 'GG', 'EZ', 'REKT', 'OWNED', 'RIP',
+    'RIP BOB', 'BOB WAS\nHERE', 'BOB\nSUCKS', 'ASS', 'BOOBS', 'DAMN', 'HELL\nYEAH', 'SHIT', 'HOLY\nSHIT', 'MEH', 'NO\nSMOKING',
+    'WET\nPAINT', 'CALL\nMOM', 'U MAD?', 'NICE\nTRY', 'TOO\nEASY', 'PANTS\nOFF', 'WHERE\nAM I?', 'MONSTERS\nAHEAD',
+    'ХУЙ', 'ЛОХ', 'ЖОПА', 'СУКА', 'БЛИН', 'ГОВНО', 'ПИПЕЦ', 'ДНО', 'ДУРАК', 'ТУТ БЫЛ\nВАСЯ', 'ВАСЯ\nЛОХ', 'МАМА\nПРОСТИ',
+    'ВЫХОДА\nНЕТ', 'НЕ ВЛЕЗАЙ\nУБЬЁТ', 'ГЕРОИ\nЛОХИ', 'БЕГИ', 'ПОМОГИТЕ', 'ЗДЕСЬ\nНЕ ССАТЬ',
+  ],
+  prison: [
+    'KING\nSUX', 'FREE ME', 'INNOCENT', "I DIDN'T\nDO IT", 'GUARDS\nSUCK', 'DIG\nTUNNEL', 'DAY 3652', 'LIFE\nSENTENCE',
+    'ESCAPE\nPLAN', 'WARDEN\nIS FAT', 'RATS\nBITE', 'NO\nPAROLE', 'BONE\nAPPETIT', 'SKELETON\nCREW', 'LOCKED\nUP',
+    'GOBLINS\nSTINK', 'SAW THE\nKING NAKED', 'KEY IS\nUNDER RAT', 'КОРОЛЬ\nЛОХ', 'НА ВОЛЮ', 'КРЫСЫ\nКУСАЮТ',
+  ],
+  ice: [
+    'COLD\nAS HELL', 'FROZEN\nBUTT', 'BRRR', 'YETI\nSTINKS', 'LICH\nSUX', 'NO\nSKATING', 'THIN ICE', 'FREEZE!', 'CHILL',
+    'COLD\nFEET', 'NUMB\nNUTS', 'WITCH\nIS UGLY', 'GHOST\nFARTS', 'SNOWBALL\nFIGHT', 'NO TONGUE\nON POLES',
+    'ХОЛОДНО\nБЛИН', 'ЖОПА\nМЁРЗНЕТ', 'ЛИЧ\nЛОХ', 'ЙЕТИ\nСУКА',
+  ],
+  forge: [
+    'HOT\nAS HELL', 'NO\nPEEING', 'SMITH\nSUX', 'BURN', 'HOT\nSTUFF', 'TOO HOT', 'LAVA\nFLOOR', "DON'T\nTOUCH", 'FIRE!',
+    'SWEATY', 'MELTED', 'FORGE\nAHEAD', 'STRIKE\nWHILE HOT', 'SPICY', 'IMPS\nCHEAT', 'SLIME\nSMELLS', 'BOOM',
+    'ЖАРКО\nКАК В АДУ', 'КУЗНЕЦ\nЛОХ', 'ГОРИ\nОНО ВСЁ',
+  ],
+};
 
 export const BIOMES: Biome[] = [
   { name: 'Тюремные казематы', f: ['#6f6a64', '#79736b'], g: '#3b3631', w: ['#4a433c', '#5a5148'], cap: '#857b6e', mu: 70, haz: 'spikes', hazDmg: 3, bg: ['#2d2621', '#0e0b09'], torch: '255,160,70', art: 'prison' },
@@ -172,12 +216,28 @@ export interface HeroDef {
   pw: number;
   ab: string;
   abTxt: string;
+  /** The rest of how the ability works, for the tooltip and the collection: the button has room for a line or two. */
+  abMore: string;
+  /** Glow of the hero's discs while the ability is on. */
+  abCol: string;
 }
 
 export const HEROES: HeroDef[] = [
-  { key: 'bastion', name: 'Бастион', col: '#4f9a8f', dk: '#2b5a53', skin: '#e3a882', r: 6, m: 4, e: 0.55, fr: 1.1, pw: 0.75, ab: 'Стена', abTxt: 'Все герои получают +3 щита до конца хода.' },
-  { key: 'ricochet', name: 'Рикошет', col: '#c9a03a', dk: '#6f5420', skin: '#e3a882', r: 4, m: 1.2, e: 0.95, fr: 0.8, pw: 1.25, ab: 'Град чакр', abTxt: '4 урона каждому мобу в комнате.' },
-  { key: 'ash', name: 'Пепельница', col: '#b85a2e', dk: '#5e2a14', skin: '#d8b59a', r: 5, m: 2, e: 0.75, fr: 1, pw: 1, ab: 'Поджог', abTxt: 'Самый живучий моб горит 3 хода по 4 урона.' },
+  {
+    key: 'bastion', name: 'Бастион', col: '#4f9a8f', dk: '#2b5a53', skin: '#e3a882', r: 6, m: 4, e: 0.55, fr: 1.1, pw: 0.75,
+    ab: 'Щитобой', abTxt: `До конца хода каждое попадание его диска по врагу даёт всем героям +${AB_SHIELD} щита.`, abCol: '#3fc4b6',
+    abMore: 'Щиты копятся с каждым попаданием и держатся до следующего хода.',
+  },
+  {
+    key: 'ricochet', name: 'Рикошет', col: '#c9a03a', dk: '#6f5420', skin: '#e3a882', r: 4, m: 1.2, e: 0.95, fr: 0.8, pw: 1.25,
+    ab: 'Шальной диск', abTxt: `До конца хода его диски первые ${AB_BOUNCES} отскоков не теряют скорость, даже от врагов.`, abCol: '#ffd34d',
+    abMore: 'Один бросок прошивает всю толпу, а слабый бросок всё равно летит быстро. Ресурс гасит такой диск, как обычный.',
+  },
+  {
+    key: 'ash', name: 'Пепельница', col: '#b85a2e', dk: '#5e2a14', skin: '#d8b59a', r: 5, m: 2, e: 0.75, fr: 1, pw: 1,
+    ab: 'Поджог', abTxt: `До конца хода каждое попадание её диска добавляет врагу ${AB_BURN} огня. Огонь копится.`, abCol: '#ff7a3d',
+    abMore: 'В свой ход враг теряет столько HP, сколько на нём огня, сквозь броню, и огонь стихает на 1. С павшего огонь перекидывается на ближайшего врага.',
+  },
 ];
 
 export const HERO_FIG = 34;
@@ -219,7 +279,7 @@ export const UPS: Upgrade[] = [
 /** Damage of a full-strength throw that hits square on before the disc slows down (no precise-hit bonus). */
 export const fullHit = (m: number, pw: number) => Math.ceil((m * 270 * pw) / 120);
 
-/** Ore the blacksmith hands the party. */
+/** Ore the blacksmith hands the party on top of selling disc upgrades. */
 export const FORGE_ORE = 5;
 
 export type RoomType = 'fight' | 'elite' | 'treasure' | 'camp' | 'forge' | 'event' | 'boss';
@@ -229,7 +289,7 @@ export const ROOM_TYPES: Record<RoomType, { name: string; col: string; min: numb
   elite: { name: 'Элитный бой', col: '#7a1d33', min: 3, txt: 'Сильный враг этажа и свита. Две рудные жилы вместо одной.' },
   treasure: { name: 'Рудная пещера', col: '#d39612', min: 1.5, txt: 'Три рудные жилы и всего два моба.' },
   camp: { name: 'Костёр', col: '#e8642c', min: 0.5, txt: 'Лечит героев на 8 HP. Павшие встают с половиной здоровья.' },
-  forge: { name: 'Кузнец', col: '#5d6488', min: 0.75, txt: `Даёт ${FORGE_ORE} руды на прокачку дисков.` },
+  forge: { name: 'Кузнец', col: '#5d6488', min: 1, txt: `Прокачка дисков за руду, только здесь. Кузнец ещё и даёт ${FORGE_ORE} руды. На каждом этаже хотя бы один к середине пути.` },
   event: { name: 'Событие', col: '#6b4fa8', min: 0.75, txt: 'Сцена с неожиданным исходом: алтарь, торговец, ловушка.' },
   boss: { name: 'Босс этажа', col: '#2a1a3a', min: 3.5, txt: 'Свой босс на каждом этаже, со свитой.' },
 };

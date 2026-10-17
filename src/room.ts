@@ -377,7 +377,7 @@ export const firstFloorExtra = (f: number, t: number) =>
  * one throw a turn and nobody to stand in for it, so it gets the biggest cut.
  */
 export const PARTY_SCALE: Record<number, { mobs: number; hp: number; dmg: number; ch: Partial<Record<NodeKind, number>> }> = {
-  1: { mobs: 0.4, hp: 0.4, dmg: 0.5, ch: { ore: 1, spk: 2 } },
+  1: { mobs: 0.4, hp: 0.5, dmg: 0.6, ch: { ore: 1, spk: 2 } },
   2: { mobs: 0.7, hp: 0.8, dmg: 0.8, ch: { ore: 2 } },
   3: { mobs: 1, hp: 1, dmg: 1, ch: {} },
 };
