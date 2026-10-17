@@ -818,6 +818,41 @@ describe('online play', () => {
     expect(JSON.parse(JSON.stringify(snapshot(back))).bank).toEqual({ ore: 6, boon: 0 });
   });
 
+  it('rolls the discs on a client step for step with the host, bounces and all, even from a late snapshot', () => {
+    const { host, cli } = pair();
+    let ms = 0;
+    cli.clock = () => ms;
+    host.startFight(host.heroOf(0));
+    host.startFight(host.heroOf(2));
+    // two throws that hit enemies, walls and each other
+    host.throwDisc(host.heroOf(0), 40, -45);
+    host.throwDisc(host.heroOf(2), -50, -30);
+    const at = new Map<number, string>(), snaps = new Map<number, string>();
+    const pos = (g: Game) => JSON.stringify(g.S.discs.map(d => [d.x, d.y, d.vx, d.vy]));
+    for (let k = 0; k < 400; k++) { host.step(1 / 120); at.set(host.tick, pos(host)); snaps.set(host.tick, JSON.stringify(snapshot(host))); }
+    expect(host.S.discs.some(d => d.bounces > 0 || d.hits > 0)).toBe(true);
+    const t0 = host.tick - 400;
+    // the first snapshot comes 3 steps after it was taken; then the client runs on its own clock
+    ms = 0;
+    applySnapshot(cli, JSON.parse(snaps.get(t0 + 3)!));
+    expect(pos(cli)).toBe(at.get(t0 + 3));
+    for (let k = 1; k <= 200; k++) {
+      ms = (k * 1000) / 120;
+      cli.update(1 / 120);
+      expect(cli.tick).toBe(t0 + 3 + k);
+      expect(pos(cli)).toBe(at.get(cli.tick));
+    }
+    // a snapshot held up on the way: the client plays it on to where it already was, and nothing moves
+    applySnapshot(cli, JSON.parse(snaps.get(t0 + 150)!));
+    expect(cli.tick).toBe(t0 + 203);
+    expect(pos(cli)).toBe(at.get(t0 + 203));
+    // a quicker one moves the client's clock up to it
+    ms += 1000 / 120;
+    applySnapshot(cli, JSON.parse(snaps.get(t0 + 210)!));
+    expect(cli.tick).toBe(t0 + 210);
+    expect(pos(cli)).toBe(at.get(t0 + 210));
+  });
+
   it('lets a client control only its own hero', () => {
     const { cli } = pair();
     cli.select(0);
@@ -1606,17 +1641,24 @@ describe('hit effects', () => {
     expect(h.knock!.t).toBeLessThan(0);
   });
 
-  it('a struck resource throws chips that land, stop and vanish, and a client sees them too', () => {
+  it('a struck resource throws chips that land, stop and vanish, and a client throws the very same ones', () => {
     const g = arena(['archer']);
     g.S.nodes = [{ k: 'ore', name: 'Рудная жила', r: 7, ch: 3, x: 88, y: 88, left: 3, hit: 0 }];
     g.S.discs = [disc(g, 88, 88 + TILE / 2 + 5.5, 0, -200)];
-    g.step(1 / 60);
+    const cli = new Game();
+    let ms = 0;
+    Object.assign(cli, { online: true, send: () => {}, clock: () => ms });
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(g))));
+    Object.assign(cli.S, { nodes: structuredClone(g.S.nodes), blocks: [], rock: [], pits: [] });
+    g.step(1 / 120);
     const chips = g.S.sparks.filter(p => p.k);
     expect(chips.length).toBeGreaterThanOrEqual(5);
     expect(chips.some(p => p.k === 'gold') || chips.some(p => p.k === 'ore')).toBe(true);
-    const cli = new Game();
-    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(g))));
-    expect(cli.S.sparks.filter(p => p.k)).toHaveLength(chips.length);
+    // they don't travel in the snapshot: the client's own disc knocks them off, one step on
+    expect(snapshot(g).sparks.filter(p => p.k)).toEqual([]);
+    ms += 1000 / 120;
+    cli.update(0);
+    expect(cli.S.sparks.filter(p => p.k)).toEqual(chips);
     let landed = 0;
     for (let k = 0; k < 90; k++) { g.update(1 / 60); landed = Math.max(landed, g.S.sparks.filter(p => p.k && p.h === 0).length); }
     expect(landed).toBeGreaterThan(0);

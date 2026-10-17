@@ -3,6 +3,7 @@
 
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, CRIT_COS, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
 import { KNOCK_T, type ChipKind, type Knock } from './fx';
+import { mulberry32 } from './rng';
 import { cellAt, cellCentre, generate, hazKey, isFloor, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
@@ -68,6 +69,11 @@ export interface Spark {
   k?: ChipKind; a?: number; va?: number;
   /** Seconds it lasts, half a second when not given. */
   life?: number;
+  /**
+   * The physics step a disc's hit threw it on. Every screen runs the discs and throws these itself, the same ones,
+   * so they stay out of the host's snapshots.
+   */
+  b?: number;
 }
 
 export interface State extends Layout {
@@ -107,6 +113,12 @@ export type Action =
   | { k: 'end'; h: number; on: boolean };
 
 const STEP = 1 / 120;
+
+/**
+ * Online client: a snapshot's delay is weighed against the least delayed one of this many milliseconds back; one late by
+ * more than RESYNC_MS starts the count afresh (the host page was asleep or reloaded). REPLAY caps the physics steps run at once.
+ */
+const LAG_WINDOW = 3000, RESYNC_MS = 2500, REPLAY = 360;
 
 /**
  * Enemy turn pacing, in seconds: a pause before the first enemy goes (the "Ход врагов" banner has the stage),
@@ -187,6 +199,20 @@ export class Game {
    */
   forge = 0;
   private acc = 0;
+  /** Physics steps run so far on this page; online, every snapshot carries the host's count. */
+  tick = 0;
+  /** Online client: this page's clock in milliseconds (tests set their own). */
+  clock: () => number = () => performance.now();
+  /**
+   * Online client: how far behind this page's clock the host's step count was in each recent snapshot, in steps, and when
+   * the snapshot came. The smallest is the least delayed snapshot: it tells where the host is now.
+   */
+  private lags: { at: number; lag: number }[] = [];
+  /**
+   * Chips and sparks scatter by this, seeded afresh on every physics step, so a hit throws the same ones on every screen
+   * and the host's snapshot doesn't swap them for others.
+   */
+  private fx = mulberry32(0);
   /** Host: the disc each hero is hopping over to; it picks the disc up once it lands. */
   private pickup = new Map<HeroState, Disc>();
 
@@ -718,8 +744,8 @@ export class Game {
 
   burst(x: number, y: number, col: string, n = 8) {
     for (let i = 0; i < n; i++) {
-      const a = Math.random() * Math.PI * 2, s = 20 + Math.random() * 60;
-      this.S.sparks.push({ x, y, h: 4, vx: Math.cos(a) * s, vy: Math.sin(a) * s, vh: 30 + Math.random() * 40, t: 0, col, sz: 1 + Math.random() * 1.5 });
+      const a = this.fx() * Math.PI * 2, s = 20 + this.fx() * 60;
+      this.S.sparks.push({ x, y, h: 4, vx: Math.cos(a) * s, vy: Math.sin(a) * s, vh: 30 + this.fx() * 40, t: 0, col, sz: 1 + this.fx() * 1.5 });
     }
   }
 
@@ -729,7 +755,7 @@ export class Game {
    */
   knock(o: { knock?: Knock }, x: number, y: number, fromX: number, fromY: number, p: number, delay = 0) {
     let dx = x - fromX, dy = y - fromY, L = Math.hypot(dx, dy);
-    if (L < 1e-6) { const a = Math.random() * Math.PI * 2; dx = Math.cos(a); dy = Math.sin(a); L = 1; }
+    if (L < 1e-6) { const a = this.fx() * Math.PI * 2; dx = Math.cos(a); dy = Math.sin(a); L = 1; }
     const k = o.knock;
     if (k && k.t < KNOCK_T / 2 && k.p * (1 - Math.max(0, k.t) / KNOCK_T) > p) return;
     o.knock = { t: -delay, x: dx / L, y: dy / L, p: Math.min(1, p) };
@@ -751,19 +777,19 @@ export class Game {
     // from the side the disc struck, a little above the floor
     const ox = x + nx * r * 0.6, oy = y + ny * r * 0.6;
     const add = (kind: ChipKind, sz: number, spread: number, sp: number, life: number) => {
-      const a = Math.atan2(ny, nx) + (Math.random() - 0.5) * spread, s = sp * (0.6 + Math.random() * 0.6);
+      const a = Math.atan2(ny, nx) + (this.fx() - 0.5) * spread, s = sp * (0.6 + this.fx() * 0.6);
       S.sparks.push({
-        x: ox, y: oy, h: 5 + Math.random() * 4, vx: Math.cos(a) * s, vy: Math.sin(a) * s, vh: 110 * (0.7 + Math.random() * 0.5),
-        t: 0, col: '', sz, k: kind, a: Math.random() * 6.3, va: (Math.random() - 0.5) * 24, life,
+        x: ox, y: oy, h: 5 + this.fx() * 4, vx: Math.cos(a) * s, vy: Math.sin(a) * s, vh: 110 * (0.7 + this.fx() * 0.5),
+        t: 0, col: '', sz, k: kind, a: this.fx() * 6.3, va: (this.fx() - 0.5) * 24, life,
       });
     };
     if (k === 'ice') {
-      for (let i = 0; i < (big ? 12 : 5); i++) add('ice', 1.4 + Math.random() * 1.6, Math.PI * 1.6, big ? 70 : 50, 0.9 + Math.random() * 0.3);
+      for (let i = 0; i < (big ? 12 : 5); i++) add('ice', 1.4 + this.fx() * 1.6, Math.PI * 1.6, big ? 70 : 50, 0.9 + this.fx() * 0.3);
       return;
     }
     // stone with gold in it, crystal splinters, bits of cap and stem
     const kinds: ChipKind[] = k === 'ore' ? ['ore', 'ore', 'gold'] : k === 'spk' ? ['spk'] : ['cap', 'cap', 'stem'];
-    for (let i = 0, n = 5 + 3 * q; i < n; i++) add(kinds[Math.floor(Math.random() * kinds.length)], 1.1 + Math.random() * 1.2, Math.PI * 1.3, 65, 0.9 + Math.random() * 0.4);
+    for (let i = 0, n = 5 + 3 * q; i < n; i++) add(kinds[Math.floor(this.fx() * kinds.length)], 1.1 + this.fx() * 1.2, Math.PI * 1.3, 65, 0.9 + this.fx() * 0.4);
   }
 
   hurtMob(m: Mob, n: number, col = '#fff', pierce = false) {
@@ -893,6 +919,9 @@ export class Game {
   step(dt: number) {
     const S = this.S;
     let changed = false;
+    this.tick++;
+    this.fx = mulberry32(Math.imul(this.tick, 0x9e3779b1));
+    const born = S.sparks.length;
     for (const d of this.bodies()) {
       const v = Math.hypot(d.vx, d.vy);
       // a disc with sure bounces left rolls on without slowing, and even a soft throw goes at a good clip
@@ -988,6 +1017,7 @@ export class Game {
         this.burst(mx, my, '#b893ff', 10);
       }
     }
+    for (let k = born; k < S.sparks.length; k++) S.sparks[k].b = this.tick;
     if (changed) this.onChange();
   }
 
@@ -1423,23 +1453,47 @@ export class Game {
   }
 
   /**
-   * Online client: the host owns the rules; between its snapshots, discs keep rolling and mobs keep walking
-   * locally so motion stays smooth.
+   * Online client: the host owns the rules; between its snapshots the discs roll on here by the same rules, step for step
+   * with the host's count, so they bounce where the host's do, and the enemy making its move keeps walking.
    */
   private updateRemote(dt: number) {
     const S = this.S;
-    for (const d of this.bodies()) {
-      const v = Math.hypot(d.vx, d.vy);
-      if (v > 0 && d.rico <= 0) { const nv = Math.max(0, v - muAt(S, d.x, d.y) * d.fr * dt); d.vx *= nv / v; d.vy *= nv / v; d.spin += nv * dt * 0.08; }
-      d.x = Math.max(d.r, Math.min(S.Wx - d.r, d.x + d.vx * dt));
-      d.y = Math.max(d.r, Math.min(S.Wy - d.r, d.y + d.vy * dt));
-    }
+    this.rollOn();
     if (S.phase === 'enemy') {
       S.clock += dt;
       const m = S.mobs[S.actor];
       if (m) this.walkMob(m);
     }
     this.fade(dt);
+  }
+
+  /** Online client: run the physics on to the host's step count now. */
+  private rollOn() {
+    const to = this.hostTick();
+    for (let n = 0; this.tick < to && n < REPLAY; n++) this.step(STEP);
+  }
+
+  /** Online client: where the host's step count is now, as near as the snapshots tell. */
+  private hostTick() {
+    if (!this.lags.length) return this.tick;
+    return Math.floor((this.clock() / 1000) / STEP - Math.min(...this.lags.map(l => l.lag)) + 1e-6);
+  }
+
+  /**
+   * Online client: the state of the host's step `tick` was just put in place. It is already a little old, so the discs
+   * are played on to where the host's are now, not where they were. The rest (what the enemies do, the effects of it)
+   * shows as the host had it, a moment late but from its start. `own` are the sparks this screen's discs have thrown:
+   * the snapshot leaves them out.
+   */
+  synced(tick: number, own: Spark[] = []) {
+    const S = this.S, now = this.clock(), lag = (now / 1000) / STEP - tick, was = this.tick;
+    this.lags = this.lags.filter(l => now - l.at < LAG_WINDOW);
+    if (this.lags.some(l => lag - l.lag > (RESYNC_MS / 1000) / STEP)) this.lags = [];
+    this.lags.push({ at: now, lag });
+    this.tick = tick;
+    this.rollOn();
+    // hits this screen had already played come again as the discs are played on: their sparks fly on as they were
+    S.sparks = S.sparks.filter(p => p.b === undefined || p.b > was).concat(own);
   }
 
   /** A chip in flight: it falls, bounces off the floor and the walls, slides to a stop; one that drops into a hole is gone. */
