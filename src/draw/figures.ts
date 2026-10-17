@@ -4,6 +4,7 @@
 import { HEROES, INK, type MobKind } from '../data';
 import { sprites } from '../assets';
 import type { Pose } from '../fx';
+import { litLevels } from './standee';
 import { brow, circ, ell, eye, fs, lg, mix, pth, rg, rr, type Ctx, type Pt } from './util';
 
 export const BASE_TH = 2.5;
@@ -29,6 +30,8 @@ export interface MiniatureOpts {
   hp?: { now: number; max: number };
   /** Rocking after a knock, or toppling over. */
   pose?: Pose;
+  /** The floor's light the picture is washed in (see `Biome.light`). */
+  light?: string;
   placeholder: (c: Ctx, x: number, y: number, flash: boolean) => void;
 }
 
@@ -116,8 +119,8 @@ export function drawMiniature(c: Ctx, o: MiniatureOpts) {
   }
   if (sp) {
     // the standee: the plate and its edge around the picture, scaled so the picture keeps the figure's height
-    const b = sp.standee, h = o.fig, k = h / b.h, m = c.getTransform();
-    const lv = b.levels[Math.max(0, Math.min(b.levels.length - 1, Math.floor(Math.log2(b.h / (h * Math.hypot(m.a, m.b))))))];
+    const b = sp.standee, h = o.fig, k = h / b.h, m = c.getTransform(), levels = o.light ? litLevels(b, o.light) : b.levels;
+    const lv = levels[Math.max(0, Math.min(levels.length - 1, Math.floor(Math.log2(b.h / (h * Math.hypot(m.a, m.b))))))];
     if (o.flash) c.filter = 'brightness(3) saturate(0)';
     c.drawImage(lv, o.x - (b.w / 2 + b.x) * k, feet - h + 1 - b.y * k, b.W * k, b.H * k);
     c.filter = 'none';

@@ -1161,6 +1161,7 @@ export class SceneRenderer {
       alpha: dead ? 0.45 : carried ? 0.3 : lifted ? 0.85 : 1,
       hp: dead || carried ? undefined : { now: h.hp, max: h.max },
       pose: lifted ? undefined : this.pose(h.knock, p.x, p.y, HERO_BASE),
+      light: S.biome.light,
       placeholder: (cc, x, y, fl) => drawHeroFigure(cc, h.i, x, y, 0.8, fl, this.t),
     });
     if (dead || carried) return;
@@ -1196,6 +1197,7 @@ export class SceneRenderer {
       alpha,
       hp: m.hp > 0 ? { now: m.hp, max: m.max } : undefined,
       pose,
+      light: S.biome.light,
       placeholder: (cc, fx, fy, fl) => drawMobFigure(cc, m.k, fx, fy, fl),
     });
     if (m.hp <= 0) return;
