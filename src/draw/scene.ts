@@ -1,7 +1,7 @@
 // Draws one frame of a room: walls, floor, obstacles, resources, discs and miniatures.
 // Everything is drawn in iso space through the camera, so zoom and rotation are free.
 
-import { WALL_WORDS, FAN_R, GAS_R, GAS_TURNS, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize } from '../data';
+import { WALL_WORDS, FAN_R, GAS_R, GAS_TURNS, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize, type NodeKind } from '../data';
 import { KX, KY, type Camera, type Vec } from '../camera';
 import { ART, FOOD_FLY, ZAP_T, type Bomb, type Disc, type Food, type Game, type Gas, type HeroState, type Spark, type Zap } from '../game';
 import { cellAt, floorAt, hazKey, inPit, isFloor, pitAt, type Block, type Decal, type Edge, type Mob, type Pit, type ResNode } from '../room';
@@ -22,6 +22,21 @@ const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-
 
 /** Room art from the manifest; anything missing is drawn by code in the same cartoon look. */
 const env = (k: string) => envArt.get(k);
+
+/**
+ * Resource pictures: the full one (`key`) stands for a full stock and `<key>_<n>` for n of its `pieces` left, as wide as
+ * `w` either way. A mushroom is a heal and a crystal a spark, so a patch shows how many are left; an ore vein holds one
+ * to six charges by the party, so its seven gold nuggets go in step with them.
+ */
+const NODE_ART: Record<NodeKind, { key: string; pieces: number; w: number }> = {
+  ore: { key: 'ore', pieces: 7, w: 21 },
+  spk: { key: 'crystal', pieces: 3, w: 15.5 },
+  herb: { key: 'mushrooms', pieces: 3, w: 19 },
+};
+
+/** Pieces of a resource's picture still standing with `left` of its `ch` charges. */
+const nodePieces = (k: NodeKind, left: number, ch: number) =>
+  k === 'ore' ? Math.ceil((NODE_ART.ore.pieces * left) / ch) : Math.min(NODE_ART[k].pieces, left);
 
 /** The card sharp's phantom discs: pink where his disc is purple, inked the same, and see-through. */
 const PHANTOM = { col: '#f06ac6', dk: '#7a2463', ink: '#3a0c2c', alpha: 0.66 };
@@ -1088,8 +1103,12 @@ export class SceneRenderer {
   private drawNodeShape(n: ResNode, left: number, f: boolean) {
     // the cave's big vein is the same boulder, as big as its 2 × 2 cells
     const c = this.c, [x, y] = this.P(n.x, n.y), q = left / n.ch, z = n.s ?? 1;
-    const ni = env(n.k === 'ore' ? 'ore' : n.k === 'spk' ? 'crystal' : 'mushrooms');
-    if (ni) { this.standee(ni, x, y + 3 * z, (n.k === 'ore' ? 21 : n.k === 'spk' ? 15.5 : 19) * (0.6 + 0.4 * q) * z, f); return; }
+    const art = NODE_ART[n.k], ni = env(art.key);
+    if (ni) {
+      const k = nodePieces(n.k, left, n.ch);
+      this.standee((k < art.pieces && env(`${art.key}_${k}`)) || ni, x, y + 3 * z, art.w * z, f);
+      return;
+    }
     const W = (col: string) => (f ? '#ffffff' : col);
     c.lineJoin = 'round';
     if (n.k === 'ore') {
@@ -1126,7 +1145,7 @@ export class SceneRenderer {
     } else {
       // mushrooms straight on the floor, big one behind
       const sh: [number, number, number][] = [[0, -1.5, 1.35], [5, 1.5, 0.85], [-5, 1.5, 0.7]];
-      for (const [ox, oy, s] of sh.slice(0, left === n.ch ? 3 : left)) {
+      for (const [ox, oy, s] of sh.slice(0, nodePieces(n.k, left, n.ch))) {
         const mx = x + ox, my = y + oy;
         rr(c, mx - 1.6 * s, my - 6 * s, 3.2 * s, 6 * s, 1.2 * s); fs(c, W('#f1e7d0'), 1);
         c.beginPath(); c.ellipse(mx, my - 6 * s, 5.2 * s, 5 * s, 0, Math.PI, 0); c.quadraticCurveTo(mx, my - 4 * s, mx - 5.2 * s, my - 6 * s); c.closePath();
