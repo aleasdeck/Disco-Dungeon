@@ -441,6 +441,7 @@ game.onChange = () => { hud.refresh(); dirty = true; stale = true; };
 game.onSound = (ev, p) => sound.play(ev, p);
 // online every party head says whose hero it is
 hud.nameOf = i => (game.online ? players.find(p => p.hero === i)?.name ?? null : null);
+hud.me = () => (game.online ? game.party.find(h => h.i === myHero()) ?? null : game.party[0] ?? null);
 hl.changed = () => { dirty = true; };
 game.onRoomEnd = win => {
   const S = game.S, boss = S.spec.type === 'boss';
@@ -456,8 +457,10 @@ game.onRoomEnd = win => {
     if (boss) run.floor++;
     choosing = true;
     votes = {};
-    showEnd({ title: boss ? `Этаж ${run.floor} пройден` : 'Комната зачищена',
-      text: `Ходов: ${S.turn}. Пройдено комнат: ${run.path.reduce((a, p) => a + p.length, 0)} из ${FLOORS * LAYERS}.`, kind: 'map' });
+    // the ore cave ends when its turns are up or everything in it is spent: it tells how much ore it gave
+    const cave = game.cave(), rooms = `Пройдено комнат: ${run.path.reduce((a, p) => a + p.length, 0)} из ${FLOORS * LAYERS}.`;
+    showEnd({ title: boss ? `Этаж ${run.floor} пройден` : cave ? (game.cleared() ? 'Пещера выбрана дочиста' : 'Ходы кончились') : 'Комната зачищена',
+      text: cave ? `Добыто руды: ${game.mined}. ${rooms}` : `Ходов: ${S.turn}. ${rooms}`, kind: 'map' });
     shareMap();
   }, 900);
 };
@@ -854,7 +857,7 @@ async function reopen(code: string) {
   else if (camp) showCamp();
   else if (choosing) showMap(true);
   else if (ev) showEvent();
-  else if (!game.liveMobs().length || !game.alive().length) game.onRoomEnd(game.alive().length > 0);
+  else if (game.cleared() || game.S.phase === 'over' || !game.alive().length) game.onRoomEnd(game.alive().length > 0);
 }
 
 /** The main menu and its screens; the settings count among them when opened from the main menu, not from a game. */

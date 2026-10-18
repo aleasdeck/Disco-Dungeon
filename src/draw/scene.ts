@@ -736,12 +736,13 @@ export class SceneRenderer {
     // a spent resource leaves only a flat scatter of chips on its cell, not something to bounce off
     for (const n of S.nodes) {
       if (n.left > 0) continue;
-      const [dx, dy] = P(n.x, n.y);
-      ell(c, dx, dy, 9, 4.2); c.fillStyle = 'rgba(25,15,10,.18)'; c.fill();
+      // the cave's big vein leaves a scatter as big as it was
+      const [dx, dy] = P(n.x, n.y), z = n.s ?? 1;
+      ell(c, dx, dy, 9 * z, 4.2 * z); c.fillStyle = 'rgba(25,15,10,.18)'; c.fill();
       const tint = n.k === 'ore' ? '#e8b44a' : n.k === 'spk' ? '#a98ae8' : '#c9584a';
       const chips: [number, number, number, boolean][] = [[-4, -1, 1.4, false], [3, -3, 1.1, true], [1, 2.5, 1.3, false], [-2, 3.5, 0.9, true], [5, 2, 1, false], [-5, 2, 0.8, true]];
-      for (const [ox, oy, r, tinted] of chips) {
-        const [x, y] = P(n.x + ox, n.y + oy);
+      for (const [ox, oy, r0, tinted] of chips) {
+        const [x, y] = P(n.x + ox * z, n.y + oy * z), r = r0 * z;
         pth(c, [[x - r * 1.4, y], [x, y - r * 0.6], [x + r * 1.4, y], [x, y + r * 0.6]]);
         c.fillStyle = tinted ? tint : 'rgba(120,110,104,.85)';
         c.fill();
@@ -749,7 +750,7 @@ export class SceneRenderer {
     }
     // the cells enemies and resources stand on are shaded like a square on a board; enemies get a red rim
     c.beginPath();
-    for (const n of S.nodes) if (n.left > 0) { const [i, j] = cellAt(n.x, n.y); inner(i, j); }
+    for (const n of S.nodes) if (n.left > 0) { const z = n.s ?? 1, [i, j] = cellAt(n.x, n.y, z); quad(i * TILE + g2, j * TILE + g2, (i + z) * TILE - g2, (j + z) * TILE - g2); }
     for (const m of S.mobs) if (m.hp > 0) { const s = mobSize(m.k), [i, j] = cellAt(m.tx, m.ty, s); quad(i * TILE + gap, j * TILE + gap, (i + s) * TILE - gap, (j + s) * TILE - gap); }
     c.fillStyle = 'rgba(25,15,10,.2)';
     c.fill();
@@ -1041,13 +1042,14 @@ export class SceneRenderer {
    * a cluster of violet crystals, or fat spotted mushrooms. Each loses a piece per charge taken.
    */
   private drawNodeShape(n: ResNode, left: number, f: boolean) {
-    const c = this.c, [x, y] = this.P(n.x, n.y), q = left / n.ch;
+    // the cave's big vein is the same boulder, as big as its 2 × 2 cells
+    const c = this.c, [x, y] = this.P(n.x, n.y), q = left / n.ch, z = n.s ?? 1;
     const ni = env(n.k === 'ore' ? 'ore' : n.k === 'spk' ? 'crystal' : 'mushrooms');
-    if (ni) { this.standee(ni, x, y + 3, (n.k === 'ore' ? 21 : n.k === 'spk' ? 15.5 : 19) * (0.6 + 0.4 * q), f); return; }
+    if (ni) { this.standee(ni, x, y + 3 * z, (n.k === 'ore' ? 21 : n.k === 'spk' ? 15.5 : 19) * (0.6 + 0.4 * q) * z, f); return; }
     const W = (col: string) => (f ? '#ffffff' : col);
     c.lineJoin = 'round';
     if (n.k === 'ore') {
-      const s = 0.75 + 0.25 * q;
+      const s = (0.75 + 0.25 * q) * z;
       const lump: [number, number][] = [[-9, 0], [-9.5, -5], [-6.5, -10], [-2, -12.5], [3, -11.5], [7, -8.5], [9.5, -3.5], [8.5, 1], [3, 3], [-4, 3]];
       const pts = lump.map(([px, py]) => [x + px * s, y + py * s] as Pt);
       const path = () => { c.beginPath(); pts.forEach((p, k) => { const nx = pts[(k + 1) % pts.length]; const mx = (p[0] + nx[0]) / 2, my = (p[1] + nx[1]) / 2; if (!k) c.moveTo(mx, my); else c.quadraticCurveTo(p[0], p[1], mx, my); }); const p0 = pts[0], p1 = pts[1]; c.quadraticCurveTo(p0[0], p0[1], (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2); c.closePath(); };
@@ -1093,8 +1095,8 @@ export class SceneRenderer {
   private drawNode(n: ResNode) {
     // a spent node is drawn with the floor
     if (n.left <= 0) return;
-    const { c, P } = this;
-    ell(c, ...P(n.x + 1.5, n.y + 1.5), 11, 5.5); c.fillStyle = 'rgba(15,8,4,.35)'; c.fill();
+    const { c, P } = this, z = n.s ?? 1;
+    ell(c, ...P(n.x + 1.5 * z, n.y + 1.5 * z), 11 * z, 5.5 * z); c.fillStyle = 'rgba(15,8,4,.35)'; c.fill();
     // a struck resource jolts: squashed and shaken for a moment
     const f = n.hit > 0 && !reduce ? n.hit / 0.2 : 0;
     if (f) {
@@ -1202,7 +1204,8 @@ export class SceneRenderer {
     const { c, P, g } = this;
     const lifted = !!at, carried = !at && this.carry?.hero === h;
     const S = g.S, p = at ?? g.figureAt(h)!, [sx, sy0] = P(p.x, p.y), sy = sy0 - (lifted ? 8 : 0), dead = h.hp <= 0;
-    const target = g.liveMobs()[0] ?? { x: S.Wx / 2, y: S.Wy / 2 };
+    // heroes face the enemies, in the ore cave its biggest vein
+    const target = g.liveMobs()[0] ?? S.nodes.filter(n => n.left > 0).sort((a, b) => b.r - a.r)[0] ?? { x: S.Wx / 2, y: S.Wy / 2 };
     if (lifted) { ell(c, sx, sy0, HERO_BASE * 1.27, HERO_BASE * 0.64); c.fillStyle = 'rgba(0,0,0,.35)'; c.fill(); }
     drawMiniature(c, {
       key: h.def.key, x: sx, y: sy, baseR: HERO_BASE, baseCol: h.def.col, fig: HERO_FIG,

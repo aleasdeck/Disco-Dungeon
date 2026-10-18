@@ -183,6 +183,10 @@ i.ico { display: inline-block; font-style: normal; }
 .ib.sp { background: #6b4fa8; padding: 3px; }
 .ib.sp .ico { width: 16px; height: 16px; }
 .ib.go .ico { width: 12px; height: 12px; }
+/* a shooter's badge has a bow stuck on its left: it fires from afar, only at a hero it sees */
+.qi:has(.qbow) { display: flex; align-items: center; }
+.qbow, .qb img.qbow { display: block; width: 22px; height: 22px; margin-right: -7px; z-index: 1; clip-path: none; background: none; filter: drop-shadow(0 1px 0 #120c09); }
+.mc-act .qbow { margin-right: -14px; }
 
 .top-btns { display: flex; gap: 8px; }
 .ibtn {
@@ -508,29 +512,7 @@ i.ico { display: inline-block; font-style: normal; }
 .up .lvl i { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--ink); background: #2a1f18; }
 .up .lvl i.on { background: var(--gold); }
 .up b { font-family: Oswald, sans-serif; font-weight: 600; text-align: right; }
-.up .btn { justify-self: end; white-space: nowrap; }
 .ups-note { color: var(--muted); font-size: 11px; }
-
-/* ---------- the blacksmith's: every hero's upgrades for sale */
-.forge-panel { width: min(980px, 100%); }
-.forge-ore { font-size: 22px; gap: 6px; }
-.forge-ore svg { width: 20px; height: 20px; }
-.forge-text { margin: 6px 0 12px; color: var(--muted); }
-.forge-heroes { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 12px; }
-.fcard { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px 10px; align-items: center; background: rgba(0, 0, 0, 0.22); border: 2px solid var(--ink); border-radius: 12px; padding: 10px; }
-.fcard.mine { border-color: var(--c); }
-.fcard canvas { width: 64px; height: 64px; border-radius: 10px; border: 1.5px solid var(--ink); }
-.fc-head { display: flex; flex-direction: column; gap: 2px; }
-.fc-head b { font: 700 19px Oswald, sans-serif; color: var(--c); }
-.fc-hp { color: var(--muted); font-size: 12px; }
-.fcard .ups { grid-column: 1 / -1; gap: 6px; }
-.fcard .up-name { white-space: normal; }
-.fcard .up-txt { display: block; }
-/* on a phone the cards scroll; the ore left and the way out stay in sight */
-.forge-panel .panel-head, .forge-foot { position: sticky; z-index: 1; background: var(--panel); }
-.forge-panel .panel-head { top: -16px; padding: 4px 0; }
-.forge-foot { bottom: -16px; display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 8px; padding: 8px 0; flex-wrap: wrap; }
-.forge-foot .muted { margin-right: auto; }
 
 /* ---------- overlays */
 .overlay {
@@ -813,7 +795,6 @@ i.ico { display: inline-block; font-style: normal; }
 /* panels: the map stands tall, everything else lies wide */
 /* sliced in nine, so the taped corners keep their size on a wide or a tall panel */
 .art-panel .panel { background: none; border: 0; outline: 0; border-radius: 0; box-shadow: none; border-image: var(--ui-panel) 190 130 fill / 58px 40px stretch; filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.6)); padding: 30px 34px; }
-.art-panel .forge-panel .panel-head, .art-panel .forge-foot { background: #513a2b; }
 .art-panel_tall .panel.map-panel { border-image: var(--ui-panel_tall) 130 fill / 40px stretch; padding: 26px 26px 22px; }
 .art-btn_dark .btn:not(.round) { background: var(--ui-btn_dark) center / 100% 100% no-repeat; border: 0; border-radius: 0; box-shadow: none; padding: 8px 16px; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
 .art-btn_dark .btn.sm { padding: 5px 11px; }
@@ -833,7 +814,6 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .btn.big:has(> i[data-art]:not(:empty)) { padding-left: 40px; }
 .menu-panel .menu-btns { padding-left: 12px; }
 .menu-btns .btn.big > i[data-art] { width: 52px; height: 52px; left: -18px; }
-.forge-foot .btn.big > i[data-art] { width: 36px; height: 36px; }
 /* the disco ball hangs over the name on its chain */
 .logo-art { display: block !important; width: 76px; height: 76px; margin: 0 auto 2px; filter: drop-shadow(0 4px 0 #120d0a); animation: logo-swing 4s ease-in-out infinite; transform-origin: 50% 0; }
 .logo-art:empty { display: none !important; }
@@ -998,4 +978,49 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
   .camp-opt:has(> .camp-mate) { padding-right: 96px; }
   .camp-mate { width: 80px; right: 10px; }
   .camp-mate img { width: 28px; height: 28px; }
+}
+
+/* ---------- the blacksmith's window: the event window's dress, with this screen's own hero's upgrades on its slabs,
+   each one a sticker, the name and level, where the stat goes with the next level, and the price in ore on the right end */
+.fg-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.fg-mine { display: grid; gap: 9px; }
+.fg-mine:empty { display: none; }
+.fg-me { display: flex; align-items: center; gap: 8px; }
+.fg-me img { width: 34px; height: 34px; clip-path: var(--cut-face); background: var(--c); }
+.fg-me b { font: 600 18px Oswald, sans-serif; color: var(--c); }
+.fg-me span { font: 16px var(--hand); color: var(--muted); }
+.fg-up { padding: 8px 92px 9px 72px; }
+.fg-up > i[data-art] { position: absolute; left: 12px; top: 50%; width: 52px; height: 52px; transform: translateY(-50%) rotate(-6deg); filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45)); }
+.fg-name { display: flex; align-items: center; gap: 10px; }
+.fg-name .lvl { display: inline-flex; gap: 3px; }
+.fg-name .lvl i { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--ink); background: #1a130e; }
+.fg-name .lvl i.on { background: var(--gold-1); }
+.fg-fx { font: 18px/1.2 var(--hand); color: #8ee07f; }
+.fg-fx i { font-style: normal; color: var(--muted); margin: 0 6px; }
+.fg-up:disabled .fg-fx { color: var(--muted); }
+.fg-cost { position: absolute; right: 18px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 4px; font: 700 24px/1 Oswald, sans-serif; color: var(--gold-1); }
+.fg-cost .ico { width: 28px; height: 28px; }
+.fg-cost.short { color: #ff7d70; }
+/* shut for want of ore it only dims, so the price in red still says why */
+.ev-opt.fg-up:disabled { filter: brightness(0.62); }
+#forgeDone { justify-self: end; align-self: flex-end; margin-top: 4px; }
+#forgeDone > i[data-art] { width: 36px; height: 36px; }
+
+@media (max-height: 520px) and (orientation: landscape) {
+  .art-panel #forgeScreen .ev-panel { padding: 20px 24px; }
+  #forgeScreen .fg-mine { gap: 6px; }
+  .fg-me { display: none !important; }
+  #forgeScreen .ev-text { font-size: 15px; }
+  /* the name and what the next level gives on one line, so the four slabs and the way out fit the screen's height */
+  .fg-up { grid-auto-flow: column; justify-content: start; align-items: center; gap: 14px; padding: 5px 76px 6px 56px; }
+  .fg-up > i[data-art] { left: 8px; width: 36px; height: 36px; }
+  .fg-fx { font-size: 15px; }
+  #forgeDone { margin-top: 0; }
+  .fg-cost { font-size: 20px; right: 14px; }
+  .fg-cost .ico { width: 22px; height: 22px; }
+}
+@media (orientation: portrait) and (max-width: 700px) {
+  #forgeScreen { align-items: start; }
+  .fg-up { padding-right: 78px; }
+  .fg-cost { right: 14px; font-size: 22px; }
 }

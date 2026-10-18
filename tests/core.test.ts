@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, FAN_ANGLE, FAN_M, FOOD_HEAL, FOOD_PER_DISC, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, mobSize } from '../src/data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, FAN_ANGLE, FAN_M, FOOD_HEAL, FOOD_PER_DISC, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, isRanged, mobSize } from '../src/data';
 import { FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { MOB_CAP, PARTY_SCALE, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
+import { CAVE, MOB_CAP, PARTY_SCALE, caveTurns, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
 import { FLOORS, FORGE_ROWS, LAYERS, agreed, genFloor, newRun } from '../src/run';
 import { makeRng } from '../src/rng';
 import { EVENTS, applyFx, canPick, eventDef, eventOf, fxParts, rolled } from '../src/events';
@@ -68,6 +68,78 @@ describe('resources', () => {
       expect(veins('boss', seed)).toBe(1);
       expect(veins('treasure', seed)).toBe(3);
     }
+  });
+});
+
+describe('ore cave', () => {
+  const cave = (seed: number, heroes: number) => generate({ seed, depth: LAYERS + 2, floor: 1, type: 'treasure', heroes });
+  const sum = (n: number[]) => n.reduce((a, b) => a + b, 0);
+
+  it('holds no enemies, one big vein on 2 × 2 cells, two small ones and two mushroom patches, the same for any party', () => {
+    for (let seed = 1; seed < 40; seed++) for (const heroes of [1, 2, 3]) {
+      const L = cave(seed, heroes), [big, ...rest] = L.nodes;
+      const small = rest.filter(n => n.k === 'ore'), herbs = rest.filter(n => n.k === 'herb');
+      expect(L.mobs).toHaveLength(0);
+      expect(big).toMatchObject({ k: 'ore', s: 2, r: CAVE.big.r, ch: CAVE.big.ch, left: CAVE.big.ch });
+      expect(small).toHaveLength(2);
+      for (const n of small) { expect(n).toMatchObject({ ch: CAVE.small, left: CAVE.small }); expect(n.s).toBeUndefined(); }
+      expect(herbs).toHaveLength(2);
+      expect(rest).toHaveLength(4);
+    }
+    expect(sum(cave(7, 1).nodes.map(n => n.ch))).toBe(sum(cave(7, 3).nodes.map(n => n.ch)));
+  });
+
+  it('gives 4 minus the heroes turns: three alone, one for three heroes', () => {
+    expect([1, 2, 3].map(heroes => caveTurns({ heroes }))).toEqual([3, 2, 1]);
+  });
+
+  const enter = (picks: number[], seed = 11) => {
+    const g = new Game();
+    g.party = newParty(picks);
+    g.loadRoom({ seed, depth: LAYERS + 2, floor: 1, type: 'treasure' });
+    placeAll(g); g.startFight();
+    let won: boolean | null = null;
+    g.onRoomEnd = w => { won = w; };
+    return { g, won: () => won };
+  };
+  const play = (g: Game, until: () => boolean) => { for (let k = 0; k < 20000 && !until(); k++) g.update(1 / 60); };
+
+  it('ends once the turns are up, with no enemy turn in between', () => {
+    for (const picks of [[0], [0, 1], [0, 1, 2]]) {
+      const { g, won } = enter(picks), seen = new Set<string>();
+      expect(g.turnsMax()).toBe(4 - picks.length);
+      for (let t = 1; t <= g.turnsMax(); t++) {
+        expect(g.S.turn).toBe(t);
+        expect(g.S.phase).toBe('throw');
+        endAll(g);
+        play(g, () => { seen.add(g.S.phase); return g.S.phase === 'throw' && g.S.turn > t || g.S.phase === 'over'; });
+      }
+      expect(g.S.phase).toBe('over');
+      expect(won()).toBe(true);
+      expect(seen.has('enemy')).toBe(false);
+      expect(g.S.turn).toBe(4 - picks.length);
+    }
+  });
+
+  it('stays open while mushrooms are left, ends at once when everything is spent, and counts the ore mined', () => {
+    const { g, won } = enter([0]);
+    const [big] = g.S.nodes;
+    // the veins spent, a mushroom patch left: a throw may still go for health
+    for (const n of g.S.nodes) n.left = n.k === 'herb' ? 1 : 0;
+    g.update(1 / 60);
+    expect(g.cleared()).toBe(false);
+    expect(g.S.phase).toBe('throw');
+    // the last charge: the big vein a hit away, the rest spent
+    for (const n of g.S.nodes) n.left = n === big ? 1 : 0;
+    const h = g.hero, p = g.spot(h)!;
+    g.throwDisc(h, big.x - p.x, big.y - p.y);
+    play(g, () => g.S.phase === 'over');
+    expect(big.left).toBe(0);
+    expect(g.cleared()).toBe(true);
+    expect(g.S.turn).toBe(1);
+    expect(won()).toBe(true);
+    expect(g.mined).toBeGreaterThan(0);
+    expect(g.bank.ore).toBe(g.mined);
   });
 });
 
@@ -264,6 +336,8 @@ describe('party size', () => {
     expect(hp(one)).toBeLessThan(hp(two));
     expect(dmg(one)).toBeLessThan(dmg(two));
     one.forEach((L, k) => {
+      // the ore cave has no enemies and the same veins for any party (see its own tests)
+      if (specs[k].type === 'treasure') return;
       expect(L.mobs.length).toBeGreaterThan(0);
       expect(L.mobs.length).toBeLessThanOrEqual(three[k].mobs.length);
       // the boss and the elite stay whatever the party
@@ -1848,7 +1922,7 @@ describe('every floor plays out', () => {
 describe('enemy walking', () => {
   // routes every walker in 80 rooms: a few seconds locally, more on a busy CI runner
   it('routes walkers cell by cell around blocks and resources to the rune they go for and says when they strike', () => {
-    let detours = 0;
+    let detours = 0, shots = 0;
     for (let seed = 1; seed < 80; seed++) {
       const g = new Game();
       g.loadRoom({ seed, depth: 1 + (seed % 12), floor: seed % 3, type: 'fight' });
@@ -1857,10 +1931,15 @@ describe('enemy walking', () => {
       for (const m of g.liveMobs()) {
         const it = m.intent;
         if (!it?.way || (it.t !== 'hit' && it.t !== 'move')) continue;
-        const pad = g.S.pads[g.heroOf(it.hero).pad!], end = it.way[it.way.length - 1];
-        expect(end).toEqual({ x: pad.x, y: pad.y });
-        const cells = it.way.slice(0, -1), sz = mobSize(m.k);
-        if (wayLen(cells) > Math.hypot(pad.x - m.x, pad.y - m.y) + 24) detours++;
+        const pad = g.S.pads[g.heroOf(it.hero).pad!], end = it.way[it.way.length - 1], shooter = isRanged(m.k);
+        // a walker's way runs on to the rune; a shooter's ends on the nearest cell that sees it, out of sight where it stands
+        if (shooter) {
+          expect(g.clearShot(end, pad)).toBe(true);
+          expect(g.clearShot(m, pad)).toBe(false);
+          shots++;
+        } else expect(end).toEqual({ x: pad.x, y: pad.y });
+        const cells = shooter ? it.way : it.way.slice(0, -1), sz = mobSize(m.k);
+        if (!shooter && wayLen(cells) > Math.hypot(pad.x - m.x, pad.y - m.y) + 24) detours++;
         // every stop is a whole footprint on free floor; steps go to a neighbouring cell
         for (let k = 1; k < cells.length; k++) {
           const [i, j] = cellAt(cells[k].x, cells[k].y, sz);
@@ -1874,6 +1953,7 @@ describe('enemy walking', () => {
       }
     }
     expect(detours).toBeGreaterThan(0);
+    expect(shots).toBeGreaterThan(0);
   }, 20_000);
 
   it('stands every enemy and resource on the cell grid, big ones on 2 × 2 cells, never two on one cell', () => {
@@ -1892,7 +1972,7 @@ describe('enemy walking', () => {
       };
       for (const b of L.blocks) claim(b.x0 + 8, b.y0 + 8, 1);
       for (const m of L.mobs) claim(m.x, m.y, mobSize(m.k));
-      for (const n of L.nodes) claim(n.x, n.y, 1);
+      for (const n of L.nodes) claim(n.x, n.y, n.s ?? 1);
       if (type === 'boss') expect(mobSize(L.mobs[0].k)).toBe(2);
     }
   });
@@ -2037,6 +2117,141 @@ describe('heroes go where their last disc stopped', () => {
     const client = new Game();
     applySnapshot(client, JSON.parse(JSON.stringify(snapshot(host))));
     expect(client.spot(client.heroOf(a.i))).toEqual(cellCentre(5, 4));
+  });
+});
+
+describe('shooters fire only at a hero they see', () => {
+  /** A floor 0 fight in a bare room, the first hero alone (the rest fallen) standing on cell `at`, the shooter on `from`. */
+  const arena = (k: keyof typeof MOBS, from: [number, number], at: [number, number], blocks: [number, number][] = []) => {
+    const g = new Game();
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    g.S.mobs = [newMob(k, cellCentre(...from).x, cellCentre(...from).y, 1, 0)];
+    g.S.nodes = []; g.S.pits = []; g.S.haz = new Set();
+    g.S.blocks = blocks.map(([i, j]) => ({ x0: i * TILE, y0: j * TILE, x1: (i + 1) * TILE, y1: (j + 1) * TILE, v: 0 }));
+    placeAll(g); g.startFight();
+    const [h] = g.party;
+    for (const o of g.party) o.hp = o === h ? (o.max = 99) : 0;
+    h.at = cellCentre(...at);
+    g.pickIntents();
+    return { g, h, m: g.S.mobs[0] };
+  };
+  /** Play the enemy turn through. */
+  const enemyTurn = (g: Game) => {
+    const t = g.S.turn;
+    endAll(g);
+    for (let k = 0; k < 3000 && g.S.turn === t; k++) g.update(1 / 60);
+    expect(g.S.turn).toBe(t + 1);
+  };
+  const box = (i: number, j: number) => ({ x0: i * TILE, y0: j * TILE, x1: (i + 1) * TILE, y1: (j + 1) * TILE, v: 0 });
+
+  it('a wall, a block, a standing icicle or a resource blocks the line; holes, enemies and spent things do not', () => {
+    const { g } = arena('archer', [1, 4], [9, 4]), a = cellCentre(1, 4), b = cellCentre(9, 4);
+    expect(g.clearShot(a, b)).toBe(true);
+    g.S.blocks = [box(5, 4)];
+    expect(g.clearShot(a, b)).toBe(false);
+    // a line that only grazes the corner of a block flies past it
+    expect(g.clearShot(cellCentre(4, 2), cellCentre(7, 5))).toBe(true);
+    expect(g.clearShot(cellCentre(4, 3), cellCentre(6, 5))).toBe(false);
+    g.S.blocks = [{ ...box(5, 4), ice: true, hp: 3, max: 3 }];
+    expect(g.clearShot(a, b)).toBe(false);
+    g.S.blocks[0].hp = 0;
+    expect(g.clearShot(a, b)).toBe(true);
+    g.S.rock = [...g.S.rock, box(5, 4)];
+    expect(g.clearShot(a, b)).toBe(false);
+    g.S.rock.pop();
+    const n = { k: 'ore' as const, name: 'Рудная жила', r: 7, ch: 3, ...cellCentre(5, 4), left: 3, hit: 0 };
+    g.S.nodes = [n];
+    expect(g.clearShot(a, b)).toBe(false);
+    n.left = 0;
+    expect(g.clearShot(a, b)).toBe(true);
+    g.S.pits = [{ k: '1x1', cells: [[5, 4]] }];
+    g.S.mobs.push(newMob('skel', cellCentre(5, 4).x, cellCentre(5, 4).y, 1, 0));
+    expect(g.clearShot(a, b)).toBe(true);
+  });
+
+  it('in sight, it fires from where it stands', () => {
+    const { g, h, m } = arena('archer', [1, 4], [9, 4]);
+    expect(m.intent).toMatchObject({ t: 'hit', hero: h.i, dmg: m.dmg });
+    enemyTurn(g);
+    expect(cellAt(m.x, m.y)).toEqual([1, 4]);
+    expect(h.hp).toBe(99 - m.dmg);
+  });
+
+  it('behind a column it steps out to where it sees the hero and fires the same turn', () => {
+    const { g, h, m } = arena('archer', [1, 4], [9, 4], [[5, 4]]);
+    expect(g.sees(m, h)).toBe(false);
+    const it = m.intent!;
+    expect(it.t).toBe('hit');
+    expect(it.eta).toBe(1);
+    expect(g.clearShot(it.way![it.way!.length - 1], cellCentre(9, 4))).toBe(true);
+    enemyTurn(g);
+    expect(cellAt(m.x, m.y)).not.toEqual([1, 4]);
+    expect(g.sees(m, h)).toBe(true);
+    expect(h.hp).toBe(99 - m.dmg);
+    expect(g.S.log.map(l => l.txt)).toContain(`Гоблин-лучник выстрелил в ${h.def.acc} на ${m.dmg}`);
+  });
+
+  it('far out of sight it walks towards the hero, says when it will fire, and holds its shot', () => {
+    // a wall of blocks down the middle of the room with a gap only at the bottom
+    const wall: [number, number][] = [0, 1, 2, 3, 4, 5, 6, 7].map(j => [5, j]);
+    const { g, h, m } = arena('archer', [1, 1], [9, 1], wall);
+    const it = m.intent!;
+    expect(it.t).toBe('move');
+    expect(it.hero).toBe(h.i);
+    expect(it.eta).toBeGreaterThan(1);
+    expect(g.incoming(h)).toBe(0);
+    enemyTurn(g);
+    expect(h.hp).toBe(99);
+    expect(cellAt(m.x, m.y)).not.toEqual([1, 1]);
+    expect(g.S.log.map(l => l.txt)).toContain(`Гоблин-лучник идёт к ${h.def.dat}`);
+  });
+
+  it('fires at a hero it sees rather than one hidden, whoever\'s turn it would be', () => {
+    const g = new Game();
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    g.S.mobs = [newMob('archer', cellCentre(1, 4).x, cellCentre(1, 4).y, 1, 0)];
+    g.S.nodes = []; g.S.pits = []; g.S.blocks = [box(5, 4)];
+    placeAll(g); g.startFight();
+    const [a, b] = g.party;
+    g.party[2].hp = 0;
+    a.at = cellCentre(9, 4);
+    b.at = cellCentre(9, 1);
+    const m = g.S.mobs[0];
+    for (let t = 1; t <= 4; t++) { g.S.turn = t; g.pickIntents(); expect(m.intent).toMatchObject({ t: 'hit', hero: b.i }); }
+  });
+
+  it('a hero who steps out of its sight after the throws makes it walk instead of fire', () => {
+    // a wall of blocks down the middle with gaps at the top and the bottom: the hero is in sight through the top one
+    const { g, h, m } = arena('archer', [1, 1], [9, 1], [2, 3, 4, 5, 6, 7].map(j => [5, j] as [number, number]));
+    expect(m.intent!.t).toBe('hit');
+    expect(g.incoming(h)).toBe(m.dmg);
+    // its disc took the hero behind the wall
+    h.at = cellCentre(8, 5);
+    (g as unknown as { rechase: () => void }).rechase();
+    expect(g.sees(m, h)).toBe(false);
+    expect(m.intent).toMatchObject({ t: 'move', hero: h.i });
+    expect(g.incoming(h)).toBe(0);
+  });
+
+  it('a shot whose line closed since it was aimed misses', () => {
+    const { g, h, m } = arena('archer', [1, 4], [9, 4]);
+    g.S.blocks = [box(5, 4)];
+    g.S.log = [];
+    (g as unknown as { mobAct: (m: Mob) => void }).mobAct(m);
+    expect(h.hp).toBe(99);
+    expect(g.S.log.map(l => l.txt)).toEqual([`Гоблин-лучник не увидел ${h.def.acc}`]);
+  });
+
+  it('a bomber out of sight lights its fuse on the way, and throws once it sees the hero', () => {
+    const { g, h, m } = arena('bomber', [1, 4], [9, 4], [[5, 4]]);
+    expect(g.S.turn % 2).toBe(1);
+    expect(m.intent!.t).toBe('charge');
+    enemyTurn(g);
+    expect(g.sees(m, h)).toBe(true);
+    expect(g.S.log.map(l => l.txt)).toContain(`Гном-подрывник поджёг фитиль и пошёл к ${h.def.dat}`);
+    expect(m.intent).toMatchObject({ t: 'hit', hero: h.i, dmg: m.dmg * 2 });
+    enemyTurn(g);
+    expect(h.hp).toBe(99 - m.dmg * 2);
   });
 });
 

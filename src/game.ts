@@ -5,7 +5,7 @@ import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, CRIT_COS, E_MA
 import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { mulberry32 } from './rng';
 import type { Sfx } from './audio/sfx';
-import { cellAt, cellCentre, generate, hazKey, isFloor, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
+import { caveTurns, cellAt, cellCentre, generate, hazKey, isFloor, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
 
@@ -249,6 +249,8 @@ export class Game {
    * levels for sale; the depth tells one visit from the next when two blacksmiths come in a row.
    */
   forge = 0;
+  /** Host: ore the party has mined in this room, for the room's result. */
+  mined = 0;
   private acc = 0;
   /** Physics steps run so far on this page; online, every snapshot carries the host's count. */
   tick = 0;
@@ -275,6 +277,7 @@ export class Game {
     if (this.bank.strobe) spec.strobe = true;
     const L = generate(spec);
     this.forge = 0;
+    this.mined = 0;
     this.pickup.clear();
     this.walked = { key: '', n: 0 };
     this.hopped.clear();
@@ -338,6 +341,12 @@ export class Game {
 
   alive = () => this.S.heroes.filter(h => h.hp > 0);
   liveMobs = () => this.S.mobs.filter(m => m.hp > 0);
+  /** The ore cave: no enemies, only veins and mushrooms, and a few turns to mine or heal. */
+  cave = () => this.S.spec.type === 'treasure';
+  /** Turns the room gives the party, 0 for no limit: a fight lasts as long as its enemies stand. */
+  turnsMax = () => (this.cave() ? caveTurns(this.S.spec) : 0);
+  /** The room is done: every enemy is down, or in the ore cave nothing is left to hit, veins and mushrooms alike. */
+  cleared = () => (this.cave() ? !this.S.nodes.some(n => n.left > 0) : !this.liveMobs().length);
   stat = (h: HeroState, k: StatKey) => {
     const step = UPS.find(u => u.k === k)!.step;
     return k === 'e' ? Math.min(E_MAX, h.def.e + h.up.e * step) : h.def[k] * (1 + h.up[k] * step);
@@ -790,9 +799,7 @@ export class Game {
         const it = this.special(m, a, hs, taken);
         if (it) { if (it.t === 'slam') it.dmg += rage; m.intent = it; return; }
       }
-      if (d.charge && S.turn % 2 === 1) { m.intent = { t: 'charge', hero: hs[(S.turn + i) % hs.length].i, dmg: 0 }; return; }
-      const dmg = this.blow(m);
-      if (isRanged(m.k)) { m.intent = { t: 'hit', hero: hs[(S.turn + i) % hs.length].i, dmg }; return; }
+      if (isRanged(m.k)) { m.intent = this.shoot(m, hs, S.turn + i); return; }
       let best = hs[0], way: Pt[] | null = null, bd = Infinity;
       for (const h of hs) {
         const w = this.route(m, this.spot(h)!);
@@ -807,27 +814,84 @@ export class Game {
     return (MOBS[m.k].charge ? m.dmg * 2 : m.dmg) + this.rage();
   }
 
-  /** A walker going after hero h along `way`: it strikes this turn if its steps take it there, else it closes in. */
+  /**
+   * A walker going after hero h along `way`: it strikes this turn if its steps take it there, else it closes in.
+   * A shooter's way ends where it sees the hero, and it fires on arriving there.
+   */
   private chase(m: Mob, h: HeroState, way: Pt[] | null): Intent {
     // walled off from the hero: it stays put
     if (!way) return { t: 'move', hero: h.i, dmg: 0 };
     const p = this.spot(h)!, n = way.length - 1, go = wayLen(way.slice(0, this.stopAt(m, way) + 1)), eta = Math.max(1, Math.ceil(n / stepsOf(m)));
-    way.push({ x: p.x, y: p.y });
+    if (!isRanged(m.k)) way.push({ x: p.x, y: p.y });
     return n <= stepsOf(m) ? { t: 'hit', hero: h.i, dmg: this.blow(m), way, go, eta: 1 } : { t: 'move', hero: h.i, dmg: 0, way, go, eta };
   }
 
   /**
+   * What a shooter does about the heroes `hs`: it fires at one it sees, taking them in turn by `k`; seeing none, it walks
+   * to the nearest spot it sees one from and fires on arriving, if its steps take it there this turn. A bomber lighting
+   * its fuse walks the same way, so it has the hero in sight when the bomb is ready.
+   */
+  private shoot(m: Mob, hs: HeroState[], k: number): Intent {
+    const seen = hs.filter(h => this.sees(m, h));
+    let it: Intent;
+    if (seen.length) it = { t: 'hit', hero: seen[k % seen.length].i, dmg: this.blow(m) };
+    else {
+      let best = hs[k % hs.length], way: Pt[] | null = null;
+      for (const h of hs) {
+        const w = this.route(m, this.spot(h)!, true, true);
+        if (w && (!way || w.length < way.length)) { best = h; way = w; }
+      }
+      it = this.chase(m, best, way);
+    }
+    return MOBS[m.k].charge && this.S.turn % 2 === 1 ? { ...it, t: 'charge', dmg: 0 } : it;
+  }
+
+  /**
    * The heroes have moved to their discs: every walker still goes after the hero it was after, now to where that hero stands,
-   * so its route, its reach and the blows the heroes expect are right for the enemy turn.
+   * so its route, its reach and the blows the heroes expect are right for the enemy turn. A shooter keeps its target too:
+   * a hero who has stepped out of its sight makes it walk to where it sees that hero again.
    */
   private rechase() {
     for (const m of this.liveMobs()) {
       const it = m.intent;
-      if (!it || (it.t !== 'hit' && it.t !== 'move') || isRanged(m.k)) continue;
+      if (!it || (it.t !== 'hit' && it.t !== 'move' && it.t !== 'charge')) continue;
       const h = this.heroOf(it.hero), p = this.spot(h);
       if (h.hp <= 0 || !p) continue;
-      m.intent = this.chase(m, h, this.route(m, p));
+      if (isRanged(m.k)) m.intent = this.shoot(m, it.t === 'charge' ? this.alive().filter(o => this.spot(o)) : [h], 0);
+      else if (it.t !== 'charge') m.intent = this.chase(m, h, this.route(m, p));
     }
+  }
+
+  /**
+   * Whether a shot from a to b flies clear: no wall, block or icicle still standing and no resource left in between.
+   * Holes in the floor, the heroes and the other enemies don't stand in the way; a line that only grazes an edge
+   * or a corner of a block goes past it.
+   */
+  clearShot(a: Pt, b: Pt) {
+    const S = this.S, dx = b.x - a.x, dy = b.y - a.y, E = 0.01;
+    for (const o of S.rock.concat(standing(S.blocks))) {
+      let t0 = 0, t1 = 1;
+      for (const [p, d, lo, hi] of [[a.x, dx, o.x0 + E, o.x1 - E], [a.y, dy, o.y0 + E, o.y1 - E]]) {
+        if (Math.abs(d) < 1e-9) { if (p <= lo || p >= hi) t1 = -1; continue; }
+        const u = (lo - p) / d, v = (hi - p) / d;
+        t0 = Math.max(t0, Math.min(u, v));
+        t1 = Math.min(t1, Math.max(u, v));
+      }
+      if (t1 > t0) return false;
+    }
+    const L2 = dx * dx + dy * dy;
+    for (const n of S.nodes) {
+      if (n.left <= 0) continue;
+      const t = L2 ? Math.max(0, Math.min(1, ((n.x - a.x) * dx + (n.y - a.y) * dy) / L2)) : 0;
+      if (Math.hypot(a.x + dx * t - n.x, a.y + dy * t - n.y) < n.r) return false;
+    }
+    return true;
+  }
+
+  /** Whether a mob standing at `from` (where it stands now, by default) sees hero h: a shooter fires only then. */
+  sees(m: Mob, h: HeroState, from: Pt = m) {
+    const p = this.spot(h);
+    return h.hp > 0 && !!p && this.clearShot(from, p);
   }
 
   /** The intent for a mob's special act this turn, or null when it can't do it (nobody to heal, no room to summon). */
@@ -1159,7 +1223,7 @@ export class Game {
         const big = Math.ceil((d.m * vn) / 120) >= 4, h = d.hero, q = big ? 2 : 1;
         n.left--;
         n.hit = 0.2;
-        if (n.k === 'ore') { this.bank.ore += q; this.float(n.x, n.y, `+${q} руда`, '#ffb070'); }
+        if (n.k === 'ore') { this.bank.ore += q; this.mined += q; this.float(n.x, n.y, `+${q} руда`, '#ffb070'); }
         // sparks go to every hero still standing, whoever threw the disc, each up to what one ability costs
         if (n.k === 'spk') {
           const all = this.alive();
@@ -1361,17 +1425,20 @@ export class Game {
     return false;
   }
 
-  /** Where a walker goes on its move: along its way to the hero it is after, as far as its steps take it. */
+  /**
+   * Where a walker goes on its move: along its way to the hero it is after, as far as its steps take it.
+   * A shooter that sees the hero fires from where it stands; out of sight, it walks to where it sees it.
+   */
   private planWalk(m: Mob) {
     const it = m.intent;
     m.fx = m.tx = m.x;
     m.fy = m.ty = m.y;
     m.walk = undefined;
     if (m.hp <= 0 || !it || it.hero < 0 || m.speed === 0) return;
-    const h = this.heroOf(it.hero), p = this.spot(h);
-    if (h.hp <= 0 || !p) return;
+    const h = this.heroOf(it.hero), p = this.spot(h), aim = isRanged(m.k);
+    if (h.hp <= 0 || !p || (aim && this.sees(m, h))) return;
     // the room has changed since the intent was picked: the enemies before it have moved, an icicle may have broken
-    const way = this.route(m, p);
+    const way = this.route(m, p, true, aim);
     if (!way) return;
     const walk = way.slice(0, this.stopAt(m, way) + 1);
     if (walk.length < 2) return;
@@ -1440,7 +1507,7 @@ export class Game {
       for (let b = 0; b < sz; b++) for (let a = 0; a < sz; a++) if (i + a >= 0 && j + b >= 0 && i + a < gw && j + b < S.gh) out[(j + b) * gw + i + a] = 1;
     };
     for (const b of standing(S.blocks)) mark(Math.floor(b.x0 / TILE), Math.floor(b.y0 / TILE));
-    for (const n of S.nodes) if (n.left > 0) mark(Math.floor(n.x / TILE), Math.floor(n.y / TILE));
+    for (const n of S.nodes) if (n.left > 0) mark(...cellAt(n.x, n.y, n.s), n.s);
     for (const p of S.pits) for (const [i, j] of p.cells) mark(i, j);
     if (mobs) for (const o of S.mobs) {
       if (o === self || o.hp <= 0) continue;
@@ -1483,8 +1550,9 @@ export class Game {
    * around blocks, pits, resources and the other enemies, to the nearest cells next to the hero it can stand on.
    * Big enemies move their whole 2 × 2 footprint. Returns the centres it steps through, starting where it stands,
    * or null when nothing connects. Other enemies crowding the hero don't stop a walker from heading there.
+   * With `aim` the way ends instead on the nearest cell it can stand on that sees the hero: a shooter's firing spot.
    */
-  route(m: Mob, to: Pt, mobs = true): Pt[] | null {
+  route(m: Mob, to: Pt, mobs = true, aim = false): Pt[] | null {
     const S = this.S, gw = S.gw, gh = S.gh, sz = mobSize(m.k), taken = this.occupied(m, mobs), stands = this.standCells();
     const ti = Math.floor(to.x / TILE), tj = Math.floor(to.y / TILE);
     const [si, sj] = cellAt(m.x, m.y, sz);
@@ -1493,7 +1561,8 @@ export class Game {
     const start = sj * gw + si;
     // a rune or a hero can sit in a one-cell corridor: walkers pass over them, they just never stop on one
     const open = (i: number, j: number) => inRoom(i, j) && !this.onStand(i, j, sz, new Set([hazKey(ti, tj)])) && ((i === si && j === sj) || this.fits(i, j, sz, taken));
-    const goal = (i: number, j: number) => this.nextTo(i, j, sz, ti, tj) && ((i === si && j === sj) || (this.fits(i, j, sz, taken) && !this.onStand(i, j, sz, stands)));
+    const stop = (i: number, j: number) => (i === si && j === sj) || (this.fits(i, j, sz, taken) && !this.onStand(i, j, sz, stands));
+    const goal = aim ? (i: number, j: number) => stop(i, j) && this.clearShot(cellCentre(i, j, sz), to) : (i: number, j: number) => this.nextTo(i, j, sz, ti, tj) && stop(i, j);
     const dist = new Float64Array(gw * gh).fill(Infinity), from = new Int32Array(gw * gh).fill(-1), done = new Uint8Array(gw * gh);
     dist[start] = 0;
     let end = -1;
@@ -1513,7 +1582,7 @@ export class Game {
         if (nd < dist[k]) { dist[k] = nd; from[k] = c; }
       }
     }
-    if (end < 0) return mobs ? this.route(m, to, false) : null;
+    if (end < 0) return mobs ? this.route(m, to, false, aim) : null;
     const way: Pt[] = [];
     for (let k = end; k >= 0; k = from[k]) way.push(k === start ? { x: m.x, y: m.y } : cellCentre(k % gw, Math.floor(k / gw), sz));
     return way.reverse();
@@ -1563,7 +1632,7 @@ export class Game {
     } else if (it.t === 'charge') {
       this.float(m.x, m.y - 10, 'фитиль горит', '#ffb070');
       this.sfx('launch', 0.3);
-      this.note(`${m.name} ${did(d, 'поджёг', 'подожгла')} фитиль`);
+      this.note(`${m.name} ${did(d, 'поджёг', 'подожгла')} фитиль` + (m.walk ? ` и ${did(d, 'пошёл', 'пошла')} к ${this.heroOf(it.hero).def.dat}` : ''));
     } else if (it.t === 'move') {
       // walled off, it stayed put: nothing to tell
       if (m.walk) this.note(`${m.name} идёт к ${this.heroOf(it.hero).def.dat}`);
@@ -1571,7 +1640,8 @@ export class Game {
       const h = this.heroOf(it.hero);
       const p = this.spot(h);
       if (h.hp <= 0 || !p) return;
-      if (isRanged(m.k) || this.beside(m, p)) {
+      // a shooter fires only at a hero it sees, a walker strikes only from right next to it
+      if (isRanged(m.k) ? this.sees(m, h) : this.beside(m, p)) {
         // up close the enemy lunges at the hero; a shooter rocks back from its shot
         if (isRanged(m.k)) this.knock(m, m.x, m.y, p.x, p.y, 0.3);
         else this.knock(m, p.x, p.y, m.x, m.y, 0.5);
@@ -1580,6 +1650,9 @@ export class Game {
         this.noteBlow(`${m.name} ${how} на ${it.dmg}`, h, blk);
         if (d.chill && h.hp > 0) this.chillHero(h);
         if (d.fire && h.hp > 0) { h.fire = 1; this.float(p.x, p.y - 8, 'горит!', '#ff7a3d'); }
+      } else if (isRanged(m.k)) {
+        this.float(m.x, m.y, 'не видит', '#c7cbe0');
+        this.note(`${m.name} не ${did(d, 'увидел')} ${h.def.acc}`);
       } else {
         this.float(m.x, m.y, 'не достал', '#c7cbe0');
         this.note(`${m.name} не ${did(d, 'достал')} ${h.def.acc}`);
@@ -1597,7 +1670,8 @@ export class Game {
 
   private nextTurn() {
     const S = this.S;
-    if (!this.alive().length || !this.liveMobs().length) { this.finish(); return; }
+    // the ore cave also ends once its turns are up
+    if (!this.alive().length || this.cleared() || (this.turnsMax() && S.turn >= this.turnsMax())) { this.finish(); return; }
     S.turn++;
     S.discs = [];
     S.done = [];
@@ -1622,13 +1696,15 @@ export class Game {
     if (this.send) { this.updateRemote(dt); return; }
     this.acc += dt;
     while (this.acc >= STEP) { this.step(STEP); this.acc -= STEP; }
-    // the last enemy down ends the fight at once, whatever throws are left
-    if ((S.phase === 'throw' || S.phase === 'resolve' || S.phase === 'enemy') && !this.liveMobs().length) this.finish();
+    // the last enemy down (in the ore cave, the last vein or mushroom spent) ends the room at once, whatever throws are left
+    if ((S.phase === 'throw' || S.phase === 'resolve' || S.phase === 'enemy') && this.cleared()) this.finish();
     // the heroes' turn ends by the players' word only, once the discs have stopped
     else if (S.phase === 'throw' && this.allDone() && !this.moving()) {
       S.phase = 'resolve'; S.timer = 0.9; this.resolve(); this.onChange();
     } else if (S.phase === 'resolve' && (S.timer -= dt) <= 0) {
-      S.phase = 'enemy'; this.mobsStart(); this.onChange();
+      // nobody moves against the party in the ore cave: its next turn comes at once
+      if (this.cave()) this.nextTurn();
+      else { S.phase = 'enemy'; this.mobsStart(); this.onChange(); }
     } else if (S.phase === 'enemy') this.enemyTurn(dt);
     this.fade(dt);
   }

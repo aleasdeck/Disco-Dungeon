@@ -173,7 +173,7 @@ export interface MobDef {
   hp: number;
   r: number;
   speed: number;
-  /** 999 means it shoots across the whole room. */
+  /** 999 means it shoots across the whole room, at a hero it sees; out of sight it walks to where it sees one. */
   reach: number;
   dmg: number;
   armor?: number;
@@ -207,10 +207,10 @@ export const MOB_HP_MUL = 1.25;
 
 export const MOBS: Record<MobKind, MobDef> = {
   skel: { name: 'Скелет', floor: 0, hp: 9, r: 7, speed: 34, reach: 30, dmg: 4, fig: 31, txt: 'Идёт к ближайшему герою и бьёт вблизи.', acc: 'Скелета' },
-  archer: { name: 'Гоблин-лучник', floor: 0, hp: 6, r: 6, speed: 0, reach: 999, dmg: 3, fig: 26, txt: 'Стоит на месте и стреляет через всю комнату.', acc: 'Гоблина-лучника' },
+  archer: { name: 'Гоблин-лучник', floor: 0, hp: 6, r: 6, speed: 32, reach: 999, dmg: 3, fig: 26, txt: 'Стреляет через всю комнату, но только в того, кого видит. За колонной не достанет: сперва выйдет на линию огня.', acc: 'Гоблина-лучника' },
   rat: { name: 'Тюремная крыса', floor: 0, hp: 5, r: 6, speed: 64, reach: 26, dmg: 3, fig: 18, txt: 'Хилая, но очень быстрая: добегает до рун за ход-два.', acc: 'Тюремную крысу', fem: true },
   necro: {
-    name: 'Некромант', acc: 'Некроманта', floor: 0, hp: 12, r: 8, speed: 0, reach: 999, dmg: 2, fig: 36,
+    name: 'Некромант', acc: 'Некроманта', floor: 0, hp: 12, r: 8, speed: 16, reach: 999, dmg: 2, fig: 36,
     acts: [{ k: 'summon', every: 2, at: 0, n: 1, kind: 'skel', cap: 3 }],
     txt: 'Каждый второй ход поднимает скелета из светящегося круга. Круг видно заранее: убей некроманта, пока не поздно.',
   },
@@ -220,21 +220,21 @@ export const MOBS: Record<MobKind, MobDef> = {
     txt: 'Босс казематов. Каждый третий ход бьёт скипетром об пол и задевает весь отряд.',
   },
   ghoul: { name: 'Ледяной упырь', floor: 1, hp: 10, r: 7, speed: 36, reach: 30, dmg: 4, fig: 30, chill: true, txt: 'Бьёт вблизи и морозит: следующий бросок героя слабее.', acc: 'Ледяного упыря' },
-  ghost: { name: 'Призрак', floor: 1, hp: 7, r: 7, speed: 0, reach: 999, dmg: 3, fig: 30, ghost: true, txt: 'Стреляет издалека. Каждый второй ход бесплотен: диски пролетают насквозь.', acc: 'Призрака' },
+  ghost: { name: 'Призрак', floor: 1, hp: 7, r: 7, speed: 32, reach: 999, dmg: 3, fig: 30, ghost: true, txt: 'Стреляет издалека в того, кого видит. Каждый второй ход бесплотен: диски пролетают насквозь.', acc: 'Призрака' },
   yeti: { name: 'Йети', floor: 1, hp: 22, r: 9, speed: 18, reach: 34, dmg: 6, armor: 2, fig: 38, txt: 'Толстая шкура, броня 2. Медленный, но бьёт больно.', acc: 'Йети' },
   witch: {
-    name: 'Ледяная ведьма', acc: 'Ледяную ведьму', fem: true, floor: 1, hp: 14, r: 8, speed: 0, reach: 999, dmg: 2, fig: 36,
+    name: 'Ледяная ведьма', acc: 'Ледяную ведьму', fem: true, floor: 1, hp: 14, r: 8, speed: 16, reach: 999, dmg: 2, fig: 36,
     acts: [{ k: 'heal', every: 2, at: 0, amt: 8 }],
     txt: 'Каждый второй ход лечит самого раненого моба на 8.',
   },
   lich: {
-    size: 2, name: 'Ледяной лич', acc: 'Ледяного лича', floor: 1, boss: true, hp: 64, r: 14, speed: 0, reach: 999, dmg: 6, armor: 2, fig: 52,
+    size: 2, name: 'Ледяной лич', acc: 'Ледяного лича', floor: 1, boss: true, hp: 64, r: 14, speed: 10, reach: 999, dmg: 6, armor: 2, fig: 52,
     acts: [{ k: 'summon', every: 3, at: 2, n: 2, kind: 'ghoul', cap: 4 }, { k: 'slam', every: 3, at: 0, chill: true }],
     txt: 'Босс склепа. Призывает упырей из ледяных кругов, а следом насылает метель на весь отряд.',
   },
   imp: { name: 'Бес-кочегар', floor: 2, hp: 7, r: 6, speed: 52, reach: 28, dmg: 3, fig: 24, fire: true, txt: 'Шустрый, поджигает: герой горит и в следующий ход теряет ещё 2.', acc: 'Беса-кочегара' },
   slime: { name: 'Лавовый слизень', floor: 2, hp: 14, r: 9, speed: 20, reach: 30, dmg: 5, fig: 24, lava: true, txt: 'Толстый и медленный. Где лопнет, там остаётся лужа лавы.', acc: 'Лавового слизня' },
-  bomber: { name: 'Гном-подрывник', floor: 2, hp: 8, r: 7, speed: 0, reach: 999, dmg: 4, fig: 28, charge: true, txt: 'Ход поджигает фитиль, следующий ход кидает бомбу на двойной урон.', acc: 'Гнома-подрывника' },
+  bomber: { name: 'Гном-подрывник', floor: 2, hp: 8, r: 7, speed: 16, reach: 999, dmg: 4, fig: 28, charge: true, txt: 'Ход поджигает фитиль, следующий кидает бомбу на двойной урон в того, кого видит.', acc: 'Гнома-подрывника' },
   golem: { name: 'Голем', floor: 2, hp: 26, r: 9, speed: 14, reach: 34, dmg: 7, armor: 3, fig: 38, txt: 'Броня 3: удары слабее не проходят.', acc: 'Голема' },
   forgelord: {
     size: 2, name: 'Владыка кузни', acc: 'Владыку кузни', floor: 2, boss: true, hp: 70, r: 15, speed: 12, reach: 44, dmg: 9, armor: 4, fig: 54, rage: true,
@@ -243,7 +243,7 @@ export const MOBS: Record<MobKind, MobDef> = {
   },
 };
 
-/** Shoots across the room instead of walking up. */
+/** Shoots across the room, at a hero it sees, instead of walking up to strike. */
 export const isRanged = (k: MobKind) => MOBS[k].reach >= 999;
 
 /** Cells a mob covers on each side. */
@@ -367,7 +367,7 @@ export type RoomType = 'fight' | 'elite' | 'treasure' | 'camp' | 'forge' | 'even
 export const ROOM_TYPES: Record<RoomType, { name: string; col: string; min: number; txt: string }> = {
   fight: { name: 'Бой', col: '#c2364f', min: 2, txt: 'Обычные мобы, рудная жила, кристалл искр и грибы.' },
   elite: { name: 'Элитный бой', col: '#7a1d33', min: 3, txt: 'Сильный враг этажа и свита. Две рудные жилы вместо одной.' },
-  treasure: { name: 'Рудная пещера', col: '#d39612', min: 1.5, txt: 'Три рудные жилы и всего два моба.' },
+  treasure: { name: 'Рудная пещера', col: '#d39612', min: 1, txt: 'Врагов нет: одна большая рудная жила, две малые и грибы. Ходов 4 минус число героев, втроём один.' },
   camp: { name: 'Костёр', col: '#e8642c', min: 0.5, txt: 'У огня каждый делает одно: отдыхает, перевязывает товарища или копает руду.' },
   forge: { name: 'Кузнец', col: '#5d6488', min: 1, txt: `Прокачка дисков за руду, только здесь. И ещё ${FORGE_ORE} руды в подарок.` },
   event: { name: 'Событие', col: '#6b4fa8', min: 0.75, txt: 'Странная встреча и выбор: награда, риск или беда.' },
