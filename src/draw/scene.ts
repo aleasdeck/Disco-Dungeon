@@ -55,8 +55,10 @@ const phantomArt = (img: HTMLImageElement) => {
 
 /** The cook's dishes, by `Food.k`: their pictures are food_<name> in the manifest, else drawn by code. */
 const DISHES = ['cutlet', 'sausage', 'pie', 'drumstick'];
-/** How wide a dish stands, in iso units: it fills most of the cell it lies in. */
-const FOOD_W = 17;
+/** How wide a dish's plate stands, in iso units: it fills most of the cell it lies in. */
+const FOOD_W = 22;
+/** How far below the middle of its cell a plate's front rim comes, as a share of its width: the plate sits centred on the cell. */
+const FOOD_RIM = 0.28;
 
 /** Cartoon look: silhouette and detail ink widths, in iso units. */
 const OL = 2.1, DL = 1.1;
@@ -1147,9 +1149,10 @@ export class SceneRenderer {
   private drawFood(f: Food) {
     const { c, P } = this, u = Math.min(1, f.t / FOOD_FLY), e = u * (2 - u);
     const x = f.fx + (f.x - f.fx) * e, y = f.fy + (f.y - f.fy) * e, h = Math.sin(Math.PI * u) * 14;
-    ell(c, ...P(x, y), FOOD_W * 0.46 * (0.6 + 0.4 * u), FOOD_W * 0.22 * (0.6 + 0.4 * u)); c.fillStyle = 'rgba(15,8,4,.35)'; c.fill();
+    const [gx, gy] = P(x, y), q = 0.6 + 0.4 * u;
+    ell(c, gx, gy + 1.5 * u, FOOD_W * 0.48 * q, FOOD_W * 0.26 * q); c.fillStyle = 'rgba(15,8,4,.35)'; c.fill();
     const [sx, sy] = P(x, y, h), im = env('food_' + DISHES[f.k % DISHES.length]);
-    if (im) { this.standee(im, sx, sy + 2, FOOD_W); return; }
+    if (im) { this.standee(im, sx, sy + FOOD_W * FOOD_RIM, FOOD_W); return; }
     // the drawn dishes are sized for a dish 10 wide
     c.save();
     c.translate(sx, sy);
