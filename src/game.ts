@@ -5,7 +5,7 @@ import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, CRIT_COS, E_MA
 import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { mulberry32 } from './rng';
 import type { Sfx } from './audio/sfx';
-import { cellAt, cellCentre, generate, hazKey, isFloor, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
+import { caveTurns, cellAt, cellCentre, generate, hazKey, isFloor, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
 
@@ -219,6 +219,8 @@ export class Game {
    * levels for sale; the depth tells one visit from the next when two blacksmiths come in a row.
    */
   forge = 0;
+  /** Host: ore the party has mined in this room, for the room's result. */
+  mined = 0;
   private acc = 0;
   /** Physics steps run so far on this page; online, every snapshot carries the host's count. */
   tick = 0;
@@ -245,6 +247,7 @@ export class Game {
     if (this.bank.strobe) spec.strobe = true;
     const L = generate(spec);
     this.forge = 0;
+    this.mined = 0;
     this.pickup.clear();
     this.walked = { key: '', n: 0 };
     this.hopped.clear();
@@ -308,6 +311,12 @@ export class Game {
 
   alive = () => this.S.heroes.filter(h => h.hp > 0);
   liveMobs = () => this.S.mobs.filter(m => m.hp > 0);
+  /** The ore cave: no enemies, only veins, and a few turns to mine them. */
+  cave = () => this.S.spec.type === 'treasure';
+  /** Turns the room gives the party, 0 for no limit: a fight lasts as long as its enemies stand. */
+  turnsMax = () => (this.cave() ? caveTurns(this.S.spec) : 0);
+  /** The room is done: every enemy is down, or in the ore cave every vein is spent. */
+  cleared = () => (this.cave() ? !this.S.nodes.some(n => n.k === 'ore' && n.left > 0) : !this.liveMobs().length);
   stat = (h: HeroState, k: StatKey) => {
     const step = UPS.find(u => u.k === k)!.step;
     return k === 'e' ? Math.min(E_MAX, h.def.e + h.up.e * step) : h.def[k] * (1 + h.up[k] * step);
@@ -1039,7 +1048,7 @@ export class Game {
         const big = Math.ceil((d.m * vn) / 120) >= 4, h = d.hero, q = big ? 2 : 1;
         n.left--;
         n.hit = 0.2;
-        if (n.k === 'ore') { this.bank.ore += q; this.float(n.x, n.y, `+${q} руда`, '#ffb070'); }
+        if (n.k === 'ore') { this.bank.ore += q; this.mined += q; this.float(n.x, n.y, `+${q} руда`, '#ffb070'); }
         // sparks go to every hero still standing, whoever threw the disc, each up to what one ability costs
         if (n.k === 'spk') {
           const all = this.alive();
@@ -1317,7 +1326,7 @@ export class Game {
       for (let b = 0; b < sz; b++) for (let a = 0; a < sz; a++) if (i + a >= 0 && j + b >= 0 && i + a < gw && j + b < S.gh) out[(j + b) * gw + i + a] = 1;
     };
     for (const b of standing(S.blocks)) mark(Math.floor(b.x0 / TILE), Math.floor(b.y0 / TILE));
-    for (const n of S.nodes) if (n.left > 0) mark(Math.floor(n.x / TILE), Math.floor(n.y / TILE));
+    for (const n of S.nodes) if (n.left > 0) mark(...cellAt(n.x, n.y, n.s), n.s);
     for (const p of S.pits) for (const [i, j] of p.cells) mark(i, j);
     if (mobs) for (const o of S.mobs) {
       if (o === self || o.hp <= 0) continue;
@@ -1474,7 +1483,8 @@ export class Game {
 
   private nextTurn() {
     const S = this.S;
-    if (!this.alive().length || !this.liveMobs().length) { this.finish(); return; }
+    // the ore cave also ends once its turns are up
+    if (!this.alive().length || this.cleared() || (this.turnsMax() && S.turn >= this.turnsMax())) { this.finish(); return; }
     S.turn++;
     S.discs = [];
     S.done = [];
@@ -1499,13 +1509,15 @@ export class Game {
     if (this.send) { this.updateRemote(dt); return; }
     this.acc += dt;
     while (this.acc >= STEP) { this.step(STEP); this.acc -= STEP; }
-    // the last enemy down ends the fight at once, whatever throws are left
-    if ((S.phase === 'throw' || S.phase === 'resolve' || S.phase === 'enemy') && !this.liveMobs().length) this.finish();
+    // the last enemy down (in the ore cave, the last vein spent) ends the room at once, whatever throws are left
+    if ((S.phase === 'throw' || S.phase === 'resolve' || S.phase === 'enemy') && this.cleared()) this.finish();
     // the heroes' turn ends by the players' word only, once the discs have stopped
     else if (S.phase === 'throw' && this.allDone() && !this.moving()) {
       S.phase = 'resolve'; S.timer = 0.9; this.resolve(); this.onChange();
     } else if (S.phase === 'resolve' && (S.timer -= dt) <= 0) {
-      S.phase = 'enemy'; this.mobsStart(); this.onChange();
+      // nobody moves against the party in the ore cave: its next turn comes at once
+      if (this.cave()) this.nextTurn();
+      else { S.phase = 'enemy'; this.mobsStart(); this.onChange(); }
     } else if (S.phase === 'enemy') this.enemyTurn(dt);
     this.fade(dt);
   }
