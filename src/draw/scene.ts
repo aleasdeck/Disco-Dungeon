@@ -3,9 +3,9 @@
 
 import { WALL_WORDS, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize } from '../data';
 import { KX, KY, type Camera, type Vec } from '../camera';
-import { type Disc, type Game, type HeroState, type Spark } from '../game';
+import { FOOD_FLY, ZAP_T, type Disc, type Food, type Game, type HeroState, type Spark, type Zap } from '../game';
 import { cellAt, floorAt, hazKey, inPit, isFloor, pitAt, type Block, type Decal, type Edge, type Mob, type Pit, type ResNode } from '../room';
-import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure } from './figures';
+import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure, heroLook } from './figures';
 import { circ, ell, fs, mix, pth, rr, type Ctx, type Pt } from './util';
 import { GRAFFITI_FONTS, envArt } from '../assets';
 import { settings } from '../settings';
@@ -21,6 +21,9 @@ const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-
 
 /** Room art from the manifest; anything missing is drawn by code in the same cartoon look. */
 const env = (k: string) => envArt.get(k);
+
+/** The cook's dishes, by `Food.k`: their pictures are food_<name> in the manifest, else drawn by code. */
+const DISHES = ['cutlet', 'sausage', 'pie', 'drumstick'];
 
 /** Cartoon look: silhouette and detail ink widths, in iso units. */
 const OL = 2.1, DL = 1.1;
@@ -366,6 +369,7 @@ export class SceneRenderer {
     for (const m of S.mobs) if (m.dead <= 1) items.push([cam.depth(m.x, m.y), () => this.drawMob(m)]);
     for (const b of S.blocks) items.push([cam.depth(b.x0 + 8, b.y0 + 8), () => this.drawBlock(b)]);
     for (const n of S.nodes) items.push([cam.depth(n.x, n.y), () => this.drawNode(n)]);
+    for (const f of S.food) items.push([cam.depth(f.x, f.y) - 0.5, () => this.drawFood(f)]);
     for (const p of S.sparks) if (p.k) items.push([cam.depth(p.x, p.y) + 0.5, () => this.drawChip(p)]);
     this.wallItems(items);
     this.decorItems(items);
@@ -1106,6 +1110,22 @@ export class SceneRenderer {
     if (f) c.restore();
   }
 
+  /** A dish of the cook's: in flight it arcs from where the disc bounced, then sits on the floor with a little shadow. */
+  private drawFood(f: Food) {
+    const { c, P } = this, u = Math.min(1, f.t / FOOD_FLY), e = u * (2 - u);
+    const x = f.fx + (f.x - f.fx) * e, y = f.fy + (f.y - f.fy) * e, h = Math.sin(Math.PI * u) * 14;
+    ell(c, ...P(x, y), 4.6 * (0.6 + 0.4 * u), 2.2 * (0.6 + 0.4 * u)); c.fillStyle = 'rgba(15,8,4,.35)'; c.fill();
+    const [sx, sy] = P(x, y, h), im = env('food_' + DISHES[f.k % DISHES.length]);
+    if (im) { this.standee(im, sx, sy + 1.5, 10); return; }
+    c.lineJoin = 'round';
+    switch (f.k % DISHES.length) {
+      case 0: ell(c, sx, sy - 1, 5.5, 2.6); fs(c, '#f4efe4', 1); ell(c, sx, sy - 2, 3.6, 2); fs(c, '#8a4f2a', 1); break;
+      case 1: rr(c, sx - 4.5, sy - 4, 9, 3.4, 1.7); fs(c, '#e59a9a', 1); break;
+      case 2: c.beginPath(); c.ellipse(sx, sy - 1.5, 4.8, 3, 0, Math.PI, 0); c.closePath(); fs(c, '#d9a13d', 1); break;
+      default: ell(c, sx + 1, sy - 2.5, 3.4, 2.6); fs(c, '#b8692e', 1); rr(c, sx - 4.5, sy - 2, 3.5, 1.4, 0.6); fs(c, '#f1e7d0', 0.8);
+    }
+  }
+
   private drawDisc(d: Disc) {
     const hole = d.fall ? pitAt(this.g.S.pits, d.x, d.y) : undefined;
     if (!hole) return this.drawPuck(d);
@@ -1136,8 +1156,9 @@ export class SceneRenderer {
     ell(c, x, y - th, rx, ry); fs(c, col, 1.5);
     ell(c, x, y - th, rx * 0.62, ry * 0.62); fs(c, mix(col, '#ffffff', 0.18), 0.9);
     c.save(); c.translate(x, y - th); c.scale(1, 0.5); c.rotate(d.spin); c.fillStyle = '#f6efe0'; c.strokeStyle = INK; c.lineWidth = 1.4;
-    if (d.hero.i === 0) { c.beginPath(); for (const [a, b] of [[-0.12, -0.38], [0.12, -0.38], [0.12, -0.12], [0.38, -0.12], [0.38, 0.12], [0.12, 0.12], [0.12, 0.38], [-0.12, 0.38], [-0.12, 0.12], [-0.38, 0.12], [-0.38, -0.12], [-0.12, -0.12]]) c.lineTo(a * rx * 1.4, b * rx * 1.4); c.closePath(); c.stroke(); c.fill(); }
-    else if (d.hero.i === 1) { c.beginPath(); for (let k = 0; k < 4; k++) { const a = k * 1.571; c.lineTo(Math.cos(a) * rx * 0.48, Math.sin(a) * rx * 0.48); c.lineTo(Math.cos(a + 0.785) * rx * 0.15, Math.sin(a + 0.785) * rx * 0.15); } c.closePath(); c.stroke(); c.fill(); }
+    const look = heroLook(d.hero.def.key);
+    if (look === 0) { c.beginPath(); for (const [a, b] of [[-0.12, -0.38], [0.12, -0.38], [0.12, -0.12], [0.38, -0.12], [0.38, 0.12], [0.12, 0.12], [0.12, 0.38], [-0.12, 0.38], [-0.12, 0.12], [-0.38, 0.12], [-0.38, -0.12], [-0.12, -0.12]]) c.lineTo(a * rx * 1.4, b * rx * 1.4); c.closePath(); c.stroke(); c.fill(); }
+    else if (look === 1) { c.beginPath(); for (let k = 0; k < 4; k++) { const a = k * 1.571; c.lineTo(Math.cos(a) * rx * 0.48, Math.sin(a) * rx * 0.48); c.lineTo(Math.cos(a + 0.785) * rx * 0.15, Math.sin(a + 0.785) * rx * 0.15); } c.closePath(); c.stroke(); c.fill(); }
     else { c.beginPath(); c.moveTo(0, -rx * 0.42); c.quadraticCurveTo(rx * 0.36, -rx * 0.05, rx * 0.2, rx * 0.3); c.quadraticCurveTo(0, rx * 0.42, -rx * 0.2, rx * 0.3); c.quadraticCurveTo(-rx * 0.36, -rx * 0.05, 0, -rx * 0.42); c.closePath(); c.stroke(); c.fill(); }
     c.restore();
     c.strokeStyle = 'rgba(255,255,255,.8)'; c.lineWidth = 1.1; c.beginPath(); c.ellipse(x, y - th, rx * 0.8, ry * 0.74, 0, Math.PI * 1.1, Math.PI * 1.42); c.stroke();
@@ -1433,9 +1454,34 @@ export class SceneRenderer {
     c.restore();
   }
 
+  /** A stroke of lightning: a jagged line at mid-figure height, a wide cyan glow under a white core, flickering out. */
+  private drawZap(z: Zap) {
+    const { c, P } = this, a = P(z.x0, z.y0, z.h0), b = P(z.x1, z.y1, z.h1), dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1;
+    const n = Math.max(3, Math.round(L / 6)), pts: Pt[] = [];
+    let r = z.s;
+    const rnd = () => ((r = Math.imul(r ^ (r >>> 15), 0x2c1b3c6d) + 0x9e3779b9) >>> 0) / 4294967296 - 0.5;
+    for (let k = 0; k <= n; k++) {
+      const u = k / n, off = k === 0 || k === n ? 0 : rnd() * Math.min(9, L * 0.25);
+      pts.push([a[0] + dx * u - (dy / L) * off, a[1] + dy * u + (dx / L) * off]);
+    }
+    // a cartoon bolt: ink outline, electric blue, white core, so it reads on dark stone and on white ice alike; it flickers
+    // and thins out as it fades
+    const q = 1 - z.t / ZAP_T, w = 0.5 + 0.5 * q;
+    c.save();
+    c.lineJoin = 'round';
+    c.lineCap = 'round';
+    c.globalAlpha = Math.min(1, q * 2) * (0.8 + 0.2 * Math.sin(z.t * 70));
+    c.beginPath(); pts.forEach((p, k) => (k ? c.lineTo(...p) : c.moveTo(...p)));
+    c.strokeStyle = INK; c.lineWidth = 3.6 * w; c.stroke();
+    c.strokeStyle = '#3fb4ff'; c.lineWidth = 2.4 * w; c.stroke();
+    c.strokeStyle = '#f2fcff'; c.lineWidth = 0.9 * w; c.stroke();
+    c.restore();
+  }
+
   private drawFx() {
     const { c, P } = this;
     const S = this.g.S;
+    for (const z of S.zaps) this.drawZap(z);
     for (const p of S.sparks) {
       if (p.k) continue;
       const [sx, sy] = P(p.x, p.y, p.h);

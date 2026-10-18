@@ -18,8 +18,6 @@ export function show(screen: Screen | null) {
 
 const FLOOR_NAMES = BIOMES.map(b => b.name);
 
-const HERO_ROLES = ['Танк', 'Урон', 'Зона'];
-
 // ------------------------------------------------------------ collection
 
 export function renderCollection(tab: 'heroes' | 'mobs') {
@@ -34,7 +32,7 @@ export function renderCollection(tab: 'heroes' | 'mobs') {
       drawPortrait(cv, { i, def });
       // starting health, then the same words as the disc upgrades: damage of a full straight throw, speed next to Ash's, speed kept off a wall
       const stats = `<dt>HP</dt><dd>${def.hp}</dd><dt>Урон</dt><dd>${fullHit(def.m, def.pw)}</dd><dt>Скорость</dt><dd>${Math.round(def.pw * 100)}%</dd><dt>Отскок</dt><dd>${Math.round(def.e * 100)}%</dd>`;
-      card.innerHTML = `<div></div><div><h3 style="color:${def.col}">${def.name}</h3><p>${HERO_ROLES[i] ?? ''}. Способность «${def.ab}»: ${def.abTxt} ${def.abMore}</p>`
+      card.innerHTML = `<div></div><div><h3 style="color:${def.col}">${def.name}</h3><p>${def.role}. Способность «${def.ab}»: ${def.abTxt} ${def.abMore}</p>`
         + `<dl>${stats}<dt>Диск</dt><dd>${def.r * 2}</dd></dl></div>`;
       card.firstElementChild!.replaceWith(cv);
       grid.appendChild(card);
@@ -65,13 +63,13 @@ export function renderHeroSelect(picked: number, onPick: (hero: number) => void)
     drawPortrait(cv, { i, def });
     b.append(cv);
     const label = document.createElement('span');
-    label.innerHTML = `${def.name}<em>${HERO_ROLES[i] ?? ''}</em>`;
+    label.innerHTML = `${def.name}<em>${def.role}</em>`;
     b.append(label);
     b.addEventListener('click', () => onPick(i));
     box.appendChild(b);
   });
   const def = HEROES[picked];
-  $('heroInfo').innerHTML = `<b style="color:${def.col}">${def.name}</b>. ${HERO_ROLES[picked] ?? ''}. HP ${def.hp}, урон ${fullHit(def.m, def.pw)}, скорость ${Math.round(def.pw * 100)}%, отскок ${Math.round(def.e * 100)}%. `
+  $('heroInfo').innerHTML = `<b style="color:${def.col}">${def.name}</b>. ${def.role}. HP ${def.hp}, урон ${fullHit(def.m, def.pw)}, скорость ${Math.round(def.pw * 100)}%, отскок ${Math.round(def.e * 100)}%. `
     + `Способность «${def.ab}»: ${def.abTxt}`;
 }
 

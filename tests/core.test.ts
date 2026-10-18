@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, isRanged, mobSize } from '../src/data';
-import { Game, newBank, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, FAN_ANGLE, FAN_M, FOOD_HEAL, FOOD_PER_DISC, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, isRanged, mobSize } from '../src/data';
+import { FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { CAVE, MOB_CAP, PARTY_SCALE, caveTurns, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
 import { FLOORS, FORGE_ROWS, LAYERS, agreed, genFloor, newRun } from '../src/run';
@@ -1612,6 +1612,146 @@ describe('hero abilities work through the discs', () => {
     expect(cli.heroOf(2).boost).toBe(true);
     expect(cli.heroOf(2).sparks).toBe(0);
     expect(cli.S.mobs[0].burn).toBe(5);
+  });
+});
+
+describe('the three new heroes', () => {
+  const at = (key: string) => HEROES.findIndex(d => d.key === key);
+  /** A floor 0 fight for the given heroes, the given enemies at the given cells and nothing else in the room. */
+  const arena = (picks: number[], mobs: [keyof typeof MOBS, number, number][]) => {
+    const g = new Game();
+    g.party = newParty(picks);
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    g.S.mobs = mobs.map(([k, i, j]) => newMob(k, cellCentre(i, j).x, cellCentre(i, j).y, 1, 0));
+    g.S.nodes = []; g.S.blocks = []; g.S.rock = []; g.S.pits = [];
+    g.S.haz = new Set();
+    placeAll(g); g.startFight();
+    for (const m of g.S.mobs) m.hp = m.max = 99;
+    return g;
+  };
+  /** A disc of hero h rolling straight up into mob m from just below it. */
+  const into = (g: Game, h: HeroState, m: { x: number; y: number; r: number }, ab: boolean, v = 200) => {
+    const d = { id: 900 + g.S.discs.length, hero: h, x: m.x, y: m.y + m.r + h.def.r + 1, vx: 0, vy: -v, r: h.def.r, m: g.stat(h, 'm'), e: g.stat(h, 'e'), fr: h.def.fr,
+      fall: 0, gone: false, charged: false, bounces: 1, spin: 0, hits: 0, ab, rico: 0 };
+    g.S.discs.push(d);
+    return d;
+  };
+
+  it('six heroes to pick from, two of each kind, each with its own colour, disc and ability; online still three seats', () => {
+    expect(HEROES.map(d => d.key)).toEqual(['bastion', 'ricochet', 'ash', 'cook', 'sharp', 'electra']);
+    // the pick screens lay them out three to a row: each column is one kind
+    expect(HEROES.slice(3).map(d => d.role)).toEqual(HEROES.slice(0, 3).map(d => d.role));
+    for (const role of ['Танк', 'Урон', 'Зона']) expect(HEROES.filter(d => d.role === role)).toHaveLength(2);
+    expect(new Set(HEROES.map(d => d.col)).size).toBe(6);
+    expect(new Set(HEROES.map(d => d.ab)).size).toBe(6);
+    expect(HEROES[at('electra')].fem && HEROES[at('cook')].fem && !HEROES[at('sharp')].fem).toBe(true);
+    // the cook is the tank: the most health of all
+    expect(HEROES[at('cook')].hp).toBe(Math.max(...HEROES.map(d => d.hp)));
+    expect(MAX_PLAYERS).toBe(3);
+    // the campaign's party and the tests' default stay the old trio
+    expect(newParty().map(h => h.def.key)).toEqual(['bastion', 'ricochet', 'ash']);
+  });
+
+  it('Electra: her hit strikes lightning that leaps to the nearest enemies, weaker each time, through armour', () => {
+    // a golem struck, a skeleton two cells off, an archer two past that, a rat out of reach far away
+    const g = arena([at('electra')], [['golem', 2, 1], ['skel', 4, 1], ['archer', 6, 1], ['rat', 2, 8]]);
+    const h = g.party[0], [golem, skel, archer, rat] = g.S.mobs;
+    expect(Math.hypot(rat.x - archer.x, rat.y - archer.y)).toBeGreaterThan(ZAP_REACH);
+    const d = into(g, h, golem, true);
+    g.step(1 / 120);
+    const hit = Math.ceil((d.m * 200) / 120);
+    expect(golem.max - golem.hp).toBe(hit - 0 + ZAP[0]);
+    expect(skel.max - skel.hp).toBe(ZAP[1]);
+    expect(archer.max - archer.hp).toBe(ZAP[2]);
+    expect(rat.hp).toBe(rat.max);
+    expect(g.S.zaps.length).toBe(3);
+    // without the ability her disc is just a disc
+    const g2 = arena([at('electra')], [['skel', 2, 1], ['skel', 4, 1]]);
+    into(g2, g2.party[0], g2.S.mobs[0], false);
+    g2.step(1 / 120);
+    expect(g2.S.mobs[1].hp).toBe(g2.S.mobs[1].max);
+    expect(g2.S.zaps).toEqual([]);
+  });
+
+  it('Electra: when the disc fells the enemy, the lightning starts from it and its first stroke goes to the next', () => {
+    const g = arena([at('electra')], [['rat', 2, 1], ['skel', 4, 1], ['archer', 7, 1]]);
+    const [rat, skel, archer] = g.S.mobs;
+    rat.hp = 1;
+    into(g, g.party[0], rat, true);
+    g.step(1 / 120);
+    expect(rat.hp).toBeLessThanOrEqual(0);
+    expect(skel.max - skel.hp).toBe(ZAP[0]);
+    expect(archer.max - archer.hp).toBe(ZAP[1]);
+  });
+
+  it('the cook: her disc drops a dish at each of its first bounces, and a hurt hero\'s disc eats it', () => {
+    const g = arena([at('cook'), at('ricochet')], [['archer', 1, 1]]);
+    const [cook, rico] = g.party;
+    cook.sparks = AB_COST;
+    g.useAbility(cook);
+    // a lively disc of hers rolling along a row: off the far wall, back and off the near one, many times
+    g.throwDisc(cook, 60, 0);
+    const d = g.S.discs[0];
+    expect(d.ab).toBe(true);
+    Object.assign(d, { vx: 420, vy: 0, e: 0.95 });
+    for (let k = 0; k < 60 * 30 && g.moving(); k++) g.update(1 / 60);
+    expect(d.bounces).toBeGreaterThan(FOOD_PER_DISC);
+    expect(g.S.food).toHaveLength(FOOD_PER_DISC);
+    for (const f of g.S.food) {
+      expect(f.t).toBe(FOOD_FLY);
+      expect(isFloor(g.S, Math.floor(f.x / TILE), Math.floor(f.y / TILE))).toBe(true);
+      expect(f.by).toBe(d.id);
+    }
+    // the cook's own disc rolled over its dishes and left them; a hurt Ricochet's disc eats one
+    const f = g.S.food[0];
+    g.S.food = [f];
+    rico.hp = rico.max - 5;
+    const full = { ...d, id: 77, hero: cook, x: f.x - 20, y: f.y, vx: 120, vy: 0, gone: false, food: 0, ab: false };
+    cook.hp = cook.max;
+    g.S.discs = [full];
+    for (let k = 0; k < 30; k++) g.step(1 / 120);
+    expect(g.S.food).toHaveLength(1);
+    g.S.discs = [{ ...full, id: 78, hero: rico, x: f.x - 20, y: f.y, vx: 120, vy: 0, r: rico.def.r }];
+    for (let k = 0; k < 30; k++) g.step(1 / 120);
+    expect(rico.hp).toBe(rico.max - 5 + FOOD_HEAL);
+    expect(g.S.food).toHaveLength(0);
+  });
+
+  it('the cook: dishes travel to the other screens with the snapshot', () => {
+    const host = new Game(), cli = new Game();
+    host.party = newParty([at('cook'), 0]);
+    host.loadRoom({ seed: 21, depth: 2, floor: 0, type: 'fight' });
+    host.S.food = [{ x: 40, y: 40, fx: 30, fy: 40, k: 2, by: 5, t: FOOD_FLY }];
+    cli.send = () => {};
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    expect(cli.S.food).toEqual(host.S.food);
+  });
+
+  it('the card sharp: with his ability a throw fans out three discs for one from the hand, the side ones weaker', () => {
+    const g = arena([at('sharp')], [['archer', 1, 1]]), h = g.party[0];
+    h.discs = h.hand = 2;
+    g.throwDisc(h, 0, -40);
+    expect(g.S.discs).toHaveLength(1);
+    g.S.discs[0].gone = true;
+    h.sparks = AB_COST;
+    g.useAbility(h);
+    g.throwDisc(h, 0, -40);
+    expect(h.hand).toBe(0);
+    const fan = g.S.discs.slice(1);
+    expect(fan).toHaveLength(3);
+    const [l, r, mid] = fan;
+    expect([l.fan, r.fan, mid.fan]).toEqual([true, true, undefined]);
+    expect(l.m).toBeCloseTo(mid.m * FAN_M, 6);
+    expect(new Set(fan.map(d => d.vol)).size).toBe(1);
+    const ang = (d: typeof mid) => Math.atan2(d.vy, d.vx);
+    expect(Math.abs(ang(l) - ang(mid))).toBeCloseTo(FAN_ANGLE, 6);
+    expect(Math.abs(ang(r) - ang(mid))).toBeCloseTo(FAN_ANGLE, 6);
+    // launched from one point they would knock each other aside: a fan's discs pass through each other
+    const v = fan.map(d => [d.vx, d.vy]);
+    g.step(1 / 120);
+    fan.forEach((d, k) => expect(Math.atan2(d.vy, d.vx)).toBeCloseTo(Math.atan2(v[k][1], v[k][0]), 6));
+    // after the throws he goes over to the middle disc, the one he aimed
+    expect(g.S.discs.filter(d => d.hero === h).pop()).toBe(mid);
   });
 });
 

@@ -1,5 +1,5 @@
 import './style.css';
-import { BOOT_GAGS, COMBAT_ROOMS, FORGE_ORE, HEROES, WALL_H } from './data';
+import { BOOT_GAGS, COMBAT_ROOMS, FORGE_ORE, HEROES, MAX_PLAYERS, WALL_H } from './data';
 import { Camera } from './camera';
 import { Game, newBank, newParty } from './game';
 import { Net, type Player } from './net';
@@ -711,8 +711,8 @@ function welcome(id: string, name: string, key: string) {
       hud.refresh();
       dirty = true;
     }
-  } else if (started || players.length >= HEROES.length) {
-    // three heroes, three seats; a game already under way takes no one new
+  } else if (started || players.length >= MAX_PLAYERS) {
+    // three seats at the table; a game already under way takes no one new
     net.sendTo(id, { t: 'deny', text: started ? 'В этой комнате игра уже идёт.' : 'Комната заполнена.' });
     setTimeout(() => net.kick(id), 300);
     return;

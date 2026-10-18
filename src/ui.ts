@@ -18,10 +18,6 @@ const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
 /** "2 хода", "5 ходов". */
 const turns = (n: number) => n + ' ' + (n % 10 === 1 && n % 100 !== 11 ? 'ход' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'хода' : 'ходов');
 
-/** Hero names as the object of a blow ("ударит Пепельницу") and as where a walker heads ("идёт к Пепельнице"). */
-const ACC: Record<string, string> = { bastion: 'Бастиона', ash: 'Пепельницу', ricochet: 'Рикошета' };
-const DAT: Record<string, string> = { bastion: 'Бастиону', ash: 'Пепельнице', ricochet: 'Рикошету' };
-
 /** Small picture of a mob's miniature, drawn once per kind (and again once its art loads). */
 const mobIcons = new Map<string, string>();
 export function mobIcon(k: MobKind) {
@@ -340,15 +336,15 @@ export class Hud {
   private intent(m: Mob): { badge: string; txt: string } {
     const g = this.g, it = m.intent;
     if (!it) return { badge: '', txt: 'Ничего не делает' };
-    const tgt = it.hero >= 0 ? g.heroOf(it.hero) : null, key = tgt?.def.key ?? '', far = isRanged(m.k), bomb = !!MOBS[m.k].charge;
+    const tgt = it.hero >= 0 ? g.heroOf(it.hero) : null, far = isRanged(m.k), bomb = !!MOBS[m.k].charge;
     // a shooter's blow and its walk to where it sees the hero carry a bow by the badge
-    const acc = ACC[key] ?? tgt?.def.name, out = far && !!it.way && it.way.length > 1, bow = far ? icon('bow', 'qbow') : '';
+    const acc = tgt?.def.acc ?? '', out = far && !!it.way && it.way.length > 1, bow = far ? icon('bow', 'qbow') : '';
     if (it.t === 'hit') {
       const how = !far ? `ударит ${acc}` : bomb ? `бросит бомбу в ${acc}` : `выстрелит в ${acc}`;
       return { badge: `${bow}<span class="ib hit" style="--c:${tgt!.def.col}">${it.dmg}</span>`, txt: cap(out ? `выйдет на линию огня и ${how}` : how) + ` на ${it.dmg}` };
     }
     if (it.t === 'move') {
-      const txt = !far ? `Идёт к ${DAT[key] ?? tgt!.def.name}` + (it.eta ? `, ударит через ${turns(it.eta)}` : '')
+      const txt = !far ? `Идёт к ${tgt!.def.dat}` + (it.eta ? `, ударит через ${turns(it.eta)}` : '')
         : `Не видит ${acc}` + (it.way ? ': идёт на линию огня' + (it.eta && !bomb ? `, выстрелит через ${turns(it.eta)}` : '') : '');
       return { badge: `${bow}<span class="ib go" style="--c:${tgt!.def.col}">${it.eta ?? icon('move')}</span>`, txt };
     }

@@ -133,12 +133,15 @@ export function drawMiniature(c: Ctx, o: MiniatureOpts) {
 
 // ---------------------------------------------------------------- heroes
 
+/** Which of the three drawn caricatures stands in for a hero until its picture loads: the knight, the rogue or the diva. */
+export const heroLook = (key: string) => ({ bastion: 0, cook: 0, ricochet: 1, sharp: 1 } as Record<string, number>)[key] ?? 2;
+
 /** Caricature hero, feet at (x, y), s = scale. */
 export function drawHeroFigure(c: Ctx, i: number, x: number, y: number, s: number, flash: boolean, t = 0) {
-  const h = HEROES[i], W = flash ? '#fff' : null, L = (v: number) => v * s;
+  const h = HEROES[i], W = flash ? '#fff' : null, L = (v: number) => v * s, look = heroLook(h.key);
   c.lineJoin = 'round';
   c.lineCap = 'round';
-  if (i === 0) {
+  if (look === 0) {
     rr(c, x - L(6), y - L(5), L(5), L(5), L(1.2)); fs(c, W || '#3b2c22', L(0.9));
     rr(c, x + L(1), y - L(5), L(5), L(5), L(1.2)); fs(c, W || '#3b2c22', L(0.9));
     ell(c, x, y - L(13), L(9), L(9)); fs(c, W || lg(c, x - L(9), 0, x + L(9), 0, '#b9bfbf', '#5f6866'), L(1.1));
@@ -158,7 +161,7 @@ export function drawHeroFigure(c: Ctx, i: number, x: number, y: number, s: numbe
     c.beginPath(); c.moveTo(x - L(1), y - L(22.6)); c.bezierCurveTo(x - L(5), y - L(24), x - L(9), y - L(22), x - L(9.5), y - L(18.5)); c.bezierCurveTo(x - L(7), y - L(20.5), x - L(4), y - L(20.5), x, y - L(21.2));
     c.bezierCurveTo(x + L(4), y - L(20.5), x + L(7), y - L(20.5), x + L(9.5), y - L(18.5)); c.bezierCurveTo(x + L(9), y - L(22), x + L(5), y - L(24), x + L(1), y - L(22.6)); c.closePath(); fs(c, W || '#8a5528', L(0.9));
     c.beginPath(); c.moveTo(x - L(1), y - L(35)); c.bezierCurveTo(x + L(2), y - L(41), x + L(9), y - L(40), x + L(10), y - L(33)); c.bezierCurveTo(x + L(7), y - L(36), x + L(3), y - L(36), x + L(1), y - L(34.5)); c.closePath(); fs(c, W || h.col, L(0.8));
-  } else if (i === 1) {
+  } else if (look === 1) {
     rr(c, x - L(4), y - L(10), L(2.2), L(10), L(1)); fs(c, W || '#3b2c22', L(0.8));
     rr(c, x + L(1.5), y - L(10), L(2.2), L(10), L(1)); fs(c, W || '#3b2c22', L(0.8));
     ell(c, x - L(3.4), y - L(0.6), L(2.6), L(1.2)); fs(c, W || '#2a1d16', L(0.7));
