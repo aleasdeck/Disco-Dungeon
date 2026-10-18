@@ -334,6 +334,8 @@ export interface HeroDef {
   abMore: string;
   /** Glow of the hero's discs while the ability is on. */
   abCol: string;
+  /** Figure height on the field, when not HERO_FIG: Шкет is a child, so he stands shorter than the grown-ups. */
+  fig?: number;
 }
 
 export const HEROES: HeroDef[] = [
@@ -368,7 +370,7 @@ export const HEROES: HeroDef[] = [
     abMore: `Молния бьёт сквозь броню и перескакивает на ближайшего врага в ${ZAP_REACH / 16} клетках, которого ещё не била. Если диск добил врага, молния начинает с соседа.`,
   },
   {
-    key: 'kid', name: 'Шкет', acc: 'Шкета', dat: 'Шкету', col: '#d0528b', dk: '#6b2347', skin: '#f0c09a', hp: 20, r: 4, m: 1.7, e: 0.9, fr: 0.85, pw: 1,
+    key: 'kid', name: 'Шкет', acc: 'Шкета', dat: 'Шкету', col: '#d0528b', dk: '#6b2347', skin: '#f0c09a', hp: 20, r: 4, m: 1.7, e: 0.9, fr: 0.85, pw: 1, fig: 26,
     ab: 'Отвлекуха', abTxt: `До конца хода его диск на первом отскоке не от врага роняет петарду, одну на диск. На треск бегут ${PETARD_LURE} ближайших врага.`, abCol: '#ffb347',
     abMore: `Петарда ложится в клетку, как еда Поварёшки, и трещит, пока лежит. Из врагов в ${PETARD_HEAR} клетках от неё ${PETARD_LURE} ближайших идут к ней, а не к героям, и в этот ход никого не бьют. Кто зайдёт в клетку рядом с ней, тот её подорвёт: по ${PETARD_DMG} сквозь броню всем врагам рядом. Призыв, лечение и удар по всем враги делают как обычно.`,
   },
@@ -401,6 +403,8 @@ export const kindOf = (def: HeroDef) => {
 export const heroesByKind = () => KINDS.map(k => HEROES.flatMap((h, i) => (h.r === k.r ? [i] : [])));
 
 export const HERO_FIG = 34;
+/** How tall a hero's figure stands. */
+export const heroFig = (def: HeroDef) => def.fig ?? HERO_FIG;
 /** Hero stand radius in world units: a cell is 16 across, so the stand sits inside its cell with a rim of floor around it. */
 export const HERO_BASE = 7;
 

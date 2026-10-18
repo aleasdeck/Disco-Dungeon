@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_HEAR, PETARD_LURE, PETARD_PER_DISC, KINDS, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_HEAR, PETARD_LURE, PETARD_PER_DISC, KINDS, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
 import { ART, FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { CAVE, MOB_CAP, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
@@ -2120,6 +2120,8 @@ describe('the heroes past the first three', () => {
     expect(new Set(HEROES.map(d => d.col)).size).toBe(HEROES.length);
     expect(new Set(HEROES.map(d => d.ab)).size).toBe(HEROES.length);
     expect(HEROES[at('electra')].fem && HEROES[at('cook')].fem && !HEROES[at('sharp')].fem && !HEROES[at('bum')].fem).toBe(true);
+    // the kid is a child: the only figure shorter than the grown-ups
+    expect(HEROES.filter(d => heroFig(d) < HERO_FIG).map(d => d.key)).toEqual(['kid']);
     // the cook is the tank: the most health of all
     expect(HEROES[at('cook')].hp).toBe(Math.max(...HEROES.map(d => d.hp)));
     expect(MAX_PLAYERS).toBe(3);

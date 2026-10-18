@@ -1,7 +1,7 @@
 // Loader of the art, the music and the fonts, all of it before the main menu. public/assets/manifest.json lists the
 // pictures and tracks that exist; a missing picture falls back to the code-drawn placeholder.
 
-import { ENEMY_BASE, HEROES, HERO_FIG, MOBS, type MobKind } from './data';
+import { ENEMY_BASE, HEROES, HERO_FIG, MOBS, heroFig, type MobKind } from './data';
 import { makeStandee, type Standee } from './draw/standee';
 
 export interface Sprite {
@@ -77,8 +77,8 @@ export async function loadAll(onProgress: (part: number) => void): Promise<void>
   });
   await Promise.all([
     ...Object.entries(figures).map(([key, e]) => load(e.file, img => {
-      const facing = e.facing ?? 'right', fig = MOBS[key as MobKind]?.fig ?? HERO_FIG;
-      const tint = HEROES.find(h => h.key === key)?.col ?? ENEMY_BASE;
+      const hero = HEROES.find(h => h.key === key), facing = e.facing ?? 'right';
+      const fig = MOBS[key as MobKind]?.fig ?? (hero ? heroFig(hero) : HERO_FIG), tint = hero?.col ?? ENEMY_BASE;
       sprites.set(key, { img, facing, standee: makeStandee(img, facing, fig / HERO_FIG, tint) });
     })),
     ...Object.entries(env).map(([key, file]) => load(file, img => envArt.set(key, img))),
