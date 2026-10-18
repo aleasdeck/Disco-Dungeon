@@ -1074,9 +1074,36 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .art-panel .log-panel, .art-panel .hero-card { padding: 14px 18px; }
 /* faces stuck on a slab or on the turn button keep their colour edge, without the ink round it */
 .ev-who img, .tb-who img { outline: 0; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35); }
-/* the choices in the event, camp, trophy and blacksmith windows: each on its own slab */
-.art-opt .ev-opt { clip-path: none; background: var(--ui-opt) center / 100% 100% no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)); }
-.art-opt .ev-opt:not(:disabled):hover, .art-opt .ev-opt:focus-visible { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) brightness(1.18); }
-.art-opt .ev-opt:disabled { filter: saturate(0.3) brightness(0.65); }
+/* the choices in the event, camp, trophy and blacksmith windows: each on its own light slab, so they stand out of the
+   dark board (Vladislav: dark ones melted into it), with the words on them in ink */
+.art-opt .ev-opt { clip-path: none; background: var(--ui-opt) center / 100% 100% no-repeat; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.45)); color: #2a1a0d; }
+.art-opt .ev-opt:not(:disabled):hover, .art-opt .ev-opt:focus-visible { filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.45)) brightness(1.07); }
+.art-opt .ev-opt:disabled { filter: saturate(0.4) brightness(0.62); }
 .art-opt .ev-opt.fg-up:disabled { filter: brightness(0.62); }
-
+.art-opt .ev-opt b, .art-opt .ev-opt.camp-back b, .art-opt .fg-cost { color: #2a1a0d; }
+.art-opt .ev-opt :is(.ev-fx .good, .fg-fx) { color: #2c6a1c; }
+.art-opt .ev-opt :is(.ev-fx .bad, small, .fg-cost.short) { color: #a3261a; }
+.art-opt .ev-opt :is(.ev-fx .none, .fg-fx i) { color: #6a5640; }
+.art-opt .ev-opt.fg-up:disabled .fg-fx { color: #6a5640; }
+.art-opt .ev-opt .ev-fx .odds { color: #f3e6c8; background: #2a1a0d; }
+.art-opt .ev-opt.mine::before { background: #a3261a; }
+.art-opt .fg-name .lvl i { border-color: #2a1a0d; background: none; }
+.art-opt .fg-name .lvl i.on { background: #2a1a0d; }
+/* the menu's and the pause's buttons, each a plate of its own shape (Vladislav asked), laid a little askew by hand */
+.art-mb_go :is(#mContinue, #pResume) { background-image: var(--ui-mb_go); }
+.art-mb_arrow #mCampaign { background-image: var(--ui-mb_arrow); }
+.art-mb_ticket #mOnline { background-image: var(--ui-mb_ticket); }
+.art-mb_mark :is(#mCollection, #pHelp) { background-image: var(--ui-mb_mark); }
+.art-mb_slant :is(#mSettings, #pSettings) { background-image: var(--ui-mb_slant); }
+.art-mb_back #pMenu { background-image: var(--ui-mb_back); }
+.art-mb_go .menu-btns .btn.big:nth-child(odd) { rotate: -0.8deg; }
+.art-mb_go .menu-btns .btn.big:nth-child(even) { rotate: 0.6deg; }
+/* the board behind my hero's portrait: bare cardboard under the button, over it the print in the hero's colour where
+   it stays (pf_ink's alpha) with the board's grain laid over, and the hero on top */
+.art-pf_board.art-pf_ink .portrait { background: var(--ui-pf_board) center / 100% 100% no-repeat; }
+.art-pf_board.art-pf_ink .portrait::before {
+  clip-path: none; background: var(--ui-pf_ink) center / 100% 100% no-repeat, color-mix(in srgb, var(--c) 82%, #c8a474);
+  background-blend-mode: overlay;
+  -webkit-mask: var(--ui-pf_ink) center / 100% 100% no-repeat; mask: var(--ui-pf_ink) center / 100% 100% no-repeat;
+}
+.art-pf_board.art-pf_ink .portrait canvas { inset: 0; width: 100%; height: 100%; }

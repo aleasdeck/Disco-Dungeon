@@ -41,11 +41,13 @@ def grain(rng, shape, flutes=True):
     return g + rng.uniform(-0.015, 0.015, shape)
 
 
-def board(img, seed, corners, torn=True, rub=0.1):
+def board(img, seed, corners, torn=True, rub=0.1, parts=False, tear=1.0):
     """prints the picture on cardboard: the ink a little soaked into the kraft, the board's grain through it, the print
     rubbed off to bare board in patches along the cut and round the corners (corners, pixels; rub from -1, the whole
-    edge, to 1, none of it), a couple of scratches, the liner torn off at one corner (unless torn is false), and a few
-    small nicks in the cut itself"""
+    edge, to 1, none of it), a couple of scratches, the liner torn off at one corner (unless torn is false; tear scales
+    the bite), and a few small nicks in the cut itself. With parts it gives the bare board and the print apart, for
+    style.css to colour the print itself: the print as a grey grain picture to lay over the colour with overlay (128
+    is no change) whose alpha says where the ink stays"""
     rng = np.random.default_rng(seed)
     a = np.asarray(img).astype(float)
     shape = a.shape[:2]
@@ -74,15 +76,26 @@ def board(img, seed, corners, torn=True, rub=0.1):
     rgb = (ink * (1 - wear) + KRAFT * wear) * g
     # at one corner the liner is torn off: the flutes under it bare, a pale ragged fringe of torn paper round them
     cx, cy = corners[rng.integers(len(corners))]
-    r = 1 - np.hypot(xx - cx, yy - cy) / (100 + rng.random() * 50) + 0.18 * smooth(rng, shape, 22)
+    r = 1 - np.hypot(xx - cx, yy - cy) / ((100 + rng.random() * 50) * tear) + 0.18 * smooth(rng, shape, 22)
+    bare, stays = KRAFT * g, 1 - wear[..., 0]
     if torn:
         torn, fringe = r > 0.5, r > 0.46
         ribs = KRAFT * (0.8 + 0.18 * np.cos(2 * np.pi * xx / 28))[..., None] * g
         rgb = np.where(fringe[..., None], np.array((236, 224, 198), float) * g, rgb)
         rgb = np.where(torn[..., None], ribs, rgb)
+        bare = np.where(fringe[..., None], np.array((236, 224, 198), float) * g, bare)
+        bare = np.where(torn[..., None], ribs, bare)
+        stays = stays * ~fringe
     a[..., :3] = np.clip(rgb, 0, 255)
     # nicks: the cut is a little ragged
     a[..., 3] *= ~(within(2) & (smooth(rng, shape, 6) < -0.7))
+    if parts:
+        b = a.copy()
+        b[..., :3] = np.clip(bare, 0, 255)
+        ink = np.zeros_like(a)
+        ink[..., :3] = np.clip(128 + (g - 1) * 128, 0, 255)
+        ink[..., 3] = a[..., 3] * stays
+        return Image.fromarray(b.astype(np.uint8), 'RGBA'), Image.fromarray(ink.astype(np.uint8), 'RGBA')
     return Image.fromarray(a.astype(np.uint8), 'RGBA')
 
 
