@@ -417,13 +417,12 @@ const SOLO: MobKind[] = ['golem', 'necro', 'witch', 'yeti', 'bomber'];
 
 /**
  * Resources in each kind of fight room: one of each, so the floor stays clear. Ore is scarce, so a party can't buy
- * every upgrade in one run; an elite fight pays a second vein. The ore cave has its big vein on top of these (CAVE).
+ * every upgrade in one run; an elite fight pays a second vein. The ore cave rolls its own (CAVE).
  */
 export const NODE_SETS: Partial<Record<RoomType, NodeKind[]>> = {
   fight: ['ore', 'spk', 'herb'],
   elite: ['ore', 'ore', 'spk', 'herb'],
   boss: ['ore', 'spk', 'herb'],
-  treasure: ['ore', 'ore', 'herb', 'herb'],
 };
 
 /**
@@ -437,12 +436,19 @@ export const SPK_AREA = [100, 130];
 export const crystals = (cells: number) => 1 + SPK_AREA.filter(a => cells > a).length;
 
 /**
- * The ore cave holds no enemies: one big vein in the middle of the room, the two small veins and two mushroom patches
- * of NODE_SETS off to the sides, and only `turns` minus the heroes: three turns for a lone hero, one for three heroes,
- * who throw three times as many discs a turn. Each throw goes for ore or for health. It ends once the turns run out
- * or nothing is left to hit. Its veins hold as many charges whatever the party: the turns already make up for its size.
+ * The ore cave holds no enemies, and each one is stocked differently: a big vein on 2 × 2 cells in the middle of
+ * the room or none, two to five small veins and up to two mushroom patches off to the sides (`n`: how many, each count
+ * as likely). It has only `turns` minus the heroes: three turns for a lone hero, one for three heroes, who throw three
+ * times as many discs a turn. Each throw goes for ore or for health. It ends once the turns run out or nothing is left
+ * to hit. Its veins hold as many charges whatever the party: the turns already make up for its size.
  */
-export const CAVE = { turns: 4, big: { r: 12, ch: 6 }, small: 2 };
+export const CAVE = { turns: 4, big: { r: 12, ch: 6, n: [0, 1] as Range }, small: { ch: 2, n: [2, 5] as Range }, herbs: [0, 2] as Range };
+
+/** What one ore cave holds, from its own stream of the seed, so the rest of the room is laid out as before. */
+export function caveStock(spec: Pick<RoomSpec, 'seed' | 'depth'>) {
+  const R = makeRng(spec.seed * 31 + spec.depth + 4241), roll = (r: Range) => R.int(r[0], r[1]);
+  return { big: roll(CAVE.big.n), ore: roll(CAVE.small.n), herb: roll(CAVE.herbs) };
+}
 
 /** Turns the party has in the ore cave: 4 minus the heroes, at least one. */
 export const caveTurns = (spec: Pick<RoomSpec, 'heroes'>) => Math.max(1, CAVE.turns - Math.max(1, Math.min(3, spec.heroes ?? 3)));
@@ -627,9 +633,9 @@ export function generate(spec: RoomSpec): Layout {
 
   // the ore cave's big vein stands in the middle of the room, a straight throw from every rune, on 2 × 2 cells;
   // it goes in before the blocks, so they keep out of its way
-  const cave = type === 'treasure';
+  const cave = type === 'treasure', stock = cave ? caveStock(spec) : null;
   let big: ResNode | null = null;
-  if (cave) {
+  if (stock?.big) {
     const { r, ch } = CAVE.big, centre = (x: number, y: number) => Math.abs(x / Wx - 0.5) < 0.18 && Math.abs(y / Wy - 0.5) < 0.18;
     const q = placeCell(2, r, centre) ?? placeCell(2, r, mid) ?? placeCell(2, r, any) ?? placeCell(2, r, any, true);
     if (q) { big = { k: 'ore', ...NODES.ore, r, ch, x: q[0], y: q[1], left: ch, hit: 0, s: 2 }; objs.push({ x: q[0], y: q[1], r }); }
@@ -719,7 +725,7 @@ export function generate(spec: RoomSpec): Layout {
   const ground = floor.reduce((a, b) => a + b, 0) - pits.reduce((a, p) => a + p.cells.length, 0);
   // a bigger party's mushroom patches come after the room's own resources; a bigger room's second and third crystals
   // come last, and stay out if no fair place is left for them
-  const set = NODE_SETS[type] ?? NODE_SETS.fight!, more = set.includes('spk') ? crystals(ground) - 1 : 0;
+  const set = stock ? [...Array<NodeKind>(stock.ore).fill('ore'), ...Array<NodeKind>(stock.herb).fill('herb')] : NODE_SETS[type] ?? NODE_SETS.fight!, more = set.includes('spk') ? crystals(ground) - 1 : 0;
   const herbs = cave ? 0 : Math.max(0, sc.herbs - set.filter(k => k === 'herb').length);
   const kinds = [...set, ...Array<NodeKind>(herbs).fill('herb'), ...Array<NodeKind>(more).fill('spk')];
   for (const [n, k] of kinds.entries()) {
@@ -731,7 +737,7 @@ export function generate(spec: RoomSpec): Layout {
     const q = placeCell(1, NODES[k].r, side) ?? placeCell(1, NODES[k].r, (x, y) => apart(x, y, k) && open(x, y)) ?? (away ? placeCell(1, NODES[k].r, (x, y) => apart(x, y, k) && open(x, y), true) : null) ?? placeCell(1, NODES[k].r, (x, y) => mid(x, y) && open(x, y)) ?? placeCell(1, NODES[k].r, open) ?? (extra ? null : placeCell(1, NODES[k].r, any, true));
     if (!q) continue;
     // the ore cave's veins and mushrooms hold as much for any party
-    const ch = cave ? (k === 'ore' ? CAVE.small : NODES[k].ch) : sc.ch[k] ?? NODES[k].ch;
+    const ch = cave ? (k === 'ore' ? CAVE.small.ch : NODES[k].ch) : sc.ch[k] ?? NODES[k].ch;
     nodes.push({ k, ...NODES[k], ch, x: q[0], y: q[1], left: ch, hit: 0 });
     objs.push({ x: q[0], y: q[1], r: NODES[k].r });
     shut.add(hazKey(Math.floor(q[0] / TILE), Math.floor(q[1] / TILE)));
