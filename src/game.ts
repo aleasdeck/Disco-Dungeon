@@ -34,7 +34,7 @@ export interface HeroState {
   fire: number;
   /** The ability is on for the rest of this turn: the discs thrown now shield, set on fire or keep their speed. */
   boost: boolean;
-  /** Sparks for the ability, 0 to AB_COST: a spark crystal fills every hero's at once, each spends its own, and they last one fight. */
+  /** Sparks for the ability, 0 to AB_COST: a spark crystal fills every hero's at once, each spends its own, and they last the whole run. */
   sparks: number;
   /** The last knock it took: the figure rocks on its stand for a moment. */
   knock?: Knock;
@@ -201,8 +201,8 @@ export function pointAt(w: Pt[], d: number): Pt {
 
 /**
  * Ore belongs to the whole party: any hero's hit fills the pool, any hero spends from it, and it lasts the whole run.
- * Sparks are each hero's own to spend (`HeroState.sparks`), though a crystal fills everyone's, and last one fight; every hero
- * starts the next one with `boon` of them (the altar's gift, usually none). An event may also leave the next fight a `shield`
+ * Sparks are each hero's own to spend (`HeroState.sparks`), though a crystal fills everyone's, and last the whole run; the
+ * altar's gift tops every hero up to `boon` of them at the next fight (usually none). An event may also leave the next fight a `shield`
  * for every hero, `rage`: that much harder blows from its enemies, or a curse that room's spec carries: `smoke` over the
  * floor, a `strobe` that hides the aiming line.
  */
@@ -288,9 +288,9 @@ export class Game {
     this.pickup.clear();
     this.walked = { key: '', n: 0 };
     this.hopped.clear();
-    // sparks don't carry over: every fight starts without them, or full after the altar
+    // sparks carry over from the last room, and the altar fills them up
     const boon = Math.min(AB_COST, this.bank.boon ?? 0), shield = this.bank.shield ?? 0;
-    for (const h of this.party) Object.assign(h, { pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: h.hp > 0 ? shield : 0, flash: 0, chill: 0, fire: 0, boost: false, sparks: boon });
+    for (const h of this.party) Object.assign(h, { pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: h.hp > 0 ? shield : 0, flash: 0, chill: 0, fire: 0, boost: false, sparks: Math.min(AB_COST, Math.max(h.sparks, boon)) });
     // an event's curse: the room's enemies come in angrier
     if (this.bank.rage) for (const m of L.mobs) m.dmg += this.bank.rage;
     this.bank.boon = 0;

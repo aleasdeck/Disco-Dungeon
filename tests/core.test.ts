@@ -922,23 +922,31 @@ describe('placement and discs', () => {
     expect(g.bank.ore).toBe(ore);
   });
 
-  it('starts every fight without sparks, except full ones for every hero after the altar', () => {
+  it('carries every hero\'s sparks into the next room, and the altar fills them up', () => {
     const g = fresh(), sparks = () => g.party.map(h => h.sparks);
-    for (const h of g.party) h.sparks = 2;
+    g.party[0].sparks = 2; g.party[1].sparks = AB_COST; g.party[2].sparks = 0;
     g.bank.ore = 5;
     g.loadRoom({ seed: 3, depth: 2, floor: 0, type: 'fight' });
-    expect(sparks()).toEqual([0, 0, 0]);
+    expect(sparks()).toEqual([2, AB_COST, 0]);
     expect(g.bank.ore).toBe(5);
+    // a fallen hero keeps them too, for when they get up
+    g.party[0].hp = 0;
+    g.loadRoom({ seed: 3, depth: 3, floor: 0, type: 'fight' });
+    expect(sparks()).toEqual([2, AB_COST, 0]);
+    g.party[0].hp = g.party[0].max;
     // the disco god's altar: a dance gives full sparks in the next fight, not this one
     applyFx(eventDef('altar').choices[0].win.fx, g.party, g.bank, 1);
-    expect(sparks()).toEqual([0, 0, 0]);
+    expect(sparks()).toEqual([2, AB_COST, 0]);
     g.loadRoom({ seed: 4, depth: 3, floor: 0, type: 'fight' });
     expect(sparks()).toEqual([AB_COST, AB_COST, AB_COST]);
     // full sparks pay for the ability right away
     placeAll(g); g.startFight();
     expect(g.party.every(h => g.canUseAbility(h))).toBe(true);
+    g.useAbility(g.party[0]);
     g.loadRoom({ seed: 5, depth: 4, floor: 0, type: 'fight' });
-    expect(sparks()).toEqual([0, 0, 0]);
+    expect(sparks()).toEqual([0, AB_COST, AB_COST]);
+    // a new run starts without them
+    expect(newParty().map(h => h.sparks)).toEqual([0, 0, 0]);
   });
   it('ends the fight the moment the last enemy falls, with throws still left', () => {
     const g = fresh();
@@ -1543,6 +1551,10 @@ describe('pressure in a fight', () => {
     host.step(1 / 60);
     cli.online = true;
     cli.canControl = o => o.i === 0;
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    expect([cli.heroOf(0).sparks, cli.heroOf(2).sparks]).toEqual([2, 2]);
+    // and they come along into the next room on every screen
+    host.loadRoom({ seed: 22, depth: 3, floor: 0, type: 'fight' });
     applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
     expect([cli.heroOf(0).sparks, cli.heroOf(2).sparks]).toEqual([2, 2]);
   });
