@@ -1226,12 +1226,12 @@ export class Game {
         n.hit = 0.2;
         if (n.k !== 'spk') n.left--;
         if (n.k === 'ore') { this.bank.ore += q; this.mined += q; this.float(n.x, n.y, `+${q} руда`, '#ffb070'); }
-        // one hit fills the sparks of every hero still standing, whoever threw the disc, up to what one ability costs;
-        // the crystal loses only what was taken, so sparks nobody had room for stay in it for later
+        // sparks go to every hero still standing, whoever threw the disc, each up to what one ability costs; the crystal
+        // loses only what was taken, so sparks nobody had room for stay in it for later
         if (n.k === 'spk') {
           const all = this.alive();
           let got = 0;
-          for (const o of all) { const k = Math.min(n.left, AB_COST - o.sparks); o.sparks += k; got = Math.max(got, k); }
+          for (const o of all) { const k = Math.min(q, n.left, AB_COST - o.sparks); o.sparks += k; got = Math.max(got, k); }
           n.left -= got;
           this.float(n.x, n.y, got ? `+${got} искр${got > 1 ? 'ы' : 'а'}${all.length > 1 ? ' всем' : ''}` : 'искры полны', '#c9a8ff');
         }

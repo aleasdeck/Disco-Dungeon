@@ -3,7 +3,7 @@ import { Camera, FIT, KEEP, type Vec } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, FAN_ANGLE, FAN_M, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, isRanged, mobSize } from '../src/data';
 import { FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { CAVE, MOB_CAP, PARTY_SCALE, SPK_TWO, caveTurns, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
+import { CAVE, MOB_CAP, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
 import { FLOORS, FORGE_ROWS, LAYERS, agreed, genFloor, newRun } from '../src/run';
 import { makeRng } from '../src/rng';
 import { EVENTS, applyFx, canPick, eventDef, eventOf, fxParts, rolled } from '../src/events';
@@ -169,19 +169,30 @@ describe('difficulty along a floor', () => {
     }
   });
 
-  it('puts one spark crystal in every fight and a second one in most, each holding one ability for any party', () => {
-    let two = 0, n = 0;
-    for (let seed = 1; seed < 120; seed++)
-      for (const [type, row, f] of [['fight', 1 + (seed % (LAYERS - 2)), seed % FLOORS], ['elite', 4, seed % FLOORS], ['boss', LAYERS - 1, seed % FLOORS]] as const)
-        for (const heroes of type === 'boss' && seed % 4 ? [] : [1, 2, 3]) {
+  it('puts one to three spark crystals in a fight by the size of the room, each holding one ability for any party', () => {
+    expect([crystals(80), crystals(SPK_AREA[0]), crystals(SPK_AREA[0] + 1), crystals(SPK_AREA[1]), crystals(SPK_AREA[1] + 1), crystals(200)]).toEqual([1, 1, 2, 2, 3, 3]);
+    const seen: Record<number, number[]> = {};
+    let short = 0, n = 0;
+    for (let seed = 1; seed < 60; seed++)
+      for (let row = 0; row < LAYERS; row++) {
+        const f = seed % FLOORS, type = row === LAYERS - 1 ? 'boss' : row === 4 && seed % 2 ? 'elite' : 'fight';
+        if (type === 'boss' && seed % 4) continue;
+        for (const heroes of [1, 3]) {
           const L = generate({ seed, depth: f * LAYERS + row + 1, floor: f, type, heroes }), spk = L.nodes.filter(k => k.k === 'spk');
+          const open = L.floor.reduce((a, b) => a + b, 0) - L.pits.reduce((a, p) => a + p.cells.length, 0);
+          // a second or third crystal stays out of the rare room with no fair place left for it
           expect(spk.length).toBeGreaterThanOrEqual(1);
-          expect(spk.length).toBeLessThanOrEqual(2);
+          expect(spk.length).toBeLessThanOrEqual(crystals(open));
+          n++;
+          if (spk.length < crystals(open)) short++;
           for (const c of spk) expect([c.ch, c.left]).toEqual([AB_COST, AB_COST]);
-          if (heroes === 3) { n++; if (spk.length === 2) two++; }
+          (seen[row] ??= []).push(spk.length);
         }
-    expect(two / n).toBeGreaterThan(SPK_TWO - 0.1);
-    expect(two / n).toBeLessThan(SPK_TWO + 0.1);
+      }
+    expect(short / n).toBeLessThan(0.05);
+    // the first room of a floor is small, the boss's big
+    expect(seen[0].every(n => n === 1)).toBe(true);
+    expect(seen[LAYERS - 1].filter(n => n === 3).length).toBeGreaterThan(seen[LAYERS - 1].length / 2);
   });
 
   it('keeps even the last rooms of the last floor uncluttered', () => {
@@ -189,7 +200,7 @@ describe('difficulty along a floor', () => {
       const L = room(FLOORS - 1, LAYERS - 2, seed), area = L.floor.reduce((a, b) => a + b, 0);
       const busy = L.mobs.length + L.blocks.length + L.pits.length + L.haz.size + L.nodes.length;
       expect(L.nodes.length).toBeGreaterThanOrEqual(3);
-      expect(L.nodes.length).toBeLessThanOrEqual(4);
+      expect(L.nodes.length).toBeLessThanOrEqual(5);
       expect(L.decals.length).toBeLessThanOrEqual(6);
       expect(busy / area).toBeLessThan(0.2);
     }
@@ -1457,10 +1468,12 @@ describe('pressure in a fight', () => {
     // a fallen hero gets none; one nearly full gets only what is still missing
     c.hp = 0;
     a.sparks = 2;
-    // one hit fills everyone, and the crystal is spent
-    expect(hit(b)).toContain('+3 искры всем');
-    expect([a.sparks, b.sparks, c.sparks]).toEqual([AB_COST, AB_COST, 0]);
-    expect(n.left).toBe(0);
+    // a hard hit gives two, for everyone, and the crystal loses the two that b took
+    expect(hit(b)).toContain('+2 искры всем');
+    expect([a.sparks, b.sparks, c.sparks, n.left]).toEqual([AB_COST, 2, 0, 1]);
+    // a full hero's disc still fills the others, with the crystal's last spark
+    expect(hit(a)).toContain('+1 искра всем');
+    expect([a.sparks, b.sparks, c.sparks, n.left]).toEqual([AB_COST, AB_COST, 0, 0]);
     // a hit that finds everyone full takes nothing from a fresh crystal
     n.left = AB_COST;
     expect(hit(b)).toContain('искры полны');
@@ -1470,9 +1483,6 @@ describe('pressure in a fight', () => {
     g.useAbility(a);
     expect([a.sparks, b.sparks]).toEqual([0, AB_COST]);
     expect(g.canUseAbility(b)).toBe(true);
-    // a full hero's disc still fills the others
-    expect(hit(b)).toContain('+3 искры всем');
-    expect([a.sparks, b.sparks]).toEqual([AB_COST, AB_COST]);
   });
 
   it('online, a crystal one player hits fills the sparks on every screen', () => {
@@ -1489,10 +1499,10 @@ describe('pressure in a fight', () => {
     cli.online = true;
     cli.canControl = o => o.i === 0;
     applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
-    expect([cli.heroOf(0).sparks, cli.heroOf(2).sparks]).toEqual([AB_COST, AB_COST]);
+    expect([cli.heroOf(0).sparks, cli.heroOf(2).sparks]).toEqual([2, 2]);
   });
 
-  it('a crystal is one ability: a soft hit fills the sparks as well as a hard one, and it keeps what a hero had no room for', () => {
+  it('a crystal holds one ability: soft hits take a spark each, and it keeps what a hero had no room for', () => {
     const g = new Game();
     g.party = newParty([1]);
     g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
@@ -1501,19 +1511,19 @@ describe('pressure in a fight', () => {
     placeAll(g); g.startFight();
     const h = g.party[0], n = { k: 'spk' as const, name: 'Кристалл искр', r: 6, ch: AB_COST, x: 88, y: 88, left: AB_COST, hit: 0 };
     g.S.nodes = [n];
-    const hit = (v: number) => { g.S.discs = [{ ...disc(g, n.x, n.y + n.r + 6.5, 0, -v), hero: h }]; g.step(1 / 60); g.S.discs = []; };
-    hit(100);
-    expect([h.sparks, n.left]).toEqual([AB_COST, 0]);
+    // Ricochet's light disc hits softly: a spark a hit, three hits for the crystal's three
+    const hit = () => { g.S.discs = [{ ...disc(g, n.x, n.y + n.r + 6.5, 0, -200), m: h.def.m, hero: h }]; g.step(1 / 60); g.S.discs = []; };
+    for (let k = 1; k <= AB_COST; k++) {
+      hit();
+      expect([h.sparks, n.left]).toEqual([k, AB_COST - k]);
+    }
     // a hero one spark short takes one, and the rest waits for the ability to be spent
     n.left = AB_COST;
     h.sparks = AB_COST - 1;
-    hit(400);
+    hit();
     expect([h.sparks, n.left]).toEqual([AB_COST, AB_COST - 1]);
-    hit(400);
+    hit();
     expect([h.sparks, n.left]).toEqual([AB_COST, AB_COST - 1]);
-    h.sparks = 0;
-    hit(400);
-    expect([h.sparks, n.left]).toEqual([AB_COST - 1, 0]);
   });
 
   it('a lone hero\'s spark crystal says nothing about the others', () => {
@@ -1527,8 +1537,8 @@ describe('pressure in a fight', () => {
     g.S.nodes = [n];
     g.S.discs = [{ ...disc(g, n.x, n.y + n.r + 6.5, 0, -200), hero: g.party[0] }];
     g.step(1 / 60);
-    expect(g.S.floats.map(f => f.txt)).toContain('+3 искры');
-    expect(g.party[0].sparks).toBe(AB_COST);
+    expect(g.S.floats.map(f => f.txt)).toContain('+2 искры');
+    expect(g.party[0].sparks).toBe(2);
   });
 
   it('a resource soaks up the disc, so collecting costs the throw', () => {
