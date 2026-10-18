@@ -239,13 +239,17 @@ i.ico { display: inline-block; font-style: normal; }
 .log-panel li.old { color: var(--muted); }
 .log-panel small { color: var(--muted); font-size: 11px; margin-right: 4px; }
 
-/* ---------- my hero's corner: portrait, discs, health with the shield, sparks running into the ability */
+/* ---------- my hero's corner: the portrait, then a block after Vladislav's sketch: a column of disc cells, the health with
+   the shield on it, the sparks under it and the ability gem the full height on the right */
 .corner {
   position: fixed; left: 16px; bottom: calc(16px + var(--safe-b)); z-index: 5;
-  width: 588px; height: 196px; pointer-events: none;
-  --pf-w: 156px; --pf-h: 184px;
+  width: calc(var(--pf-w) + var(--bgap) + 713 * var(--u)); height: 196px; pointer-events: none;
+  --pf-w: 156px; --pf-h: 184px; --bgap: 8px;
   transition: filter 0.35s;
 }
+/* the block's unit: the sketch's block is 713 x 267 (art/ui/draw_corner.py); the turn button above it on an upright phone
+   uses it too, so it lives on the root */
+:root { --u: 0.6px; }
 .corner > * { position: absolute; pointer-events: auto; }
 [data-turn='enemies'] .corner { filter: saturate(0.4) brightness(0.8); }
 .portrait { left: 0; bottom: 0; width: var(--pf-w); height: var(--pf-h); padding: 0; border: 0; background: none; cursor: pointer; filter: var(--outline); }
@@ -263,27 +267,34 @@ i.ico { display: inline-block; font-style: normal; }
 .statuses .st b { font-size: 12px; right: 1px; bottom: 0; }
 .corner.dead .portrait { filter: var(--outline) grayscale(1) brightness(0.6); }
 
-/* the discs of this turn as a stack of pucks standing on the health bar's tall left end, each like the one in the room: a
-   rim in the hero's colour and the hero's disc on top (--disc, the room's picture; the hero's colour without it). The
-   ones still in hand are bright and on top, the thrown ones dark under them; --dw is a puck's width */
-.discs {
-  position: relative; z-index: 1; align-self: flex-start; display: flex; flex-direction: column-reverse;
-  --dw: 50px; margin: 0 0 calc(var(--dw) * -0.32) 8px; pointer-events: auto; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5));
+/* the block, in the sketch's units: each piece's box is --bx --by --bw --bh, the margin round its picture included, so the
+   painted pieces sit apart by their cuts */
+.bars { left: calc(var(--pf-w) + var(--bgap)); bottom: 0; width: calc(713 * var(--u)); height: calc(267 * var(--u)); pointer-events: none; }
+.bars > *, .spk i {
+  position: absolute; left: calc(var(--bx) * var(--u)); top: calc(var(--by) * var(--u));
+  width: calc(var(--bw) * var(--u)); height: calc(var(--bh) * var(--u)); pointer-events: auto;
 }
-.discs i { position: relative; display: block; width: var(--dw); height: calc(var(--dw) * 0.56); margin-top: calc(var(--dw) * -0.4); }
-.discs i:last-child { margin-top: 0; }
-.discs i::before, .discs i::after { content: ''; position: absolute; left: 0; right: 0; border: 2px solid #120c09; }
-.discs i::before {
-  top: calc(var(--dw) * 0.2); bottom: 0; border-top: 0; border-radius: 0 0 50% 50% / 0 0 calc(var(--dw) * 0.2) calc(var(--dw) * 0.2);
-  --rim: color-mix(in srgb, var(--c) 55%, var(--dk));
-  background: linear-gradient(90deg, color-mix(in srgb, var(--rim) 55%, #000), var(--rim) 28%, color-mix(in srgb, var(--rim) 65%, #fff) 44%, var(--rim) 60%, color-mix(in srgb, var(--rim) 50%, #000));
-}
-.discs i::after { top: 0; height: calc(var(--dw) * 0.4); box-sizing: border-box; border-radius: 50%; background: var(--disc, none) center / 106% 106% no-repeat, var(--c); }
-.discs i:not(.on) { filter: grayscale(0.9) brightness(0.4); }
 
-.bars { left: calc(var(--pf-w) + 10px); bottom: 10px; width: 368px; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
-.hpbar { position: relative; height: 28px; margin-right: 18px; pointer-events: auto; }
-.track { position: absolute; inset: 0; background: #241a14; clip-path: var(--cut-bar); }
+/* the discs of this turn: a column of cells, one a disc, the first at the bottom; the ones still in hand show the hero's
+   disc (--disc, the room's picture; a puck in the hero's colour without it), the thrown ones go dark from the top down */
+.discs {
+  --bx: -14; --by: -14; --bw: 106; --bh: 295;
+  display: flex; flex-direction: column-reverse; box-sizing: border-box; padding: calc(14 * var(--u));
+  background: #241a14 content-box; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5));
+}
+.discs i {
+  flex: 1; margin: calc(7 * var(--u));
+  background: var(--disc, radial-gradient(closest-side, var(--c) 86%, #120c09 88% 98%, transparent)) center / contain no-repeat;
+}
+.discs i:not(.on) { filter: grayscale(0.9) brightness(0.35); opacity: 0.7; }
+.art-discs_1 .discs { background: center / 100% 100% no-repeat; }
+.art-discs_1 .discs[data-n='1'] { background-image: var(--ui-discs_1); }
+.art-discs_2 .discs[data-n='2'] { background-image: var(--ui-discs_2); }
+.art-discs_3 .discs[data-n='3'] { background-image: var(--ui-discs_3); }
+.art-discs_4 .discs[data-n='4'] { background-image: var(--ui-discs_4); }
+
+.hpbar { --bx: 79; --by: -14; --bw: 458; --bh: 230; }
+.track { position: absolute; inset: 6%; background: #241a14; clip-path: var(--cut-bar); }
 .corner .hpbar { filter: var(--outline); }
 .hpbar.shielded .track { box-shadow: inset 0 0 0 3px #7fb6dc; }
 .track i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(#ef6b75, #c13340 55%, #8d1e2a); transition: width 0.25s; }
@@ -291,27 +302,34 @@ i.ico { display: inline-block; font-style: normal; }
 .track s.risk { background: repeating-linear-gradient(-45deg, #ffd34d 0 3px, #5a9cc8 3px 6px); animation: risk 0.9s ease-in-out infinite; }
 .track em { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(-45deg, #ffd34d 0 3px, #8a1f2a 3px 6px); animation: risk 0.9s ease-in-out infinite; }
 .hpbar.lethal { animation: lethal-f 0.9s ease-in-out infinite; }
-.hp-num { position: absolute; inset: 0; display: grid; place-items: center; font: 700 15px/1 Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #000, 0 0 3px #000; }
+/* the number sits in the bar's tall left part, before the waist */
+.hp-num {
+  position: absolute; inset: 28% 45% 28% 12%; display: grid; place-items: center;
+  font: 700 calc(64 * var(--u))/1 Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #000, 0 0 3px #000;
+}
 @keyframes risk { 50% { opacity: 0.45; } }
 @keyframes lethal-f { 50% { filter: var(--outline) drop-shadow(0 0 6px #ff4d6a); } }
 
-/* the sparks bar: three cells that stop short of the ability button; full, both shine like the lit turn button */
-.spk { position: relative; display: flex; gap: 3px; height: 12px; margin-right: 18px; padding: 2px 3px; background: #241a33; clip-path: var(--cut-bar); }
-.spk i { flex: 1; background: #3a2c55; }
+/* the sparks: three pieces of one crystal under the health, on the whole block so each keeps its own box; full, they
+   shine like the lit turn button */
+.spk { --bx: 0; --by: 0; --bw: 713; --bh: 267; pointer-events: none; }
+.spk i { background: #3a2c55; clip-path: inset(30% 8% 6%); }
+.spk i:nth-child(1) { --bx: 79; --by: 184.45; --bw: 167; --bh: 96.55; }
+.spk i:nth-child(2) { --bx: 213; --by: 152; --bw: 177; --bh: 129; }
+.spk i:nth-child(3) { --bx: 357; --by: 158.63; --bw: 166; --bh: 122.37; }
 .spk i.on { background: linear-gradient(#a98bf0, #6b4cc0); }
-.spk.full { background: #d9c8ff; box-shadow: 0 0 12px #c9a8ff; }
 .spk.full i { background: linear-gradient(#e2d4ff, #a07ef0); animation: shine 1.4s ease-in-out infinite; }
 @keyframes shine { 50% { filter: brightness(1.25); } }
 
 .ability {
-  left: calc(var(--pf-w) + 338px); bottom: 0; width: 104px; height: 112px; padding: 10px 6px 0;
+  --bx: 483; --by: -14; --bw: 244; --bh: 295; padding: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
   border: 0; cursor: pointer; background: none; filter: var(--outline);
 }
-.ability::before { content: ''; position: absolute; inset: 0; clip-path: var(--cut-gem); background: linear-gradient(#5a3f99, #2f2050); }
-.ability::after { content: ''; position: absolute; inset: 7px; clip-path: var(--cut-gem); background: linear-gradient(160deg, #8f6fe0, #5a3aa8 60%, #3d2875); }
+.ability::before { content: ''; position: absolute; inset: 5%; clip-path: var(--cut-gem); background: linear-gradient(#5a3f99, #2f2050); }
+.ability::after { content: ''; position: absolute; inset: 10%; clip-path: var(--cut-gem); background: linear-gradient(160deg, #8f6fe0, #5a3aa8 60%, #3d2875); }
 .ability > * { position: relative; z-index: 1; }
-.ability b { font: 700 15px/1 Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #120c09; }
+.ability b { font: 700 calc(26 * var(--u))/1 Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #120c09; }
 .ability:disabled { cursor: default; }
 .ability:disabled::after { filter: saturate(0.45) brightness(0.7); }
 .ability.full::after { background: linear-gradient(160deg, #c7b0ff, #8f6fe0 55%, #5a3aa8); }
@@ -389,17 +407,10 @@ i.ico { display: inline-block; font-style: normal; }
   .boss-bar { padding: 4px 10px 4px 6px; }
   .boss-bar canvas { width: 30px; height: 30px; }
   .log-panel { top: 50px; }
-  .corner { left: max(8px, env(safe-area-inset-left)); bottom: calc(8px + var(--safe-b)); width: 344px; height: 118px; --pf-w: 84px; --pf-h: 104px; }
+  :root { --u: 0.36px; }
+  .corner { left: max(8px, env(safe-area-inset-left)); bottom: calc(8px + var(--safe-b)); height: 118px; --pf-w: 84px; --pf-h: 104px; --bgap: 6px; }
   .pname { --pn: 14px; left: 5px; right: 5px; bottom: 5px; }
   .statuses .st { width: 22px; height: 22px; padding: 2px; }
-  .discs { --dw: 30px; margin-left: 6px; }
-  .discs i::before, .discs i::after { border-width: 1.5px; }
-  .bars { left: calc(var(--pf-w) + 8px); bottom: 6px; width: 215px; gap: 4px; }
-  .hpbar { height: 19px; margin-right: 12px; }
-  .hp-num { font-size: 11px; }
-  .spk { height: 9px; margin-right: 12px; }
-  .ability { left: calc(var(--pf-w) + 198px); width: 68px; height: 74px; padding-top: 6px; gap: 3px; }
-  .ability b { font-size: 10px; }
   .turn-btn { right: max(10px, env(safe-area-inset-right)); bottom: calc(8px + var(--safe-b)); width: 210px; height: 58px; }
   .turn-btn b { font-size: 22px; }
   .turn-btn.long b { font-size: 18px; }
@@ -445,7 +456,9 @@ i.ico { display: inline-block; font-style: normal; }
   .ib.sp .ico, .ib.go .ico { width: 12px; height: 12px; }
   .qi { right: -7px; bottom: -6px; }
   .log-panel { top: 52px; }
-  .corner { left: 6px; right: 6px; bottom: calc(6px + var(--safe-b)); width: auto; height: 136px; --pf-w: 94px; --pf-h: 128px; }
+  /* the block runs from the portrait to the right edge: 6 + 94 + 6 px before it, 6 after; a wide one stops growing */
+  :root { --u: min(0.48px, (100vw - 112px) / 713); }
+  .corner { left: 6px; right: 6px; bottom: calc(6px + var(--safe-b)); width: auto; height: 136px; --pf-w: 94px; --pf-h: 128px; --bgap: 6px; }
   .corner::before {
     content: ''; position: absolute; inset: 14px -6px -14px; z-index: -1; pointer-events: none;
     background: linear-gradient(color-mix(in srgb, var(--dk) 70%, #120c09), #19120e);
@@ -453,19 +466,11 @@ i.ico { display: inline-block; font-style: normal; }
   }
   .pname { --pn: 16px; left: 6px; right: 6px; bottom: 6px; }
   .statuses .st { width: 24px; height: 24px; padding: 2px; }
-  .discs { --dw: 36px; margin-left: 4px; }
-  .discs i::before, .discs i::after { border-width: 1.5px; }
-  .bars { left: calc(var(--pf-w) + 10px); right: 50px; bottom: 6px; width: auto; gap: 5px; }
-  .hpbar { height: 22px; margin-right: 6px; }
-  .hp-num { font-size: 13px; }
-  .spk { height: 10px; margin-right: 6px; }
-  .ability { left: auto; right: 0; bottom: 0; width: 68px; height: 96px; padding-top: 8px; gap: 4px; }
-  .ability b { font-size: 12px; }
   .hero-card { bottom: calc(100% + 8px); }
+  /* the turn button stands on the block, over the health's right half and the gem, as in his sketch */
   .turn-btn {
-    left: 154px; right: 10px; bottom: calc(6px + var(--safe-b) + 68px); width: auto; height: 58px; padding: 0 86px 14px 6px;
-    --plate: polygon(0 10px, 40% 0, calc(100% - 6px) 3px, 100% 16px, 100% calc(100% - 36px), calc(100% - 9px) calc(100% - 33px),
-      calc(100% - 90px) calc(100% - 29px), calc(100% - 104px) 100%, 7px calc(100% - 3px), 0 62%);
+    left: calc(112px + 180 * var(--u)); right: 10px; bottom: calc(6px + var(--safe-b) + 267 * var(--u) + 6px); width: auto; height: 58px; padding: 0 30px 10px 24px;
+    --plate: polygon(0 100%, 9% 12%, 74% 0, 100% 100%);
   }
   .turn-btn b { font-size: 22px; white-space: nowrap; }
   .turn-btn.long b { font-size: 17px; }
@@ -784,10 +789,10 @@ i.ico { display: inline-block; font-style: normal; }
   .art-btn_turn .turn-btn { width: 220px; height: 70px; padding: 20px 42px 2px 14px; --lift: -5px; }
   .art-btn_turn .tb-who { top: -8px; right: 14%; }
 }
-/* the upright phone: the blade runs above the health with an ink edge, its bottom rising over the ability gem */
+/* the upright phone: the blade stands on the block with an ink edge */
 @media (orientation: portrait) and (max-width: 700px) {
   .art-btn_turn .turn-btn {
-    width: auto; height: 76px; padding: 24px 86px 6px 22px; filter: var(--outline) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); --lift: -5px;
+    width: auto; height: 66px; padding: 20px 34px 4px 30px; filter: var(--outline) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); --lift: -4px;
   }
   .art-btn_turn .turn-btn b { font-size: 20px; }
   .art-btn_turn .turn-btn.long b { font-size: 15px; }
@@ -801,16 +806,17 @@ i.ico { display: inline-block; font-style: normal; }
 
 .art-btn_dark .ore-chip { clip-path: none; background: var(--ui-btn_dark) center / 100% 100% no-repeat; padding: 4px 18px 4px 10px; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
 
-.art-btn_gem .ability { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); background: var(--ui-btn_gem) center / contain no-repeat; }
-.art-btn_gem .ability::before, .art-btn_gem .ability::after { display: none; }
-.art-btn_gem .ability:disabled { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) saturate(0.4) brightness(0.65); }
-.art-btn_gem .ability.full { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 12px #c9a8ff); }
-.art-btn_gem .ability.full:not(.on) { animation-name: ab-full-art; }
+/* the gem (gem, drawn by art/ui/draw_corner.py with the health and the sparks): a notch on its left for the health's point */
+.art-gem .ability { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); background: var(--ui-gem) center / 100% 100% no-repeat; }
+.art-gem .ability::before, .art-gem .ability::after { display: none; }
+.art-gem .ability:disabled { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) saturate(0.4) brightness(0.65); }
+.art-gem .ability.full { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 12px #c9a8ff); }
+.art-gem .ability.full:not(.on) { animation-name: ab-full-art; }
 @keyframes ab-full-art { 50% { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 26px #e2d4ff) brightness(1.22); } }
-.art-btn_gem .ability.on { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px var(--ab)); }
-.art-btn_gem .ability b { padding: 2px 5px; background: rgba(18, 12, 9, 0.6); }
-/* the ability's own picture fills the gem instead of its name */
-.ability .ab-ico { position: absolute; inset: 37%; z-index: 1; pointer-events: none; }
+.art-gem .ability.on { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px var(--ab)); }
+.art-gem .ability b { padding: 2px 5px; background: rgba(18, 12, 9, 0.6); }
+/* the ability's own picture fills the gem's middle face instead of its name */
+.ability .ab-ico { position: absolute; left: 30%; top: 33.4%; width: 40%; height: 33.2%; z-index: 1; pointer-events: none; }
 .ability .ab-ico:empty { display: none; }
 .ability:has(.ab-ico img) b { display: none; }
 
@@ -860,27 +866,19 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 #map .mnode.art.visited .mart { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 4px var(--gold-2)); }
 #map .mnode.art.mine .mart, #map .mnode.art:focus-visible .mart { transform: scale(1.1); filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 3px #fff) drop-shadow(0 0 7px #fff); }
 
-/* the HP bar and the sparks as die-cut cardboard (art/ui/draw_hp_spk.py draws both from the shapes Vladislav picked) */
-/* health «Мягкий перехват», after his sketch: a tall left end, a dip with a step on top, a pinched waist and a slanted right
-   end, drawn longer to use the room before the ability gem, with no plate under it (hp_empty, hp_full, hp_shield: one shape,
-   stretched whole). The red runs from x 42 to 1220 of 1269, so .track is that span and the fills stay plain percentages of
-   it; each fill shows the same picture at the bar's full size (cqw/cqh of the track), shifted by where the fill starts (--x,
-   set with it) */
-.art-hp_empty.art-hp_full .corner .hpbar { height: auto; aspect-ratio: 1269 / 319; background: var(--ui-hp_empty) center / 100% 100% no-repeat; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
-.art-hp_empty.art-hp_full .corner .hpbar .track { inset: 0 3.861% 0 3.310%; clip-path: none; background: none; container-type: size; }
+/* the health and the sparks as die-cut cardboard (art/ui/draw_corner.py draws them from Vladislav's sketch) */
+/* health: a bow tie with a dip on top, a waist below and a point on the right going into the gem (hp_empty, hp_full,
+   hp_shield: one shape, stretched whole). The red runs from x 36 to 879 of 916, so .track is that span and the fills stay
+   plain percentages of it; each fill shows the same picture at the bar's full size (cqw/cqh of the track), shifted by where
+   the fill starts (--x, set with it) */
+.art-hp_empty.art-hp_full .corner .hpbar { background: var(--ui-hp_empty) center / 100% 100% no-repeat; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
+.art-hp_empty.art-hp_full .corner .hpbar .track { inset: 0 4.039% 0 3.930%; clip-path: none; background: none; container-type: size; }
 .art-hp_empty.art-hp_full .corner .hpbar.shielded .track { box-shadow: none; }
-.art-hp_empty.art-hp_full .corner .track > * { background: var(--ui-hp_full) calc(-3.565cqw - var(--x, 0) * 1cqw) 0 / 107.72cqw 100cqh no-repeat; }
+.art-hp_empty.art-hp_full .corner .track > * { background: var(--ui-hp_full) calc(-4.270cqw - var(--x, 0) * 1cqw) 0 / 108.66cqw 100cqh no-repeat; }
 .art-hp_empty.art-hp_full .corner .track s { background-image: var(--ui-hp_shield); }
 .art-hp_empty.art-hp_full .corner .track s.risk, .art-hp_empty.art-hp_full .corner .track em { filter: brightness(1.7) saturate(0.5); }
-/* the number sits in the bar's wide right part, past the waist */
-.art-hp_empty.art-hp_full .corner .hp-num { inset: 20% 10% 30% 50%; font-size: 20px; }
-/* the sparks are one long crystal (its point at the ability gem) split in three: each piece keeps its own width and the
-   pieces overlap by their margins (14 of 1063 px), so the cracks line up with a hair of a gap */
-.art-spk_1_on .spk { background: none; clip-path: none; box-shadow: none; padding: 0; gap: 0; height: auto; align-items: flex-start; margin: -2px 18px 0 4px; }
-.art-spk_1_on .spk i { flex: none; background: center / 100% 100% no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
-.art-spk_1_on .spk i:nth-child(1) { width: 34.24%; aspect-ratio: 364 / 124; }
-.art-spk_1_on .spk i:nth-child(2) { width: 36.50%; aspect-ratio: 388 / 124; margin-left: -1.32%; }
-.art-spk_1_on .spk i:nth-child(3) { width: 31.89%; aspect-ratio: 339 / 124; margin-left: -1.32%; }
+/* the sparks: three pieces of one crystal, each its own picture in its own box */
+.art-spk_1_on .spk i { clip-path: none; background: center / 100% 100% no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
 .art-spk_1_off .spk i:nth-child(1) { background-image: var(--ui-spk_1_off); }
 .art-spk_2_off .spk i:nth-child(2) { background-image: var(--ui-spk_2_off); }
 .art-spk_3_off .spk i:nth-child(3) { background-image: var(--ui-spk_3_off); }
@@ -888,17 +886,6 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .art-spk_2_on .spk i.on:nth-child(2) { background-image: var(--ui-spk_2_on); }
 .art-spk_3_on .spk i.on:nth-child(3) { background-image: var(--ui-spk_3_on); }
 .art-spk_1_on .spk.full i { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 6px #c9a8ff); }
-@media (max-height: 520px) and (orientation: landscape) {
-  .art-spk_1_on .spk { margin-right: 12px; }
-  .art-hp_empty.art-hp_full .corner .hp-num { font-size: 15px; }
-}
-@media (orientation: portrait) and (max-width: 700px) {
-  .art-spk_1_on .spk { margin-right: 14px; }
-  .art-hp_empty.art-hp_full .corner .hp-num { font-size: 17px; }
-  /* the painted bar and crystal are taller than the drawn ones and grow with the screen (the bars are 100vw - 166px wide,
-     about 0.34 of that tall without the bar's transparent top), so the blade above them rises with them */
-  .art-hp_empty.art-hp_full .turn-btn { bottom: calc(25.5px + var(--safe-b) + (100vw - 166px) * 0.3429); }
-}
 
 /* the menus stand on a painted disco dungeon instead of the dimmed room */
 .art-menu_bg .overlay.solid { background: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_bg) center / cover no-repeat; }

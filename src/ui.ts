@@ -1,6 +1,6 @@
 // DOM HUD in the corners, so the room keeps the middle of the screen: the top strip (the party, ore, where we are,
-// the enemy queue with what each will do, map / journal / menu), my hero's corner (portrait with its statuses, discs,
-// health with the shield on it, the sparks bar running into the ability button) and one big button for the turn.
+// the enemy queue with what each will do, map / journal / menu), my hero's corner (portrait with its statuses, a column of
+// discs, health with the shield on it, the sparks under it and the ability gem) and one big button for the turn.
 
 import { AB_COST, CRIT, E_MAX, ENEMY_BASE, FROST_STEPS, FROST_VULN, GAS_WEAK, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, fullHit, gasDmg, isRanged, type MobKind, type StatKey } from './data';
 import { envArt, eventArt, sprites, uiArt } from './assets';
@@ -462,11 +462,15 @@ export class Hud {
     if (h.fire > 0) st.push({ k: 'fire', n: 2, t: 'Горит: в ход врагов потеряет 2' });
     $('fStatus').innerHTML = statusHtml(st);
 
-    // the discs of this turn as a stack of pucks with the hero's disc on top: the ones still in hand bright, the thrown ones dark
-    const per = g.handOf(h), out = S.phase === 'throw' && g.ended(h) ? per : per - h.hand, top = envArt.get('disc_' + h.def.key);
-    $('fDiscs').innerHTML = Array.from({ length: per }, (_, k) => `<i class="${k < out ? '' : 'on'}"></i>`).join('');
-    $('fDiscs').style.setProperty('--disc', top ? `url("${top.src}")` : 'none');
-    $('fDiscs').title = `Диски: ${h.hand} из ${per} за ход`;
+    // the discs of this turn as a column of cells, the first at the bottom: the ones still in hand show the hero's disc, the
+    // thrown ones (from the top down) go dark
+    const per = g.handOf(h), out = S.phase === 'throw' && g.ended(h) ? per : per - h.hand, discPic = envArt.get('disc_' + h.def.key);
+    const discs = $('fDiscs');
+    discs.innerHTML = Array.from({ length: per }, (_, k) => `<i class="${k < per - out ? 'on' : ''}"></i>`).join('');
+    discs.dataset.n = String(per);
+    if (discPic) discs.style.setProperty('--disc', `url("${discPic.src}")`);
+    else discs.style.removeProperty('--disc');
+    discs.title = `Диски: ${h.hand} из ${per} за ход`;
 
     // health and the shield on top of it: the bar holds both, squeezing when they add up to more than the most health
     const inc = g.incoming(h), dead = h.hp > 0 && inc >= h.hp, tot = Math.max(h.max, h.hp + h.shield);
