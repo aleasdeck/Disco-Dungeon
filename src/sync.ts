@@ -4,6 +4,7 @@
 import { AB_COST, HEROES } from './data';
 import type { Bank, Cue, Disc, Float, Game, HeroState, Phase, Spark, State } from './game';
 import type { Mob, RoomSpec } from './room';
+import type { CampState } from './camp';
 import type { EventState } from './events';
 import type { Run, Votes } from './run';
 
@@ -68,13 +69,13 @@ export function snapshot(g: Game): Snapshot {
 export interface MapState {
   run: Run;
   choosing: boolean;
-  /** What the last rest room gave the party. */
-  info: string;
   votes: Votes;
   /** Heroes whose players are here to vote; the host plays the others, and they have no say. */
   voters: number[];
   /** The event the party stands in: its choices, the vote on them, and once taken what came of it. */
   ev?: EventState | null;
+  /** The camp the party sits at: what each hero has done by the fire. */
+  camp?: CampState | null;
 }
 
 const sameSpec = (a: RoomSpec, b: RoomSpec) => a.seed === b.seed && a.depth === b.depth && a.floor === b.floor && a.type === b.type && (a.heroes ?? 3) === (b.heroes ?? 3);

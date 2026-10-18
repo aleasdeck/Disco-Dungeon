@@ -109,6 +109,9 @@
     "btn_main": "ui/btn_main.webp",
     "btn_tile": "ui/btn_tile.webp",
     "btn_turn": "ui/btn_turn.webp",
+    "camp_dig": "ui/camp_dig.webp",
+    "camp_mend": "ui/camp_mend.webp",
+    "camp_rest": "ui/camp_rest.webp",
     "hp_empty": "ui/hp_empty.webp",
     "hp_full": "ui/hp_full.webp",
     "hp_shield": "ui/hp_shield.webp",
@@ -187,6 +190,7 @@
     "toilet": "events/toilet.webp",
     "ogre": "events/ogre.webp",
     "goblin": "events/goblin.webp",
-    "dj": "events/dj.webp"
+    "dj": "events/dj.webp",
+    "camp": "events/camp.webp"
   }
 }

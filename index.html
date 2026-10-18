@@ -65,7 +65,6 @@
         </div>
       </div>
       <div id="mapParty" class="map-party"></div>
-      <p id="mapInfo" class="map-info" hidden></p>
       <p id="mapVotes" class="map-info map-votes" aria-live="polite" hidden></p>
       <svg id="map" viewBox="0 0 320 600" role="group" aria-label="Комнаты этажа"></svg>
     </div>
@@ -80,6 +79,19 @@
         <div id="evOpts" class="ev-opts"></div>
         <p id="evNote" class="map-info map-votes" aria-live="polite" hidden></p>
         <button class="btn big" id="evLeave" hidden><i data-art="ico_map" aria-hidden="true"></i>К карте</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="campScreen" class="overlay dim" hidden>
+    <div class="panel ev-panel" role="dialog" aria-labelledby="campTitle">
+      <div class="ev-pic"><div class="ev-art" id="campArt"><img id="campImg" alt="" draggable="false" /></div></div>
+      <div class="ev-body">
+        <h2 id="campTitle">Костёр</h2>
+        <p id="campText" class="ev-text"></p>
+        <div id="campOpts" class="ev-opts"></div>
+        <div id="campParty" class="camp-party" hidden></div>
+        <button class="btn big" id="campLeave" hidden><i data-art="ico_map" aria-hidden="true"></i>К карте</button>
       </div>
     </div>
   </section>

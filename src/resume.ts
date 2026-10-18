@@ -2,6 +2,7 @@
 // also keeps the whole game, so it can open the same room again and the others rejoin their heroes.
 
 import type { Player } from './net';
+import type { CampState } from './camp';
 import type { EventState } from './events';
 import type { Run, Votes } from './run';
 import type { Snapshot } from './sync';
@@ -19,11 +20,12 @@ export interface HostSave {
   started: boolean;
   run: Run;
   choosing: boolean;
-  mapInfo: string;
   /** Saves from before the vote have none. */
   votes?: Votes;
   /** The event the party stands in, if any. */
   ev?: EventState | null;
+  /** The camp the party sits at, if any. */
+  camp?: CampState | null;
   /** The room's result screen, if it was showing. */
   ending: Ending | null;
   screen: { title: string; text: string; win?: boolean; lose?: boolean };

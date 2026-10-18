@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, mobSize } from '../src/data';
-import { Game, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
+import { Game, newBank, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { MOB_CAP, PARTY_SCALE, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
 import { FLOORS, FORGE_ROWS, LAYERS, agreed, genFloor, newRun } from '../src/run';
 import { makeRng } from '../src/rng';
 import { EVENTS, applyFx, canPick, eventDef, eventOf, fxParts, rolled } from '../src/events';
+import { CAMP_HEAL, DIG_MAX, campDo, campLeave, canCamp, digOre, type CampState } from '../src/camp';
 
 /** Put every living hero on its own rune, as players do before the fight. */
 const placeAll = (g: Game) => g.alive().forEach((h, k) => g.movePad(h, k));
@@ -593,6 +594,60 @@ describe('map events', () => {
     expect(agreed<number>({ 0: 0 }, [0, 2])).toBeNull();
     expect(agreed<number>({ 0: 0, 2: 1 }, [0, 2])).toBeNull();
     expect(agreed<number>({ 0: 0, 2: 0 }, [0, 2])).toBe(0);
+  });
+});
+
+describe('the camp', () => {
+  const sit = (picks = [0, 1, 2]) => ({ party: newParty(picks), bank: newBank(), camp: { seed: 9001, did: {} } as CampState });
+
+  it('digs 0 to 3 ore, the same on every screen, and each amount turns up', () => {
+    expect(digOre(5150, 2)).toBe(digOre(5150, 2));
+    const got = new Set<number>();
+    for (let s = 0; s < 200; s++) for (let h = 0; h < 3; h++) {
+      const n = digOre(s * 131, h);
+      expect(n).toBeGreaterThanOrEqual(0);
+      expect(n).toBeLessThanOrEqual(DIG_MAX);
+      got.add(n);
+    }
+    expect([...got].sort()).toEqual([0, 1, 2, 3]);
+  });
+
+  it('lets every hero do one thing: rest, bandage a hurt teammate, or dig into the shared pool', () => {
+    const { party, bank, camp } = sit();
+    const [bastion, ricochet, ash] = party;
+    bastion.hp = 10;
+    ash.hp = ash.max - 3;
+    expect(campDo(camp, bastion, { k: 'rest' }, party, bank)).toEqual({ k: 'rest', hp: CAMP_HEAL });
+    expect(bastion.hp).toBe(10 + CAMP_HEAL);
+    // one thing per camp
+    expect(campDo(camp, bastion, { k: 'dig' }, party, bank)).toBeNull();
+    // a bandage tops a teammate up to their most, no further
+    expect(campDo(camp, ricochet, { k: 'mend', to: ash.i }, party, bank)).toEqual({ k: 'mend', to: ash.i, hp: 3 });
+    expect(ash.hp).toBe(ash.max);
+    const did = campDo(camp, ash, { k: 'dig' }, party, bank);
+    expect(did).toEqual({ k: 'dig', ore: digOre(camp.seed, ash.i) });
+    expect(bank.ore).toBe(digOre(camp.seed, ash.i));
+  });
+
+  it('gets the fallen up with half their health; they can do nothing else, and nobody bandages the healthy or himself', () => {
+    const { party, bank, camp } = sit([0, 2]);
+    const [bastion, ash] = party;
+    ash.hp = 0;
+    expect(canCamp(ash, { k: 'dig' }, party)).toBe(false);
+    expect(canCamp(ash, { k: 'mend', to: bastion.i }, party)).toBe(false);
+    expect(canCamp(bastion, { k: 'rest' }, party)).toBe(false);
+    expect(canCamp(bastion, { k: 'mend', to: bastion.i }, party)).toBe(false);
+    expect(campDo(camp, bastion, { k: 'mend', to: ash.i }, party, bank)).toEqual({ k: 'mend', to: ash.i, hp: Math.ceil(ash.max / 2) });
+    expect(ash.hp).toBe(Math.ceil(ash.max / 2));
+  });
+
+  it('has a hero who did nothing (their player dropped out) rest when the party walks on', () => {
+    const { party, bank, camp } = sit([0, 1]);
+    party[1].hp = 5;
+    campDo(camp, party[0], { k: 'dig' }, party, bank);
+    campLeave(camp, party, bank);
+    expect(party[1].hp).toBe(5 + CAMP_HEAL);
+    expect(camp.did[party[0].i].k).toBe('dig');
   });
 });
 

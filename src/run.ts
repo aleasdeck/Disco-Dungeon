@@ -1,7 +1,6 @@
 // Run structure: 3 floors, each a layered branching map of rooms; a path takes 7 rooms ending at the boss.
 
-import { FORGE_ORE, ROOM_TYPES, type RoomType } from './data';
-import type { Bank, HeroState } from './game';
+import { ROOM_TYPES, type RoomType } from './data';
 import { makeRng } from './rng';
 
 export interface MapNode { id: string; l: number; i: number; type: RoomType; next: string[] }
@@ -103,18 +102,4 @@ export function minutes(run: Run) {
     for (let l = p.length; l < LAYERS; l++) est += l === LAYERS - 1 ? ROOM_TYPES.boss.min : REST_ROWS.includes(l) ? 0.75 : l < 3 ? 1.5 : 2.5;
   }
   return { done, total: done + est };
-}
-
-/** The camp and the blacksmith's give their gifts at once; returns what happened, worded for a lone hero or a party. */
-export function restRoom(type: RoomType, party: HeroState[], bank: Bank): string {
-  const solo = party.length === 1;
-  if (type === 'camp') {
-    for (const h of party) h.hp = h.hp <= 0 ? Math.ceil(h.max / 2) : Math.min(h.max, h.hp + 8);
-    return solo ? 'Костёр: герой подлечился на 8 HP.' : 'Костёр: отряд подлечился на 8 HP, павшие встали с половиной здоровья.';
-  }
-  if (type === 'forge') {
-    bank.ore += FORGE_ORE;
-    return solo ? `Кузнец дал ${FORGE_ORE} руды. Прокачать диски можно только у него.` : `Кузнец дал отряду ${FORGE_ORE} руды. Прокачать диски можно только у него, руда общая на всех.`;
-  }
-  return '';
 }
