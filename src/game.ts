@@ -1227,6 +1227,8 @@ export class Game {
         if (n.left <= 0) continue;
         // a resource soaks up most of the disc's run: collecting costs the throw
         const vn = this.bounceStatic(d, n, NODE_E);
+        // the cook's dish drops off a resource as off an enemy, soft touch or not
+        if (vn > 5 && d.ab && d.hero.def.key === 'cook') this.dropFood(d, d.x - n.x, d.y - n.y);
         if (vn <= 30) continue;
         d.hits++;
         // even Ricochet's ability doesn't carry a disc on through a resource

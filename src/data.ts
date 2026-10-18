@@ -31,7 +31,7 @@ export const AB_SPEED = 180;
 export const ZAP = [4, 3, 2];
 export const ZAP_REACH = 6 * 16;
 /**
- * The cook's food: her disc drops a dish at each of its first FOOD_PER_DISC bounces (walls, blocks, enemies). It lands in
+ * The cook's food: her disc drops a dish at each of its first FOOD_PER_DISC bounces (walls, blocks, resources, enemies). It lands in
  * the middle of a cell about a cell off, one dish to a cell (a taken cell sends it to the nearest free one beside), and heals
  * FOOD_HEAL to the hero whose disc rolls over it, any disc but the one that dropped it; a hero at full health leaves it
  * lying. Discs roll over food, nothing bounces off it, and it lies there till the fight ends.
