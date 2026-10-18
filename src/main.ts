@@ -5,7 +5,7 @@ import { Game, newBank, newParty } from './game';
 import { Net, type Player } from './net';
 import { applySnapshot, snapshot, type MapState } from './sync';
 import { saveSettings, settings } from './settings';
-import { bindSettings, lobbyStatus, renderCollection, renderHeroSelect, renderLobby, resetLobby, show } from './menu';
+import { bindSettings, lobbyStatus, renderCollection, renderHeroSelect, renderLobby, resetLobby, show, startable } from './menu';
 import { Input } from './input';
 import { Hud, faceUrl } from './ui';
 import { hl } from './hl';
@@ -663,18 +663,30 @@ function lobbyView() {
   });
 }
 
-/** Host: a player picks a hero, if it is free. */
+/** Host: a player picks a hero, if it is free; one who changes their hero has to press «Готов» again. */
 function pick(id: string, hero: number | null) {
   const p = players.find(o => o.id === id);
   if (!p || started) return;
   if (hero !== null && players.some(o => o.hero === hero && o.id !== id)) return;
+  if (p.hero !== hero) p.ready = false;
   p.hero = hero;
+  net.broadcast({ t: 'lobby', players: pub() });
+  lobbyView();
+}
+
+/** Host: a player presses «Готов» or takes it back; only with a hero picked. */
+function readyUp(id: string, on: boolean) {
+  const p = players.find(o => o.id === id);
+  if (!p || started || p.id === 'host') return;
+  p.ready = on && p.hero !== null;
   net.broadcast({ t: 'lobby', players: pub() });
   lobbyView();
 }
 
 function backToLobby() {
   started = false;
+  // a new run asks everyone for their «Готов» again
+  for (const p of players) p.ready = false;
   ev = null;
   showEvent();
   loot = null;
@@ -712,12 +724,17 @@ $('lobbyCopy').addEventListener('click', () => {
   navigator.clipboard?.writeText(url).then(() => lobbyStatus('Ссылка скопирована.'), () => lobbyStatus(url));
 });
 $('lobbyStartBtn').addEventListener('click', () => {
-  if (!players.every(p => p.hero !== null)) return;
+  if (!startable(players)) return;
   started = true;
   net.broadcast({ t: 'start', players: pub() });
   setOnline('host');
   show(null);
   startRun(players.map(p => p.hero!).sort((a, b) => a - b));
+});
+
+$('lobbyReadyBtn').addEventListener('click', () => {
+  if (mode !== 'client' || myHero() === null) return;
+  net.send({ t: 'ready', on: !players.find(p => p.id === net.id)?.ready });
 });
 
 /** Join a room; `key` takes back a seat this browser had before a crash or reload. */
@@ -791,6 +808,8 @@ function welcome(id: string, name: string, key: string) {
   if (back) {
     const old = back.id;
     Object.assign(back, { id, name });
+    // in the lobby a player who comes back says «Готов» anew
+    if (!started) back.ready = false;
     if (old !== id) net.kick(old);
     if (started) {
       net.sendTo(id, { t: 'start', players: pub() });
@@ -842,6 +861,7 @@ net.onMsg = (from, m) => {
   if (mode === 'host') {
     if (m.t === 'hello') welcome(from, m.name, m.key);
     else if (m.t === 'pick') pick(from, m.hero);
+    else if (m.t === 'ready') readyUp(from, m.on);
     else if (m.t === 'vote' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) vote(h, m.id); }
     else if (m.t === 'evote' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) evVote(h, m.opt); }
     else if (m.t === 'camp' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) campPick(h, m.pick); }
@@ -951,7 +971,18 @@ async function reopen(code: string) {
   }
   wait('');
   dirty = true;
-  if (!started || !s.snap) { lobbyView(); show('lobby'); return; }
+  if (!started || !s.snap) {
+    // a player who doesn't come back to the lobby is let go, so the start doesn't wait for their «Готов»
+    setTimeout(() => {
+      if (mode !== 'host' || started || players.every(p => net.has(p.id))) return;
+      players = players.filter(p => net.has(p.id));
+      net.broadcast({ t: 'lobby', players: pub() });
+      lobbyView();
+    }, 15_000);
+    lobbyView();
+    show('lobby');
+    return;
+  }
   // players get a moment to find their seats again; whoever is still missing after it stops holding the others up
   setTimeout(seatAway, 15_000);
   if (s.ending) showEnd(s.ending);

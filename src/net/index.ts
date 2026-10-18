@@ -9,8 +9,11 @@ import type { Ending } from '../resume';
 import type { MapState, Snapshot } from '../sync';
 import { hostRoom, joinRoom, RoomError, type Accept, type HostedRoom, type JoinRoom, type Link, type OpenRoom } from './link';
 
-/** `key` is the player's secret for rejoining after a drop; only the host keeps it. */
-export interface Player { id: string; name: string; hero: number | null; key?: string }
+/**
+ * `key` is the player's secret for rejoining after a drop; only the host keeps it. `ready`: the player pressed
+ * «Готов» in the lobby (the host has no such flag: pressing «Начать» is its word).
+ */
+export interface Player { id: string; name: string; hero: number | null; key?: string; ready?: boolean }
 
 export type Msg =
   /** A player's first word on every link: which browser it is, so a link made anew after a drop keeps its place. */
@@ -20,6 +23,8 @@ export type Msg =
   | { t: 'deny'; text: string }
   | { t: 'lobby'; players: Player[] }
   | { t: 'pick'; hero: number | null }
+  /** A player in the lobby says they are ready to start, or takes it back. */
+  | { t: 'ready'; on: boolean }
   | { t: 'start'; players: Player[] }
   | { t: 'act'; a: Action }
   | { t: 'snap'; s: Snapshot }
