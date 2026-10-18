@@ -52,12 +52,14 @@ export const FAN_M = 0.7;
 export const FAN_R = 0.7;
 /**
  * The bum's «Амбре»: the first bounce of his disc lets out a cloud of green gas GAS_R cells each way with the corners
- * cut off (21 cells), for GAS_TURNS enemy turns. An enemy in it as its move begins loses GAS_DMG, through armour, and strikes
- * GAS_WEAK weaker on that move. Clouds don't add up; past GAS_MAX the oldest clears.
+ * cut off (21 cells), for GAS_TURNS enemy turns. An enemy in it as its move begins loses GAS_PCT of its full health
+ * (a boss GAS_PCT_BOSS), rounded up, through armour, and strikes GAS_WEAK weaker on that move. Clouds don't add up; past
+ * GAS_MAX the oldest clears.
  */
 export const GAS_R = 2;
 export const GAS_TURNS = 3;
-export const GAS_DMG = 2;
+export const GAS_PCT = 0.15;
+export const GAS_PCT_BOSS = 0.05;
 export const GAS_WEAK = 0.3;
 export const GAS_MAX = 6;
 /**
@@ -278,6 +280,9 @@ export const MOBS: Record<MobKind, MobDef> = {
 /** Shoots across the room, at a hero it sees, instead of walking up to strike. */
 export const isRanged = (k: MobKind) => MOBS[k].reach >= 999;
 
+/** What the bum's gas takes off an enemy of full health `max` at the start of its move: a share of it, at least 1. */
+export const gasDmg = (k: MobKind, max: number) => Math.max(1, Math.ceil(max * (MOBS[k].boss ? GAS_PCT_BOSS : GAS_PCT)));
+
 /** Cells a mob covers on each side. */
 export const mobSize = (k: MobKind) => MOBS[k].size ?? 1;
 
@@ -361,8 +366,8 @@ export const HEROES: HeroDef[] = [
   },
   {
     key: 'bum', name: 'Перегар', acc: 'Перегара', dat: 'Перегару', col: '#7b6a4e', dk: '#3b3224', skin: '#d9b08c', role: 'Зона', hp: 24, r: 5, m: 2.2, e: 0.7, fr: 1.05, pw: 1,
-    ab: 'Амбре', abTxt: `До конца хода с первого отскока его диска встаёт облако газа на ${GAS_TURNS} хода: враги в нём теряют HP и бьют слабее.`, abCol: '#b9e34f',
-    abMore: `Облако круглое, ${GAS_R * 2 + 1} на ${GAS_R * 2 + 1} клеток без углов. Враг, который начинает в нём свой ход, теряет ${GAS_DMG} сквозь броню и бьёт на ${Math.round(GAS_WEAK * 100)}% слабее. Облака не складываются.`,
+    ab: 'Амбре', abTxt: `До конца хода первый отскок его диска пускает газ на ${GAS_TURNS} хода: враги в нём теряют ${Math.round(GAS_PCT * 100)}% HP за ход и бьют слабее.`, abCol: '#b9e34f',
+    abMore: `Облако круглое, ${GAS_R * 2 + 1} на ${GAS_R * 2 + 1} клеток без углов. Враг, который начинает в нём свой ход, теряет ${Math.round(GAS_PCT * 100)}% здоровья (босс ${Math.round(GAS_PCT_BOSS * 100)}%) сквозь броню и бьёт на ${Math.round(GAS_WEAK * 100)}% слабее. Облака не складываются.`,
   },
   {
     key: 'genius', name: 'Отморозок', acc: 'Отморозка', dat: 'Отморозку', col: '#3a9cb8', dk: '#1b4d5c', skin: '#cfe0e4', role: 'Зона', hp: 22, r: 5, m: 2, e: 0.85, fr: 0.9, pw: 1,
