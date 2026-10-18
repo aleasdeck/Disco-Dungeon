@@ -73,10 +73,14 @@ export const PETARD_LURE = 2;
 export const PETARD_MAX = 6;
 /**
  * The ice genius's «Заморозка»: an enemy his disc hits once walks at most FROST_STEPS cells on its next move, hit twice it
- * skips the move. Either way, till the frost wears off it takes FROST_VULN more from the heroes' discs and tricks, rounded up.
+ * skips the move. Till the frost wears off it takes more from the heroes' discs and tricks, rounded up: FROST_SLOW_VULN
+ * slowed, FROST_VULN frozen stiff.
  */
 export const FROST_STEPS = 1;
+export const FROST_SLOW_VULN = 0.25;
 export const FROST_VULN = 0.5;
+/** How much more a frosted enemy takes from the heroes: nothing without frost, a quarter slowed, a half frozen. */
+export const frostVuln = (frost = 0) => (frost >= 2 ? FROST_VULN : frost > 0 ? FROST_SLOW_VULN : 0);
 /** Online, at most this many players sit at one table: rooms are built for one to three heroes. */
 export const MAX_PLAYERS = 3;
 /** Ore for each level of a disc stat; a party can't buy everything in one run, so it has to choose. */
@@ -375,8 +379,8 @@ export const HEROES: HeroDef[] = [
   },
   {
     key: 'genius', name: 'Отморозок', acc: 'Отморозка', dat: 'Отморозку', col: '#3a9cb8', dk: '#1b4d5c', skin: '#cfe0e4', hp: 22, r: 5, m: 2, e: 0.85, fr: 0.9, pw: 1,
-    ab: 'Заморозка', abTxt: `До конца хода его диск морозит: после одного попадания враг еле ползёт, после двух пропускает ход. Урон по нему +${Math.round(FROST_VULN * 100)}%.`, abCol: '#bdf2ff',
-    abMore: `Замедленный враг в свой ход проходит не больше ${FROST_STEPS === 1 ? 'клетки' : FROST_STEPS + ' клеток'}, но бьёт и стреляет, как обычно. Замороженный стоит и ничего не делает: ни удара, ни выстрела, ни призыва. Пока мороз держится, а это до конца ближайшего хода врагов, диски и умения героев бьют врага на ${Math.round(FROST_VULN * 100)}% сильнее.`,
+    ab: 'Заморозка', abTxt: `До конца хода его диск морозит: после одного попадания враг еле ползёт, после двух пропускает ход. Урон по замедленному +${Math.round(FROST_SLOW_VULN * 100)}%, по замороженному +${Math.round(FROST_VULN * 100)}%.`, abCol: '#bdf2ff',
+    abMore: `Замедленный враг в свой ход проходит не больше ${FROST_STEPS === 1 ? 'клетки' : FROST_STEPS + ' клеток'}, но бьёт и стреляет, как обычно. Замороженный стоит и ничего не делает: ни удара, ни выстрела, ни призыва. Пока мороз держится, а это до конца ближайшего хода врагов, диски и умения героев бьют замедленного врага на ${Math.round(FROST_SLOW_VULN * 100)}% сильнее, замороженного на ${Math.round(FROST_VULN * 100)}%.`,
   },
 ];
 
