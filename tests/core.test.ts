@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, isRanged, mobSize } from '../src/data';
-import { FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
+import { ART, FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { CAVE, MOB_CAP, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
 import { FLOORS, FORGE_ROWS, LAYERS, agreed, genFloor, newRun } from '../src/run';
@@ -1032,6 +1032,243 @@ describe('placement and discs', () => {
     expect(g.S.phase).toBe('over');
     expect(won).toBe(true);
     expect(g.party.some(h => h.hand > 0)).toBe(true);
+  });
+});
+
+describe('trophies in play', () => {
+  /** A fight on floor 0 for one hero carrying the given trophies, with just the given enemies in a row along the top. */
+  const arena = (arts: string[], kinds: (keyof typeof MOBS)[] = ['golem'], hero = 0) => {
+    const g = new Game();
+    g.party = newParty([hero]);
+    g.party[0].arts = arts;
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    g.S.mobs = kinds.map((k, i) => newMob(k, 40 + i * 30, 30, 1, 0));
+    g.S.nodes = [];
+    g.S.blocks = [];
+    g.S.pits = [];
+    g.S.haz = new Set();
+    placeAll(g); g.startFight();
+    return g;
+  };
+  const disc = (g: Game, x: number, y: number, vx: number, vy: number, more: Partial<Disc> = {}): Disc =>
+    ({ hero: g.party[0], x, y, vx, vy, r: 5, m: 4, e: 0.6, fr: 1, fall: 0, gone: false, charged: false, bounces: 0, spin: 0, hits: 0, ab: false, rico: 0, ...more });
+  /** Damage of one disc running square into the first enemy from below. */
+  const blow = (arts: string[], more: Partial<Disc> = {}) => {
+    const g = arena(arts), m = g.S.mobs[0];
+    m.armor = 0;
+    const hp = m.hp;
+    g.S.discs = [disc(g, m.x, m.y + m.r + 5.5, 0, -200, more)];
+    g.step(1 / 60);
+    return hp - m.hp;
+  };
+
+  it('«Стеклянный глаз» makes a sure hit triple, «Бильярдный мел» counts one off the walls', () => {
+    const plain = blow([], { bounces: 1 });
+    expect(blow([])).toBe(Math.ceil(plain * CRIT));
+    expect(blow(['glasseye'])).toBe(Math.ceil(plain * ART.critBig));
+    expect(blow([], { bounces: 2 })).toBe(plain);
+    expect(blow(['chalk'], { bounces: 2 })).toBe(Math.ceil(plain * CRIT));
+  });
+
+  it('«Пружина» adds a point a bounce up to four, «Нож» goes through armour', () => {
+    const plain = blow([], { bounces: 3 });
+    expect(blow(['spring'], { bounces: 3 })).toBe(plain + 3);
+    expect(blow(['spring'], { bounces: 9 })).toBe(plain + ART.springMax);
+    const arm = (arts: string[]) => {
+      const g = arena(arts), m = g.S.mobs[0], hp = m.hp;
+      m.armor = 99;
+      g.S.discs = [disc(g, m.x, m.y + m.r + 5.5, 0, -200)];
+      g.step(1 / 60);
+      return hp - m.hp;
+    };
+    expect(arm([])).toBe(0);
+    expect(arm(['opener'])).toBeGreaterThan(0);
+  });
+
+  it('«Бубенцы» ring a hero\'s own discs together and make the clash triple', () => {
+    const clash = (arts: string[]) => {
+      const g = arena(arts), a = disc(g, 100, 100, 150, 0), b = disc(g, 111, 100, -150, 0);
+      g.S.discs = [a, b];
+      g.step(1 / 120);
+      return { charged: a.charged && b.charged, txt: g.S.floats.map(f => f.txt) };
+    };
+    expect(clash([]).charged).toBe(false);
+    const rung = clash(['bells']);
+    expect(rung.charged).toBe(true);
+    expect(rung.txt).toContain('ЗВОН ×3');
+    expect(blow(['bells'], { charged: true, bounces: 1 })).toBe(blow([], { bounces: 1 }) * ART.bells);
+  });
+
+  it('«Надувные труселя»: the disc rolls over the holes, and spikes under it don\'t hurt', () => {
+    const roll = (arts: string[]) => {
+      const g = arena(arts), h = g.party[0], hp = h.hp;
+      g.S.pits = [{ k: '1x1', cells: [[6, 4]] }];
+      const d = disc(g, 4 * TILE, 4.5 * TILE, 250, 0);
+      g.S.discs = [d];
+      let far = d.x;
+      for (let k = 0; k < 240 && !d.fall; k++) { g.step(1 / 120); far = Math.max(far, d.x); }
+      return { fall: d.fall, x: far, hurt: hp - h.hp };
+    };
+    expect(roll([]).fall).toBeGreaterThan(0);
+    const safe = roll(['undies']);
+    expect(safe.fall).toBe(0);
+    expect(safe.x).toBeGreaterThan(7 * TILE);
+    expect(safe.hurt).toBe(0);
+    // the aim line runs on over the hole too
+    const aim = (arts: string[]) => {
+      const g = arena(arts), p = g.spot(g.party[0])!, i = Math.floor(p.x / TILE), j = Math.floor(p.y / TILE) - 2;
+      g.S.mobs = [];
+      g.S.pits = [{ k: '1x1', cells: [[i, j]] }];
+      const pr = g.predict(g.party[0], 0, -40, 0);
+      return pr.path[pr.path.length - 1][1] - j * TILE;
+    };
+    expect(aim([])).toBeGreaterThan(0);
+    expect(aim(['undies'])).toBeLessThan(0);
+    const spikes = (arts: string[]) => {
+      const g = arena(arts), h = g.party[0], hp = h.hp;
+      g.S.discs = [disc(g, 5 * TILE + 8, 5 * TILE + 8, 0, 0, { hits: 1 })];
+      g.S.haz.add(hazKey(5, 5));
+      endAll(g);
+      g.update(0.02);
+      return hp - h.hp;
+    };
+    expect(spikes([])).toBeGreaterThan(0);
+    expect(spikes(['undies'])).toBe(0);
+  });
+
+  it('«Золотая челюсть» takes a whole vein in one hit', () => {
+    const mine = (arts: string[]) => {
+      const g = arena(arts), n = { k: 'ore' as const, name: 'Рудная жила', r: 7, ch: 3, x: 88, y: 88, left: 3, hit: 0, s: 1 };
+      g.S.nodes = [n];
+      g.S.discs = [disc(g, n.x, n.y + n.r + 5.5, 0, -60)];
+      g.step(1 / 60);
+      return { ore: g.bank.ore, left: n.left };
+    };
+    expect(mine([])).toEqual({ ore: 1, left: 2 });
+    expect(mine(['denture'])).toEqual({ ore: 3, left: 0 });
+  });
+
+  it('«Ракушка» shields every turn, «Третья рука» adds a disc, «Батарейка» fills the sparks, «Энергетик» makes the ability cheaper', () => {
+    const g = arena(['cup', 'hand', 'battery', 'energy']), h = g.party[0];
+    expect(h.shield).toBe(ART.cup);
+    expect(h.hand).toBe(h.discs + 1);
+    expect(h.sparks).toBe(AB_COST);
+    h.sparks = ART.energyCost;
+    expect(g.canUseAbility(h)).toBe(true);
+    g.useAbility(h);
+    expect(h.sparks).toBe(0);
+    endAll(g);
+    for (let k = 0; k < 600 && g.S.turn === 1; k++) g.update(0.05);
+    expect(g.S.turn).toBe(2);
+    expect(h.shield).toBe(ART.cup);
+    expect(h.hand).toBe(h.discs + 1);
+    const plain = arena([]);
+    expect(plain.party[0].shield).toBe(0);
+    plain.party[0].sparks = ART.energyCost;
+    expect(plain.canUseAbility(plain.party[0])).toBe(false);
+  });
+
+  it('«Носок» saves the hero from a deadly blow once a room', () => {
+    const g = arena(['sock']), h = g.party[0];
+    g.hurtHero(h, h.hp + 5);
+    expect(h.hp).toBe(1);
+    g.hurtHero(h, 3);
+    expect(h.hp).toBeLessThanOrEqual(0);
+  });
+
+  it('a kill by the hero\'s disc mends it with «Клыки» and drops ore with «Копилка»', () => {
+    const g = arena(['fangs', 'piggy'], ['skel', 'skel']), h = g.party[0], [a, b] = g.S.mobs;
+    h.hp = 10;
+    g.hurtMob(a, 99, '#fff', false, 0.6, h);
+    expect(h.hp).toBe(10 + ART.fangs);
+    expect(g.bank.ore).toBe(1);
+    // a kill nobody's disc made pays nothing
+    g.hurtMob(b, 99);
+    expect(g.bank.ore).toBe(1);
+  });
+
+  it('«Ёж в штанах» pricks an enemy that strikes up close', () => {
+    const g = arena(['hedgehog'], ['skel']), h = g.party[0], m = g.S.mobs[0], p = g.spot(h)!;
+    m.x = p.x < g.S.Wx / 2 ? p.x + TILE : p.x - TILE; m.y = p.y; m.tx = m.x; m.ty = m.y;
+    const hp = m.hp;
+    m.intent = { t: 'hit', hero: h.i, dmg: 2 };
+    endAll(g);
+    for (let k = 0; k < 200 && g.S.turn === 1; k++) g.update(0.05);
+    expect(hp - m.hp).toBe(ART.hedgehog);
+  });
+
+  it('«Ромашковый чай» puts the enemies\' rage off by three turns', () => {
+    expect(arena(['tea']).rageFrom()).toBe(RAGE_FROM + ART.tea);
+    expect(arena([]).rageFrom()).toBe(RAGE_FROM);
+  });
+
+  it('«Бумеранг» brings a miss back into the hand once a turn', () => {
+    const g = arena(['boomerang']), h = g.party[0], hand = h.hand;
+    g.throwDisc(h, 0, 5);
+    expect(h.hand).toBe(hand - 1);
+    for (let k = 0; k < 600 && g.moving(); k++) g.step(1 / 120);
+    g.step(1 / 120);
+    expect(h.hand).toBe(hand);
+    expect(g.S.floats.some(f => f.txt === 'вернулся!')).toBe(true);
+    g.throwDisc(h, 0, 5);
+    for (let k = 0; k < 600 && g.moving(); k++) g.step(1 / 120);
+    g.step(1 / 120);
+    expect(h.hand).toBe(hand - 1);
+  });
+
+  it('«Поднос» widens the disc, «Полироль» lets it roll further, «Смазка» spares the speed of two bounces', () => {
+    const g = arena(['tray', 'polish']), h = g.party[0];
+    g.throwDisc(h, 0, 20);
+    expect(g.S.discs[0].r).toBeCloseTo(h.def.r * ART.trayR);
+    expect(g.S.discs[0].fr).toBeCloseTo(h.def.fr * ART.polishFr);
+    const len = (arts: string[]) => {
+      const a = arena(arts), at = a.spot(a.party[0])!, sx = at.x < a.S.Wx / 2 ? 1 : -1, sy = at.y < a.S.Wy / 2 ? 1 : -1;
+      a.S.mobs = [];
+      // into the open room, soft enough to stop before the far wall
+      const p = a.predict(a.party[0], 9 * sx, 9 * sy, 9).path;
+      return Math.hypot(p[p.length - 1][0] - p[0][0], p[p.length - 1][1] - p[0][1]);
+    };
+    expect(len(['polish'])).toBeGreaterThan(len([]) * 1.3);
+    const wall = (arts: string[]) => {
+      const a = arena(arts);
+      a.throwDisc(a.party[0], 0, 0.0001 - 40);
+      const d = a.S.discs[0];
+      d.x = 100; d.y = d.r + 1; d.vx = 0; d.vy = -200;
+      a.step(1 / 120);
+      return Math.hypot(d.vx, d.vy);
+    };
+    expect(wall(['lube'])).toBeGreaterThan(wall([]) * 1.3);
+  });
+
+  it('«Диско-шар» throws a light spot off a bounce at the nearest enemy, three at most a throw', () => {
+    const g = arena(['mirrorball'], ['skel']), m = g.S.mobs[0], hp = m.hp, d = disc(g, m.x + 30, 6, 0, -200);
+    g.S.discs = [d];
+    g.step(1 / 120);
+    expect(hp - m.hp).toBe(ART.beamDmg);
+    expect(g.S.zaps.some(z => z.beam)).toBe(true);
+    d.beams = ART.beamMax;
+    d.y = 6; d.vy = -200;
+    g.step(1 / 120);
+    expect(hp - m.hp).toBe(ART.beamDmg);
+  });
+
+  it('«Стельки» keep more of the disc\'s speed off an enemy', () => {
+    const left = (arts: string[]) => {
+      const g = arena(arts), m = g.S.mobs[0];
+      const d = disc(g, m.x, m.y + m.r + 5.5, 0, -200);
+      g.S.discs = [d];
+      g.step(1 / 60);
+      return Math.hypot(d.vx, d.vy);
+    };
+    expect(left(['insoles'])).toBeGreaterThan(left([]) * 1.5);
+  });
+
+  it('«Рентген-очки» show the aim line on through three bounces', () => {
+    // Ricochet's disc keeps enough speed for three bounces and more
+    const g = arena(['xray'], ['golem'], 1), at = g.spot(g.party[0])!, sx = at.x < g.S.Wx / 2 ? 1 : -1, sy = at.y < g.S.Wy / 2 ? 1 : -1;
+    g.S.mobs = [];
+    expect(g.predict(g.party[0], 50 * sx, 31 * sy, 0).bounces.length).toBe(1);
+    expect(g.predict(g.party[0], 50 * sx, 31 * sy, ART.xrayBounces).bounces.length).toBe(ART.xrayBounces + 1);
   });
 });
 

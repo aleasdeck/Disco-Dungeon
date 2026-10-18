@@ -3,7 +3,7 @@
 
 import { WALL_WORDS, FAN_R, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize } from '../data';
 import { KX, KY, type Camera, type Vec } from '../camera';
-import { FOOD_FLY, ZAP_T, type Disc, type Food, type Game, type HeroState, type Spark, type Zap } from '../game';
+import { ART, FOOD_FLY, ZAP_T, type Disc, type Food, type Game, type HeroState, type Spark, type Zap } from '../game';
 import { cellAt, floorAt, hazKey, inPit, isFloor, pitAt, type Block, type Decal, type Edge, type Mob, type Pit, type ResNode } from '../room';
 import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure, heroLook } from './figures';
 import { circ, ell, fs, mix, pth, rr, type Ctx, type Pt } from './util';
@@ -11,6 +11,7 @@ import { GRAFFITI_FONTS, envArt } from '../assets';
 import { settings } from '../settings';
 import { knockPose, topplePose, type Knock, type Pose } from '../fx';
 import { hl } from '../hl';
+import { has } from '../artifacts';
 
 export interface Aim { hero: HeroState; dx: number; dy: number }
 /** A hero dragged to another rune: pointer position in screen pixels and the rune under it. */
@@ -1440,18 +1441,19 @@ export class SceneRenderer {
     const { c, P, g } = this;
     const h = aim.hero, p = g.spot(h), len = Math.hypot(aim.dx, aim.dy);
     if (!p || len < 4) return;
-    // one straight line up to the first wall, block or mob; ricochets are left for the player to judge
-    const pr = g.predict(h, aim.dx, aim.dy, 0);
+    // one straight line up to the first wall, block or mob; ricochets are left for the player to judge, unless the hero
+    // wears «Рентген-очки»: then the line runs on through three bounces, with a ring at each
+    const xray = has(h, 'xray'), pr = g.predict(h, aim.dx, aim.dy, xray ? ART.xrayBounces : 0);
     // «Стробоскоп», an event's curse: the fight goes without the line, as with it turned off in the settings
     if (pr.path.length < 2 || !settings.aimLine || g.S.spec.strobe) return;
     // thick enough to read on a phone at any zoom: at least ~4 screen pixels
     const lw = Math.max(2.4, 4 / this.cam.zoom);
-    const [x0, y0] = P(...pr.path[0], 2), [x1, y1] = P(...pr.path[pr.path.length - 1], 2);
+    const pts = (xray ? pr.path : [pr.path[0], pr.path[pr.path.length - 1]]).map(q => P(...q, 2));
     c.save();
     c.lineCap = 'round';
+    c.lineJoin = 'round';
     c.beginPath();
-    c.moveTo(x0, y0);
-    c.lineTo(x1, y1);
+    pts.forEach(([x, y], k) => (k ? c.lineTo(x, y) : c.moveTo(x, y)));
     c.strokeStyle = INK;
     c.lineWidth = lw + 2.2;
     c.stroke();
@@ -1461,6 +1463,7 @@ export class SceneRenderer {
     c.lineWidth = lw;
     c.stroke();
     c.setLineDash([]);
+    if (xray) for (const q of pr.bounces) { const [bx, by] = P(...q, 2); circ(c, bx, by, lw * 1.3); fs(c, h.def.col, 1.4); }
     c.restore();
     const [px, py] = P(p.x, p.y), pw = Math.round((len / 60) * 5);
     for (let k = 0; k < 5; k++) { rr(c, px - 11 + k * 4.6, py + 7, 3.6, 2.6, 1); fs(c, k < pw ? h.def.col : '#2a1f18', 0.6); }
@@ -1513,7 +1516,8 @@ export class SceneRenderer {
     let r = z.s;
     const rnd = () => ((r = Math.imul(r ^ (r >>> 15), 0x2c1b3c6d) + 0x9e3779b9) >>> 0) / 4294967296 - 0.5;
     for (let k = 0; k <= n; k++) {
-      const u = k / n, off = k === 0 || k === n ? 0 : rnd() * Math.min(9, L * 0.25);
+      // a light spot off the mirror ball flies straight; lightning zigzags
+      const u = k / n, off = k === 0 || k === n || z.beam ? 0 : rnd() * Math.min(9, L * 0.25);
       pts.push([a[0] + dx * u - (dy / L) * off, a[1] + dy * u + (dx / L) * off]);
     }
     // a cartoon bolt: ink outline, electric blue, white core, so it reads on dark stone and on white ice alike; it flickers
@@ -1525,8 +1529,8 @@ export class SceneRenderer {
     c.globalAlpha = Math.min(1, q * 2) * (0.8 + 0.2 * Math.sin(z.t * 70));
     c.beginPath(); pts.forEach((p, k) => (k ? c.lineTo(...p) : c.moveTo(...p)));
     c.strokeStyle = INK; c.lineWidth = 3.6 * w; c.stroke();
-    c.strokeStyle = '#3fb4ff'; c.lineWidth = 2.4 * w; c.stroke();
-    c.strokeStyle = '#f2fcff'; c.lineWidth = 0.9 * w; c.stroke();
+    c.strokeStyle = z.beam ? '#ffd34d' : '#3fb4ff'; c.lineWidth = 2.4 * w; c.stroke();
+    c.strokeStyle = z.beam ? '#fffbe6' : '#f2fcff'; c.lineWidth = 0.9 * w; c.stroke();
     c.restore();
   }
 
