@@ -456,16 +456,18 @@ export const firstFloorExtra = (f: number, t: number) =>
   f > 0 ? { blocks: 0, haz: 0, mobs: 0 } : { blocks: 1, haz: t > 0 ? 1 : 0, mobs: t >= 2 ? 1 : 0 };
 
 /**
- * Rooms are made for a party of three. A smaller party meets fewer enemies (summons included), with less HP and softer hits,
- * and its ore veins hold fewer charges, so mining costs it as many turns as it costs three heroes and each hero earns
- * about as much ore. Spark crystals hold as much for any party: one ability for every hero. Tuned with the bot so one,
- * two and three heroes get about as far through a run: a lone hero has one throw a turn and nobody to stand in for it,
- * so it gets the biggest cut.
+ * Rooms are made for a party of three. A smaller party meets fewer enemies (summons included), with less HP and softer hits.
+ * Spark crystals hold as much for any party: one ability for every hero. Tuned with the bot so one, two and three heroes
+ * get about as far through a run: a lone hero has one throw a turn and nobody to stand in for it, so it gets the biggest cut.
+ * Resources grow with the party. Ore veins hold more charges than one a hero: each hero buys their own upgrades, while
+ * the blacksmith's gift, the ore cave and the events pay the same to any party, so without this a trio ended up with
+ * little more than half a lone hero's ore each. A mushroom heals only the hero who threw at it, so a bigger party finds
+ * more mushroom patches in a fight (`herbs`, the ore cave aside) and a trio's hold more: as many heals for every hero.
  */
-export const PARTY_SCALE: Record<number, { mobs: number; hp: number; dmg: number; ch: Partial<Record<NodeKind, number>> }> = {
-  1: { mobs: 0.4, hp: 0.5, dmg: 0.6, ch: { ore: 1 } },
-  2: { mobs: 0.7, hp: 0.8, dmg: 0.8, ch: { ore: 2 } },
-  3: { mobs: 1, hp: 1, dmg: 1, ch: {} },
+export const PARTY_SCALE: Record<number, { mobs: number; hp: number; dmg: number; herbs: number; ch: Partial<Record<NodeKind, number>> }> = {
+  1: { mobs: 0.4, hp: 0.5, dmg: 0.6, herbs: 1, ch: { ore: 1 } },
+  2: { mobs: 0.7, hp: 0.8, dmg: 0.8, herbs: 2, ch: { ore: 3 } },
+  3: { mobs: 1, hp: 1, dmg: 1, herbs: 2, ch: { ore: 5, herb: 3 } },
 };
 
 export const partyScale = (spec: Pick<RoomSpec, 'heroes'>) => PARTY_SCALE[Math.max(1, Math.min(3, spec.heroes ?? 3))];
@@ -708,19 +710,26 @@ export function generate(spec: RoomSpec): Layout {
 
   const nodes: ResNode[] = [];
   if (cave && big) nodes.push(big);
-  // in the ore cave the small veins and the mushrooms stand apart, from the big vein and from each other
-  const apart = (x: number, y: number) => !cave || nodes.every(n => Math.hypot(x - n.x, y - n.y) > (n.s ? 3 : 2.5) * TILE);
+  // in the ore cave the small veins and the mushrooms stand apart, from the big vein and from each other;
+  // in a fight the mushroom patches keep away from each other, so heroes on different runes each have one in reach
+  const apart = (x: number, y: number, k: NodeKind) =>
+    cave ? nodes.every(n => Math.hypot(x - n.x, y - n.y) > (n.s ? 3 : 2.5) * TILE) : k !== 'herb' || nodes.every(n => n.k !== 'herb' || Math.hypot(x - n.x, y - n.y) > 4 * TILE);
   const ground = floor.reduce((a, b) => a + b, 0) - pits.reduce((a, p) => a + p.cells.length, 0);
-  // a bigger room's second and third crystals come last, and stay out if no fair place is left for them
+  // a bigger party's mushroom patches come after the room's own resources; a bigger room's second and third crystals
+  // come last, and stay out if no fair place is left for them
   const set = NODE_SETS[type] ?? NODE_SETS.fight!, more = set.includes('spk') ? crystals(ground) - 1 : 0;
-  const kinds = [...set, ...Array<NodeKind>(more).fill('spk')];
+  const herbs = cave ? 0 : Math.max(0, sc.herbs - set.filter(k => k === 'herb').length);
+  const kinds = [...set, ...Array<NodeKind>(herbs).fill('herb'), ...Array<NodeKind>(more).fill('spk')];
   for (const [n, k] of kinds.entries()) {
     const open = (x: number, y: number) => !cuts([[Math.floor(x / TILE), Math.floor(y / TILE)]]);
-    const side = (x: number, y: number) => flank(x, y) && apart(x, y) && open(x, y);
-    const extra = n >= set.length;
-    const q = placeCell(1, NODES[k].r, side) ?? placeCell(1, NODES[k].r, (x, y) => apart(x, y) && open(x, y)) ?? placeCell(1, NODES[k].r, (x, y) => mid(x, y) && open(x, y)) ?? placeCell(1, NODES[k].r, open) ?? (extra ? null : placeCell(1, NODES[k].r, any, true));
+    const side = (x: number, y: number) => flank(x, y) && apart(x, y, k) && open(x, y);
+    const extra = n >= set.length + herbs;
+    // a second mushroom patch would rather stand against a wall than next to the first
+    const away = k === 'herb' && !cave && nodes.some(o => o.k === 'herb');
+    const q = placeCell(1, NODES[k].r, side) ?? placeCell(1, NODES[k].r, (x, y) => apart(x, y, k) && open(x, y)) ?? (away ? placeCell(1, NODES[k].r, (x, y) => apart(x, y, k) && open(x, y), true) : null) ?? placeCell(1, NODES[k].r, (x, y) => mid(x, y) && open(x, y)) ?? placeCell(1, NODES[k].r, open) ?? (extra ? null : placeCell(1, NODES[k].r, any, true));
     if (!q) continue;
-    const ch = cave && k === 'ore' ? CAVE.small : sc.ch[k] ?? NODES[k].ch;
+    // the ore cave's veins and mushrooms hold as much for any party
+    const ch = cave ? (k === 'ore' ? CAVE.small : NODES[k].ch) : sc.ch[k] ?? NODES[k].ch;
     nodes.push({ k, ...NODES[k], ch, x: q[0], y: q[1], left: ch, hit: 0 });
     objs.push({ x: q[0], y: q[1], r: NODES[k].r });
     shut.add(hazKey(Math.floor(q[0] / TILE), Math.floor(q[1] / TILE)));

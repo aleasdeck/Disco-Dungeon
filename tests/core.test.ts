@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, isRanged, mobSize } from '../src/data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, isRanged, mobSize } from '../src/data';
 import { FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { CAVE, MOB_CAP, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
@@ -199,8 +199,9 @@ describe('difficulty along a floor', () => {
     for (let seed = 1; seed < 40; seed++) {
       const L = room(FLOORS - 1, LAYERS - 2, seed), area = L.floor.reduce((a, b) => a + b, 0);
       const busy = L.mobs.length + L.blocks.length + L.pits.length + L.haz.size + L.nodes.length;
+      // a vein, the trio's mushroom patches and up to three crystals
       expect(L.nodes.length).toBeGreaterThanOrEqual(3);
-      expect(L.nodes.length).toBeLessThanOrEqual(5);
+      expect(L.nodes.length).toBeLessThanOrEqual(1 + PARTY_SCALE[3].herbs + 3);
       expect(L.decals.length).toBeLessThanOrEqual(6);
       expect(busy / area).toBeLessThan(0.2);
     }
@@ -414,6 +415,24 @@ describe('party size', () => {
       for (const n of L.nodes) expect(n.left).toBe(PARTY_SCALE[1].ch[n.k] ?? n.ch);
     });
     expect(sum(one.map(L => sum(L.nodes.filter(n => n.k === 'ore').map(n => n.left))))).toBeLessThan(sum(three.map(L => sum(L.nodes.filter(n => n.k === 'ore').map(n => n.left)))));
+    // every hero buys their own upgrades, and the blacksmith's gift, the cave and the events pay the same to any party,
+    // so a bigger party's veins hold more than a lone hero's for every hero
+    for (const heroes of [2, 3]) expect(PARTY_SCALE[heroes].ch.ore! / heroes).toBeGreaterThan(PARTY_SCALE[1].ch.ore!);
+  });
+
+  it('gives a bigger party more mushroom patches, apart from each other, and as many heals for every hero', () => {
+    const heals = (heroes: number) => PARTY_SCALE[heroes].herbs * (PARTY_SCALE[heroes].ch.herb ?? NODES.herb.ch);
+    for (const heroes of [1, 2, 3]) {
+      expect(heals(heroes) / heroes).toBe(heals(1));
+      for (const spec of specs) {
+        // the ore cave keeps its two patches for any party (see its own tests)
+        if (spec.type === 'treasure') continue;
+        const herbs = generate({ ...spec, heroes }).nodes.filter(n => n.k === 'herb');
+        expect(herbs).toHaveLength(PARTY_SCALE[heroes].herbs);
+        expect(sum(herbs.map(n => n.left))).toBe(heals(heroes));
+        for (const [k, a] of herbs.entries()) for (const b of herbs.slice(k + 1)) expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(4 * TILE);
+      }
+    }
   });
 
   it('builds each room for the party that enters it, and the summoners raise fewer mobs for a lone hero', () => {
