@@ -3,7 +3,7 @@
 // health with the shield on it, the sparks bar running into the ability button) and one big button for the turn.
 
 import { AB_COST, CRIT, E_MAX, ENEMY_BASE, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, fullHit, isRanged, type MobKind, type StatKey } from './data';
-import { eventArt, sprites, uiArt } from './assets';
+import { envArt, eventArt, sprites, uiArt } from './assets';
 import type { Game, HeroState } from './game';
 import type { Mob } from './room';
 import { BASE_TH, drawHeroFigure, drawMiniature, drawMobFigure } from './draw/figures';
@@ -455,9 +455,10 @@ export class Hud {
     if (h.fire > 0) st.push({ k: 'fire', n: 2, t: 'Горит: в ход врагов потеряет 2' });
     $('fStatus').innerHTML = statusHtml(st);
 
-    // the discs of this turn as a little stack: the ones still in hand in the hero's colour, the thrown ones dark
-    const out = S.phase === 'throw' && g.ended(h) ? h.discs : h.discs - h.hand;
-    $('fDiscs').innerHTML = Array.from({ length: h.discs }, (_, k) => `<i class="${k < h.discs - out ? 'on' : ''}"></i>`).join('');
+    // the discs of this turn as a stack of pucks with the hero's disc on top: the ones still in hand bright, the thrown ones dark
+    const out = S.phase === 'throw' && g.ended(h) ? h.discs : h.discs - h.hand, top = envArt.get('disc_' + h.def.key);
+    $('fDiscs').innerHTML = Array.from({ length: h.discs }, (_, k) => `<i class="${k < out ? '' : 'on'}"></i>`).join('');
+    $('fDiscs').style.setProperty('--disc', top ? `url("${top.src}")` : 'none');
     $('fDiscs').title = `Диски: ${h.hand} из ${h.discs} за ход`;
 
     // health and the shield on top of it: the bar holds both, squeezing when they add up to more than the most health

@@ -57,11 +57,15 @@ def shrink(img):
 
 
 # ---------- health ----------
+# He then had the bar run on to the ability gem: the sketch is drawn HP_LONG times as long at the same height, its middle
+# stretched while both ends keep their slant
+HP_LONG = 1.32
 HP = [(0, 4), (150, 15), (174, 3), (320, 0), (274, 66), (210, 56), (128, 56), (6, 68)]
+HP = [(x if x < 10 else x * HP_LONG if x < 250 else x + 320 * (HP_LONG - 1), y) for x, y in HP]
 HP = [(x, y * 1.25) for x, y in HP]  # drawn a quarter taller than the box it was written in, like on the shape page
-HW, MARGIN = 1024, 32
-scale = (HW - 2 * MARGIN) / 320
-HH = round(85 * scale + 2 * MARGIN)
+MARGIN = 32
+scale = 3  # pixels per unit of the sketch
+HW, HH = round(320 * HP_LONG * scale + 2 * MARGIN), round(85 * scale + 2 * MARGIN)
 hp_px = [((MARGIN + x * scale) * SS, (MARGIN + y * scale) * SS) for x, y in HP]
 
 
@@ -78,16 +82,30 @@ for key, col in [('hp_empty', (46, 36, 28)), ('hp_full', (200, 45, 59)), ('hp_sh
     noise(img, 3, 7).save(OUT + key + '.webp', quality=92)
 red = np.asarray(Image.open(OUT + 'hp_full.webp').convert('RGB')).astype(int)
 xs = np.where(((red[..., 0] > 170) & (red[..., 1] < 90)).any(axis=0))[0]
-print(f'hp {HW}x{HH}: red runs x {xs.min()}..{xs.max() + 1}')
+r0, r1 = xs.min(), xs.max() + 1
+print(f'hp {HW}x{HH}: red runs x {r0}..{r1}')
+print(f'  .hpbar aspect-ratio: {HW} / {HH}; .track inset: 0 {100 * (HW - r1) / HW:.3f}% 0 {100 * r0 / HW:.3f}%;'
+      f' fill background: calc(-{100 * r0 / (r1 - r0):.3f}cqw - var(--x, 0) * 1cqw) 0 / {100 * HW / (r1 - r0):.2f}cqw 100cqh')
 
 # ---------- sparks ----------
 # the crystal is 230 x 30: T and B its top and bottom edges, L its broken left end, the point on the right;
 # a crack point is (x, t), t being the share of the way from the top edge down to the bottom one
-T = [(0, 4), (120, 2), (196, 4), (230, 16)]
-B = [(0, 27), (110, 30), (200, 28), (230, 16)]
+# it runs on to the gem with the health bar: the body (left of x 196) is drawn SPK_LONG times as long, the point keeps its size,
+# and the cracks keep their zigzag where the body stretches them to
+SPK_LONG = 1.39
+END = 196 * SPK_LONG + 34  # where the point is
+
+
+def sx(x):
+    return x * SPK_LONG if x <= 196 else 196 * SPK_LONG + x - 196
+
+
+T = [(sx(x), y) for x, y in [(0, 4), (120, 2), (196, 4), (230, 16)]]
+B = [(sx(x), y) for x, y in [(0, 27), (110, 30), (200, 28), (230, 16)]]
 L = [(0, 4), (4, 11), (0, 18), (4, 23), (0, 27)]
-R = [(230, 16)]
+R = [(END, 16)]
 CRACKS = [[(76, 0), (70, 0.45), (80, 0.7), (74, 1)], [(150, 0), (158, 0.35), (148, 0.6), (155, 1)]]
+CRACKS = [[(x - cr[0][0] + sx(cr[0][0]), t) for x, t in cr] for cr in CRACKS]
 SC, SM = 3.2, 14  # pixels per unit and the margin round each shard
 
 
@@ -113,12 +131,12 @@ for k in range(3):
     pieces.append([a[0]] + tops + b + bots + a[::-1][:-1])
 
 # the facets of the whole crystal: the ridge a bit above the middle, the point's facets past the bend at x ~ 198
-ridge = [(x, edge_y(T, x) + 0.5 * (edge_y(B, x) - edge_y(T, x))) for x in range(0, 231, 2)]
-upper = [(-5, -5), (235, -5)] + ridge[::-1]
-point_line = [(196, 4), (199, 16), (200, 28)]
-upper_point = [(196, -5), (235, -5), (230, 16), (199, 16)]
-lower_point = [(199, 16), (230, 16), (235, 35), (200, 35)]
-shine = [(6, 6), (188, 5.8), (185, 7.4), (8, 7.8)]
+ridge = [(x / 2, edge_y(T, x / 2) + 0.5 * (edge_y(B, x / 2) - edge_y(T, x / 2))) for x in range(0, round(2 * END) + 1, 4)]
+upper = [(-5, -5), (END + 5, -5)] + ridge[::-1]
+point_line = [(sx(196), 4), (sx(199), 16), (sx(200), 28)]
+upper_point = [(sx(196), -5), (END + 5, -5), (END, 16), (sx(199), 16)]
+lower_point = [(sx(199), 16), (END, 16), (END + 5, 35), (sx(200), 35)]
+shine = [(6, 6), (sx(188), 5.8), (sx(185), 7.4), (8, 7.8)]
 COLS = {
     'on': dict(base=(112, 50, 118), up=(166, 89, 184), up_pt=(196, 128, 214), lo_pt=(92, 40, 98), shine=(214, 170, 232)),
     'off': dict(base=(52, 46, 66), up=(71, 62, 88), up_pt=(88, 79, 107), lo_pt=(44, 39, 56), shine=(98, 90, 118)),
@@ -146,3 +164,6 @@ for k, p in enumerate(pieces):
         img = shrink(sticker((w * SS, h * SS), [px(q) for q in p], round(1.0 * SC * SS), round(2.4 * SC * SS), paint))
         noise(img, 3, 11 + k).save(f'{OUT}spk_{k + 1}_{state}.webp', quality=92)
 print(f'sparks: height {h}, widths {widths}')
+# in the bar the pieces overlap by their margins, so the row is the widths less two margins
+row = sum(widths) - 2 * SM
+print('  .spk i: ' + '; '.join(f'width {100 * w / row:.2f}%, aspect-ratio {w} / {h}' for w in widths) + f'; margin-left -{100 * SM / row:.2f}%')

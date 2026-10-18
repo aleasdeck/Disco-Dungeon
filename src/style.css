@@ -244,7 +244,7 @@ i.ico { display: inline-block; font-style: normal; }
 /* ---------- my hero's corner: portrait, discs, health with the shield, sparks running into the ability */
 .corner {
   position: fixed; left: 16px; bottom: calc(16px + var(--safe-b)); z-index: 5;
-  width: 560px; height: 196px; pointer-events: none;
+  width: 600px; height: 196px; pointer-events: none;
   --pf-w: 156px; --pf-h: 184px;
   transition: filter 0.35s;
 }
@@ -265,15 +265,25 @@ i.ico { display: inline-block; font-style: normal; }
 .statuses .st b { font-size: 12px; right: 1px; bottom: 0; }
 .corner.dead .portrait { filter: var(--outline) grayscale(1) brightness(0.6); }
 
-/* the discs of this turn as a stack: in hand in the hero's colour, thrown ones dark */
-.discs { left: calc(var(--pf-w) + 14px); bottom: 70px; display: flex; flex-direction: column-reverse; }
-.discs i {
-  display: block; width: 44px; height: 15px; margin-top: -4px; border-radius: 50%;
-  background: linear-gradient(#3a2f28, #241c17); border: 2px solid #120c09; box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.35);
+/* the discs of this turn as a stack of pucks standing on the health bar's tall left end, each like the one in the room: a
+   rim in the hero's colour and the hero's disc on top (--disc, the room's picture; the hero's colour without it). The
+   ones still in hand are bright and on top, the thrown ones dark under them; --dw is a puck's width */
+.discs {
+  position: relative; z-index: 1; align-self: flex-start; display: flex; flex-direction: column-reverse;
+  --dw: 50px; margin: 0 0 calc(var(--dw) * -0.32) 8px; pointer-events: auto; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5));
 }
-.discs i.on { background: linear-gradient(color-mix(in srgb, var(--c) 70%, #fff), var(--c) 60%, var(--dk)); }
+.discs i { position: relative; display: block; width: var(--dw); height: calc(var(--dw) * 0.56); margin-top: calc(var(--dw) * -0.4); }
+.discs i:last-child { margin-top: 0; }
+.discs i::before, .discs i::after { content: ''; position: absolute; left: 0; right: 0; border: 2px solid #120c09; }
+.discs i::before {
+  top: calc(var(--dw) * 0.2); bottom: 0; border-top: 0; border-radius: 0 0 50% 50% / 0 0 calc(var(--dw) * 0.2) calc(var(--dw) * 0.2);
+  --rim: color-mix(in srgb, var(--c) 55%, var(--dk));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--rim) 55%, #000), var(--rim) 28%, color-mix(in srgb, var(--rim) 65%, #fff) 44%, var(--rim) 60%, color-mix(in srgb, var(--rim) 50%, #000));
+}
+.discs i::after { top: 0; height: calc(var(--dw) * 0.4); box-sizing: border-box; border-radius: 50%; background: var(--disc, none) center / 106% 106% no-repeat, var(--c); }
+.discs i:not(.on) { filter: grayscale(0.9) brightness(0.4); }
 
-.bars { left: calc(var(--pf-w) + 10px); bottom: 10px; width: 300px; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+.bars { left: calc(var(--pf-w) + 10px); bottom: 10px; width: 385px; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
 .hpbar { position: relative; height: 28px; margin-right: 18px; pointer-events: auto; }
 .track { position: absolute; inset: 0; background: #241a14; clip-path: var(--cut-bar); }
 .corner .hpbar { filter: var(--outline); }
@@ -296,7 +306,7 @@ i.ico { display: inline-block; font-style: normal; }
 @keyframes shine { 50% { filter: brightness(1.25); } }
 
 .ability {
-  left: calc(var(--pf-w) + 300px); bottom: 0; width: 104px; height: 112px; padding: 10px 6px 0;
+  left: calc(var(--pf-w) + 348px); bottom: 0; width: 104px; height: 112px; padding: 10px 6px 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
   border: 0; cursor: pointer; background: none; filter: var(--outline);
 }
@@ -375,16 +385,16 @@ i.ico { display: inline-block; font-style: normal; }
   .boss-bar { padding: 4px 10px 4px 6px; }
   .boss-bar canvas { width: 30px; height: 30px; }
   .log-panel { top: 50px; }
-  .corner { left: max(8px, env(safe-area-inset-left)); bottom: calc(8px + var(--safe-b)); width: 330px; height: 118px; --pf-w: 84px; --pf-h: 104px; }
+  .corner { left: max(8px, env(safe-area-inset-left)); bottom: calc(8px + var(--safe-b)); width: 360px; height: 118px; --pf-w: 84px; --pf-h: 104px; }
   .pname { --pn: 14px; left: 5px; right: 5px; bottom: 5px; }
   .statuses .st { width: 22px; height: 22px; padding: 2px; }
-  .discs { bottom: 44px; left: calc(var(--pf-w) + 10px); }
-  .discs i { width: 30px; height: 11px; margin-top: -3px; border-width: 1.5px; }
-  .bars { left: calc(var(--pf-w) + 8px); bottom: 6px; width: 176px; gap: 4px; }
+  .discs { --dw: 30px; margin-left: 6px; }
+  .discs i::before, .discs i::after { border-width: 1.5px; }
+  .bars { left: calc(var(--pf-w) + 8px); bottom: 6px; width: 225px; gap: 4px; }
   .hpbar { height: 19px; margin-right: 12px; }
   .hp-num { font-size: 11px; }
   .spk { height: 9px; margin-right: 12px; }
-  .ability { left: calc(var(--pf-w) + 176px); width: 68px; height: 74px; padding-top: 6px; gap: 3px; }
+  .ability { left: calc(var(--pf-w) + 212px); width: 68px; height: 74px; padding-top: 6px; gap: 3px; }
   .ability b { font-size: 10px; }
   .turn-btn { right: max(10px, env(safe-area-inset-right)); bottom: calc(8px + var(--safe-b)); width: 210px; height: 58px; }
   .turn-btn b { font-size: 22px; }
@@ -439,17 +449,17 @@ i.ico { display: inline-block; font-style: normal; }
   }
   .pname { --pn: 16px; left: 6px; right: 6px; bottom: 6px; }
   .statuses .st { width: 24px; height: 24px; padding: 2px; }
-  .discs { left: calc(var(--pf-w) + 8px); top: 22px; bottom: auto; }
-  .discs i { width: 32px; height: 12px; margin-top: -3px; border-width: 1.5px; }
-  .bars { left: calc(var(--pf-w) + 10px); right: 92px; bottom: 6px; width: auto; gap: 5px; }
+  .discs { --dw: 36px; margin-left: 4px; }
+  .discs i::before, .discs i::after { border-width: 1.5px; }
+  .bars { left: calc(var(--pf-w) + 10px); right: 40px; bottom: 6px; width: auto; gap: 5px; }
   .hpbar { height: 22px; margin-right: 6px; }
   .hp-num { font-size: 13px; }
   .spk { height: 10px; margin-right: 6px; }
-  .ability { left: auto; right: 0; bottom: 0; width: 90px; height: 96px; padding-top: 8px; gap: 4px; }
+  .ability { left: auto; right: 0; bottom: 0; width: 68px; height: 96px; padding-top: 8px; gap: 4px; }
   .ability b { font-size: 12px; }
   .hero-card { bottom: calc(100% + 8px); }
   .turn-btn {
-    left: 146px; right: 10px; bottom: calc(6px + var(--safe-b) + 68px); width: auto; height: 58px; padding: 0 86px 14px 6px;
+    left: 154px; right: 10px; bottom: calc(6px + var(--safe-b) + 68px); width: auto; height: 58px; padding: 0 86px 14px 6px;
     --plate: polygon(0 10px, 40% 0, calc(100% - 6px) 3px, 100% 16px, 100% calc(100% - 36px), calc(100% - 9px) calc(100% - 33px),
       calc(100% - 90px) calc(100% - 29px), calc(100% - 104px) 100%, 7px calc(100% - 3px), 0 62%);
   }
@@ -739,14 +749,14 @@ i.ico { display: inline-block; font-style: normal; }
 }
 
 /* ---------- painted cardboard plates and icons (public/assets/ui): each takes over from the drawn one once its picture loads */
-/* the turn button is a mustard blade (btn_turn): low on the left, its top edge rising to a sharp corner on the right; the box is
-   taller and the words sit low and left, in the blade's body, tilted along the rising edge */
-.art-btn_turn .turn-btn { height: 115px; width: 360px; padding: 34px 70px 6px 26px; filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)); }
-.art-btn_turn .tb-plate { clip-path: none; background: var(--ui-btn_turn) center / 100% 100% no-repeat; transition: filter 0.2s; }
+/* the turn button is a mustard blade (btn_turn) turned upside down, as Vladislav asked: a flat top, the tape on the right, its
+   bottom edge rising from a sharp corner low on the left; the words stay upright and sit in the blade's body, tilted along
+   that rising edge */
+.art-btn_turn .turn-btn { height: 115px; width: 360px; padding: 8px 34px 30px 62px; filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)); }
+.art-btn_turn .tb-plate { clip-path: none; background: var(--ui-btn_turn) center / 100% 100% no-repeat; transform: rotate(180deg); transition: filter 0.2s; }
 .art-btn_turn .tb-plate::before, .art-btn_turn .tb-plate::after { display: none; }
-/* the words climb with the blade's top edge, lifted a little off its bottom */
-.art-btn_turn .turn-btn { --lift: -9px; }
-.art-btn_turn .turn-btn b, .art-btn_turn .turn-btn small { transform: translateY(var(--lift)) rotate(-7deg); }
+/* the words climb with the blade's bottom edge */
+.art-btn_turn .turn-btn b, .art-btn_turn .turn-btn small { transform: rotate(-7deg); }
 .art-btn_turn .turn-btn.idle .tb-plate { filter: saturate(0.45) brightness(0.7); }
 .art-btn_turn .turn-btn.idle b { color: #1c120a; }
 .art-btn_turn .turn-btn.lit { filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 16px rgba(255, 200, 80, 0.8)); animation: lit-art 1.6s ease-in-out infinite; }
@@ -757,19 +767,15 @@ i.ico { display: inline-block; font-style: normal; }
 @keyframes lit-art { 50% { filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 28px rgba(255, 210, 90, 1)); } }
 @media (prefers-reduced-motion: reduce) { .art-btn_turn .turn-btn.lit { animation: none; } }
 @media (max-height: 520px) and (orientation: landscape) {
-  .art-btn_turn .turn-btn { width: 220px; height: 70px; padding: 20px 42px 2px 14px; --lift: -5px; }
+  .art-btn_turn .turn-btn { width: 220px; height: 70px; padding: 4px 20px 18px 38px; }
   .art-btn_turn .tb-who { top: -8px; right: 14%; }
 }
-/* the upright phone: the blade runs above the health and is cut round the ability gem; the ink edge follows the cut */
+/* the upright phone: the blade runs above the health, and its bottom edge rises clear of the ability gem */
 @media (orientation: portrait) and (max-width: 700px) {
-  .art-btn_turn .turn-btn {
-    width: auto; height: 76px; padding: 24px 86px 6px 22px; filter: var(--outline) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); --lift: -5px;
-    --plate: polygon(0 0, 100% 0, 100% calc(100% - 40px), calc(100% - 9px) calc(100% - 37px), calc(100% - 90px) calc(100% - 31px), calc(100% - 104px) 100%, 0 100%);
-  }
-  .art-btn_turn .tb-plate { clip-path: var(--plate); }
+  .art-btn_turn .turn-btn { width: auto; height: 76px; padding: 4px 30px 20px 40px; filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); }
   .art-btn_turn .turn-btn b { font-size: 20px; }
   .art-btn_turn .turn-btn.long b { font-size: 15px; }
-  .art-btn_turn .turn-btn.lit { filter: var(--outline) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px rgba(255, 200, 80, 0.8)); animation: none; }
+  .art-btn_turn .turn-btn.lit { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px rgba(255, 200, 80, 0.8)); animation: none; }
   .art-btn_turn .tb-who { top: -8px; right: 12px; }
 }
 
@@ -840,24 +846,24 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 
 /* the HP bar and the sparks as die-cut cardboard (art/ui/draw_hp_spk.py draws both from the shapes Vladislav picked) */
 /* health «Мягкий перехват», after his sketch: a tall left end, a dip with a step on top, a pinched waist and a slanted right
-   end, with no plate under it (hp_empty, hp_full, hp_shield: one shape, stretched whole). The red runs from x 42 to 975 of
-   1024, so .track is that span and the fills stay plain percentages of it; each fill shows the same picture at the bar's
+   end, drawn long enough to run on to the ability gem, with no plate under it (hp_empty, hp_full, hp_shield: one shape,
+   stretched whole). The red runs from x 42 to 1282 of 1331, so .track is that span and the fills stay plain percentages of it; each fill shows the same picture at the bar's
    full size (cqw/cqh of the track), shifted by where the fill starts (--x, set with it) */
-.art-hp_empty.art-hp_full .corner .hpbar { height: auto; aspect-ratio: 1024 / 319; background: var(--ui-hp_empty) center / 100% 100% no-repeat; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
-.art-hp_empty.art-hp_full .corner .hpbar .track { inset: 0 4.785% 0 4.102%; clip-path: none; background: none; container-type: size; }
+.art-hp_empty.art-hp_full .corner .hpbar { height: auto; aspect-ratio: 1331 / 319; background: var(--ui-hp_empty) center / 100% 100% no-repeat; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
+.art-hp_empty.art-hp_full .corner .hpbar .track { inset: 0 3.681% 0 3.156%; clip-path: none; background: none; container-type: size; }
 .art-hp_empty.art-hp_full .corner .hpbar.shielded .track { box-shadow: none; }
-.art-hp_empty.art-hp_full .corner .track > * { background: var(--ui-hp_full) calc(-4.502cqw - var(--x, 0) * 1cqw) 0 / 109.75cqw 100cqh no-repeat; }
+.art-hp_empty.art-hp_full .corner .track > * { background: var(--ui-hp_full) calc(-3.387cqw - var(--x, 0) * 1cqw) 0 / 107.34cqw 100cqh no-repeat; }
 .art-hp_empty.art-hp_full .corner .track s { background-image: var(--ui-hp_shield); }
 .art-hp_empty.art-hp_full .corner .track s.risk, .art-hp_empty.art-hp_full .corner .track em { filter: brightness(1.7) saturate(0.5); }
 /* the number sits in the bar's wide right part, past the waist */
-.art-hp_empty.art-hp_full .corner .hp-num { inset: 20% 12% 30% 44%; font-size: 20px; }
+.art-hp_empty.art-hp_full .corner .hp-num { inset: 20% 10% 30% 50%; font-size: 20px; }
 /* the sparks are one long crystal (its point at the ability gem) split in three: each piece keeps its own width and the
-   pieces overlap by their margins (14 of 856 px), so the cracks line up with a hair of a gap */
+   pieces overlap by their margins (14 of 1101 px), so the cracks line up with a hair of a gap */
 .art-spk_1_on .spk { background: none; clip-path: none; box-shadow: none; padding: 0; gap: 0; height: auto; align-items: flex-start; margin: -2px 18px 0 4px; }
 .art-spk_1_on .spk i { flex: none; background: center / 100% 100% no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
-.art-spk_1_on .spk i:nth-child(1) { width: 33.18%; aspect-ratio: 284 / 124; }
-.art-spk_1_on .spk i:nth-child(2) { width: 36.21%; aspect-ratio: 310 / 124; margin-left: -1.64%; }
-.art-spk_1_on .spk i:nth-child(3) { width: 33.88%; aspect-ratio: 290 / 124; margin-left: -1.64%; }
+.art-spk_1_on .spk i:nth-child(1) { width: 34.42%; aspect-ratio: 379 / 124; }
+.art-spk_1_on .spk i:nth-child(2) { width: 36.51%; aspect-ratio: 402 / 124; margin-left: -1.27%; }
+.art-spk_1_on .spk i:nth-child(3) { width: 31.61%; aspect-ratio: 348 / 124; margin-left: -1.27%; }
 .art-spk_1_off .spk i:nth-child(1) { background-image: var(--ui-spk_1_off); }
 .art-spk_2_off .spk i:nth-child(2) { background-image: var(--ui-spk_2_off); }
 .art-spk_3_off .spk i:nth-child(3) { background-image: var(--ui-spk_3_off); }
@@ -872,9 +878,9 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 @media (orientation: portrait) and (max-width: 700px) {
   .art-spk_1_on .spk { margin-right: 6px; }
   .art-hp_empty.art-hp_full .corner .hp-num { font-size: 17px; }
-  /* the painted bar and crystal are taller than the drawn ones and grow with the screen (the bars are 100vw - 208px wide,
-     about 0.43 of that tall without the bar's transparent top), so the blade above them rises with them */
-  .art-hp_empty.art-hp_full .turn-btn { bottom: calc(26px + var(--safe-b) + (100vw - 208px) * 0.425); }
+  /* the painted bar and crystal are taller than the drawn ones and grow with the screen (the bars are 100vw - 156px wide,
+     about 0.33 of that tall without the bar's transparent top), so the blade above them rises with them */
+  .art-hp_empty.art-hp_full .turn-btn { bottom: calc(26.6px + var(--safe-b) + (100vw - 156px) * 0.3283); }
 }
 
 /* the menus stand on a painted disco dungeon instead of the dimmed room */
