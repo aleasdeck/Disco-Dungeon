@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_HEAR, PETARD_LURE, PETARD_MAX, PETARD_TURNS, KINDS, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_MAX, PETARD_TURNS, KINDS, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
 import { ART, FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { CAVE, MOB_CAP, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
@@ -2428,8 +2428,8 @@ describe('the heroes past the first three', () => {
     expect(skel.hp).toBe(99 - 2 * PETARD_DMG);
   });
 
-  it('the kid: an enemy coming up to a firecracker or walking past it sets it off, and one it fells stops where it fell', () => {
-    // four cells off the rat hears it and runs to it, six cells off it runs past it at the hero
+  it('the kid: an enemy hears a firecracker from anywhere in the room, runs up and sets it off, and one it fells stops where it fell', () => {
+    // two cells off it or four, the rat hears it and runs to it, and across the room as well (below)
     for (const [far, hp] of [[4, 99], [4, PETARD_DMG], [6, 99]]) {
       const g = arena([at('kid')], [['rat', 1, 1]]), kid = g.party[0], [rat] = g.S.mobs;
       kid.hp = kid.max = 99;
@@ -2439,7 +2439,7 @@ describe('the heroes past the first three', () => {
       g.pickIntents();
       g.S.bombs = [{ ...cellCentre(i + 2 * dx, j), fx: 0, fy: 0, h: kid.i, t: FOOD_FLY - 1e-6, left: PETARD_TURNS }];
       g.step(1 / 120);
-      expect(!!rat.intent!.bang).toBe(far - 2 <= PETARD_HEAR);
+      expect(!!rat.intent!.bang).toBe(true);
       turn(g);
       expect(g.S.bombs).toEqual([]);
       if (hp > PETARD_DMG) {
@@ -2455,7 +2455,26 @@ describe('the heroes past the first three', () => {
     }
   });
 
-  it('the kid: a firecracker draws the two enemies nearest it within three cells, and they strike nobody that turn', () => {
+  it('the kid: a skeleton across the room hears the firecracker too, and walks to it turn by turn', () => {
+    const g = arena([at('kid')], [['skel', 1, 1]]), kid = g.party[0], [skel] = g.S.mobs;
+    kid.hp = kid.max = 99;
+    // six cells off along the top: two cells a turn, it gets there on the last turn the firecracker lasts
+    const b = cellCentre(7, 2);
+    g.pickIntents();
+    g.S.bombs = [{ ...b, fx: 0, fy: 0, h: kid.i, t: FOOD_FLY - 1e-6, left: PETARD_TURNS }];
+    g.step(1 / 120);
+    expect(skel.intent!.bang).toEqual(b);
+    turn(g);
+    // still on its way the next turn, and still drawn
+    expect(g.S.bombs).toHaveLength(1);
+    expect(skel.intent!.bang).toEqual(b);
+    for (let k = 0; k < 3 && g.S.bombs.length; k++) turn(g);
+    expect(g.S.bombs).toEqual([]);
+    expect(skel.hp).toBe(99 - PETARD_DMG);
+    expect(kid.hp).toBe(99);
+  });
+
+  it('the kid: a firecracker draws the two enemies nearest it, and they strike nobody that turn', () => {
     const g = arena([at('kid')], [['skel', 9, 7], ['skel', 6, 6], ['skel', 8, 3], ['skel', 2, 2]]), kid = g.party[0];
     const [close, near, third, far] = g.S.mobs;
     kid.hp = kid.max = 99;
