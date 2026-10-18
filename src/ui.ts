@@ -130,8 +130,9 @@ type TurnAct = 'fight' | 'end' | 'cancel' | 'none';
 
 export class Hud {
   private lastPortrait = '';
-  /** Whose turn the HUD showed last, so a change of turn gets its banner. */
+  /** Whose turn the HUD showed last, so a change of turn gets its banner; in the ore cave every new turn gets one. */
   private side: Side | null = null;
+  private bannerTurn = 0;
   /** Whose cards the blacksmith's screen holds now; the cards are built once per visit, then only their rows change. */
   private forgeCards = '';
   /** The blacksmith's (by depth) this player is done at and left for the map, while the others may still be buying. */
@@ -232,10 +233,12 @@ export class Hud {
     fillIcons();
     // the floor is laid out after the room's name (style.css): where the strip is narrow the floor gives way, never the room
     $('locName').innerHTML = `<span class="fl">Этаж ${S.spec.floor + 1} · </span><span>${ROOM_TYPES[S.spec.type].name}</span>`;
-    $('hTurn').textContent = S.phase === 'place' ? 'Расстановка' : `Ход ${S.turn}`;
+    // the ore cave counts its turns down: «Ход 2 из 3»
+    const max = g.turnsMax(), last = max > 0 && S.turn >= max;
+    $('hTurn').textContent = S.phase === 'place' ? 'Расстановка' : max ? `Ход ${S.turn} из ${max}` : `Ход ${S.turn}`;
     $('hOre').textContent = String(g.bank.ore);
     // enemies grow angrier every turn once a fight drags on; warn a turn ahead
-    const rage = $('hRage'), fighting = S.phase !== 'place' && S.phase !== 'over', soon = g.rageFrom() - S.turn;
+    const rage = $('hRage'), fighting = S.phase !== 'place' && S.phase !== 'over' && !g.cave(), soon = g.rageFrom() - S.turn;
     rage.hidden = !fighting || (g.rage() === 0 && soon > 1);
     rage.classList.toggle('soon', g.rage() === 0);
     rage.textContent = g.rage() ? `ярость +${g.rage()}` : 'ярость со след. хода';
@@ -246,15 +249,20 @@ export class Hud {
     curse.textContent = cs.join(' · ');
     curse.title = [S.spec.smoke && 'Дым-машина: видно только вокруг героев.', S.spec.strobe && 'Стробоскоп: нет линии прицела.'].filter(Boolean).join(' ');
 
-    const side: Side = S.phase === 'place' || S.phase === 'over' ? S.phase : S.phase === 'enemy' || S.phase === 'resolve' ? 'enemies' : 'heroes';
+    // in the ore cave nobody moves against the party: the heroes hop to their discs and throw again
+    const side: Side = S.phase === 'place' || S.phase === 'over' ? S.phase : S.phase === 'enemy' || (S.phase === 'resolve' && !g.cave()) ? 'enemies' : 'heroes';
     const sd = $('hSide');
     sd.className = 'side ' + side;
-    sd.textContent = { place: '', heroes: 'ваш ход', enemies: 'ход врагов', over: g.alive().length ? 'победа' : g.party.length > 1 ? 'отряд пал' : 'герой пал' }[side];
+    sd.textContent = { place: max ? `${max} ${max === 1 ? 'ход' : 'хода'}` : '', heroes: last ? 'последний ход' : 'ваш ход', enemies: 'ход врагов', over: !g.alive().length ? (g.party.length > 1 ? 'отряд пал' : 'герой пал') : g.cave() ? 'пещера пройдена' : 'победа' }[side];
     document.body.dataset.turn = side;
-    if (this.side !== side) {
+    if (this.side !== side || (g.cave() && side === 'heroes' && this.bannerTurn !== S.turn)) {
       // the fight starts or the turn passes to the other side: a banner across the room says so
-      if (this.side && (side === 'heroes' || side === 'enemies')) this.banner(side === 'heroes' ? 'Ваш ход' : 'Ход врагов', side === 'heroes' ? `Ход ${S.turn} · бросайте диски` : 'враги ходят по очереди', side);
+      if (this.side && (side === 'heroes' || side === 'enemies')) {
+        const sub = max ? `${last ? 'Последний ход' : `Ход ${S.turn} из ${max}`} · бросайте диски` : `Ход ${S.turn} · бросайте диски`;
+        this.banner(side === 'heroes' ? 'Ваш ход' : 'Ход врагов', side === 'heroes' ? sub : 'враги ходят по очереди', side);
+      }
       this.side = side;
+      this.bannerTurn = S.turn;
     }
 
     this.heads();
@@ -499,6 +507,10 @@ export class Hud {
       if (g.ended(h)) { txt = 'Ждём…'; sub = alive > 1 ? `готовы ${done} из ${alive}` : ''; cls = 'wait'; act = 'cancel'; }
       else if (h.hand > 0 && performance.now() < this.confirmUntil) { txt = 'Точно?'; sub = `не брошено: ${h.hand}`; cls = 'confirm'; act = 'end'; }
       else { txt = 'Конец хода'; cls = h.hand > 0 ? 'idle' : 'lit'; act = g.canEndTurn(h) ? 'end' : 'none'; sub = alive > 1 && done ? `готовы ${done} из ${alive}` : ''; }
+    } else if (g.cave()) {
+      // the ore cave: the heroes hop over to their discs, then the next turn comes
+      txt = 'Ждём…';
+      cls = 'wait';
     } else {
       txt = 'Ход врагов';
       cls = 'enemy';
@@ -542,6 +554,8 @@ export class Hud {
   /** The enemy turn's journal under the scroll button: this turn's lines and the last one's, newest on top. */
   private log() {
     const S = this.g.S, list = S.log, btn = $('btnLog');
+    // nothing to read in the ore cave: no enemies there
+    if (this.g.cave()) { btn.hidden = true; $('logPanel').hidden = true; return; }
     btn.hidden = S.phase === 'place' && !list.length;
     btn.classList.toggle('new', list.length > this.logSeen && $('logPanel').hidden);
     if ($('logPanel').hidden) return;

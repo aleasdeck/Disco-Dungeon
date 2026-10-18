@@ -456,8 +456,10 @@ game.onRoomEnd = win => {
     if (boss) run.floor++;
     choosing = true;
     votes = {};
-    showEnd({ title: boss ? `Этаж ${run.floor} пройден` : 'Комната зачищена',
-      text: `Ходов: ${S.turn}. Пройдено комнат: ${run.path.reduce((a, p) => a + p.length, 0)} из ${FLOORS * LAYERS}.`, kind: 'map' });
+    // the ore cave ends when its turns are up or its veins are spent: it tells how much ore it gave
+    const cave = game.cave(), rooms = `Пройдено комнат: ${run.path.reduce((a, p) => a + p.length, 0)} из ${FLOORS * LAYERS}.`;
+    showEnd({ title: boss ? `Этаж ${run.floor} пройден` : cave ? (game.cleared() ? 'Жилы выбиты' : 'Ходы кончились') : 'Комната зачищена',
+      text: cave ? `Добыто руды: ${game.mined}. ${rooms}` : `Ходов: ${S.turn}. ${rooms}`, kind: 'map' });
     shareMap();
   }, 900);
 };
@@ -854,7 +856,7 @@ async function reopen(code: string) {
   else if (camp) showCamp();
   else if (choosing) showMap(true);
   else if (ev) showEvent();
-  else if (!game.liveMobs().length || !game.alive().length) game.onRoomEnd(game.alive().length > 0);
+  else if (game.cleared() || game.S.phase === 'over' || !game.alive().length) game.onRoomEnd(game.alive().length > 0);
 }
 
 /** The main menu and its screens; the settings count among them when opened from the main menu, not from a game. */

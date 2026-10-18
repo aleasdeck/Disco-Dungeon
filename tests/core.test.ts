@@ -3,7 +3,7 @@ import { Camera, FIT, KEEP, type Vec } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, mobSize } from '../src/data';
 import { Game, newBank, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { MOB_CAP, PARTY_SCALE, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
+import { CAVE, MOB_CAP, PARTY_SCALE, caveTurns, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
 import { FLOORS, FORGE_ROWS, LAYERS, agreed, genFloor, newRun } from '../src/run';
 import { makeRng } from '../src/rng';
 import { EVENTS, applyFx, canPick, eventDef, eventOf, fxParts, rolled } from '../src/events';
@@ -68,6 +68,71 @@ describe('resources', () => {
       expect(veins('boss', seed)).toBe(1);
       expect(veins('treasure', seed)).toBe(3);
     }
+  });
+});
+
+describe('ore cave', () => {
+  const cave = (seed: number, heroes: number) => generate({ seed, depth: LAYERS + 2, floor: 1, type: 'treasure', heroes });
+  const sum = (n: number[]) => n.reduce((a, b) => a + b, 0);
+
+  it('holds no enemies, one big vein on 2 × 2 cells and two small ones, the same for any party', () => {
+    for (let seed = 1; seed < 40; seed++) for (const heroes of [1, 2, 3]) {
+      const L = cave(seed, heroes), [big, ...small] = L.nodes;
+      expect(L.mobs).toHaveLength(0);
+      expect(L.nodes.every(n => n.k === 'ore')).toBe(true);
+      expect(big).toMatchObject({ s: 2, r: CAVE.big.r, ch: CAVE.big.ch, left: CAVE.big.ch });
+      expect(small).toHaveLength(2);
+      for (const n of small) { expect(n).toMatchObject({ ch: CAVE.small, left: CAVE.small }); expect(n.s).toBeUndefined(); }
+    }
+    expect(sum(cave(7, 1).nodes.map(n => n.ch))).toBe(sum(cave(7, 3).nodes.map(n => n.ch)));
+  });
+
+  it('gives 4 minus the heroes turns: three alone, one for three heroes', () => {
+    expect([1, 2, 3].map(heroes => caveTurns({ heroes }))).toEqual([3, 2, 1]);
+  });
+
+  const enter = (picks: number[], seed = 11) => {
+    const g = new Game();
+    g.party = newParty(picks);
+    g.loadRoom({ seed, depth: LAYERS + 2, floor: 1, type: 'treasure' });
+    placeAll(g); g.startFight();
+    let won: boolean | null = null;
+    g.onRoomEnd = w => { won = w; };
+    return { g, won: () => won };
+  };
+  const play = (g: Game, until: () => boolean) => { for (let k = 0; k < 20000 && !until(); k++) g.update(1 / 60); };
+
+  it('ends once the turns are up, with no enemy turn in between', () => {
+    for (const picks of [[0], [0, 1], [0, 1, 2]]) {
+      const { g, won } = enter(picks), seen = new Set<string>();
+      expect(g.turnsMax()).toBe(4 - picks.length);
+      for (let t = 1; t <= g.turnsMax(); t++) {
+        expect(g.S.turn).toBe(t);
+        expect(g.S.phase).toBe('throw');
+        endAll(g);
+        play(g, () => { seen.add(g.S.phase); return g.S.phase === 'throw' && g.S.turn > t || g.S.phase === 'over'; });
+      }
+      expect(g.S.phase).toBe('over');
+      expect(won()).toBe(true);
+      expect(seen.has('enemy')).toBe(false);
+      expect(g.S.turn).toBe(4 - picks.length);
+    }
+  });
+
+  it('ends at once when every vein is spent, and counts the ore mined', () => {
+    const { g, won } = enter([0]);
+    const [big] = g.S.nodes;
+    // the last charges: one vein a hit away, the rest spent
+    for (const n of g.S.nodes) n.left = n === big ? 1 : 0;
+    const h = g.hero, p = g.spot(h)!;
+    g.throwDisc(h, big.x - p.x, big.y - p.y);
+    play(g, () => g.S.phase === 'over');
+    expect(big.left).toBe(0);
+    expect(g.cleared()).toBe(true);
+    expect(g.S.turn).toBe(1);
+    expect(won()).toBe(true);
+    expect(g.mined).toBeGreaterThan(0);
+    expect(g.bank.ore).toBe(g.mined);
   });
 });
 
@@ -264,6 +329,8 @@ describe('party size', () => {
     expect(hp(one)).toBeLessThan(hp(two));
     expect(dmg(one)).toBeLessThan(dmg(two));
     one.forEach((L, k) => {
+      // the ore cave has no enemies and the same veins for any party (see its own tests)
+      if (specs[k].type === 'treasure') return;
       expect(L.mobs.length).toBeGreaterThan(0);
       expect(L.mobs.length).toBeLessThanOrEqual(three[k].mobs.length);
       // the boss and the elite stay whatever the party
@@ -1752,7 +1819,7 @@ describe('enemy walking', () => {
       };
       for (const b of L.blocks) claim(b.x0 + 8, b.y0 + 8, 1);
       for (const m of L.mobs) claim(m.x, m.y, mobSize(m.k));
-      for (const n of L.nodes) claim(n.x, n.y, 1);
+      for (const n of L.nodes) claim(n.x, n.y, n.s ?? 1);
       if (type === 'boss') expect(mobSize(L.mobs[0].k)).toBe(2);
     }
   });
