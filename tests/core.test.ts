@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, FROST_STEPS, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_PER_DISC, RAGE_FROM, ROLES, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroesByRole, isRanged, mobSize } from '../src/data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_HEAR, PETARD_LURE, PETARD_PER_DISC, RAGE_FROM, ROLES, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroesByRole, isRanged, mobSize } from '../src/data';
 import { ART, FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { CAVE, MOB_CAP, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
@@ -2111,9 +2111,9 @@ describe('the heroes past the first three', () => {
 
   it('nine heroes to pick from, each with its own colour, disc and ability, a row of each kind; online still three seats', () => {
     expect(HEROES.map(d => d.key)).toEqual(['bastion', 'ricochet', 'ash', 'cook', 'sharp', 'electra', 'kid', 'bum', 'genius']);
-    // the pick screens lay them out a row per kind: two tanks, three damage dealers, four zone holders
-    expect(ROLES).toEqual(['Танк', 'Урон', 'Зона']);
-    expect(heroesByRole().map(row => row.map(i => HEROES[i].key))).toEqual([['bastion', 'cook'], ['ricochet', 'sharp', 'kid'], ['ash', 'electra', 'bum', 'genius']]);
+    // the pick screens lay them out a row per kind: two tanks, two damage dealers, four zone holders and the kid's support
+    expect(ROLES).toEqual(['Танк', 'Урон', 'Зона', 'Поддержка']);
+    expect(heroesByRole().map(row => row.map(i => HEROES[i].key))).toEqual([['bastion', 'cook'], ['ricochet', 'sharp'], ['ash', 'electra', 'bum', 'genius'], ['kid']]);
     expect(new Set(HEROES.map(d => d.col)).size).toBe(HEROES.length);
     expect(new Set(HEROES.map(d => d.ab)).size).toBe(HEROES.length);
     expect(HEROES[at('electra')].fem && HEROES[at('cook')].fem && !HEROES[at('sharp')].fem && !HEROES[at('bum')].fem).toBe(true);
@@ -2319,7 +2319,7 @@ describe('the heroes past the first three', () => {
     for (let k = 0; k < 4000 && g.S.turn === t; k++) g.update(1 / 60);
   };
 
-  it('the kid: his disc drops a firecracker at each of its first two bounces, where the cook\'s would drop a dish', () => {
+  it('the kid: his disc drops a firecracker at each of its first two bounces off walls, where the cook\'s would drop a dish', () => {
     const g = arena([at('kid')], [['archer', 1, 1]]), kid = g.party[0];
     kid.sparks = AB_COST;
     g.useAbility(kid);
@@ -2339,12 +2339,35 @@ describe('the heroes past the first three', () => {
     expect(g.S.food).toEqual([]);
   });
 
-  it('the kid: a firecracker goes off once it has landed and an enemy is within a cell of it, and hurts every enemy that close', () => {
+  it('the kid: a bounce off an enemy drops no firecracker, one off another disc does', () => {
+    const g = arena([at('kid'), at('cook')], [['skel', 5, 3]]), [kid, cook] = g.party, [skel] = g.S.mobs;
+    const d = into(g, kid, skel, true);
+    g.step(1 / 120);
+    expect(d.vy).toBeGreaterThan(0);
+    expect(g.S.bombs).toEqual([]);
+    // his disc runs into the cook's lying still in the middle of the room
+    const c = cellCentre(5, 6);
+    g.S.discs = [];
+    const rest = into(g, cook, { ...c, r: cook.def.r }, false, 0);
+    Object.assign(rest, { x: c.x, y: c.y });
+    const hit = into(g, kid, rest, true);
+    for (let k = 0; k < 3; k++) g.step(1 / 120);
+    expect(g.S.bombs).toHaveLength(1);
+    expect(g.S.bombs[0].by).toBe(hit.id);
+  });
+
+  it('the kid: in the enemies\' turn a firecracker goes off once an enemy is within a cell of it, and hurts every enemy that close', () => {
     const g = arena([at('kid')], [['skel', 7, 5], ['king', 2, 2], ['archer', 5, 9]]), kid = g.party[0];
     const [skel, king, archer] = g.S.mobs;
     const put = (m: Mob, i: number, j: number) => { const c = cellCentre(i, j, mobSize(m.k)); m.x = m.tx = c.x; m.y = m.ty = c.y; };
     put(king, 2, 2);
     g.S.bombs = [{ ...cellCentre(5, 5), fx: 0, fy: 0, h: kid.i, t: FOOD_FLY }];
+    // in the heroes' turn it only crackles, even with an enemy right by it
+    put(skel, 6, 5);
+    g.step(1 / 120);
+    expect(g.S.bombs).toHaveLength(1);
+    g.S.phase = 'enemy';
+    put(skel, 7, 5);
     // two cells off is out of its reach
     g.step(1 / 120);
     expect(g.S.bombs).toHaveLength(1);
@@ -2365,19 +2388,23 @@ describe('the heroes past the first three', () => {
     expect(skel.hp).toBe(99 - 2 * PETARD_DMG);
   });
 
-  it('the kid: an enemy walking past a firecracker sets it off on its way, and one it fells stops where it fell', () => {
-    for (const hp of [99, 3]) {
+  it('the kid: an enemy coming up to a firecracker or walking past it sets it off, and one it fells stops where it fell', () => {
+    // four cells off the rat hears it and runs to it, six cells off it runs past it at the hero
+    for (const [far, hp] of [[4, 99], [4, PETARD_DMG], [6, 99]]) {
       const g = arena([at('kid')], [['rat', 1, 1]]), kid = g.party[0], [rat] = g.S.mobs;
       kid.hp = kid.max = 99;
-      // the rat four cells off along the row, the firecracker in the middle of its way
-      const [i, j] = cellAt(g.spot(kid)!.x, g.spot(kid)!.y), dx = isFloor(g.S, i + 4, j) ? 1 : -1, start = cellCentre(i + 4 * dx, j);
+      // the rat along the row, the firecracker two cells from the hero on its way
+      const [i, j] = cellAt(g.spot(kid)!.x, g.spot(kid)!.y), dx = isFloor(g.S, i + 4, j) ? 1 : -1, start = cellCentre(i + far * dx, j);
       rat.x = rat.tx = start.x; rat.y = rat.ty = start.y; rat.hp = hp;
       g.pickIntents();
-      g.S.bombs = [{ ...cellCentre(i + 2 * dx, j), fx: 0, fy: 0, h: kid.i, t: FOOD_FLY }];
+      g.S.bombs = [{ ...cellCentre(i + 2 * dx, j), fx: 0, fy: 0, h: kid.i, t: FOOD_FLY - 1e-6 }];
+      g.step(1 / 120);
+      expect(!!rat.intent!.bang).toBe(far - 2 <= PETARD_HEAR);
       turn(g);
       expect(g.S.bombs).toEqual([]);
       if (hp > PETARD_DMG) {
         expect(rat.hp).toBe(hp - PETARD_DMG);
+        expect(kid.hp).toBe(99);
         continue;
       }
       // felled a cell short of the firecracker, it lies there in the middle of its cell and never gets to bite
@@ -2386,6 +2413,47 @@ describe('the heroes past the first three', () => {
       expect(cellCentre(i + 3 * dx, j)).toEqual({ x: rat.x, y: rat.y });
       expect(kid.hp).toBe(99);
     }
+  });
+
+  it('the kid: a firecracker draws the two enemies nearest it within three cells, and they strike nobody that turn', () => {
+    const g = arena([at('kid')], [['skel', 9, 7], ['skel', 6, 6], ['skel', 8, 3], ['skel', 2, 2]]), kid = g.party[0];
+    const [close, near, third, far] = g.S.mobs;
+    kid.hp = kid.max = 99;
+    // the hero in the corner, the first skeleton right by him and about to strike
+    expect(cellAt(g.spot(kid)!.x, g.spot(kid)!.y)).toEqual([10, 8]);
+    g.pickIntents();
+    expect(close.intent!.t).toBe('hit');
+    const blow = g.incoming(kid);
+    expect(blow).toBeGreaterThan(0);
+    // a firecracker lands two cells up the slant from him: the skeleton by him is a cell off it, the next two and three cells
+    const b = cellCentre(8, 6);
+    g.S.bombs = [{ ...b, fx: 0, fy: 0, h: kid.i, t: FOOD_FLY - 1e-6 }];
+    g.step(1 / 120);
+    expect(PETARD_LURE).toBe(2);
+    expect([close, near, third, far].map(m => m.intent!.bang ?? null)).toEqual([b, b, null, null]);
+    expect(close.intent).toMatchObject({ t: 'move', dmg: 0 });
+    expect(g.incoming(kid)).toBe(0);
+    turn(g);
+    // the one by it set it off as the enemies' turn began, the other ran up to where it crackled
+    expect(g.S.bombs).toEqual([]);
+    expect([close.hp, near.hp, third.hp, far.hp]).toEqual([99 - PETARD_DMG, 99, 99, 99]);
+    expect(kid.hp).toBe(99);
+    const [ni, nj] = cellAt(near.x, near.y);
+    expect(Math.max(Math.abs(ni - 8), Math.abs(nj - 6))).toBe(1);
+    // with it gone they go for the hero again
+    expect([close, near].map(m => m.intent!.bang)).toEqual([undefined, undefined]);
+    expect(close.intent!.t).toBe('hit');
+  });
+
+  it('the kid: each enemy runs to the nearest firecracker; one casting a spell goes on with it', () => {
+    const g = arena([at('kid')], [['skel', 2, 2], ['skel', 5, 2], ['king', 7, 5]]), kid = g.party[0], [a, b, king] = g.S.mobs;
+    g.pickIntents();
+    king.intent = { t: 'slam', hero: -1, dmg: 3 };
+    const p = cellCentre(3, 3), q = cellCentre(6, 3);
+    g.S.bombs = [{ ...p, fx: 0, fy: 0, h: kid.i, t: FOOD_FLY - 1e-6 }, { ...q, fx: 0, fy: 0, h: kid.i, t: FOOD_FLY - 1e-6 }];
+    g.step(1 / 120);
+    expect([a.intent!.bang, b.intent!.bang]).toEqual([p, q]);
+    expect(king.intent!.t).toBe('slam');
   });
 
   it('the bum: his disc lets out a cloud of gas at its first bounce, five cells across with the corners cut off', () => {
@@ -2479,6 +2547,27 @@ describe('the heroes past the first three', () => {
     expect(moved(0)).toBeGreaterThan(FROST_STEPS);
     expect(moved(1)).toBe(FROST_STEPS);
     expect(moved(2)).toBe(0);
+  });
+
+  it('the ice genius: a frosted enemy takes half as much again from the heroes\' discs, fire and gas the same as ever', () => {
+    const g = arena([at('genius'), at('cook')], [['skel', 3, 3], ['skel', 7, 3]]), [ice, cook] = g.party, [cold, warm] = g.S.mobs;
+    const hit = (h: HeroState, m: Mob, ab: boolean) => { g.S.discs = []; const d = into(g, h, m, ab); g.step(1 / 120); return d; };
+    // his own frosting hit does as much as ever, the cook's after it more
+    const d = hit(ice, cold, true);
+    const first = Math.ceil((d.m * 200) / 120);
+    expect(99 - cold.hp).toBe(first);
+    expect(cold.frost).toBe(1);
+    const c = hit(cook, warm, false), plain = Math.ceil((c.m * 200) / 120);
+    expect(99 - warm.hp).toBe(plain);
+    hit(cook, cold, false);
+    expect(99 - first - cold.hp).toBe(Math.ceil(plain * (1 + FROST_VULN)));
+    expect(FROST_VULN).toBe(0.5);
+    // burning, it loses no more than its fire
+    cold.burn = 4;
+    const hp = cold.hp;
+    g.S.phase = 'enemy'; g.S.actor = -1;
+    (g as unknown as { nextActor: () => boolean }).nextActor();
+    expect(hp - cold.hp).toBe(4);
   });
 
   it('the kid\'s firecrackers and the bum\'s gas travel to the other screens with the snapshot', () => {

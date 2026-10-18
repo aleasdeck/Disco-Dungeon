@@ -1,7 +1,7 @@
 // Combat rules: turn flow, disc physics, damage, abilities.
 // Rendering and input live elsewhere; this module only changes state.
 
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, CRIT_COS, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_MAX, PETARD_PER_DISC, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, ZAP, ZAP_REACH, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, CRIT_COS, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, FROST_VULN, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_HEAR, PETARD_LURE, PETARD_MAX, PETARD_PER_DISC, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, ZAP, ZAP_REACH, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
 import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { mulberry32 } from './rng';
 import { has } from './artifacts';
@@ -694,12 +694,12 @@ export class Game {
 
   /**
    * A disc thrown with the ability on hits an enemy: Bastion's shields the whole party, Ash's stokes the enemy's fire,
-   * Electra's strikes lightning, the cook's drops a dish, the kid's a firecracker, the bum's lets out its gas. This goes
-   * before the hit's damage; Electra's lightning and the ice genius's frost come after it.
+   * Electra's strikes lightning, the cook's drops a dish, the bum's lets out its gas. This goes before the hit's damage;
+   * Electra's lightning and the ice genius's frost come after it.
    */
   private abilityHit(d: Disc, m: Mob) {
     const k = d.hero.def.key;
-    this.abBounce(d, d.x - m.x, d.y - m.y);
+    this.abBounce(d, d.x - m.x, d.y - m.y, true);
     if (k === 'bastion') {
       for (const o of this.alive()) {
         o.shield += AB_SHIELD;
@@ -745,14 +745,15 @@ export class Game {
   }
 
   /**
-   * A disc with its ability on bounced off something (a wall, a block, a resource or an enemy); (nx, ny) points from it toward
-   * the disc. The cook's drops a dish, the kid's a firecracker, the bum's lets its gas out on its first bounce.
+   * A disc with its ability on bounced off something (a wall, a block, a resource, another disc or, `foe`, an enemy); (nx, ny)
+   * points from it toward the disc. The cook's drops a dish, the kid's a firecracker (off anything but an enemy), the bum's
+   * lets its gas out on its first bounce.
    */
-  private abBounce(d: Disc, nx: number, ny: number) {
+  private abBounce(d: Disc, nx: number, ny: number, foe = false) {
     if (!d.ab) return;
     const k = d.hero.def.key;
     if (k === 'cook') this.dropFood(d, nx, ny);
-    else if (k === 'kid') this.dropBomb(d, nx, ny);
+    else if (k === 'kid' && !foe) this.dropBomb(d, nx, ny);
     else if (k === 'bum') this.puff(d);
   }
 
@@ -789,6 +790,11 @@ export class Game {
     d.food = (d.food ?? 0) + 1;
   }
 
+  /** A disc bounced off another one: the kid's drops a firecracker, if its ability is on. */
+  private kidBounce(d: Disc, nx: number, ny: number) {
+    if (d.ab && d.hero.def.key === 'kid') this.dropBomb(d, nx, ny);
+  }
+
   /** The kid's disc drops a firecracker off a bounce, the same way the cook's drops a dish. */
   private dropBomb(d: Disc, nx: number, ny: number) {
     const S = this.S;
@@ -799,20 +805,55 @@ export class Game {
     d.bombs = (d.bombs ?? 0) + 1;
   }
 
-  /** Whether an enemy stands within a cell of a firecracker: any of its cells right next to the firecracker's, or on it. */
-  near(m: Mob, b: Pt) {
+  /** Whether an enemy stands within `r` cells of a firecracker (any of its cells, counting diagonals), or on it. */
+  near(m: Mob, b: Pt, r = 1) {
     const sz = mobSize(m.k), [i, j] = cellAt(m.x, m.y, sz), bi = Math.floor(b.x / TILE), bj = Math.floor(b.y / TILE);
-    return bi >= i - 1 && bi <= i + sz && bj >= j - 1 && bj <= j + sz;
+    return bi >= i - r && bi < i + sz + r && bj >= j - r && bj < j + sz + r;
   }
 
-  /** Every firecracker that has landed and has an enemy within a cell of it goes off. */
+  /** In the enemies' turn, every firecracker that has landed and has an enemy within a cell of it goes off. */
   private fuse() {
     const S = this.S;
+    if (S.phase !== 'enemy') return;
     for (const b of S.bombs.slice()) if (b.t >= FOOD_FLY && this.liveMobs().some(m => this.near(m, b))) this.blast(b);
   }
 
   /**
-   * A firecracker goes off: every enemy within a cell of it takes PETARD_DMG, and the figures around jolt. An enemy felled
+   * The firecrackers crackle: each draws the PETARD_LURE enemies nearest it out of those within PETARD_HEAR cells that mean
+   * to go for a hero and can walk up to it, the nearest pairs first, every enemy to one firecracker. Those go for the noise
+   * this turn instead; one no longer drawn goes back to the hero it was after. Bosses' blows on everyone, heals and summons
+   * go ahead as they were, an enemy that never walks can't come.
+   */
+  private listen() {
+    const S = this.S, bombs = S.bombs.filter(b => b.t >= FOOD_FLY);
+    const can = this.liveMobs().filter(m => m.speed > 0 && m.intent && (m.intent.t === 'hit' || m.intent.t === 'move' || m.intent.t === 'charge'));
+    const pairs: { b: Bomb; m: Mob; d: number }[] = [];
+    for (const b of bombs) for (const m of can) if (this.near(m, b, PETARD_HEAR)) pairs.push({ b, m, d: Math.hypot(b.x - m.x, b.y - m.y) });
+    pairs.sort((p, q) => p.d - q.d);
+    const drawn = new Map<Mob, Intent>(), count = new Map<Bomb, number>();
+    for (const { b, m } of pairs) {
+      if (drawn.has(m) || (count.get(b) ?? 0) >= PETARD_LURE) continue;
+      const it = this.lureTo(m, b);
+      if (!it) continue;
+      drawn.set(m, it);
+      count.set(b, (count.get(b) ?? 0) + 1);
+    }
+    for (const m of can) {
+      const it = drawn.get(m);
+      if (it) m.intent = it;
+      else if (m.intent!.bang) { m.intent = { t: 'move', hero: m.intent!.hero, dmg: 0 }; this.retune(m); }
+    }
+  }
+
+  /** An enemy going for the firecracker at b instead of hero `it.hero`: as far as its steps take it this turn. Null when walled off. */
+  private lureTo(m: Mob, b: Pt): Intent | null {
+    const way = this.route(m, b);
+    if (!way) return null;
+    return { t: 'move', hero: m.intent?.hero ?? 0, dmg: 0, bang: { x: b.x, y: b.y }, way, go: wayLen(way.slice(0, this.stopAt(m, way) + 1)) };
+  }
+
+  /**
+   * A firecracker goes off: every enemy within a cell of it takes PETARD_DMG through armour, and the figures around jolt. An enemy felled
    * on its walk stops on the cell where it fell.
    */
   private blast(b: Bomb) {
@@ -825,7 +866,7 @@ export class Game {
     this.sfx('boom');
     for (const m of this.liveMobs()) {
       if (!this.near(m, b)) continue;
-      this.hurtMob(m, PETARD_DMG, '#ffb347', false, 0.7, by);
+      this.hurtMob(m, PETARD_DMG, '#ffb347', true, 0.7, by);
       this.knock(m, m.x, m.y, b.x, b.y, 0.7);
       if (m.hp <= 0 && m.walk && S.phase === 'enemy' && S.mobs[S.actor] === m) {
         const c = cellCentre(...cellAt(m.x, m.y, mobSize(m.k)), mobSize(m.k));
@@ -899,6 +940,8 @@ export class Game {
     const it = m.intent;
     if (!it || m.hp <= 0) return;
     if (it.t === 'slam') { it.dmg = this.slamDmg(m, it.chill); return; }
+    // drawn by a firecracker, a frosted walker gets that much less far toward it
+    if (it.bang) { m.intent = this.lureTo(m, it.bang) ?? it; return; }
     if (it.t !== 'hit' && it.t !== 'move' && it.t !== 'charge') return;
     const h = this.heroOf(it.hero), p = this.spot(h);
     if (h.hp <= 0 || !p) return;
@@ -1023,6 +1066,7 @@ export class Game {
       }
       m.intent = this.chase(m, best, way);
     });
+    this.listen();
   }
 
   /**
@@ -1081,12 +1125,14 @@ export class Game {
     for (const m of this.liveMobs()) {
       const it = m.intent;
       if (it?.t === 'slam') it.dmg = this.slamDmg(m, it.chill);
-      if (!it || (it.t !== 'hit' && it.t !== 'move' && it.t !== 'charge')) continue;
+      if (!it || it.bang || (it.t !== 'hit' && it.t !== 'move' && it.t !== 'charge')) continue;
       const h = this.heroOf(it.hero), p = this.spot(h);
       if (h.hp <= 0 || !p) continue;
       if (isRanged(m.k)) m.intent = this.shoot(m, it.t === 'charge' ? this.alive().filter(o => this.spot(o)) : [h], 0);
       else if (it.t !== 'charge') m.intent = this.chase(m, h, this.route(m, p));
     }
+    // and the firecrackers draw the enemies nearest them afresh, from where everybody stands now
+    this.listen();
   }
 
   /**
@@ -1261,9 +1307,13 @@ export class Game {
     }
   }
 
-  /** Damage an enemy; `by` is the hero whose disc (or its lightning, or its light spot) dealt it, for the trophies that pay for kills. */
+  /**
+   * Damage an enemy; `by` is the hero whose disc (or its lightning, firecracker or light spot) dealt it, for the trophies
+   * that pay for kills. A hero's blow on an enemy the ice genius has frosted hits FROST_VULN harder; fire and gas don't.
+   */
   hurtMob(m: Mob, n: number, col = '#fff', pierce = false, p = 0.6, by?: HeroState) {
     if (m.hp <= 0) return;
+    if (by && m.frost) { n = Math.ceil(n * (1 + FROST_VULN)); this.burst(m.x, m.y, '#cfefff', 6); }
     if (m.armor && !pierce && n < m.armor) { this.float(m.x, m.y, 'броня', '#c7cbe0'); this.sfx('armor'); return; }
     m.hp -= n;
     m.flash = 0.15;
@@ -1576,9 +1626,14 @@ export class Game {
         this.burst(mx, my, '#b893ff', 10);
         this.sfx('clink', Math.min(1, -rv / 300));
       } else if (-rv > 15) this.sfx('wall', Math.min(1, -rv / 400));
+      // the kid's firecrackers come off another disc as off a wall
+      if (-rv > 15) { this.kidBounce(a, -nx, -ny); this.kidBounce(b, nx, ny); }
     }
     for (const f of S.food) if (f.t < FOOD_FLY) f.t = Math.min(FOOD_FLY, f.t + dt);
-    for (const b of S.bombs) if (b.t < FOOD_FLY) b.t = Math.min(FOOD_FLY, b.t + dt);
+    let landed = false;
+    for (const b of S.bombs) if (b.t < FOOD_FLY) { b.t = Math.min(FOOD_FLY, b.t + dt); landed ||= b.t >= FOOD_FLY; }
+    // a firecracker down on the floor starts crackling: the enemies nearest it turn to the noise
+    if (landed && S.phase !== 'enemy') { this.listen(); changed = true; }
     if (S.bombs.length) this.fuse();
     for (let k = born; k < S.sparks.length; k++) S.sparks[k].b = this.tick;
     this.inStep = false;
@@ -1740,8 +1795,9 @@ export class Game {
     m.fy = m.ty = m.y;
     m.walk = undefined;
     if (m.hp <= 0 || !it || it.hero < 0 || m.speed === 0 || this.frozen(m)) return;
-    const h = this.heroOf(it.hero), p = this.spot(h), aim = isRanged(m.k);
-    if (h.hp <= 0 || !p || (aim && this.sees(m, h))) return;
+    // one drawn by a firecracker runs to where it crackled, even when another enemy has set it off on the way
+    const h = this.heroOf(it.hero), p = it.bang ?? this.spot(h), aim = !it.bang && isRanged(m.k);
+    if (!p || (!it.bang && (h.hp <= 0 || (aim && this.sees(m, h))))) return;
     // the room has changed since the intent was picked: the enemies before it have moved, an icicle may have broken
     const way = this.route(m, p, true, aim);
     if (!way) return;
@@ -1948,7 +2004,7 @@ export class Game {
       this.note(`${m.name} ${did(d, 'поджёг', 'подожгла')} фитиль` + (m.walk ? ` и ${did(d, 'пошёл', 'пошла')} к ${this.heroOf(it.hero).def.dat}` : ''));
     } else if (it.t === 'move') {
       // walled off, it stayed put: nothing to tell
-      if (m.walk) this.note(`${m.name} идёт к ${this.heroOf(it.hero).def.dat}`);
+      if (m.walk) this.note(it.bang ? `${m.name} ${did(d, 'побежал', 'побежала')} на треск петарды` : `${m.name} идёт к ${this.heroOf(it.hero).def.dat}`);
     } else if (it.t === 'hit') {
       const h = this.heroOf(it.hero);
       const p = this.spot(h);

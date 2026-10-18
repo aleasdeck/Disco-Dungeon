@@ -112,6 +112,8 @@ export interface Intent {
   go?: number;
   /** Enemy turns until this walker strikes, counting this one. */
   eta?: number;
+  /** A `move` toward the kid's firecracker lying here instead of the hero: it strikes nobody this turn. */
+  bang?: { x: number; y: number };
 }
 
 export interface Mob {
