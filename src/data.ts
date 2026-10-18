@@ -61,12 +61,12 @@ export const GAS_PCT = 0.05;
 export const GAS_WEAK = 0.3;
 export const GAS_MAX = 6;
 /**
- * The kid's «Отвлекуха»: his disc drops a firecracker at each of its first PETARD_PER_DISC bounces off anything but an enemy,
+ * The kid's «Отвлекуха»: his disc drops PETARD_PER_DISC firecracker, at its first bounce off anything but an enemy,
  * laid like the cook's dishes. It crackles where it lies: of the enemies within PETARD_HEAR cells of it that mean to go for
  * a hero, the PETARD_LURE nearest go for the noise instead and strike nobody on that move. In the enemies' turn it goes off
  * as soon as an enemy is within a cell of it, PETARD_DMG through armour to every enemy that near; it lies there till then.
  */
-export const PETARD_PER_DISC = 2;
+export const PETARD_PER_DISC = 1;
 export const PETARD_DMG = 2;
 export const PETARD_HEAR = 3;
 export const PETARD_LURE = 2;
@@ -369,7 +369,7 @@ export const HEROES: HeroDef[] = [
   },
   {
     key: 'kid', name: 'Шкет', acc: 'Шкета', dat: 'Шкету', col: '#d0528b', dk: '#6b2347', skin: '#f0c09a', hp: 20, r: 4, m: 1.7, e: 0.9, fr: 0.85, pw: 1,
-    ab: 'Отвлекуха', abTxt: `До конца хода его диск на первых ${PETARD_PER_DISC} отскоках не от врагов роняет петарду. На треск бегут ${PETARD_LURE} ближайших врага.`, abCol: '#ffb347',
+    ab: 'Отвлекуха', abTxt: `До конца хода его диск на первом отскоке не от врага роняет петарду, одну на диск. На треск бегут ${PETARD_LURE} ближайших врага.`, abCol: '#ffb347',
     abMore: `Петарда ложится в клетку, как еда Поварёшки, и трещит, пока лежит. Из врагов в ${PETARD_HEAR} клетках от неё ${PETARD_LURE} ближайших идут к ней, а не к героям, и в этот ход никого не бьют. Кто зайдёт в клетку рядом с ней, тот её подорвёт: по ${PETARD_DMG} сквозь броню всем врагам рядом. Призыв, лечение и удар по всем враги делают как обычно.`,
   },
   {

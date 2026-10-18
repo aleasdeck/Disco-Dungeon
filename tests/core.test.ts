@@ -2322,7 +2322,7 @@ describe('the heroes past the first three', () => {
     for (let k = 0; k < 4000 && g.S.turn === t; k++) g.update(1 / 60);
   };
 
-  it('the kid: his disc drops a firecracker at each of its first two bounces off walls, where the cook\'s would drop a dish', () => {
+  it('the kid: his disc drops one firecracker, at its first bounce off a wall, where the cook\'s would drop a dish', () => {
     const g = arena([at('kid')], [['archer', 1, 1]]), kid = g.party[0];
     kid.sparks = AB_COST;
     g.useAbility(kid);
@@ -2338,7 +2338,7 @@ describe('the heroes past the first three', () => {
       expect(cellCentre(...cellAt(b.x, b.y))).toEqual({ x: b.x, y: b.y });
       expect([b.by, b.h]).toEqual([d.id, kid.i]);
     }
-    expect(new Set(g.S.bombs.map(b => hazKey(...cellAt(b.x, b.y)))).size).toBe(PETARD_PER_DISC);
+    expect(PETARD_PER_DISC).toBe(1);
     expect(g.S.food).toEqual([]);
   });
 
