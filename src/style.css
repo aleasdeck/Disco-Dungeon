@@ -597,6 +597,9 @@ i.ico { display: inline-block; font-style: normal; }
 .players { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
 .players li { display: flex; align-items: center; gap: 8px; }
 .players i { width: 14px; height: 14px; border-radius: 50%; background: var(--c, #3a2d22); border: 1.5px solid var(--ink); }
+.players .rdy { margin-left: auto; padding: 1px 9px; border-radius: 8px; background: rgba(0, 0, 0, 0.3); color: var(--muted); font: 500 13px Oswald, sans-serif; white-space: nowrap; }
+.players .rdy.on { background: #2f6b4a; color: #e9f7ea; }
+.players .rdy.on::before { content: '✓ '; }
 .lobby-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; color: #b2a38c; }
 
 /* ---------- collection */

@@ -102,12 +102,15 @@ export function lobbyStatus(text: string) {
   $('lobbyStatus').textContent = text;
 }
 
-/** Draw the room part of the lobby: code, hero cards to pick, the players and (for the host) the start button. */
+/** The host may start once every player has a hero and everyone but the host has pressed «Готов». */
+export const startable = (players: Player[]) => players.every(p => p.hero !== null && (p.id === 'host' || p.ready));
+
+/** Draw the room part of the lobby: code, hero cards to pick, the players, and the start button (host) or «Готов» (the rest). */
 export function renderLobby(o: { code: string; players: Player[]; me: string; host: boolean; onPick: (hero: number | null) => void }) {
   $('lobbyStart').hidden = true;
   $('lobbyRoom').hidden = false;
   $('lobbyRoomCode').textContent = o.code;
-  const mine = o.players.find(p => p.id === o.me)?.hero ?? null;
+  const me = o.players.find(p => p.id === o.me), mine = me?.hero ?? null;
   const box = $('lobbyHeroes');
   box.innerHTML = '';
   HEROES.forEach((def, i) => {
@@ -127,14 +130,25 @@ export function renderLobby(o: { code: string; players: Player[]; me: string; ho
   });
   $('lobbyPlayers').innerHTML = o.players.map(p => {
     const def = p.hero !== null ? HEROES[p.hero] : null;
-    return `<li><i style="--c:${def?.col ?? '#3a2d22'}"></i><b>${escapeHtml(p.name)}</b>${p.id === 'host' ? ' · хозяин' : ''}${p.id === o.me ? ' · ты' : ''}<span class="muted">${def ? def.name : 'выбирает героя'}</span></li>`;
+    // the host has no «Готов» of its own: it starts the game when the rest are ready
+    const ready = p.id === 'host' ? '' : p.ready ? '<span class="rdy on">готов</span>' : '<span class="rdy">не готов</span>';
+    return `<li><i style="--c:${def?.col ?? '#3a2d22'}"></i><b>${escapeHtml(p.name)}</b>${p.id === 'host' ? ' · хозяин' : ''}${p.id === o.me ? ' · ты' : ''}<span class="muted">${def ? def.name : 'выбирает героя'}</span>${ready}</li>`;
   }).join('');
-  const allPicked = o.players.every(p => p.hero !== null);
+  const go = startable(o.players), waiting = o.players.filter(p => p.id !== 'host' && !p.ready);
   $('lobbyStartBtn').hidden = !o.host;
-  $<HTMLButtonElement>('lobbyStartBtn').disabled = !allPicked;
+  $<HTMLButtonElement>('lobbyStartBtn').disabled = !go;
+  const rb = $<HTMLButtonElement>('lobbyReadyBtn');
+  rb.hidden = o.host;
+  rb.disabled = mine === null;
+  rb.textContent = me?.ready ? 'Не готов' : 'Готов';
+  rb.classList.toggle('big', !me?.ready);
+  rb.setAttribute('aria-pressed', String(!!me?.ready));
   $('lobbyHint').textContent = o.host
-    ? (allPicked ? `Игроков: ${o.players.length}. Можно начинать: враги подстроятся под число героев.` : 'Начать можно, когда все выбрали героя.')
-    : 'Игру начнёт хозяин комнаты.';
+    ? go ? `Игроков: ${o.players.length}. Можно начинать: враги подстроятся под число героев.`
+      : !o.players.every(p => p.hero !== null) ? 'Начать можно, когда все выберут героя и нажмут «Готов».'
+      : `Ждём, пока нажмут «Готов»: ${waiting.map(p => p.name).join(', ')}.`
+    : mine === null ? 'Выбери героя и нажми «Готов».'
+    : me?.ready ? 'Игру начнёт хозяин комнаты.' : 'Нажми «Готов», когда соберёшься.';
 }
 
 export function resetLobby() {
