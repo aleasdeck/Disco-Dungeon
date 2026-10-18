@@ -59,7 +59,7 @@ def shrink(img):
 # ---------- health ----------
 # He then had the bar run on to the ability gem: the sketch is drawn HP_LONG times as long at the same height, its middle
 # stretched while both ends keep their slant
-HP_LONG = 1.32
+HP_LONG = 1.255
 HP = [(0, 4), (150, 15), (174, 3), (320, 0), (274, 66), (210, 56), (128, 56), (6, 68)]
 HP = [(x if x < 10 else x * HP_LONG if x < 250 else x + 320 * (HP_LONG - 1), y) for x, y in HP]
 HP = [(x, y * 1.25) for x, y in HP]  # drawn a quarter taller than the box it was written in, like on the shape page
@@ -92,7 +92,7 @@ print(f'  .hpbar aspect-ratio: {HW} / {HH}; .track inset: 0 {100 * (HW - r1) / H
 # a crack point is (x, t), t being the share of the way from the top edge down to the bottom one
 # it runs on to the gem with the health bar: the body (left of x 196) is drawn SPK_LONG times as long, the point keeps its size,
 # and the cracks keep their zigzag where the body stretches them to
-SPK_LONG = 1.39
+SPK_LONG = 1.33
 END = 196 * SPK_LONG + 34  # where the point is
 
 
