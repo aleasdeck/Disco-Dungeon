@@ -1,7 +1,7 @@
 // Combat rules: turn flow, disc physics, damage, abilities.
 // Rendering and input live elsewhere; this module only changes state.
 
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, CRIT_COS, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_HEAR, PETARD_LURE, PETARD_MAX, PETARD_TURNS, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, ZAP, ZAP_REACH, frostVuln, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, CRIT_COS, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_MAX, PETARD_TURNS, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, ZAP, ZAP_REACH, frostVuln, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
 import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { mulberry32 } from './rng';
 import { has } from './artifacts';
@@ -825,8 +825,8 @@ export class Game {
   }
 
   /**
-   * The firecrackers crackle: each draws the PETARD_LURE enemies nearest it out of those within PETARD_HEAR cells that mean
-   * to go for a hero and can walk up to it, the nearest pairs first, every enemy to one firecracker. Those go for the noise
+   * The firecrackers crackle, loud enough for the whole room: each draws the PETARD_LURE enemies nearest it out of those that
+   * mean to go for a hero and can walk up to it, the nearest pairs first, every enemy to one firecracker. Those go for the noise
    * this turn instead; one no longer drawn goes back to the hero it was after. Bosses' blows on everyone, heals and summons
    * go ahead as they were, an enemy that never walks can't come.
    */
@@ -834,7 +834,7 @@ export class Game {
     const S = this.S, bombs = S.bombs.filter(b => b.t >= FOOD_FLY);
     const can = this.liveMobs().filter(m => m.speed > 0 && m.intent && (m.intent.t === 'hit' || m.intent.t === 'move' || m.intent.t === 'charge'));
     const pairs: { b: Bomb; m: Mob; d: number }[] = [];
-    for (const b of bombs) for (const m of can) if (this.near(m, b, PETARD_HEAR)) pairs.push({ b, m, d: Math.hypot(b.x - m.x, b.y - m.y) });
+    for (const b of bombs) for (const m of can) pairs.push({ b, m, d: Math.hypot(b.x - m.x, b.y - m.y) });
     pairs.sort((p, q) => p.d - q.d);
     const drawn = new Map<Mob, Intent>(), count = new Map<Bomb, number>();
     for (const { b, m } of pairs) {
