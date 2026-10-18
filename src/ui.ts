@@ -8,7 +8,8 @@ import type { Game, HeroState } from './game';
 import type { Mob } from './room';
 import { BASE_TH, drawHeroFigure, drawMiniature, drawMobFigure } from './draw/figures';
 import { lg } from './draw/util';
-import { art, fillIcons, icon } from './icons';
+import { art, artIcon, fillIcons, icon } from './icons';
+import { artDef } from './artifacts';
 import { hl } from './hl';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -506,7 +507,11 @@ export class Hud {
     $('ups').innerHTML = `<h3 style="color:${h.def.col}">${h.def.name}</h3>`
       + `<p class="hc-hit" title="Сильнее всего диск бьёт на полной натяжке; прямо в лоб урон удваивается">удар до ${hit}, в лоб ×${CRIT}</p>`
       + upRows(g, h) + '<small class="ups-note">Прокачка у кузнеца на карте</small>'
-      + `<p class="hc-ab"><b>${h.def.ab}.</b> ${h.def.abTxt} ${h.def.abMore}</p>`;
+      + `<p class="hc-ab"><b>${h.def.ab}.</b> ${h.def.abTxt} ${h.def.abMore}</p>`
+      + (h.arts?.length ? `<div class="hc-arts"><small class="ups-note">Трофеи боссов</small>${h.arts.map(k => {
+        const a = artDef(k);
+        return `<div class="hc-art" title="${a.gag}">${artIcon(k, 'hc-art-ico')}<b>${a.name}</b><small>${a.txt}</small></div>`;
+      }).join('')}</div>` : '');
   }
 
   // ------------------------------------------------------------ the turn button

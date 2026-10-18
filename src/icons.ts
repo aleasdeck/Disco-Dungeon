@@ -28,6 +28,9 @@ const SHAPES: Record<string, [string, string][]> = {
   check: [['M3 13l6 6L21 6l-3-3-9 10-3-3z', '#5fd068']],
   bow: [['M18 3Q4 4 3 18h3q1-11 12-12z', '#8a5a35'], ['M17 5L5 17', 'none'], ['M21 21L8 8', 'none'], ['M5 5l6 2-4 4z', '#c9ced8'], ['M19 17l3 0-1 3zM17 19l0 3 3-1z', '#c2364f']],
   disc: [['M3 10c0-3 4-5 9-5s9 2 9 5v4c0 3-4 5-9 5s-9-2-9-5z', 'currentColor'], ['M3 10c0 3 4 5 9 5s9-2 9-5', 'none']],
+  /** A boss's trophy until its picture is painted: a little mirror ball on a gold tag. */
+  relic: [['M12 1v3', 'none'], ['M12 4a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17z', '#c9ced8'], ['M3.5 12.5h17M12 4v17M5.5 8c4 1.6 9 1.6 13 0M5.5 17c4-1.6 9-1.6 13 0', 'none'],
+    ['M8 6.5l2 0-1 2.5zM15 10l2.5.5-1 2zM9 14l2 .5-.5 2z', '#f3f6ff'], ['M19 1l1 2.2 2.2 1-2.2 1-1 2.2-1-2.2-2.2-1 2.2-1z', '#ffd34d']],
 };
 
 /** The icon `k` as markup: the painted picture once loaded, else the inked SVG. */
@@ -36,6 +39,12 @@ export function icon(k: string, cls = '') {
   if (art) return `<img class="ico ${cls}" src="${art.src}" alt="" draggable="false">`;
   const parts = SHAPES[k] ?? SHAPES.spark;
   return `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true">${parts.map(([d, f]) => `<path d="${d}" fill="${f}" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>`).join('')}</svg>`;
+}
+
+/** A boss's trophy by its key (src/artifacts.ts): its painted picture (`art_<key>` in public/assets/ui) once there is one, else the mirror-ball tag. */
+export function artIcon(key: string, cls = '') {
+  const img = uiArt.get('art_' + key);
+  return img ? `<img class="art ${cls}" src="${img.src}" alt="" draggable="false">` : icon('relic', cls);
 }
 
 /** A painted picture by its key in public/assets/ui (a room, an upgrade, a menu button), or nothing while it has not loaded. */

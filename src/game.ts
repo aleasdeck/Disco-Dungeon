@@ -38,6 +38,8 @@ export interface HeroState {
   sparks: number;
   /** The last knock it took: the figure rocks on its stand for a moment. */
   knock?: Knock;
+  /** The floor bosses' trophies the hero has taken (src/artifacts.ts); saves from before them have none. */
+  arts?: string[];
 }
 
 export interface Disc {
@@ -220,7 +222,7 @@ export function newParty(picks: number[] = [0, 1, 2]): HeroState[] {
 function heroStart(hp: number) {
   return {
     hp, max: hp, shield: 0, up: { m: 0, pw: 0, e: 0 }, discs: HAND_START,
-    pad: null as number | null, at: null as Pt | null, from: null as Pt | null, leap: 0, hand: HAND_START, thrown: false, flash: 0, chill: 0, fire: 0, boost: false, sparks: 0,
+    pad: null as number | null, at: null as Pt | null, from: null as Pt | null, leap: 0, hand: HAND_START, thrown: false, flash: 0, chill: 0, fire: 0, boost: false, sparks: 0, arts: [] as string[],
   };
 }
 

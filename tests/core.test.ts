@@ -8,6 +8,7 @@ import { FLOORS, FORGE_ROWS, LAYERS, agreed, genFloor, newRun } from '../src/run
 import { makeRng } from '../src/rng';
 import { EVENTS, applyFx, canPick, eventDef, eventOf, fxParts, rolled } from '../src/events';
 import { CAMP_HEAL, DIG_MAX, campDo, campLeave, canCamp, digOre, type CampState } from '../src/camp';
+import { ARTIFACTS, BELLY, OFFER, lootAgreed, newLoot, rollOffer, settleLoot } from '../src/artifacts';
 
 /** Put every living hero on its own rune, as players do before the fight. */
 const placeAll = (g: Game) => g.alive().forEach((h, k) => g.movePad(h, k));
@@ -810,6 +811,78 @@ describe('the camp', () => {
     campLeave(camp, party, bank);
     expect(party[1].hp).toBe(5 + CAMP_HEAL);
     expect(camp.did[party[0].i].k).toBe('dig');
+  });
+});
+
+describe('boss trophies', () => {
+  it('offers three different artifacts nobody in the party has, the same on every screen', () => {
+    const party = newParty([0, 1, 2]);
+    expect(rollOffer(4242, party)).toEqual(rollOffer(4242, party));
+    for (let s = 0; s < 100; s++) {
+      const offer = rollOffer(s * 977, party);
+      expect(offer).toHaveLength(OFFER);
+      expect(new Set(offer).size).toBe(OFFER);
+    }
+    party[0].arts = ARTIFACTS.slice(0, 10).map(a => a.key);
+    party[2].arts = ARTIFACTS.slice(10, 20).map(a => a.key);
+    for (let s = 0; s < 50; s++) for (const k of rollOffer(s, party)) expect(party.flatMap(h => h.arts!)).not.toContain(k);
+    // every artifact turns up in some offer
+    const seen = new Set(Array.from({ length: 300 }, (_, s) => rollOffer(s, [])).flat());
+    expect(seen.size).toBe(ARTIFACTS.length);
+  });
+
+  it('gives a lone hero the one picked', () => {
+    const party = newParty([1]), loot = newLoot(77, 0, party);
+    loot.picks[party[0].i] = 2;
+    expect(lootAgreed(loot, [party[0].i])).toBe(true);
+    settleLoot(loot, party, [party[0].i]);
+    expect(party[0].arts).toEqual([loot.offer[2]]);
+    // once shared out it stays that way
+    settleLoot(loot, party, [party[0].i]);
+    expect(party[0].arts).toHaveLength(1);
+  });
+
+  it('online waits until every player here picks a different one; a duo leaves the third behind', () => {
+    const party = newParty([0, 2]), loot = newLoot(78, 1, party), table = party.map(h => h.i);
+    loot.picks[0] = 1;
+    expect(lootAgreed(loot, table)).toBe(false);
+    loot.picks[2] = 1;
+    expect(lootAgreed(loot, table)).toBe(false);
+    loot.picks[2] = 0;
+    expect(lootAgreed(loot, table)).toBe(true);
+    settleLoot(loot, party, table);
+    expect(party[0].arts).toEqual([loot.offer[1]]);
+    expect(party[1].arts).toEqual([loot.offer[0]]);
+    expect(Object.values(loot.done!)).not.toContain(loot.offer[2]);
+  });
+
+  it('shares all three among a trio, and a hero whose player dropped out gets what is left', () => {
+    const party = newParty([0, 1, 2]), loot = newLoot(79, 0, party), table = [0, 2];
+    loot.picks[0] = 2;
+    loot.picks[2] = 0;
+    expect(lootAgreed(loot, table)).toBe(true);
+    settleLoot(loot, party, table);
+    expect(party.map(h => h.arts![0])).toEqual([loot.offer[2], loot.offer[1], loot.offer[0]]);
+  });
+
+  it('adds the beer belly\'s health at once', () => {
+    const party = newParty([0]), loot = newLoot(80, 0, party);
+    loot.offer = ['belly', 'tea', 'cup'];
+    party[0].hp = 20;
+    loot.picks[party[0].i] = 0;
+    settleLoot(loot, party, [party[0].i]);
+    expect(party[0].max).toBe(HEROES[0].hp + BELLY);
+    expect(party[0].hp).toBe(20 + BELLY);
+  });
+
+  it('keeps the trophies a hero carries through a snapshot', () => {
+    const g = new Game();
+    g.party = newParty([0, 1]);
+    g.party[1].arts = ['bells'];
+    g.loadRoom({ seed: 5, depth: 1, floor: 0, type: 'fight' });
+    const c = new Game();
+    applySnapshot(c, JSON.parse(JSON.stringify(snapshot(g))));
+    expect(c.party[1].arts).toEqual(['bells']);
   });
 });
 

@@ -31,6 +31,8 @@ export type Msg =
   | { t: 'evote'; opt: number }
   /** A player says what their hero does by the camp's fire. */
   | { t: 'camp'; pick: CampPick }
+  /** A player points at one of the floor boss's trophies for their hero, by its place in the offer. */
+  | { t: 'loot'; opt: number }
   /** A cleared room's result: each player reads it and walks over to the map on their own. */
   | { t: 'end'; e: Ending }
   /** A screen the players wait on until the host acts (the end of the run); an empty title hides it. */

@@ -2,6 +2,8 @@
 
 import { BIOMES, HEROES, MOB_HP_MUL, MOBS, fullHit, type MobKind } from './data';
 import { drawPortrait, mobIcon } from './ui';
+import { ARTIFACTS } from './artifacts';
+import { artIcon } from './icons';
 import { saveSettings, settings } from './settings';
 import { sound } from './sound';
 import type { Player } from './net';
@@ -20,7 +22,7 @@ const FLOOR_NAMES = BIOMES.map(b => b.name);
 
 // ------------------------------------------------------------ collection
 
-export function renderCollection(tab: 'heroes' | 'mobs') {
+export function renderCollection(tab: 'heroes' | 'mobs' | 'arts') {
   document.querySelectorAll<HTMLButtonElement>('#collection .tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   const grid = $('colGrid');
   grid.innerHTML = '';
@@ -37,6 +39,14 @@ export function renderCollection(tab: 'heroes' | 'mobs') {
       card.firstElementChild!.replaceWith(cv);
       grid.appendChild(card);
     });
+  } else if (tab === 'arts') {
+    // the floor bosses' trophies: what each does, and its joke
+    for (const a of ARTIFACTS) {
+      const card = document.createElement('article');
+      card.className = 'card col-art';
+      card.innerHTML = `<span class="col-art-ico">${artIcon(a.key)}</span><div><h3>${a.name}</h3><p><b>${a.txt}.</b> ${a.gag}</p></div>`;
+      grid.appendChild(card);
+    }
   } else {
     (Object.keys(MOBS) as MobKind[]).forEach(k => {
       const d = MOBS[k], card = document.createElement('article');

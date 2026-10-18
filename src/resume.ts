@@ -3,6 +3,7 @@
 
 import type { Player } from './net';
 import type { CampState } from './camp';
+import type { LootState } from './artifacts';
 import type { EventState } from './events';
 import type { Run, Votes } from './run';
 import type { Snapshot } from './sync';
@@ -26,6 +27,8 @@ export interface HostSave {
   ev?: EventState | null;
   /** The camp the party sits at, if any. */
   camp?: CampState | null;
+  /** The floor boss's trophies the party stands over, if any. */
+  loot?: LootState | null;
   /** The room's result screen, if it was showing. */
   ending: Ending | null;
   screen: { title: string; text: string; win?: boolean; lose?: boolean };

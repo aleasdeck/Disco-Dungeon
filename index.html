@@ -96,6 +96,19 @@
     </div>
   </section>
 
+  <section id="lootScreen" class="overlay dim" hidden>
+    <div class="panel ev-panel" role="dialog" aria-labelledby="lootTitle">
+      <div class="ev-pic"><div class="ev-art" id="lootArt"><img id="lootImg" alt="" draggable="false" /></div></div>
+      <div class="ev-body">
+        <h2 id="lootTitle"></h2>
+        <p id="lootText" class="ev-text"></p>
+        <div id="lootOpts" class="ev-opts"></div>
+        <p id="lootNote" class="map-info map-votes" aria-live="polite" hidden></p>
+        <button class="btn big" id="lootLeave" hidden><i data-art="ico_map" aria-hidden="true"></i>К карте</button>
+      </div>
+    </div>
+  </section>
+
   <section id="forgeScreen" class="overlay dim" hidden>
     <div class="panel ev-panel forge-panel" role="dialog" aria-labelledby="forgeTitle">
       <div class="ev-pic"><div class="ev-art" id="forgeArt"><img id="forgeImg" alt="" draggable="false" /></div></div>
@@ -178,7 +191,7 @@
     <div class="panel collection-panel">
       <div class="panel-head">
         <h2>Коллекция</h2>
-        <div class="panel-btns"><button class="btn tab on" data-tab="heroes">Герои</button><button class="btn tab" data-tab="mobs">Враги</button><button class="btn" id="colBack"><i data-art="m_back" aria-hidden="true"></i>Назад</button></div>
+        <div class="panel-btns"><button class="btn tab on" data-tab="heroes">Герои</button><button class="btn tab" data-tab="mobs">Враги</button><button class="btn tab" data-tab="arts">Трофеи</button><button class="btn" id="colBack"><i data-art="m_back" aria-hidden="true"></i>Назад</button></div>
       </div>
       <div id="colGrid" class="col-grid"></div>
     </div>
