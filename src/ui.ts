@@ -501,7 +501,7 @@ export class Hud {
     ab.classList.toggle('full', full);
     ab.classList.toggle('on', h.boost);
     ab.style.setProperty('--ab', h.def.abCol);
-    ab.title = `${h.def.ab}: ${h.def.abTxt} ${h.def.abMore} Стоит ${cost} искры, включается до броска.` + (h.boost ? ' Включено до конца хода.' : '') + (g.petardOut(h) ? ' Петарда ещё лежит на поле, новую не поставить.' : '');
+    ab.title = `${h.def.ab}: ${h.def.abTxt} ${h.def.abMore} Стоит ${cost} искры, включается до броска.` + (h.boost ? ' Включено до конца хода.' : '');
   }
 
   /** My hero's card from the portrait: how hard the disc hits, its upgrades and the ability in full. */

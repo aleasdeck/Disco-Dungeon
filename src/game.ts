@@ -1,7 +1,7 @@
 // Combat rules: turn flow, disc physics, damage, abilities.
 // Rendering and input live elsewhere; this module only changes state.
 
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, CRIT_COS, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_MAX, PETARD_TURNS, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, ZAP, ZAP_REACH, frostVuln, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, CRIT_COS, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, ZAP, ZAP_REACH, frostVuln, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
 import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { mulberry32 } from './rng';
 import { has } from './artifacts';
@@ -98,9 +98,10 @@ export interface Food { x: number; y: number; fx: number; fy: number; k: number;
 export const FOOD_FLY = 0.35;
 /**
  * A firecracker the kid's disc dropped: it flies in like a dish, from (fx, fy) to (x, y) in the middle of a cell, for FOOD_FLY
- * seconds, then lies there till an enemy comes within a cell of it. `by` is the disc that dropped it, `h` its hero, `t` its age.
+ * seconds, then lies there till an enemy comes within a cell of it. `by` is the disc that dropped it, `h` its hero, `t` its age,
+ * `left` the enemy turns it has left and `turn` the turn it was laid in.
  */
-export interface Bomb { x: number; y: number; fx: number; fy: number; by?: number; h: number; t: number; left: number }
+export interface Bomb { x: number; y: number; fx: number; fy: number; by?: number; h: number; t: number; left: number; turn: number }
 /** A cloud of the bum's gas: its middle cell, the enemy turns it has left, and its age, for the eye. */
 export interface Gas { i: number; j: number; left: number; t: number }
 /** How close a disc's edge must pass the middle of a dish to pick it up: the dish fills most of its cell. */
@@ -673,12 +674,7 @@ export class Game {
    * and it goes on once a turn on the hero's own sparks.
    */
   canUseAbility(h = this.hero) {
-    return this.S.phase === 'throw' && h.hp > 0 && h.hand > 0 && !h.boost && !this.ended(h) && h.sparks >= this.abCost(h) && this.liveMobs().length > 0 && !this.petardOut(h);
-  }
-
-  /** The kid's firecracker is still on the field, so his ability has nothing to lay. */
-  petardOut(h: HeroState) {
-    return h.def.key === 'kid' && this.S.bombs.length >= PETARD_MAX;
+    return this.S.phase === 'throw' && h.hp > 0 && h.hand > 0 && !h.boost && !this.ended(h) && h.sparks >= this.abCost(h) && this.liveMobs().length > 0;
   }
 
   useAbility(h = this.hero) {
@@ -798,13 +794,19 @@ export class Game {
     if (d.ab && d.hero.def.key === 'kid') this.dropBomb(d, nx, ny);
   }
 
-  /** The kid's disc drops a firecracker off a bounce, the same way the cook's drops a dish, unless one is on the field already. */
+  /**
+   * The kid's disc drops a firecracker off a bounce, the same way the cook's drops a dish, one a turn. One from an earlier
+   * turn moves: it is gone as the new one flies off, and the enemies it drew go back to the heroes till the new one lands.
+   */
   private dropBomb(d: Disc, nx: number, ny: number) {
-    const S = this.S;
-    if (S.bombs.length >= PETARD_MAX) return;
+    const S = this.S, old = S.bombs;
+    if (old.some(b => b.turn === S.turn)) return;
+    S.bombs = [];
     const at = this.landing(d, nx, ny);
-    if (!at) return;
-    S.bombs.push({ ...at, fx: d.x, fy: d.y, by: d.id, h: d.hero.i, t: 0, left: PETARD_TURNS });
+    if (!at) { S.bombs = old; return; }
+    for (const b of old) this.burst(b.x, b.y, '#9a948a', 8);
+    S.bombs = [{ ...at, fx: d.x, fy: d.y, by: d.id, h: d.hero.i, t: 0, left: PETARD_TURNS, turn: S.turn }];
+    if (old.length) this.listen();
   }
 
   /** Whether an enemy stands within `r` cells of a firecracker (any of its cells, counting diagonals), or on it. */
