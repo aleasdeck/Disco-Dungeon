@@ -1,6 +1,6 @@
 // Main menu and its screens: collection, settings and the online lobby.
 
-import { BIOMES, HEROES, MOB_HP_MUL, MOBS, fullHit, type MobKind } from './data';
+import { BIOMES, HEROES, MOB_HP_MUL, MOBS, ROLES, fullHit, heroesByRole, type MobKind } from './data';
 import { drawPortrait, mobIcon } from './ui';
 import { ARTIFACTS } from './artifacts';
 import { artIcon } from './icons';
@@ -20,6 +20,17 @@ export function show(screen: Screen | null) {
 
 const FLOOR_NAMES = BIOMES.map(b => b.name);
 
+/** Heroes as the pick screens show them: a row for each role, its name on a tab at the row's start, then its heroes' cards. */
+function pickRows(box: HTMLElement, card: (i: number) => HTMLElement) {
+  box.innerHTML = '';
+  heroesByRole().forEach((list, r) => {
+    const tab = document.createElement('b');
+    tab.className = 'pick-role';
+    tab.textContent = ROLES[r];
+    box.append(tab, ...list.map(card));
+  });
+}
+
 // ------------------------------------------------------------ collection
 
 export function renderCollection(tab: 'heroes' | 'mobs' | 'arts') {
@@ -27,8 +38,9 @@ export function renderCollection(tab: 'heroes' | 'mobs' | 'arts') {
   const grid = $('colGrid');
   grid.innerHTML = '';
   if (tab === 'heroes') {
-    HEROES.forEach((def, i) => {
-      const card = document.createElement('article');
+    // the same order as the pick screens: tanks, then damage, then zone
+    heroesByRole().flat().forEach(i => {
+      const def = HEROES[i], card = document.createElement('article');
       card.className = 'card';
       const cv = document.createElement('canvas');
       drawPortrait(cv, { i, def });
@@ -62,10 +74,8 @@ export function renderCollection(tab: 'heroes' | 'mobs' | 'arts') {
 
 /** The campaign's hero cards: the picked one is marked, and below them what it does. */
 export function renderHeroSelect(picked: number, onPick: (hero: number) => void) {
-  const box = $('heroPicks');
-  box.innerHTML = '';
-  HEROES.forEach((def, i) => {
-    const b = document.createElement('button');
+  pickRows($('heroPicks'), i => {
+    const def = HEROES[i], b = document.createElement('button');
     b.className = 'pick' + (picked === i ? ' mine' : '');
     b.style.setProperty('--c', def.col);
     b.setAttribute('aria-pressed', String(picked === i));
@@ -76,7 +86,7 @@ export function renderHeroSelect(picked: number, onPick: (hero: number) => void)
     label.innerHTML = `${def.name}<em>${def.role}</em>`;
     b.append(label);
     b.addEventListener('click', () => onPick(i));
-    box.appendChild(b);
+    return b;
   });
   const def = HEROES[picked];
   $('heroInfo').innerHTML = `<b style="color:${def.col}">${def.name}</b>. ${def.role}. HP ${def.hp}, урон ${fullHit(def.m, def.pw)}, скорость ${Math.round(def.pw * 100)}%, отскок ${Math.round(def.e * 100)}%. `
@@ -121,10 +131,8 @@ export function renderLobby(o: { code: string; players: Player[]; me: string; ho
   $('lobbyRoom').hidden = false;
   $('lobbyRoomCode').textContent = o.code;
   const me = o.players.find(p => p.id === o.me), mine = me?.hero ?? null;
-  const box = $('lobbyHeroes');
-  box.innerHTML = '';
-  HEROES.forEach((def, i) => {
-    const by = o.players.find(p => p.hero === i), b = document.createElement('button');
+  pickRows($('lobbyHeroes'), i => {
+    const def = HEROES[i], by = o.players.find(p => p.hero === i), b = document.createElement('button');
     b.className = 'pick' + (mine === i ? ' mine' : by ? ' taken' : '');
     b.style.setProperty('--c', def.col);
     b.disabled = !!by && by.id !== o.me;
@@ -136,7 +144,7 @@ export function renderLobby(o: { code: string; players: Player[]; me: string; ho
     label.innerHTML = `${def.name}<em>${by ? (by.id === o.me ? 'ты' : by.name) : 'свободен'}</em>`;
     b.append(label);
     b.addEventListener('click', () => o.onPick(mine === i ? null : i));
-    box.appendChild(b);
+    return b;
   });
   $('lobbyPlayers').innerHTML = o.players.map(p => {
     const def = p.hero !== null ? HEROES[p.hero] : null;

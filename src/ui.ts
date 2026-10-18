@@ -2,7 +2,7 @@
 // the enemy queue with what each will do, map / journal / menu), my hero's corner (portrait with its statuses, discs,
 // health with the shield on it, the sparks bar running into the ability button) and one big button for the turn.
 
-import { AB_COST, CRIT, E_MAX, ENEMY_BASE, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, fullHit, isRanged, type MobKind, type StatKey } from './data';
+import { AB_COST, CRIT, E_MAX, ENEMY_BASE, FROST_STEPS, GAS_DMG, GAS_WEAK, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, fullHit, isRanged, type MobKind, type StatKey } from './data';
 import { eventArt, sprites, uiArt } from './assets';
 import type { Game, HeroState } from './game';
 import type { Mob } from './room';
@@ -338,6 +338,8 @@ export class Hud {
   private intent(m: Mob): { badge: string; txt: string } {
     const g = this.g, it = m.intent;
     if (!it) return { badge: '', txt: 'Ничего не делает' };
+    // frozen stiff, whatever it meant to do
+    if (g.frozen(m) && !g.acted(m)) return { badge: `<span class="ib sp">${icon('chill')}</span>`, txt: `${MOBS[m.k].fem ? 'Заморожена' : 'Заморожен'}: пропустит ход` };
     const tgt = it.hero >= 0 ? g.heroOf(it.hero) : null, far = isRanged(m.k), bomb = !!MOBS[m.k].charge;
     // a shooter's blow and its walk to where it sees the hero carry a bow by the badge
     const acc = tgt?.def.acc ?? '', out = far && !!it.way && it.way.length > 1, bow = far ? icon('bow', 'qbow') : '';
@@ -362,6 +364,9 @@ export class Hud {
   private mobStatus(m: Mob): Status[] {
     const g = this.g, out: Status[] = [];
     if (m.burn > 0) out.push({ k: 'fire', n: m.burn, t: `Горит: в начале своего хода потеряет ${Math.min(m.burn, m.hp)}` });
+    if (g.inGas(m)) out.push({ k: 'gas', t: `В газу: в начале своего хода потеряет ${Math.min(GAS_DMG, m.hp)} и ударит на ${Math.round(GAS_WEAK * 100)}% слабее` });
+    if (g.frozen(m)) out.push({ k: 'chill', t: 'Заморожен: пропустит ход' });
+    else if (m.frost) out.push({ k: 'slow', t: `Замедлен: в свой ход пройдёт не больше ${FROST_STEPS === 1 ? 'клетки' : FROST_STEPS + ' клеток'}` });
     if (isRanged(m.k)) out.push({ k: 'bow', t: 'Дальний бой: стреляет только в того, кого видит' });
     if (m.armor) out.push({ k: 'armor', n: m.armor, t: `Броня ${m.armor}` });
     if (!g.solid(m)) out.push({ k: 'ghost', t: 'Бесплотен в этот ход: диски пролетают насквозь' });

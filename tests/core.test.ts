@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, isRanged, mobSize } from '../src/data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, FROST_STEPS, GAS_DMG, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_PER_DISC, RAGE_FROM, ROLES, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, heroesByRole, isRanged, mobSize } from '../src/data';
 import { ART, FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { CAVE, MOB_CAP, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
@@ -2074,7 +2074,7 @@ describe('hero abilities work through the discs', () => {
   });
 });
 
-describe('the three new heroes', () => {
+describe('the heroes past the first three', () => {
   const at = (key: string) => HEROES.findIndex(d => d.key === key);
   /** A floor 0 fight for the given heroes, the given enemies at the given cells and nothing else in the room. */
   const arena = (picks: number[], mobs: [keyof typeof MOBS, number, number][]) => {
@@ -2096,14 +2096,14 @@ describe('the three new heroes', () => {
     return d;
   };
 
-  it('six heroes to pick from, two of each kind, each with its own colour, disc and ability; online still three seats', () => {
-    expect(HEROES.map(d => d.key)).toEqual(['bastion', 'ricochet', 'ash', 'cook', 'sharp', 'electra']);
-    // the pick screens lay them out three to a row: each column is one kind
-    expect(HEROES.slice(3).map(d => d.role)).toEqual(HEROES.slice(0, 3).map(d => d.role));
-    for (const role of ['Танк', 'Урон', 'Зона']) expect(HEROES.filter(d => d.role === role)).toHaveLength(2);
-    expect(new Set(HEROES.map(d => d.col)).size).toBe(6);
-    expect(new Set(HEROES.map(d => d.ab)).size).toBe(6);
-    expect(HEROES[at('electra')].fem && HEROES[at('cook')].fem && !HEROES[at('sharp')].fem).toBe(true);
+  it('nine heroes to pick from, each with its own colour, disc and ability, a row of each kind; online still three seats', () => {
+    expect(HEROES.map(d => d.key)).toEqual(['bastion', 'ricochet', 'ash', 'cook', 'sharp', 'electra', 'kid', 'bum', 'genius']);
+    // the pick screens lay them out a row per kind: two tanks, three damage dealers, four zone holders
+    expect(ROLES).toEqual(['Танк', 'Урон', 'Зона']);
+    expect(heroesByRole().map(row => row.map(i => HEROES[i].key))).toEqual([['bastion', 'cook'], ['ricochet', 'sharp', 'kid'], ['ash', 'electra', 'bum', 'genius']]);
+    expect(new Set(HEROES.map(d => d.col)).size).toBe(HEROES.length);
+    expect(new Set(HEROES.map(d => d.ab)).size).toBe(HEROES.length);
+    expect(HEROES[at('electra')].fem && HEROES[at('cook')].fem && !HEROES[at('sharp')].fem && !HEROES[at('bum')].fem).toBe(true);
     // the cook is the tank: the most health of all
     expect(HEROES[at('cook')].hp).toBe(Math.max(...HEROES.map(d => d.hp)));
     expect(MAX_PLAYERS).toBe(3);
@@ -2296,6 +2296,187 @@ describe('the three new heroes', () => {
     o.endTurn(oh);
     for (let k = 0; k < 120 && o.S.phase === 'throw'; k++) o.update(1 / 60);
     expect(oh.hp).toBe(hp - 2 - o.S.biome.hazDmg);
+  });
+
+  /** Ends the heroes' turn and plays the enemies' out, to the start of the next turn. */
+  const turn = (g: Game) => {
+    const t = g.S.turn;
+    g.S.discs = [];
+    endAll(g);
+    for (let k = 0; k < 4000 && g.S.turn === t; k++) g.update(1 / 60);
+  };
+
+  it('the kid: his disc drops a firecracker at each of its first two bounces, where the cook\'s would drop a dish', () => {
+    const g = arena([at('kid')], [['archer', 1, 1]]), kid = g.party[0];
+    kid.sparks = AB_COST;
+    g.useAbility(kid);
+    g.throwDisc(kid, 60, 0);
+    const d = g.S.discs[0];
+    expect(d.ab).toBe(true);
+    Object.assign(d, { vx: 420, vy: 0, e: 0.95 });
+    for (let k = 0; k < 60 * 30 && g.moving(); k++) g.update(1 / 60);
+    expect(d.bounces).toBeGreaterThan(PETARD_PER_DISC);
+    expect(g.S.bombs).toHaveLength(PETARD_PER_DISC);
+    for (const b of g.S.bombs) {
+      expect(b.t).toBe(FOOD_FLY);
+      expect(cellCentre(...cellAt(b.x, b.y))).toEqual({ x: b.x, y: b.y });
+      expect([b.by, b.h]).toEqual([d.id, kid.i]);
+    }
+    expect(new Set(g.S.bombs.map(b => hazKey(...cellAt(b.x, b.y)))).size).toBe(PETARD_PER_DISC);
+    expect(g.S.food).toEqual([]);
+  });
+
+  it('the kid: a firecracker goes off once it has landed and an enemy is within a cell of it, and hurts every enemy that close', () => {
+    const g = arena([at('kid')], [['skel', 7, 5], ['king', 2, 2], ['archer', 5, 9]]), kid = g.party[0];
+    const [skel, king, archer] = g.S.mobs;
+    const put = (m: Mob, i: number, j: number) => { const c = cellCentre(i, j, mobSize(m.k)); m.x = m.tx = c.x; m.y = m.ty = c.y; };
+    put(king, 2, 2);
+    g.S.bombs = [{ ...cellCentre(5, 5), fx: 0, fy: 0, h: kid.i, t: FOOD_FLY }];
+    // two cells off is out of its reach
+    g.step(1 / 120);
+    expect(g.S.bombs).toHaveLength(1);
+    // the skeleton steps right next to it, the big king's corner a cell off on the slant: both get it, through the
+    // king's armour, and the archer far off doesn't
+    put(skel, 6, 5);
+    put(king, 3, 3);
+    g.step(1 / 120);
+    expect(g.S.bombs).toEqual([]);
+    expect([skel.hp, king.hp, archer.hp]).toEqual([99 - PETARD_DMG, 99 - PETARD_DMG, 99]);
+    expect(g.S.floats.some(f => f.txt === 'БАХ!')).toBe(true);
+    // still in the air it doesn't go off, only as it lands
+    g.S.bombs = [{ ...cellCentre(5, 5), fx: cellCentre(5, 2).x, fy: cellCentre(5, 2).y, h: kid.i, t: 0 }];
+    g.step(1 / 120);
+    expect(g.S.bombs).toHaveLength(1);
+    for (let k = 0; k < 120 && g.S.bombs.length; k++) g.step(1 / 120);
+    expect(g.S.bombs).toEqual([]);
+    expect(skel.hp).toBe(99 - 2 * PETARD_DMG);
+  });
+
+  it('the kid: an enemy walking past a firecracker sets it off on its way, and one it fells stops where it fell', () => {
+    for (const hp of [99, 3]) {
+      const g = arena([at('kid')], [['rat', 1, 1]]), kid = g.party[0], [rat] = g.S.mobs;
+      kid.hp = kid.max = 99;
+      // the rat four cells off along the row, the firecracker in the middle of its way
+      const [i, j] = cellAt(g.spot(kid)!.x, g.spot(kid)!.y), dx = isFloor(g.S, i + 4, j) ? 1 : -1, start = cellCentre(i + 4 * dx, j);
+      rat.x = rat.tx = start.x; rat.y = rat.ty = start.y; rat.hp = hp;
+      g.pickIntents();
+      g.S.bombs = [{ ...cellCentre(i + 2 * dx, j), fx: 0, fy: 0, h: kid.i, t: FOOD_FLY }];
+      turn(g);
+      expect(g.S.bombs).toEqual([]);
+      if (hp > PETARD_DMG) {
+        expect(rat.hp).toBe(hp - PETARD_DMG);
+        continue;
+      }
+      // felled a cell short of the firecracker, it lies there in the middle of its cell and never gets to bite
+      expect(rat.hp).toBeLessThanOrEqual(0);
+      expect(cellAt(rat.x, rat.y)).toEqual([i + 3 * dx, j]);
+      expect(cellCentre(i + 3 * dx, j)).toEqual({ x: rat.x, y: rat.y });
+      expect(kid.hp).toBe(99);
+    }
+  });
+
+  it('the bum: his disc lets out a cloud of gas at its first bounce, five cells across with the corners cut off', () => {
+    const g = arena([at('bum')], [['skel', 6, 6]]), bum = g.party[0], [skel] = g.S.mobs;
+    const d = into(g, bum, skel, true);
+    g.step(1 / 120);
+    // on the cell the disc bounced in, just under the skeleton
+    expect(g.S.gas).toEqual([{ i: 6, j: 7, left: GAS_TURNS, t: 0 }]);
+    expect(d).toMatchObject({ gas: true });
+    let n = 0;
+    for (let b = -3; b <= 3; b++) for (let a = -3; a <= 3; a++) if (g.gasAt(6 + a, 7 + b)) n++;
+    expect(n).toBe(21);
+    expect([g.gasAt(8, 9), g.gasAt(8, 8), g.gasAt(6, 9), g.gasAt(9, 7)]).toEqual([false, true, true, false]);
+    // without the ability, or on its later bounces, his disc lets nothing out
+    g.S.discs = [];
+    g.S.gas[0].left = 1;
+    into(g, bum, skel, false);
+    g.step(1 / 120);
+    expect(g.S.gas[0].left).toBe(1);
+    // a second cloud on the same cell starts its turns over instead of piling up
+    g.S.discs = [];
+    into(g, bum, skel, true);
+    g.step(1 / 120);
+    expect(g.S.gas).toEqual([{ i: 6, j: 7, left: GAS_TURNS, t: 0 }]);
+  });
+
+  it('the bum: an enemy in his gas strikes 30% weaker and chokes at the start of each move; the cloud lasts three turns', () => {
+    const g = arena([at('bum')], [['archer', 6, 6]]), bum = g.party[0], [archer] = g.S.mobs;
+    bum.hp = bum.max = 99;
+    const full = archer.intent!.dmg;
+    expect(archer.intent!.t).toBe('hit');
+    into(g, bum, archer, true);
+    g.step(1 / 120);
+    expect(g.inGas(archer)).toBe(true);
+    // the badge shows the weaker shot straight away
+    const weak = Math.max(1, Math.round(full * (1 - GAS_WEAK)));
+    expect(weak).toBeLessThan(full);
+    expect(archer.intent!.dmg).toBe(weak);
+    const hp = archer.hp;
+    turn(g);
+    expect(hp - archer.hp).toBe(GAS_DMG);
+    expect(bum.max - bum.hp).toBe(weak);
+    expect(g.S.gas[0].left).toBe(GAS_TURNS - 1);
+    turn(g);
+    turn(g);
+    expect(hp - archer.hp).toBe(GAS_TURNS * GAS_DMG);
+    expect(g.S.gas).toEqual([]);
+    // the air clears and it shoots full again
+    expect(archer.intent!.dmg).toBe(full + g.rage());
+  });
+
+  it('the ice genius: one hit of his disc slows an enemy to a cell on its next move, two freeze it for that turn', () => {
+    /** His disc with the ability on hits m: from below, or from above if there's wall below it. */
+    const hit = (g: Game, h: HeroState, m: Mob) => {
+      g.S.discs = [];
+      const d = into(g, h, m, true);
+      if (!isFloor(g.S, ...cellAt(d.x, d.y))) { d.y = 2 * m.y - d.y; d.vy = -d.vy; }
+      g.step(1 / 120);
+    };
+    const moved = (frost: number) => {
+      const g = arena([at('genius')], frost >= 2 ? [['rat', 1, 1], ['archer', 1, 1]] : [['rat', 1, 1]]), h = g.party[0], [rat, archer] = g.S.mobs;
+      h.hp = h.max = 99;
+      // the rat six cells off along the row; once frozen, an archer halfway
+      const [i, j] = cellAt(g.spot(h)!.x, g.spot(h)!.y), dx = isFloor(g.S, i + 6, j) ? 1 : -1;
+      const put = (m: Mob, n: number) => { const c = cellCentre(i + n * dx, j); m.x = m.tx = c.x; m.y = m.ty = c.y; };
+      put(rat, 6);
+      if (archer) put(archer, 3);
+      g.pickIntents();
+      for (let k = 0; k < frost; k++) hit(g, h, rat);
+      expect(rat.frost).toBe(frost || undefined);
+      expect(g.frozen(rat)).toBe(frost >= 2);
+      // a frozen shooter doesn't shoot: it counts for nothing on the hero's health bar
+      if (frost >= 2) {
+        for (let k = 0; k < 2; k++) hit(g, h, archer);
+        expect(g.incoming(h)).toBe(0);
+      }
+      turn(g);
+      const [ri] = cellAt(rat.x, rat.y);
+      if (frost >= 2) {
+        expect(h.hp).toBe(99);
+        // the next turn the frost is gone and the archer shoots again
+        expect([rat.frost, archer.frost]).toEqual([undefined, undefined]);
+        expect(archer.intent!.t).toBe('hit');
+        turn(g);
+        expect(h.hp).toBeLessThan(99);
+      }
+      return Math.abs(ri - (i + 6 * dx));
+    };
+    expect(moved(0)).toBeGreaterThan(FROST_STEPS);
+    expect(moved(1)).toBe(FROST_STEPS);
+    expect(moved(2)).toBe(0);
+  });
+
+  it('the kid\'s firecrackers and the bum\'s gas travel to the other screens with the snapshot', () => {
+    const host = new Game(), cli = new Game();
+    host.party = newParty([at('kid'), at('bum')]);
+    host.loadRoom({ seed: 21, depth: 2, floor: 0, type: 'fight' });
+    host.S.bombs = [{ x: 40, y: 40, fx: 30, fy: 40, by: 5, h: at('kid'), t: FOOD_FLY }];
+    host.S.gas = [{ i: 4, j: 5, left: 2, t: 1.5 }];
+    cli.send = () => {};
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    expect(cli.S.bombs).toEqual(host.S.bombs);
+    expect(cli.S.gas).toEqual(host.S.gas);
+    expect(cli.gasAt(6, 6)).toBe(true);
   });
 });
 

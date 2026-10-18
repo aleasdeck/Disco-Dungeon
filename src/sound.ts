@@ -20,7 +20,7 @@ const MUFFLED_HZ = 650;
 /** A decoded track not heard for this long is let go (a minute of music is tens of megabytes); it decodes again when needed. */
 const KEEP_MS = 45_000;
 /** The shortest gap between two of the same sound: a disc rattling along a wall makes one clatter, not forty. */
-const GAP: Partial<Record<Sfx, number>> = { wall: 0.045, hit: 0.05, step: 0.06, ore: 0.08, sparks: 0.08, herb: 0.1, ice: 0.06, armor: 0.08, hurt: 0.12, click: 0.03, zap: 0.06, eat: 0.1 };
+const GAP: Partial<Record<Sfx, number>> = { wall: 0.045, hit: 0.05, step: 0.06, ore: 0.08, sparks: 0.08, herb: 0.1, ice: 0.06, armor: 0.08, hurt: 0.12, click: 0.03, zap: 0.06, eat: 0.1, boom: 0.06, gas: 0.15, freeze: 0.06 };
 /** Sounds a beat of their own: under them the music dips for a moment. */
 const DIP: Partial<Record<Sfx, number>> = { win: 2.6, lose: 2.4, enemyTurn: 0.6, yourTurn: 0.5 };
 
