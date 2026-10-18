@@ -598,12 +598,6 @@ i.ico { display: inline-block; font-style: normal; }
 .pick span { display: block; padding: 4px 2px; background: rgba(0, 0, 0, 0.55); }
 .pick em { display: block; font: 13px/1.15 var(--hand); font-style: normal; color: #f0e5d0; }
 .pick.mine { outline: 3px solid var(--gold); outline-offset: 2px; }
-/* four rows of roles on a laptop screen: shorter cards without the role under the name (the row's tab says it), so the
-   description and «В путь» stay in sight */
-@media (min-width: 821px) and (max-height: 960px) {
-  .pick canvas { aspect-ratio: 3 / 2; }
-  .pick em { display: none; }
-}
 .pick.taken { filter: grayscale(0.7) brightness(0.6); cursor: default; }
 .hero-lead { margin: 4px 0 14px; color: #b2a38c; }
 .hero-info { min-height: 3em; margin: 0 0 14px; }

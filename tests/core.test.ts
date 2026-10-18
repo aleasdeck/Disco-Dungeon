@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_HEAR, PETARD_LURE, PETARD_PER_DISC, RAGE_FROM, ROLES, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroesByRole, isRanged, mobSize } from '../src/data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_HEAR, PETARD_LURE, PETARD_PER_DISC, RAGE_FROM, ROLES, ROLE_ROWS, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroesByRole, isRanged, mobSize } from '../src/data';
 import { ART, FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { CAVE, MOB_CAP, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
@@ -2111,9 +2111,11 @@ describe('the heroes past the first three', () => {
 
   it('nine heroes to pick from, each with its own colour, disc and ability, a row of each kind; online still three seats', () => {
     expect(HEROES.map(d => d.key)).toEqual(['bastion', 'ricochet', 'ash', 'cook', 'sharp', 'electra', 'kid', 'bum', 'genius']);
-    // the pick screens lay them out a row per kind: two tanks, two damage dealers, four zone holders and the kid's support
-    expect(ROLES).toEqual(['Танк', 'Урон', 'Зона', 'Поддержка']);
-    expect(heroesByRole().map(row => row.map(i => HEROES[i].key))).toEqual([['bastion', 'cook'], ['ricochet', 'sharp'], ['ash', 'electra', 'bum', 'genius'], ['kid']]);
+    // the pick screens lay them out a row per disc size, named like records: two big «гиганты», four middle «гранды», three small «миньоны»
+    expect(ROLES).toEqual(['Гигант', 'Гранд', 'Миньон']);
+    expect(ROLE_ROWS).toEqual(['Гиганты', 'Гранды', 'Миньоны']);
+    expect(heroesByRole().map(row => row.map(i => HEROES[i].key))).toEqual([['bastion', 'cook'], ['ash', 'electra', 'bum', 'genius'], ['ricochet', 'sharp', 'kid']]);
+    heroesByRole().forEach((row, r) => row.forEach(i => expect(HEROES[i].r).toBe(6 - r)));
     expect(new Set(HEROES.map(d => d.col)).size).toBe(HEROES.length);
     expect(new Set(HEROES.map(d => d.ab)).size).toBe(HEROES.length);
     expect(HEROES[at('electra')].fem && HEROES[at('cook')].fem && !HEROES[at('sharp')].fem && !HEROES[at('bum')].fem).toBe(true);
