@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, FAN_ANGLE, FAN_M, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, isRanged, mobSize } from '../src/data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, isRanged, mobSize } from '../src/data';
 import { FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { CAVE, MOB_CAP, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
@@ -1824,6 +1824,10 @@ describe('the three new heroes', () => {
     const [l, r, mid] = fan;
     expect([l.fan, r.fan, mid.fan]).toEqual([true, true, undefined]);
     expect(l.m).toBeCloseTo(mid.m * FAN_M, 6);
+    // the side ones are phantoms, smaller than his disc
+    expect(mid.r).toBe(h.def.r);
+    expect(l.r).toBeCloseTo(h.def.r * FAN_R, 6);
+    expect(r.r).toBeCloseTo(h.def.r * FAN_R, 6);
     expect(new Set(fan.map(d => d.vol)).size).toBe(1);
     const ang = (d: typeof mid) => Math.atan2(d.vy, d.vx);
     expect(Math.abs(ang(l) - ang(mid))).toBeCloseTo(FAN_ANGLE, 6);
@@ -1834,6 +1838,35 @@ describe('the three new heroes', () => {
     fan.forEach((d, k) => expect(Math.atan2(d.vy, d.vx)).toBeCloseTo(Math.atan2(v[k][1], v[k][0]), 6));
     // after the throws he goes over to the middle disc, the one he aimed
     expect(g.S.discs.filter(d => d.hero === h).pop()).toBe(mid);
+  });
+
+  it('the card sharp: a phantom that drops into a hole or stops on spikes costs him no health, his own disc still does', () => {
+    const g = arena([at('sharp')], [['archer', 1, 1]]), h = g.party[0], hp = h.hp;
+    const disc = (i: number, j: number, vx: number, fan: boolean) => ({ hero: h, ...cellCentre(i, j), vx, vy: 0, r: h.def.r * (fan ? FAN_R : 1), m: 1, e: 0.8, fr: 1,
+      fall: 0, gone: false, charged: false, bounces: 0, spin: 0, hits: 0, ab: true, rico: 0, ...(fan ? { fan } : {}) });
+    g.S.pits = [{ k: '1x1', cells: [[6, 4]] }];
+    g.S.haz = new Set([hazKey(8, 6)]);
+    const fell = disc(4, 4, 200, true), spiked = disc(8, 6, 0, true);
+    g.S.discs = [fell, spiked, disc(3, 6, 0, false)];
+    for (let k = 0; k < 120 && !fell.fall; k++) g.step(1 / 120);
+    expect(fell.fall).toBeGreaterThan(0);
+    g.endTurn(h);
+    for (let k = 0; k < 120 && g.S.phase === 'throw'; k++) g.update(1 / 60);
+    expect(g.S.phase).toBe('resolve');
+    expect(h.hp).toBe(hp);
+    expect(g.S.floats.some(f => f.txt === 'шипы!' || f.txt === 'провал')).toBe(false);
+    // the same two places under his own disc hurt
+    const o = arena([at('sharp')], [['archer', 1, 1]]), oh = o.party[0];
+    o.S.pits = [{ k: '1x1', cells: [[6, 4]] }];
+    const own = { ...disc(4, 4, 200, false), hero: oh };
+    o.S.discs = [own];
+    for (let k = 0; k < 120 && !own.fall; k++) o.step(1 / 120);
+    expect(oh.hp).toBe(hp - 2);
+    o.S.haz = new Set([hazKey(8, 6)]);
+    o.S.discs = [{ ...disc(8, 6, 0, false), hero: oh }];
+    o.endTurn(oh);
+    for (let k = 0; k < 120 && o.S.phase === 'throw'; k++) o.update(1 / 60);
+    expect(oh.hp).toBe(hp - 2 - o.S.biome.hazDmg);
   });
 });
 
