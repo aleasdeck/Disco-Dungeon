@@ -1,5 +1,5 @@
 import './style.css';
-import { BOOT_GAGS, COMBAT_ROOMS, FORGE_ORE, HEROES, MAX_PLAYERS, WALL_H } from './data';
+import { BOOT_GAGS, COMBAT_ROOMS, HEROES, MAX_PLAYERS, WALL_H, forgeOre } from './data';
 import { Camera } from './camera';
 import { Game, newBank, newParty } from './game';
 import { Net, type Player } from './net';
@@ -249,8 +249,9 @@ function choose(id: string) {
     controls.fit();
     showMap(false);
   } else if (n.type === 'forge') {
-    // the blacksmith's gives the party its ore; everyone upgrades their own discs and goes back to the map when done
-    game.bank.ore += FORGE_ORE;
+    // the blacksmith's gives the party 0 to 3 ore; everyone upgrades their own discs and goes back to the map when done
+    game.gift = forgeOre(run.seed + depth * 131);
+    game.bank.ore += game.gift;
     game.forge = depth;
     showMap(false);
     game.onChange();

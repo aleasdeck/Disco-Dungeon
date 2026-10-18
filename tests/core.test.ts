@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, FAN_ANGLE, FAN_M, FOOD_HEAL, FOOD_PER_DISC, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, isRanged, mobSize } from '../src/data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, FAN_ANGLE, FAN_M, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, isRanged, mobSize } from '../src/data';
 import { FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { CAVE, MOB_CAP, PARTY_SCALE, caveTurns, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
@@ -754,6 +754,19 @@ describe('placement and discs', () => {
     expect(a.pad).toBe(1);
   });
 
+  it('hands the party 0 to 3 ore at the blacksmith\'s, the same on every screen, and each amount turns up', () => {
+    expect(FORGE_ORE).toBe(3);
+    expect(forgeOre(5150)).toBe(forgeOre(5150));
+    const got = new Set<number>();
+    for (let s = 0; s < 200; s++) {
+      const n = forgeOre(s * 131);
+      expect(n).toBeGreaterThanOrEqual(0);
+      expect(n).toBeLessThanOrEqual(FORGE_ORE);
+      got.add(n);
+    }
+    expect([...got].sort()).toEqual([0, 1, 2, 3]);
+  });
+
   it('sells disc upgrades only at the blacksmith\'s, between rooms', () => {
     const g = fresh(), h = g.hero;
     g.bank.ore = 100;
@@ -1098,9 +1111,10 @@ describe('online play', () => {
   it('opens the blacksmith\'s on every screen, and a client buys through the host', () => {
     const { host, cli, sent } = pair();
     host.forge = 4;
+    host.gift = 2;
     host.bank.ore = 20;
     applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
-    expect(cli.forge).toBe(4);
+    expect([cli.forge, cli.gift]).toEqual([4, 2]);
     cli.buyDisc(cli.heroOf(2));
     expect(sent).toEqual([{ k: 'disc', h: 2 }]);
     host.perform(sent[0]);
