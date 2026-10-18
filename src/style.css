@@ -258,7 +258,7 @@ i.ico { display: inline-block; font-style: normal; }
   --pn: 22px; font: var(--pn)/1 var(--hand); color: #fff; text-align: center; white-space: nowrap;
   background: rgba(18, 12, 9, 0.62); clip-path: var(--cut-bar);
 }
-/* the handwriting runs wide: a long name like «Пепельница» is written smaller */
+/* the handwriting runs wide: a long name like «Зажигалка» is written smaller */
 .pname.long { font-size: calc(var(--pn) * 0.8); }
 .statuses { position: absolute; right: 6px; top: 6px; display: flex; flex-direction: column; gap: 4px; }
 .statuses .st { width: 30px; height: 30px; padding: 3px; background: rgba(18, 12, 9, 0.7); clip-path: var(--cut-gem); }
