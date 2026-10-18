@@ -80,8 +80,8 @@ plate('opt', (W, H), [(18, 22), (W - 70, 12), (W - 14, 100), (W - 50, H - 16), (
       small=True)
 
 # the menu's buttons, each its own shape (Vladislav asked): Продолжить a chevron, Кампания an arrow, Сетевая игра a
-# ticket, Коллекция and Как играть a bookmark, Настройки a slanted label, Главное меню an arrow back. Long and low like
-# the buttons, the torn corner small
+# ticket, Коллекция and Как играть a bookmark, Статистика steps like a bar chart, Настройки a slanted label, Главное
+# меню an arrow back. Long and low like the buttons, the torn corner small
 W, H = 1024, 128
 BAND = [(0, 0), (W, 0), (W, 34), (0, 42)]
 
@@ -99,6 +99,7 @@ MENU = {
     'mb_mark': [(14, 12), (1012, 10), (952, 64), (1014, 120), (12, 118), (20, 66)],
     'mb_slant': [(64, 10), (1014, 16), (962, 120), (10, 114)],
     'mb_back': [(84, 10), (1010, 14), (1000, 64), (1006, 118), (88, 122), (10, 64)],
+    'mb_steps': [(14, 12), (904, 10), (906, 42), (958, 44), (960, 78), (1012, 80), (1010, 120), (12, 118), (20, 64)],
 }
 for i, (key, poly) in enumerate(MENU.items()):
     plate(key, (W, H), poly, MUSTARD, 70 + i, band=BAND, tear=0.45)

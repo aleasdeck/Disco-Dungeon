@@ -45,7 +45,39 @@ export interface HeroState {
   boomed?: number;
   /** «Счастливый носок»: it has already saved the hero from a deadly blow in this room. */
   lucky?: boolean;
+  /** What the hero has done this run, for the player's statistics; saves from before them have none. */
+  tally?: Tally;
 }
+
+/**
+ * A hero's run in numbers, for the player's statistics (src/stats.ts). The host counts them and the snapshots carry them,
+ * so each online player reads their own hero's from the game state. `top` and `rico` are the run's records, the rest sums.
+ */
+export interface Tally {
+  /**
+   * The seed of the run it counts: until the host's first snapshot of a new run comes, a client's heroes still hold the
+   * last run's numbers, and the statistics leave those alone.
+   */
+  run: number;
+  /** Damage the hero's discs (and their lightning, firecrackers and light spots) dealt, and the biggest single blow. */
+  dmg: number;
+  top: number;
+  kills: number;
+  throws: number;
+  /** «ТОЧНО!»: straight from the rune into an enemy, square on. */
+  crits: number;
+  /** The ability switched on. */
+  abs: number;
+  ore: number;
+  /** Damage taken past the shield, and the times the hero fell. */
+  hurt: number;
+  falls: number;
+  /** The most bounces a disc made on its way into an enemy. */
+  rico: number;
+}
+
+export const newTally = (run = 0): Tally => ({ run, dmg: 0, top: 0, kills: 0, throws: 0, crits: 0, abs: 0, ore: 0, hurt: 0, falls: 0, rico: 0 });
+const tallyOf = (h: HeroState) => (h.tally ??= newTally());
 
 export interface Disc {
   /** Tells the discs of a turn apart: the turn and the throw's place in it (saves from before the new heroes have none). */
@@ -250,9 +282,9 @@ export function newBank(): Bank {
   return { ore: 0, boon: 0 };
 }
 
-/** A fresh party; `picks` lists which heroes (by index into HEROES) take part, the first three by default. */
-export function newParty(picks: number[] = [0, 1, 2]): HeroState[] {
-  return picks.map(i => ({ i, def: HEROES[i], ...heroStart(HEROES[i].hp) }));
+/** A fresh party for the run with seed `run`; `picks` lists which heroes (by index into HEROES) take part, the first three by default. */
+export function newParty(picks: number[] = [0, 1, 2], run = 0): HeroState[] {
+  return picks.map(i => ({ i, def: HEROES[i], ...heroStart(HEROES[i].hp), tally: newTally(run) }));
 }
 
 function heroStart(hp: number) {
@@ -575,6 +607,7 @@ export class Game {
     S.discs.push(disc(0, false));
     h.hand--;
     h.thrown = true;
+    tallyOf(h).throws++;
     this.onChange();
   }
 
@@ -683,6 +716,7 @@ export class Game {
     if (this.send) { this.send({ k: 'ability', h: h.i }); return; }
     h.sparks -= this.abCost(h);
     h.boost = true;
+    tallyOf(h).abs++;
     const p = this.spot(h);
     if (p) {
       this.float(p.x, p.y - 8, h.def.ab + '!', h.def.abCol);
@@ -1320,6 +1354,8 @@ export class Game {
     if (m.hp <= 0) return;
     if (by && m.frost) { n = Math.ceil(n * (1 + frostVuln(m.frost))); this.burst(m.x, m.y, '#cfefff', 6); }
     if (m.armor && !pierce && n < m.armor) { this.float(m.x, m.y, 'броня', '#c7cbe0'); this.sfx('armor'); return; }
+    // the statistics count the health the blow took off, and the blow itself as the record
+    if (by) { const t = tallyOf(by); t.dmg += Math.min(n, m.hp); t.top = Math.max(t.top, n); }
     m.hp -= n;
     m.flash = 0.15;
     this.float(m.x, m.y, '-' + n, col);
@@ -1343,12 +1379,13 @@ export class Game {
   /** A hero's disc has felled an enemy: «Клыки» mend the hero, «Копилка» drops ore into the pool. */
   private killed(m: Mob, h: HeroState) {
     const p = this.spot(h);
+    tallyOf(h).kills++;
     if (has(h, 'fangs') && h.hp > 0 && h.hp < h.max) {
       const hl = Math.min(ART.fangs, h.max - h.hp);
       h.hp += hl;
       if (p) this.float(p.x, p.y - 4, `+${hl} HP`, '#7be39a');
     }
-    if (has(h, 'piggy')) { this.bank.ore++; this.mined++; this.float(m.x, m.y + 8, '+1 руда', '#ffb070'); }
+    if (has(h, 'piggy')) { this.bank.ore++; this.mined++; tallyOf(h).ore++; this.float(m.x, m.y + 8, '+1 руда', '#ffb070'); }
   }
 
   /** A burning enemy falls: what is left of its fire leaps onto the nearest enemy still standing. */
@@ -1386,10 +1423,13 @@ export class Game {
     const p = this.spot(h) ?? { x: S.Wx - 20, y: S.Wy - 20 };
     const blk = Math.min(h.shield, n);
     h.shield -= blk;
-    const dmg = n - blk;
+    const dmg = n - blk, had = h.hp;
     h.hp -= dmg;
     // «Счастливый носок»: once a room a deadly blow leaves the hero standing on 1
     if (h.hp <= 0 && dmg > 0 && has(h, 'sock') && !h.lucky) { h.hp = 1; h.lucky = true; this.float(p.x, p.y - 14, 'носок спас!', '#ffe27a'); }
+    const t = tallyOf(h);
+    t.hurt += Math.min(dmg, had);
+    if (h.hp <= 0) t.falls++;
     h.flash = 0.2;
     // a blow knocks the figure away from the enemy; spikes, lava and fire just make it jump
     const kp = (0.35 + Math.min(n, 10) / 14) * (dmg ? 1 : 0.6);
@@ -1559,7 +1599,7 @@ export class Game {
         // «Золотая челюсть» bites the whole vein out at once, takes as much of the crystal as everyone has room for,
         // and eats as many mushrooms as it takes to heal up (one at the least)
         const all = has(h, 'denture');
-        if (n.k === 'ore') { const k = all ? n.left : 1, got = q * k; n.left -= k; this.bank.ore += got; this.mined += got; this.float(n.x, n.y, `+${got} руда`, '#ffb070'); }
+        if (n.k === 'ore') { const k = all ? n.left : 1, got = q * k; n.left -= k; this.bank.ore += got; this.mined += got; tallyOf(h).ore += got; this.float(n.x, n.y, `+${got} руда`, '#ffb070'); }
         // sparks go to every hero still standing, whoever threw the disc, each up to what one ability costs; the crystal
         // loses only what was taken, so sparks nobody had room for stay in it for later
         if (n.k === 'spk') {
@@ -1594,7 +1634,9 @@ export class Game {
         // «Скрипучая пружина»: every bounce on the way adds a point, Ricochet's own on top
         if (has(h, 'spring')) dmg += Math.min(d.bounces, ART.springMax);
         if (d.charged) { dmg *= this.ring(h); d.charged = false; }
-        if (crit && m.hp > 0) { this.float(m.x, m.y - 24, 'ТОЧНО!', '#ffe27a'); this.sfx('crit'); }
+        const t = tallyOf(h);
+        if (crit && m.hp > 0) { this.float(m.x, m.y - 24, 'ТОЧНО!', '#ffe27a'); this.sfx('crit'); t.crits++; }
+        t.rico = Math.max(t.rico, d.bounces);
         // the ability goes first: fire on an enemy this very hit kills leaps on to the next one
         if (d.ab) this.abilityHit(d, m);
         this.hurtMob(m, dmg, '#fff', has(h, 'opener'), Math.min(1, vn / 250), h);
