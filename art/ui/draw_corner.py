@@ -1,31 +1,32 @@
-"""Draws the fight corner's pieces as die-cut cardboard stickers (a beige rim, flat print, no ink line: Vladislav had the
-outline taken off and the shading flattened), after his sketch of 2026-10-18: next to the portrait a column for the stack
-of discs (drawn by style.css as chips), then a big health bar like a bow tie (a dip on top, a waist below, its right end a
-point), the sparks as a crystal strip under it split in two by a crack, and the ability gem standing the full height on
-the right with a notch the health bar's point goes into and a foot under the bar's end: the gem is the third spark, so the
-strip's second crack is the gem's edge. Over the bar's right half and the gem the turn button, its bottom following the
-bar's top.
+"""Draws the fight corner's pieces as die-cut cardboard (flat print on kraft board with its grain and flutes showing,
+rubbed edges and a torn corner; no ink line and no rim: Vladislav had both taken off and the shading flattened), after his
+sketch of 2026-10-18: next to the portrait a column for the stack of discs (drawn by style.css as chips), then a big
+health bar like a bow tie (a dip on top, a waist below, its right end a point), the sparks as a crystal strip under it
+split in two by a crack, and the ability gem standing the full height on the right with a notch the health bar's point
+goes into and a foot under the bar's end: the gem is the third spark, so the strip's second crack is the gem's edge. Over
+the bar's right half and the gem the turn button, its bottom following the bar's top.
 
 All pieces share one plan: the block is 713 x 267 units (x right, y down; the column starts at x 0; the turn button stands
-above it, at negative y). Pieces sit apart by a cut of 9..15 units; each sticker's rim only reaches halfway across a cut,
-so two pieces never paint over each other. Run from the repo root:
+above it, at negative y). Pieces sit apart by a cut of 9..15 units; a rim, if one is asked for, only reaches halfway
+across a cut, so two pieces never paint over each other. Run from the repo root:
 
     python3 art/ui/draw_corner.py [folder] [rim]
 
-It writes hp_empty|hp_full|hp_shield, spk_1..2_on|off, gem and turn (.webp) to public/assets/ui/ (or the folder; rim is
-the rim's width in pixels, 0 for none) and prints the numbers style.css needs: each picture's box in units, the red span
-of the health bar, and the outlines of the gem and the button as clip-path polygons, for where a tap lands.
+It writes hp_empty|hp_full|hp_shield, spk_1..2_on|off, gem, turn and the grain tile board (.webp) to public/assets/ui/
+(or the folder; rim is a beige rim's width in pixels to try one, none by default) and prints the numbers style.css needs:
+each picture's box in units, the red span of the health bar, and the outlines of the gem and the button as clip-path
+polygons, for where a tap lands.
 """
 import sys
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 import numpy as np
 
 OUT = (sys.argv[1].rstrip('/') + '/') if len(sys.argv) > 1 else 'public/assets/ui/'
 U = 2.0  # pixels per unit
 SS = 4  # supersampling
 M = 14  # margin round each picture, units
-RIM = float(sys.argv[2]) if len(sys.argv) > 2 else 20  # the beige rim round the print, pixels at 1x
+RIM = float(sys.argv[2]) if len(sys.argv) > 2 else 0  # a beige rim round the print, pixels at 1x (he had it taken off)
 RIM_COL, RIM_EDGE = (220, 207, 177), (176, 158, 118)
 BW, BH = 713, 267
 
@@ -116,11 +117,90 @@ def outline(d, p, width, fill):
         d.ellipse([x - r, y - r, x + r, y + r], fill=fill)
 
 
-def noise(img, amount, seed):
-    a = np.asarray(img).astype(np.int16)
-    n = np.random.default_rng(seed).integers(-amount, amount + 1, a.shape[:2])[..., None]
-    a[..., :3] = np.clip(a[..., :3] + n, 0, 255)
+# ---------- the board: kraft cardboard showing through the print ----------
+KRAFT = np.array((200, 164, 116), float)
+
+
+def smooth(rng, shape, scale):
+    """noise with blobs about scale pixels across, wrapping round the edges, scaled to about -1..1"""
+    h, w = shape
+    fy, fx = np.fft.fftfreq(h)[:, None], np.fft.fftfreq(w)[None, :]
+    a = np.real(np.fft.ifft2(np.fft.fft2(rng.standard_normal(shape)) * np.exp(-2 * (np.pi * scale / 4) ** 2 * (fx * fx + fy * fy))))
+    return np.clip(a / (2.5 * a.std()), -1, 1)
+
+
+def fibres(rng, shape, n):
+    """short pale and dark strokes of the pulp, -1..1, wrapping round the edges"""
+    h, w = shape
+    im = Image.new('L', (w, h), 128)
+    d = ImageDraw.Draw(im)
+    for _ in range(n):
+        x, y, ang, ln = rng.random() * w, rng.random() * h, rng.random() * np.pi, 8 + rng.random() * 18
+        v = 128 + int(rng.choice((-1, 1)) * (30 + rng.random() * 50))
+        dx, dy = np.cos(ang) * ln / 2, np.sin(ang) * ln / 2
+        for ox in (-w, 0, w):
+            for oy in (-h, 0, h):
+                d.line([(x + ox - dx, y + oy - dy), (x + ox + dx, y + oy + dy)], fill=v, width=2)
+    return np.asarray(im.filter(ImageFilter.GaussianBlur(0.6)), float) / 128 - 1
+
+
+def grain(rng, shape, flutes=True):
+    """how much lighter or darker the board is at each pixel, around 1: blotches, fibres and (on corrugated board) the
+    flutes under the liner showing through as faint stripes"""
+    h, w = shape
+    g = 1 + 0.05 * smooth(rng, shape, 70) + 0.03 * smooth(rng, shape, 14) + 0.07 * fibres(rng, shape, h * w // 500)
+    if flutes:
+        g += 0.045 * np.cos(2 * np.pi * np.arange(w) / 28)[None, :]
+    return g + rng.uniform(-0.015, 0.015, shape)
+
+
+def board(img, seed, corners):
+    """prints the picture on cardboard: the ink a little soaked into the kraft, the board's grain through it, the print
+    rubbed off to bare board in patches along the cut and round the corners (corners, pixels), a couple of scratches, the
+    liner torn off at one corner, and a few small nicks in the cut itself"""
+    rng = np.random.default_rng(seed)
+    a = np.asarray(img).astype(float)
+    shape = a.shape[:2]
+    alpha = img.getchannel('A')
+
+    def within(px):
+        return np.asarray(alpha.filter(ImageFilter.MinFilter(2 * px + 1)), float) < 128
+
+    yy, xx = np.mgrid[:shape[0], :shape[1]]
+    fine, coarse = smooth(rng, shape, 18), smooth(rng, shape, 40)
+    # round each corner a blob of bare board, its size and edge ragged
+    corner = np.zeros(shape)
+    for cx, cy in corners:
+        corner = np.maximum(corner, 1 - np.hypot(xx - cx, yy - cy) / (24 + rng.random() * 24))
+    worn = (within(3) & (fine > 0.1)) | (within(10) & (coarse > 0.5)) | (corner + 0.35 * fine > 0.5)
+    # scratches: a few thin strokes of bare board across the print
+    sc = Image.new('L', img.size, 0)
+    d = ImageDraw.Draw(sc)
+    for _ in range(rng.integers(1, 4)):
+        x, y, ang, ln = rng.random() * img.width, rng.random() * img.height, rng.uniform(-0.6, 0.6), 30 + rng.random() * 80
+        d.line([(x, y), (x + np.cos(ang) * ln, y + np.sin(ang) * ln)], fill=120, width=2)
+    wear = np.maximum(worn * 255.0, np.asarray(sc, float))
+    wear = np.asarray(Image.fromarray(wear.astype(np.uint8), 'L').filter(ImageFilter.GaussianBlur(1)), float)[..., None] / 255
+    g = grain(rng, shape)[..., None]
+    ink = a[..., :3] * 0.82 + KRAFT * 0.18
+    rgb = (ink * (1 - wear) + KRAFT * wear) * g
+    # at one corner the liner is torn off: the flutes under it bare, a pale ragged fringe of torn paper round them
+    cx, cy = corners[rng.integers(len(corners))]
+    r = 1 - np.hypot(xx - cx, yy - cy) / (100 + rng.random() * 50) + 0.18 * smooth(rng, shape, 22)
+    torn, fringe = r > 0.5, r > 0.46
+    ribs = KRAFT * (0.8 + 0.18 * np.cos(2 * np.pi * xx / 28))[..., None] * g
+    rgb = np.where(fringe[..., None], np.array((236, 224, 198), float) * g, rgb)
+    rgb = np.where(torn[..., None], ribs, rgb)
+    a[..., :3] = np.clip(rgb, 0, 255)
+    # nicks: the cut is a little ragged
+    a[..., 3] *= ~(within(2) & (smooth(rng, shape, 6) < -0.7))
     return Image.fromarray(a.astype(np.uint8), 'RGBA')
+
+
+def board_tile(seed, size=256):
+    """the board's grain alone as a grey tile that wraps, for style.css to lay over its own shapes (the disc chips)"""
+    g = grain(np.random.default_rng(seed), (size, size), flutes=False)
+    return Image.fromarray(np.clip(128 + (g - 1) * 500, 0, 255).astype(np.uint8), 'L')
 
 
 def box(name):
@@ -160,8 +240,22 @@ def lighter(col, n):
     return tuple(min(255, c + n) for c in col)
 
 
-def save(img, key, seed):
-    noise(img, 3, seed).save(OUT + key + '.webp', quality=92)
+def sharp(p):
+    """the polygon's outward corners sharper than 140 degrees"""
+    turn = sum(ax * by - bx * ay for (ax, ay), (bx, by) in zip(p, p[1:] + p[:1]))
+    out = []
+    for i, (x, y) in enumerate(p):
+        (ax, ay), (bx, by) = p[i - 1], p[(i + 1) % len(p)]
+        u, v = (x - ax, y - ay), (bx - x, by - y)
+        cross, dot = u[0] * v[1] - u[1] * v[0], u[0] * v[0] + u[1] * v[1]
+        if cross * turn > 0 and np.degrees(np.arctan2(abs(cross), dot)) > 40:
+            out.append((x, y))
+    return out
+
+
+def save(img, key, seed, name):
+    x0, y0, _, _ = box(name)
+    board(img, seed, [((x - x0) * U, (y - y0) * U) for x, y in sharp(PIECES[name])]).save(OUT + key + '.webp', quality=92)
 
 
 css = {}
@@ -172,7 +266,7 @@ for key, col in [('hp_empty', (46, 36, 28)), ('hp_full', (200, 45, 59)), ('hp_sh
     def paint(d, px, col=col):
         d.rectangle([px((-M, -M)), px((BW, BH + M))], fill=col + (255,))
         d.polygon([px(q) for q in band], fill=lighter(col, 9) + (255,))
-    save(sticker('hp', paint), key, 7)
+    save(sticker('hp', paint), key, 7, 'hp')
 css['hp'] = box('hp')
 red = np.asarray(Image.open(OUT + 'hp_full.webp').convert('RGB')).astype(int)
 xs = np.where(((red[..., 0] > 170) & (red[..., 1] < 90)).any(axis=0))[0]
@@ -191,7 +285,7 @@ for k in range(2):
         def paint(d, px, c=c):
             d.rectangle([px((-M, -M)), px((BW, BH + M))], fill=c['base'] + (255,))
             d.polygon([px(q) for q in upper], fill=c['up'] + (255,))
-        save(sticker(f'spk_{k + 1}', paint), f'spk_{k + 1}_{state}', 11 + k)
+        save(sticker(f'spk_{k + 1}', paint), f'spk_{k + 1}_{state}', 11 + k, f'spk_{k + 1}')
     css[f'spk_{k + 1}'] = box(f'spk_{k + 1}')
 
 # ---------- the gem: facets round a flat middle face of its body, a shade apart, lit from the top left; the foot one facet ----------
@@ -209,7 +303,7 @@ def paint_gem(d, px):
     d.polygon([px(q) for q in inner], fill=(130, 62, 146, 255))
 
 
-save(sticker('gem', paint_gem), 'gem', 31)
+save(sticker('gem', paint_gem), 'gem', 31, 'gem')
 css['gem'] = box('gem')
 
 # ---------- the turn button: mustard board with a lighter band along its top ----------
@@ -222,8 +316,10 @@ def paint_turn(d, px):
     d.polygon([px(q) for q in turn_band], fill=lighter(MUSTARD, 10) + (255,))
 
 
-save(sticker('turn', paint_turn), 'turn', 41)
+save(sticker('turn', paint_turn), 'turn', 41, 'turn')
 css['turn'] = box('turn')
+
+board_tile(51).save(OUT + 'board.webp', quality=90)
 
 # ---------- the numbers for style.css ----------
 print(f'block {BW} x {BH} units')

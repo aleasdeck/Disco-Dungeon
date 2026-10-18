@@ -276,9 +276,11 @@ i.ico { display: inline-block; font-style: normal; }
 
 /* the discs of this turn: a stack of casino chips, the first at the bottom, stretched to fill the column; one still in hand
    shows the hero's disc on top (--disc, the room's picture; his colour without it) over a side in his dark colour with
-   light marks, the thrown ones fade from the top down */
+   light marks, the thrown ones fade from the top down. Like the rest of the corner they are cardboard: the board's grain
+   (--grain, the board picture once it loads) lies over both faces */
 .discs {
   --bx: 0; --by: 0; --bw: 78; --bh: 267; --e: calc(30 * var(--u)); --mk: color-mix(in srgb, var(--c, #888) 40%, #f4ead8);
+  --grain: none;
   display: flex; flex-direction: column-reverse; box-sizing: border-box; padding: calc(var(--e) / 2) 0;
   filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35));
 }
@@ -287,14 +289,17 @@ i.ico { display: inline-block; font-style: normal; }
 .discs i::before {
   content: ''; position: absolute; inset: 0 0 calc(var(--e) / -2);
   border-radius: 0 0 50% 50% / 0 0 calc(var(--e) / 2) calc(var(--e) / 2);
-  background: linear-gradient(90deg, transparent 9%, var(--mk) 9% 17%, transparent 17% 43%, var(--mk) 43% 57%, transparent 57% 83%, var(--mk) 83% 91%, transparent 91%) color-mix(in srgb, var(--c, #888) 62%, #000);
+  background: var(--grain) 0 0 / calc(160 * var(--u)), linear-gradient(90deg, transparent 9%, var(--mk) 9% 17%, transparent 17% 43%, var(--mk) 43% 57%, transparent 57% 83%, var(--mk) 83% 91%, transparent 91%) color-mix(in srgb, var(--c, #888) 62%, #000);
+  background-blend-mode: overlay, normal;
   box-shadow: 0 calc(5 * var(--u)) 0 rgba(0, 0, 0, 0.45);
 }
 /* the top, the hero's disc seen from the side: only the top chip's shows whole */
 .discs i::after {
   content: ''; position: absolute; left: 0; right: 0; top: calc(var(--e) / -2); height: var(--e); border-radius: 50%;
-  background: var(--disc, none) center / 100% 100% no-repeat var(--c, #888);
+  background: var(--grain) 0 0 / calc(160 * var(--u)), var(--disc, none) center / 100% 100% no-repeat var(--c, #888);
+  background-blend-mode: overlay, normal;
 }
+.art-board .discs { --grain: var(--ui-board); }
 .discs i:not(.on) { opacity: 0.3; filter: grayscale(1) brightness(0.5); }
 
 .hpbar { --bx: 79; --by: -14; --bw: 458; --bh: 230; }
@@ -850,13 +855,13 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 
 /* the health and the sparks as die-cut cardboard (art/ui/draw_corner.py draws them from Vladislav's sketch) */
 /* health: a bow tie with a dip on top, a waist below and a point on the right going into the gem (hp_empty, hp_full,
-   hp_shield: one shape, stretched whole). The red runs from x 28 to 888 of 916, so .track is that span and the fills stay
+   hp_shield: one shape, stretched whole). The red runs from x 24 to 891 of 916, so .track is that span and the fills stay
    plain percentages of it; each fill shows the same picture at the bar's full size (cqw/cqh of the track), shifted by where
    the fill starts (--x, set with it) */
 .art-hp_empty.art-hp_full .corner .hpbar { background: var(--ui-hp_empty) center / 100% 100% no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)); }
-.art-hp_empty.art-hp_full .corner .hpbar .track { inset: 0 3.057% 0 3.057%; clip-path: none; background: none; container-type: size; }
+.art-hp_empty.art-hp_full .corner .hpbar .track { inset: 0 2.729% 0 2.620%; clip-path: none; background: none; container-type: size; }
 .art-hp_empty.art-hp_full .corner .hpbar.shielded .track { box-shadow: none; }
-.art-hp_empty.art-hp_full .corner .track > * { background: var(--ui-hp_full) calc(-3.256cqw - var(--x, 0) * 1cqw) 0 / 106.51cqw 100cqh no-repeat; }
+.art-hp_empty.art-hp_full .corner .track > * { background: var(--ui-hp_full) calc(-2.768cqw - var(--x, 0) * 1cqw) 0 / 105.65cqw 100cqh no-repeat; }
 .art-hp_empty.art-hp_full .corner .track s { background-image: var(--ui-hp_shield); }
 .art-hp_empty.art-hp_full .corner .track s.risk, .art-hp_empty.art-hp_full .corner .track em { filter: brightness(1.7) saturate(0.5); }
 /* the sparks: three pieces of one crystal, each its own picture in its own box */
