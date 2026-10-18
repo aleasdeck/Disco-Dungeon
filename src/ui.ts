@@ -2,7 +2,7 @@
 // the enemy queue with what each will do, map / journal / menu), my hero's corner (portrait with its statuses, discs,
 // health with the shield on it, the sparks bar running into the ability button) and one big button for the turn.
 
-import { AB_COST, CRIT, E_MAX, ENEMY_BASE, FROST_STEPS, FROST_VULN, GAS_WEAK, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, fullHit, gasDmg, isRanged, type MobKind, type StatKey } from './data';
+import { AB_COST, CRIT, E_MAX, ENEMY_BASE, FROST_STEPS, GAS_WEAK, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, frostVuln, fullHit, gasDmg, isRanged, type MobKind, type StatKey } from './data';
 import { eventArt, sprites, uiArt } from './assets';
 import type { Game, HeroState } from './game';
 import type { Mob } from './room';
@@ -367,7 +367,7 @@ export class Hud {
     const g = this.g, out: Status[] = [];
     if (m.burn > 0) out.push({ k: 'fire', n: m.burn, t: `Горит: в начале своего хода потеряет ${Math.min(m.burn, m.hp)}` });
     if (g.inGas(m)) out.push({ k: 'gas', t: `В газу: в начале своего хода потеряет ${Math.min(gasDmg(m.max), m.hp)} и ударит на ${Math.round(GAS_WEAK * 100)}% слабее` });
-    const brittle = `; урон от дисков и умений героев +${Math.round(FROST_VULN * 100)}%`;
+    const brittle = `; урон от дисков и умений героев +${Math.round(frostVuln(m.frost) * 100)}%`;
     if (g.frozen(m)) out.push({ k: 'chill', t: 'Заморожен: пропустит ход' + brittle });
     else if (m.frost) out.push({ k: 'slow', t: `Замедлен: в свой ход пройдёт не больше ${FROST_STEPS === 1 ? 'клетки' : FROST_STEPS + ' клеток'}` + brittle });
     if (isRanged(m.k)) out.push({ k: 'bow', t: 'Дальний бой: стреляет только в того, кого видит' });

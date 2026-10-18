@@ -1,7 +1,7 @@
 // Combat rules: turn flow, disc physics, damage, abilities.
 // Rendering and input live elsewhere; this module only changes state.
 
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, CRIT_COS, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, FROST_VULN, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_HEAR, PETARD_LURE, PETARD_MAX, PETARD_PER_DISC, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, ZAP, ZAP_REACH, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, CRIT_COS, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_HEAR, PETARD_LURE, PETARD_MAX, PETARD_PER_DISC, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, ZAP, ZAP_REACH, frostVuln, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
 import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { mulberry32 } from './rng';
 import { has } from './artifacts';
@@ -1309,11 +1309,11 @@ export class Game {
 
   /**
    * Damage an enemy; `by` is the hero whose disc (or its lightning, firecracker or light spot) dealt it, for the trophies
-   * that pay for kills. A hero's blow on an enemy the ice genius has frosted hits FROST_VULN harder; fire and gas don't.
+   * that pay for kills. A hero's blow on an enemy the ice genius has frosted hits harder (`frostVuln`); fire and gas don't.
    */
   hurtMob(m: Mob, n: number, col = '#fff', pierce = false, p = 0.6, by?: HeroState) {
     if (m.hp <= 0) return;
-    if (by && m.frost) { n = Math.ceil(n * (1 + FROST_VULN)); this.burst(m.x, m.y, '#cfefff', 6); }
+    if (by && m.frost) { n = Math.ceil(n * (1 + frostVuln(m.frost))); this.burst(m.x, m.y, '#cfefff', 6); }
     if (m.armor && !pierce && n < m.armor) { this.float(m.x, m.y, 'броня', '#c7cbe0'); this.sfx('armor'); return; }
     m.hp -= n;
     m.flash = 0.15;

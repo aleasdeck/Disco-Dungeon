@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_HEAR, PETARD_LURE, PETARD_PER_DISC, KINDS, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_HEAR, PETARD_LURE, PETARD_PER_DISC, KINDS, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
 import { ART, FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { CAVE, MOB_CAP, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
@@ -2322,7 +2322,7 @@ describe('the heroes past the first three', () => {
     for (let k = 0; k < 4000 && g.S.turn === t; k++) g.update(1 / 60);
   };
 
-  it('the kid: his disc drops a firecracker at each of its first two bounces off walls, where the cook\'s would drop a dish', () => {
+  it('the kid: his disc drops one firecracker, at its first bounce off a wall, where the cook\'s would drop a dish', () => {
     const g = arena([at('kid')], [['archer', 1, 1]]), kid = g.party[0];
     kid.sparks = AB_COST;
     g.useAbility(kid);
@@ -2338,7 +2338,7 @@ describe('the heroes past the first three', () => {
       expect(cellCentre(...cellAt(b.x, b.y))).toEqual({ x: b.x, y: b.y });
       expect([b.by, b.h]).toEqual([d.id, kid.i]);
     }
-    expect(new Set(g.S.bombs.map(b => hazKey(...cellAt(b.x, b.y)))).size).toBe(PETARD_PER_DISC);
+    expect(PETARD_PER_DISC).toBe(1);
     expect(g.S.food).toEqual([]);
   });
 
@@ -2552,7 +2552,7 @@ describe('the heroes past the first three', () => {
     expect(moved(2)).toBe(0);
   });
 
-  it('the ice genius: a frosted enemy takes half as much again from the heroes\' discs, fire and gas the same as ever', () => {
+  it('the ice genius: a slowed enemy takes a quarter more from the heroes\' discs, a frozen one half as much again, fire and gas the same as ever', () => {
     const g = arena([at('genius'), at('cook')], [['skel', 3, 3], ['skel', 7, 3]]), [ice, cook] = g.party, [cold, warm] = g.S.mobs;
     const hit = (h: HeroState, m: Mob, ab: boolean) => { g.S.discs = []; const d = into(g, h, m, ab); g.step(1 / 120); return d; };
     // his own frosting hit does as much as ever, the cook's after it more
@@ -2563,8 +2563,13 @@ describe('the heroes past the first three', () => {
     const c = hit(cook, warm, false), plain = Math.ceil((c.m * 200) / 120);
     expect(99 - warm.hp).toBe(plain);
     hit(cook, cold, false);
-    expect(99 - first - cold.hp).toBe(Math.ceil(plain * (1 + FROST_VULN)));
-    expect(FROST_VULN).toBe(0.5);
+    expect(99 - first - cold.hp).toBe(Math.ceil(plain * (1 + FROST_SLOW_VULN)));
+    expect([FROST_SLOW_VULN, FROST_VULN]).toEqual([0.25, 0.5]);
+    // frozen stiff, the cook's disc hits it half as hard again
+    cold.frost = 2;
+    const before = cold.hp;
+    hit(cook, cold, false);
+    expect(before - cold.hp).toBe(Math.ceil(plain * (1 + FROST_VULN)));
     // burning, it loses no more than its fire
     cold.burn = 4;
     const hp = cold.hp;
