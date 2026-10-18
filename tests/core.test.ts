@@ -1828,6 +1828,26 @@ describe('the three new heroes', () => {
     expect(g.S.food).toHaveLength(0);
   });
 
+  it('the cook: her disc drops a dish off ore, a crystal or mushrooms too', () => {
+    for (const k of ['ore', 'spk', 'herb'] as const) {
+      const g = arena([at('cook')], [['archer', 1, 1]]);
+      const cook = g.party[0], c = cellCentre(5, 5), n = { k, name: k, r: 7, ch: 3, x: c.x, y: c.y, left: 3, hit: 0 };
+      g.S.nodes = [n];
+      // a soft touch as well as a hard hit: both are bounces
+      for (const v of [20, 200]) {
+        g.S.food = [];
+        const d = into(g, cook, n, true, v);
+        // already touching, so even a slow disc meets the resource before it stops
+        d.y -= 1.5;
+        g.S.discs = [d];
+        g.step(1 / 120);
+        expect(d.vy).toBeGreaterThan(0);
+        expect(g.S.food).toHaveLength(1);
+        expect(g.S.food[0].by).toBe(d.id);
+      }
+    }
+  });
+
   it('the cook: a dish flung at a cell already holding one lands on the free cell beside it, never on anything standing', () => {
     const g = arena([at('cook')], [['skel', 9, 1]]), cook = g.party[0];
     const drop = (d: object, nx: number, ny: number) => (g as unknown as { dropFood: (d: object, nx: number, ny: number) => void }).dropFood(d, nx, ny);
