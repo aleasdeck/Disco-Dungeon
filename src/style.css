@@ -277,10 +277,9 @@ i.ico { display: inline-block; font-style: normal; }
 /* the discs of this turn: a stack of casino chips, the first at the bottom, stretched to fill the column; one still in hand
    shows the hero's disc on top (--disc, the room's picture; his colour without it) over a side in his dark colour with
    light marks, the thrown ones fade from the top down. Like the rest of the corner they are cardboard: the board's grain
-   (--grain, the board picture once it loads) lies over both faces */
+   (--grain) lies over both faces */
 .discs {
   --bx: 0; --by: 0; --bw: 78; --bh: 267; --e: calc(30 * var(--u)); --mk: color-mix(in srgb, var(--c, #888) 40%, #f4ead8);
-  --grain: none;
   display: flex; flex-direction: column-reverse; box-sizing: border-box; padding: calc(var(--e) / 2) 0;
   filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35));
 }
@@ -299,7 +298,6 @@ i.ico { display: inline-block; font-style: normal; }
   background: var(--grain) 0 0 / calc(160 * var(--u)), var(--disc, none) center / 100% 100% no-repeat var(--c, #888);
   background-blend-mode: overlay, normal;
 }
-.art-board .discs { --grain: var(--ui-board); }
 .discs i:not(.on) { opacity: 0.3; filter: grayscale(1) brightness(0.5); }
 
 .hpbar { --bx: 79; --by: -14; --bw: 458; --bh: 230; }
@@ -1042,3 +1040,43 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
   .fg-up { padding-right: 78px; }
   .fg-cost { right: 14px; font-size: 22px; }
 }
+
+/* ---------- everything printed on cardboard like the fight corner (Vladislav's pick, 2026-10-18): no ink outline, no
+   rim, flat print. The plates are pictures (draw_plates.py); what CSS draws itself gets the board's grain laid over its
+   print (--grain, the board picture once it loads) */
+:root {
+  --outline: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35));
+  --grain: none;
+  --cut-card: polygon(0 1.5%, 98.5% 0, 100% 97%, 1.5% 100%);
+}
+.art-board { --grain: var(--ui-board); }
+.head::before, .portrait::before, .qb img, .ib, .statuses .st, .boss-bar, .mp-ore, .ev-out, .way, .card, .pick-role,
+.col-art-ico, .fl-dots i, .players .rdy {
+  background-image: var(--grain); background-size: 160px; background-blend-mode: overlay;
+}
+.hud-top { border-bottom: 0; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35), 0 8px 18px rgba(0, 0, 0, 0.4); background-image: var(--grain), linear-gradient(rgba(34, 25, 18, 0.96), rgba(28, 20, 15, 0.9)); background-size: 160px, auto; background-blend-mode: overlay, normal; }
+.ib { border: 0; }
+.ib.go { background-image: none; }
+/* the boxes inside windows: a darker print on the board, cut a little unevenly, no ink line or rounded corner */
+.way, .card, .pick-role { border: 0; border-radius: 0; clip-path: var(--cut-card); background-color: #3b2d22; }
+.card canvas, .card img, .col-art-ico { border: 0; border-radius: 0; clip-path: var(--cut-tile); background-color: #2a2019; }
+.pick { border: 0; border-radius: 0; background-image: var(--grain); background-size: 160px; background-blend-mode: overlay; }
+.pick.mine { outline: 0; box-shadow: 0 0 0 3px var(--gold-1); }
+.players i { border: 0; }
+/* fields to type in: a label of bare kraft with the words in ink */
+.field input:not([type]), .join-row input {
+  color: #2a1c10; border: 0; border-radius: 0; clip-path: var(--cut-bar); background: #c9a877 var(--grain) 0 0 / 160px; background-blend-mode: overlay;
+}
+.field input:not([type])::placeholder, .join-row input::placeholder { color: rgba(42, 28, 16, 0.55); }
+/* the small windows over the room (an enemy's card, the journal, the hero's card) are boards like the big ones */
+.art-panel :is(.mob-card, .log-panel, .hero-card) { background: none; border: 0; outline: 0; box-shadow: none; border-image: var(--ui-panel) 190 130 fill / 34px 24px stretch; filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.55)); }
+.art-panel .mob-card { padding: 14px 16px 16px; }
+.art-panel .log-panel, .art-panel .hero-card { padding: 14px 18px; }
+/* faces stuck on a slab or on the turn button keep their colour edge, without the ink round it */
+.ev-who img, .tb-who img { outline: 0; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35); }
+/* the choices in the event, camp, trophy and blacksmith windows: each on its own slab */
+.art-opt .ev-opt { clip-path: none; background: var(--ui-opt) center / 100% 100% no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)); }
+.art-opt .ev-opt:not(:disabled):hover, .art-opt .ev-opt:focus-visible { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) brightness(1.18); }
+.art-opt .ev-opt:disabled { filter: saturate(0.3) brightness(0.65); }
+.art-opt .ev-opt.fg-up:disabled { filter: brightness(0.62); }
+
