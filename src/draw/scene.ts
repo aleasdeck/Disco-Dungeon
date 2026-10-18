@@ -1,9 +1,9 @@
 // Draws one frame of a room: walls, floor, obstacles, resources, discs and miniatures.
 // Everything is drawn in iso space through the camera, so zoom and rotation are free.
 
-import { WALL_WORDS, FAN_R, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize } from '../data';
+import { WALL_WORDS, FAN_R, GAS_R, GAS_TURNS, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize } from '../data';
 import { KX, KY, type Camera, type Vec } from '../camera';
-import { FOOD_FLY, ZAP_T, type Disc, type Food, type Game, type HeroState, type Spark, type Zap } from '../game';
+import { ART, FOOD_FLY, ZAP_T, type Bomb, type Disc, type Food, type Game, type Gas, type HeroState, type Spark, type Zap } from '../game';
 import { cellAt, floorAt, hazKey, inPit, isFloor, pitAt, type Block, type Decal, type Edge, type Mob, type Pit, type ResNode } from '../room';
 import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure, heroLook } from './figures';
 import { circ, ell, fs, mix, pth, rr, type Ctx, type Pt } from './util';
@@ -11,6 +11,7 @@ import { GRAFFITI_FONTS, envArt } from '../assets';
 import { settings } from '../settings';
 import { knockPose, topplePose, type Knock, type Pose } from '../fx';
 import { hl } from '../hl';
+import { has } from '../artifacts';
 
 export interface Aim { hero: HeroState; dx: number; dy: number }
 /** A hero dragged to another rune: pointer position in screen pixels and the rune under it. */
@@ -59,6 +60,11 @@ const DISHES = ['cutlet', 'sausage', 'pie', 'drumstick'];
 const FOOD_W = 16;
 /** How far below the middle of its cell a plate's front rim comes, as a share of its width: the plate sits centred on the cell. */
 const FOOD_RIM = 0.28;
+
+/** How wide a firecracker stands, in iso units. */
+const BOMB_W = 7;
+/** The gas: its green, its ink, and how many puffs drift over a cloud. */
+const GAS_COL = '#a9d65a', GAS_INK = '#4f6b1e', PUFFS = 8;
 
 /** Cartoon look: silhouette and detail ink widths, in iso units. */
 const OL = 2.1, DL = 1.1;
@@ -392,6 +398,7 @@ export class SceneRenderer {
     this.pickDecor();
     this.drawLips();
     this.drawFloor();
+    this.drawGround();
 
     const items: [number, () => void][] = [];
     for (const d of S.discs) if (!d.gone) items.push([cam.depth(d.x, d.y), () => this.drawDisc(d)]);
@@ -405,12 +412,14 @@ export class SceneRenderer {
     for (const b of S.blocks) items.push([cam.depth(b.x0 + 8, b.y0 + 8), () => this.drawBlock(b)]);
     for (const n of S.nodes) items.push([cam.depth(n.x, n.y), () => this.drawNode(n)]);
     for (const f of S.food) items.push([cam.depth(f.x, f.y) - 0.5, () => this.drawFood(f)]);
+    for (const b of S.bombs) items.push([cam.depth(b.x, b.y) - 0.5, () => this.drawBomb(b)]);
     for (const p of S.sparks) if (p.k) items.push([cam.depth(p.x, p.y) + 0.5, () => this.drawChip(p)]);
     this.wallItems(items);
     this.decorItems(items);
     items.sort((a, b) => a[0] - b[0]).forEach(i => i[1]());
 
     this.drawOmens();
+    this.drawPuffs();
     if (S.spec.smoke && S.phase !== 'over') this.drawSmoke(view);
     this.drawAim(aim);
     this.drawFx();
@@ -909,7 +918,7 @@ export class SceneRenderer {
     for (const m of g.liveMobs()) {
       const it = m.intent;
       // gone once that enemy has made its move: the mob has risen, the floor has turned to lava
-      if (!it?.spots || g.acted(m)) continue;
+      if (!it?.spots || g.acted(m) || g.frozen(m)) continue;
       for (const p of it.spots) {
         if (it.t === 'summon') {
           const r = MOBS[MOBS[m.k].acts!.find(a => a.k === 'summon')!.kind!].r + 3, [x, y] = P(p.x, p.y);
@@ -1167,6 +1176,148 @@ export class SceneRenderer {
     c.restore();
   }
 
+  /**
+   * A firecracker of the kid's: it arcs in like a dish, then stands on end in its cell, its fuse spitting sparks. Its
+   * reach is marked on the floor (see drawGround).
+   */
+  private drawBomb(b: Bomb) {
+    const { c, P } = this, u = Math.min(1, b.t / FOOD_FLY), e = u * (2 - u);
+    const x = b.fx + (b.x - b.fx) * e, y = b.fy + (b.y - b.fy) * e, h = Math.sin(Math.PI * u) * 16;
+    const [gx, gy] = P(x, y), q = 0.6 + 0.4 * u;
+    ell(c, gx, gy + 0.5, BOMB_W * 0.55 * q, BOMB_W * 0.3 * q); c.fillStyle = 'rgba(15,8,4,.35)'; c.fill();
+    const [sx, sy] = P(x, y, h), im = env('petard');
+    // in flight it tumbles end over end
+    const spin = u < 1 ? (1 - u) * 7 : 0;
+    c.save();
+    c.translate(sx, sy - BOMB_W * 0.9);
+    c.rotate(spin);
+    c.translate(-sx, -(sy - BOMB_W * 0.9));
+    let tipX = sx + BOMB_W * 0.2, tipY = sy - BOMB_W * 2.1;
+    if (im) {
+      this.standee(im, sx, sy + 1, BOMB_W * 1.5);
+      const H = (BOMB_W * 1.5 * im.height) / im.width;
+      tipX = sx + BOMB_W * 1.5 * 0.2; tipY = sy + 1 - H * 0.93;
+    } else {
+      c.lineJoin = 'round';
+      rr(c, sx - BOMB_W / 2, sy - BOMB_W * 1.7, BOMB_W, BOMB_W * 1.7, 1.2); fs(c, '#d23a3a', 1);
+      c.fillStyle = '#f2c94c'; c.fillRect(sx - BOMB_W / 2 + 0.5, sy - BOMB_W * 1.05, BOMB_W - 1, 2);
+      ell(c, sx, sy - BOMB_W * 1.7, BOMB_W / 2, BOMB_W / 4); fs(c, '#f1e7d0', 0.8);
+      c.beginPath(); c.moveTo(sx, sy - BOMB_W * 1.7); c.quadraticCurveTo(sx + 2, sy - BOMB_W * 2, tipX, tipY); c.strokeStyle = INK; c.lineWidth = 0.9; c.stroke();
+    }
+    c.restore();
+    if (u < 1) return;
+    // the fuse fizzes: a flicker of a star and a couple of sparks hopping off it
+    const fl = reduce ? 0.8 : 0.6 + 0.4 * Math.abs(Math.sin(this.t * 23 + b.x));
+    c.save();
+    c.globalAlpha = fl;
+    c.beginPath();
+    for (let k = 0; k < 8; k++) { const a = (k * Math.PI) / 4 + this.t * 3, r = k % 2 ? 1.2 : 2.8 * fl; c.lineTo(tipX + Math.cos(a) * r, tipY + Math.sin(a) * r); }
+    c.closePath(); c.fillStyle = '#fff1a8'; c.fill(); c.strokeStyle = '#ff9a2e'; c.lineWidth = 0.6; c.stroke();
+    if (!reduce) for (let k = 0; k < 3; k++) {
+      const ph = (this.t * 2.5 + k / 3 + b.y * 0.01) % 1;
+      circ(c, tipX + Math.sin(k * 2.1 + ph * 3) * ph * 4, tipY - ph * 5, 0.6 * (1 - ph) + 0.2); c.fillStyle = '#ffd34d'; c.fill();
+    }
+    c.restore();
+  }
+
+  /**
+   * On the floor, under everything standing: the bum's gas, a green haze over every cell of its clouds with a dashed rim
+   * round them, and around each firecracker that has landed the cells an enemy sets it off from.
+   */
+  private drawGround() {
+    const { c, P, g } = this, S = g.S;
+    if (!S.gas.length && !S.bombs.length) return;
+    const quad = (x0: number, y0: number, x1: number, y1: number) => pth(c, [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)]);
+    if (S.gas.length) {
+      // a cell under two clouds is as green as under the thicker one: a thinning cloud is paler
+      const cells = new Map<string, number>();
+      for (const o of S.gas) {
+        const k = this.gasLook(o);
+        for (let j = o.j - GAS_R; j <= o.j + GAS_R; j++) for (let i = o.i - GAS_R; i <= o.i + GAS_R; i++) {
+          if (!isFloor(S, i, j) || !g.gasAt(i, j) || Math.abs(i - o.i) + Math.abs(j - o.j) > 2 * GAS_R - 1) continue;
+          const key = hazKey(i, j);
+          cells.set(key, Math.max(cells.get(key) ?? 0, k));
+        }
+      }
+      c.save();
+      for (const [key, k] of cells) {
+        const [i, j] = key.split(',').map(Number);
+        quad(i * TILE, j * TILE, (i + 1) * TILE, (j + 1) * TILE);
+        c.fillStyle = `rgba(150,205,60,${0.32 * k})`;
+        c.fill();
+      }
+      c.beginPath();
+      for (const key of cells.keys()) {
+        const [i, j] = key.split(',').map(Number);
+        for (const [di, dj, ax, ay, bx, by] of SIDES) {
+          if (cells.has(hazKey(i + di, j + dj))) continue;
+          const a = P((i + ax) * TILE, (j + ay) * TILE), b = P((i + bx) * TILE, (j + by) * TILE);
+          c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]);
+        }
+      }
+      c.setLineDash([3, 2]); c.lineDashOffset = reduce ? 0 : -this.t * 4;
+      c.strokeStyle = 'rgba(70,105,20,.8)'; c.lineWidth = 1.2; c.stroke();
+      c.restore();
+    }
+    // a firecracker's reach: the 3 × 3 cells round it, dashed in its fuse's orange
+    c.save();
+    c.setLineDash([2, 2]);
+    c.strokeStyle = 'rgba(255,170,60,.7)';
+    c.lineWidth = 1;
+    for (const b of S.bombs) {
+      if (b.t < FOOD_FLY) continue;
+      const i = Math.floor(b.x / TILE), j = Math.floor(b.y / TILE);
+      quad((i - 1) * TILE + 1, (j - 1) * TILE + 1, (i + 2) * TILE - 1, (j + 2) * TILE - 1);
+      c.fillStyle = 'rgba(255,150,40,.08)'; c.fill(); c.stroke();
+    }
+    c.restore();
+  }
+
+  /** How thick a cloud of gas looks, 0 to 1: it swells out as it rises and thins out over its turns. */
+  private gasLook(o: Gas) {
+    return Math.min(1, o.t / 0.5) * (0.55 + 0.45 * (o.left / GAS_TURNS));
+  }
+
+  private puffImg: HTMLCanvasElement | null = null;
+
+  /** One cartoon puff of gas, drawn once: three lumps of green with a darker rim and a pale top. */
+  private puff() {
+    if (this.puffImg) return this.puffImg;
+    const cv = document.createElement('canvas'), W = 96, H = 64;
+    cv.width = W; cv.height = H;
+    const x = cv.getContext('2d')!;
+    const lumps: [number, number, number][] = [[30, 38, 18], [52, 28, 22], [72, 40, 16], [50, 44, 18]];
+    x.beginPath();
+    for (const [a, b, r] of lumps) { x.moveTo(a + r, b); x.arc(a, b, r, 0, Math.PI * 2); }
+    x.lineWidth = 6; x.strokeStyle = GAS_INK; x.stroke();
+    x.fillStyle = GAS_COL; x.fill();
+    x.fillStyle = 'rgba(235,255,190,.6)';
+    for (const [a, b, r] of lumps) { x.beginPath(); x.arc(a - r * 0.3, b - r * 0.35, r * 0.38, 0, Math.PI * 2); x.fill(); }
+    this.puffImg = cv;
+    return cv;
+  }
+
+  /** Puffs of the bum's gas drifting and bobbing over its clouds, see-through so the figures inside still show. */
+  private drawPuffs() {
+    const { c, P, g } = this, S = g.S;
+    if (!S.gas.length || S.phase === 'over') return;
+    const im = this.puff();
+    c.save();
+    for (const o of S.gas) {
+      const k = this.gasLook(o);
+      for (let n = 0; n < PUFFS; n++) {
+        const a = hr(o.i, o.j, n * 7 + 1) * Math.PI * 2, r = (0.35 + 0.6 * Math.sqrt(hr(o.i, o.j, n * 7 + 2))) * GAS_R * TILE;
+        const ph = hr(o.i, o.j, n * 7 + 3) * 6.3, sp = reduce ? 0 : this.t;
+        const x = (o.i + 0.5) * TILE + Math.cos(a + sp * 0.12) * r, y = (o.j + 0.5) * TILE + Math.sin(a + sp * 0.12) * r;
+        if (!floorAt(S, x, y)) continue;
+        const [sx, sy] = P(x, y, 6 + 5 * Math.sin(sp * 0.9 + ph)), w = 15 + 7 * hr(o.i, o.j, n * 7 + 4);
+        c.globalAlpha = 0.42 * k;
+        c.drawImage(im, sx - w / 2, sy - w / 3, w, (w * 2) / 3);
+      }
+    }
+    c.restore();
+  }
+
   private drawDisc(d: Disc) {
     const hole = d.fall ? pitAt(this.g.S.pits, d.x, d.y) : undefined;
     if (!hole) return this.drawPuck(d);
@@ -1305,6 +1456,7 @@ export class SceneRenderer {
       placeholder: (cc, fx, fy, fl) => drawMobFigure(cc, m.k, fx, fy, fl),
     });
     if (m.hp <= 0) return;
+    if (m.frost) this.drawFrost(m, x, y - m.hop);
     const top = y - m.hop - BASE_TH - MOB_TOP[m.k];
     if (m.burn > 0) {
       // the more fire piled on, the more tongues of flame, and the number says what it burns off next move
@@ -1315,6 +1467,43 @@ export class SceneRenderer {
         c.fillStyle = `rgba(255,140,60,${1 - ph})`; c.fill();
       }
     }
+  }
+
+  /**
+   * The ice genius's frost on an enemy standing at screen point (x, y): slowed, its stand is rimed over and snowflakes
+   * hang round it; frozen, it stands in a block of ice.
+   */
+  private drawFrost(m: Mob, x: number, y: number) {
+    const { c } = this, R = m.r * 1.27, fig = MOBS[m.k].fig, frozen = this.g.frozen(m);
+    c.save();
+    c.lineJoin = 'round';
+    // rime on the stand
+    ell(c, x, y - BASE_TH, R + 1, m.r * 0.64 + 0.6);
+    c.fillStyle = 'rgba(225,246,255,.55)'; c.fill();
+    c.strokeStyle = '#7fc8e8'; c.lineWidth = 0.9; c.stroke();
+    if (frozen) {
+      const w = R * 2.3, h = fig + 5, top = y - BASE_TH - h, d = w * 0.22;
+      // a block of ice: a front face, a top and a side, glassy blue with the figure showing through
+      pth(c, [[x - w / 2, y - 1], [x + w / 2, y - 1], [x + w / 2, top + d], [x - w / 2, top + d]]);
+      c.fillStyle = 'rgba(170,225,255,.42)'; c.fill(); c.strokeStyle = '#2b6f93'; c.lineWidth = 1.2; c.stroke();
+      pth(c, [[x - w / 2, top + d], [x + w / 2, top + d], [x + w / 2 - d, top], [x - w / 2 - d, top]]);
+      c.fillStyle = 'rgba(230,248,255,.7)'; c.fill(); c.stroke();
+      pth(c, [[x - w / 2, top + d], [x - w / 2 - d, top], [x - w / 2 - d, y - 1 - d], [x - w / 2, y - 1]]);
+      c.fillStyle = 'rgba(200,238,255,.5)'; c.fill(); c.stroke();
+      c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = 1.3;
+      c.beginPath(); c.moveTo(x - w * 0.3, top + d + 4); c.lineTo(x - w * 0.1, top + d + 1.5); c.moveTo(x - w * 0.32, top + d + 9); c.lineTo(x - w * 0.22, top + d + 7); c.stroke();
+      c.restore();
+      return;
+    }
+    // slowed: three snowflakes turning slowly round it
+    for (let k = 0; k < 3; k++) {
+      const a = (reduce ? 0 : this.t * 0.8) + (k * Math.PI * 2) / 3, fx = x + Math.cos(a) * (R + 3), fy = y - fig * 0.55 + Math.sin(a) * 4;
+      c.strokeStyle = '#e8f8ff'; c.lineWidth = 1;
+      c.beginPath();
+      for (let s = 0; s < 3; s++) { const b = (s * Math.PI) / 3 + a; c.moveTo(fx - Math.cos(b) * 2.2, fy - Math.sin(b) * 2.2); c.lineTo(fx + Math.cos(b) * 2.2, fy + Math.sin(b) * 2.2); }
+      c.stroke();
+    }
+    c.restore();
   }
 
   // ------------------------------------------------------------ smoke
@@ -1440,18 +1629,19 @@ export class SceneRenderer {
     const { c, P, g } = this;
     const h = aim.hero, p = g.spot(h), len = Math.hypot(aim.dx, aim.dy);
     if (!p || len < 4) return;
-    // one straight line up to the first wall, block or mob; ricochets are left for the player to judge
-    const pr = g.predict(h, aim.dx, aim.dy, 0);
+    // one straight line up to the first wall, block or mob; ricochets are left for the player to judge, unless the hero
+    // wears «Рентген-очки»: then the line runs on through three bounces, with a ring at each
+    const xray = has(h, 'xray'), pr = g.predict(h, aim.dx, aim.dy, xray ? ART.xrayBounces : 0);
     // «Стробоскоп», an event's curse: the fight goes without the line, as with it turned off in the settings
     if (pr.path.length < 2 || !settings.aimLine || g.S.spec.strobe) return;
     // thick enough to read on a phone at any zoom: at least ~4 screen pixels
     const lw = Math.max(2.4, 4 / this.cam.zoom);
-    const [x0, y0] = P(...pr.path[0], 2), [x1, y1] = P(...pr.path[pr.path.length - 1], 2);
+    const pts = (xray ? pr.path : [pr.path[0], pr.path[pr.path.length - 1]]).map(q => P(...q, 2));
     c.save();
     c.lineCap = 'round';
+    c.lineJoin = 'round';
     c.beginPath();
-    c.moveTo(x0, y0);
-    c.lineTo(x1, y1);
+    pts.forEach(([x, y], k) => (k ? c.lineTo(x, y) : c.moveTo(x, y)));
     c.strokeStyle = INK;
     c.lineWidth = lw + 2.2;
     c.stroke();
@@ -1461,6 +1651,7 @@ export class SceneRenderer {
     c.lineWidth = lw;
     c.stroke();
     c.setLineDash([]);
+    if (xray) for (const q of pr.bounces) { const [bx, by] = P(...q, 2); circ(c, bx, by, lw * 1.3); fs(c, h.def.col, 1.4); }
     c.restore();
     const [px, py] = P(p.x, p.y), pw = Math.round((len / 60) * 5);
     for (let k = 0; k < 5; k++) { rr(c, px - 11 + k * 4.6, py + 7, 3.6, 2.6, 1); fs(c, k < pw ? h.def.col : '#2a1f18', 0.6); }
@@ -1513,7 +1704,8 @@ export class SceneRenderer {
     let r = z.s;
     const rnd = () => ((r = Math.imul(r ^ (r >>> 15), 0x2c1b3c6d) + 0x9e3779b9) >>> 0) / 4294967296 - 0.5;
     for (let k = 0; k <= n; k++) {
-      const u = k / n, off = k === 0 || k === n ? 0 : rnd() * Math.min(9, L * 0.25);
+      // a light spot off the mirror ball flies straight; lightning zigzags
+      const u = k / n, off = k === 0 || k === n || z.beam ? 0 : rnd() * Math.min(9, L * 0.25);
       pts.push([a[0] + dx * u - (dy / L) * off, a[1] + dy * u + (dx / L) * off]);
     }
     // a cartoon bolt: ink outline, electric blue, white core, so it reads on dark stone and on white ice alike; it flickers
@@ -1525,8 +1717,8 @@ export class SceneRenderer {
     c.globalAlpha = Math.min(1, q * 2) * (0.8 + 0.2 * Math.sin(z.t * 70));
     c.beginPath(); pts.forEach((p, k) => (k ? c.lineTo(...p) : c.moveTo(...p)));
     c.strokeStyle = INK; c.lineWidth = 3.6 * w; c.stroke();
-    c.strokeStyle = '#3fb4ff'; c.lineWidth = 2.4 * w; c.stroke();
-    c.strokeStyle = '#f2fcff'; c.lineWidth = 0.9 * w; c.stroke();
+    c.strokeStyle = z.beam ? '#ffd34d' : '#3fb4ff'; c.lineWidth = 2.4 * w; c.stroke();
+    c.strokeStyle = z.beam ? '#fffbe6' : '#f2fcff'; c.lineWidth = 0.9 * w; c.stroke();
     c.restore();
   }
 

@@ -27,7 +27,9 @@ export type Fx =
   /** A free level of a disc stat; without `stat`, a level of whatever each hero can still grow, picked at random. */
   | { k: 'up'; stat?: StatKey }
   /** One more disc a turn. */
-  | { k: 'disc' };
+  | { k: 'disc' }
+  /** A trophy: after the event the party shares out three, the same way as over a floor boss (src/artifacts.ts). */
+  | { k: 'art' };
 
 export interface Outcome { fx: Fx[]; txt: string }
 
@@ -73,11 +75,11 @@ export const EVENTS: EventDef[] = [
   },
   {
     key: 'mimic', title: 'Влюблённый сундук',
-    txt: 'Сундук хлопает крышкой и строит глазки. Крышка вся в следах помады, изнутри блестит руда и капают слюни. Похоже, он ждёт, что его приласкают.',
+    txt: 'Сундук хлопает крышкой и строит глазки. Крышка вся в следах помады, изнутри что-то блестит и капают слюни. Похоже, он ждёт, что его приласкают.',
     choices: [
       {
         label: 'Сунуть руку', odds: 0.5,
-        win: { fx: [{ k: 'ore', n: 9 }], txt: 'Сундук томно вздохнул и отдал всё, что копил. Руку потом отмывали долго.' },
+        win: { fx: [{ k: 'art' }], txt: 'Сундук томно вздохнул и раскрыл душу: внутри подарки от прошлых ухажёров. Руку потом отмывали долго.' },
         lose: { fx: [{ k: 'hp', n: -6 }], txt: 'Сундук решил, что это предложение руки и сердца, и начал с руки.' },
       },
       {
@@ -241,6 +243,8 @@ export function applyFx(fx: Fx[], party: HeroState[], bank: Bank, seed: number) 
     else if (f.k === 'rage') bank.rage = (bank.rage ?? 0) + f.n;
     else if (f.k === 'smoke') bank.smoke = true;
     else if (f.k === 'strobe') bank.strobe = true;
+    // the trophies are shared out in their own window once the event is over
+    else if (f.k === 'art') continue;
     else for (const h of party) {
       if (f.k === 'heal') h.hp = h.max;
       else if (f.k === 'hp' && h.hp > 0) h.hp = f.n > 0 ? Math.min(h.max, h.hp + f.n) : Math.max(1, h.hp + f.n);
@@ -270,6 +274,7 @@ export function fxParts(fx: Fx[], solo: boolean): { t: string; good: boolean }[]
     if (f.k === 'smoke') return { t: 'Дым-машина: следующий бой в дыму', good: false };
     if (f.k === 'strobe') return { t: 'Стробоскоп: следующий бой без прицела', good: false };
     if (f.k === 'disc') return { t: `+1 диск за ход${each}`, good: true };
+    if (f.k === 'art') return { t: solo ? 'Трофей: один из трёх на выбор' : 'Трофей каждому: три на выбор', good: true };
     const u = f.stat && UPS.find(o => o.k === f.stat);
     return { t: u ? `+1 уровень «${u.name}»${each}` : `+1 уровень случайного улучшения${each}`, good: true };
   });

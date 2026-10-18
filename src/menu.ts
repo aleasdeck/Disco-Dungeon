@@ -1,7 +1,9 @@
 // Main menu and its screens: collection, settings and the online lobby.
 
-import { BIOMES, HEROES, MOB_HP_MUL, MOBS, fullHit, type MobKind } from './data';
+import { BIOMES, HEROES, MOB_HP_MUL, KINDS, MOBS, fullHit, heroesByKind, kindOf, type MobKind } from './data';
 import { drawPortrait, mobIcon } from './ui';
+import { ARTIFACTS } from './artifacts';
+import { artIcon } from './icons';
 import { saveSettings, settings } from './settings';
 import { sound } from './sound';
 import type { Player } from './net';
@@ -18,25 +20,45 @@ export function show(screen: Screen | null) {
 
 const FLOOR_NAMES = BIOMES.map(b => b.name);
 
+/** Heroes as the pick screens show them: a row for each kind, its name on a tab at the row's start, then its heroes' cards. */
+function pickRows(box: HTMLElement, card: (i: number) => HTMLElement) {
+  box.innerHTML = '';
+  heroesByKind().forEach((list, r) => {
+    const tab = document.createElement('b');
+    tab.className = 'pick-role';
+    tab.textContent = KINDS[r].row;
+    box.append(tab, ...list.map(card));
+  });
+}
+
 // ------------------------------------------------------------ collection
 
-export function renderCollection(tab: 'heroes' | 'mobs') {
+export function renderCollection(tab: 'heroes' | 'mobs' | 'arts') {
   document.querySelectorAll<HTMLButtonElement>('#collection .tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   const grid = $('colGrid');
   grid.innerHTML = '';
   if (tab === 'heroes') {
-    HEROES.forEach((def, i) => {
-      const card = document.createElement('article');
+    // the same order as the pick screens: the biggest discs first
+    heroesByKind().flat().forEach(i => {
+      const def = HEROES[i], card = document.createElement('article');
       card.className = 'card';
       const cv = document.createElement('canvas');
       drawPortrait(cv, { i, def });
       // starting health, then the same words as the disc upgrades: damage of a full straight throw, speed next to Ash's, speed kept off a wall
       const stats = `<dt>HP</dt><dd>${def.hp}</dd><dt>Урон</dt><dd>${fullHit(def.m, def.pw)}</dd><dt>Скорость</dt><dd>${Math.round(def.pw * 100)}%</dd><dt>Отскок</dt><dd>${Math.round(def.e * 100)}%</dd>`;
-      card.innerHTML = `<div></div><div><h3 style="color:${def.col}">${def.name}</h3><p>${def.role}. Способность «${def.ab}»: ${def.abTxt} ${def.abMore}</p>`
+      card.innerHTML = `<div></div><div><h3 style="color:${def.col}">${def.name}</h3><p>${kindOf(def)}. Способность «${def.ab}»: ${def.abTxt} ${def.abMore}</p>`
         + `<dl>${stats}<dt>Диск</dt><dd>${def.r * 2}</dd></dl></div>`;
       card.firstElementChild!.replaceWith(cv);
       grid.appendChild(card);
     });
+  } else if (tab === 'arts') {
+    // the floor bosses' trophies: what each does, and its joke
+    for (const a of ARTIFACTS) {
+      const card = document.createElement('article');
+      card.className = 'card col-art';
+      card.innerHTML = `<span class="col-art-ico">${artIcon(a.key)}</span><div><h3>${a.name}</h3><p><b>${a.txt}.</b> ${a.gag}</p></div>`;
+      grid.appendChild(card);
+    }
   } else {
     (Object.keys(MOBS) as MobKind[]).forEach(k => {
       const d = MOBS[k], card = document.createElement('article');
@@ -52,10 +74,8 @@ export function renderCollection(tab: 'heroes' | 'mobs') {
 
 /** The campaign's hero cards: the picked one is marked, and below them what it does. */
 export function renderHeroSelect(picked: number, onPick: (hero: number) => void) {
-  const box = $('heroPicks');
-  box.innerHTML = '';
-  HEROES.forEach((def, i) => {
-    const b = document.createElement('button');
+  pickRows($('heroPicks'), i => {
+    const def = HEROES[i], b = document.createElement('button');
     b.className = 'pick' + (picked === i ? ' mine' : '');
     b.style.setProperty('--c', def.col);
     b.setAttribute('aria-pressed', String(picked === i));
@@ -63,13 +83,13 @@ export function renderHeroSelect(picked: number, onPick: (hero: number) => void)
     drawPortrait(cv, { i, def });
     b.append(cv);
     const label = document.createElement('span');
-    label.innerHTML = `${def.name}<em>${def.role}</em>`;
+    label.innerHTML = `${def.name}<em>${kindOf(def)}</em>`;
     b.append(label);
     b.addEventListener('click', () => onPick(i));
-    box.appendChild(b);
+    return b;
   });
   const def = HEROES[picked];
-  $('heroInfo').innerHTML = `<b style="color:${def.col}">${def.name}</b>. ${def.role}. HP ${def.hp}, урон ${fullHit(def.m, def.pw)}, скорость ${Math.round(def.pw * 100)}%, отскок ${Math.round(def.e * 100)}%. `
+  $('heroInfo').innerHTML = `<b style="color:${def.col}">${def.name}</b>. ${kindOf(def)}. HP ${def.hp}, урон ${fullHit(def.m, def.pw)}, скорость ${Math.round(def.pw * 100)}%, отскок ${Math.round(def.e * 100)}%. `
     + `Способность «${def.ab}»: ${def.abTxt}`;
 }
 
@@ -102,16 +122,17 @@ export function lobbyStatus(text: string) {
   $('lobbyStatus').textContent = text;
 }
 
-/** Draw the room part of the lobby: code, hero cards to pick, the players and (for the host) the start button. */
+/** The host may start once every player has a hero and everyone but the host has pressed «Готов». */
+export const startable = (players: Player[]) => players.every(p => p.hero !== null && (p.id === 'host' || p.ready));
+
+/** Draw the room part of the lobby: code, hero cards to pick, the players, and the start button (host) or «Готов» (the rest). */
 export function renderLobby(o: { code: string; players: Player[]; me: string; host: boolean; onPick: (hero: number | null) => void }) {
   $('lobbyStart').hidden = true;
   $('lobbyRoom').hidden = false;
   $('lobbyRoomCode').textContent = o.code;
-  const mine = o.players.find(p => p.id === o.me)?.hero ?? null;
-  const box = $('lobbyHeroes');
-  box.innerHTML = '';
-  HEROES.forEach((def, i) => {
-    const by = o.players.find(p => p.hero === i), b = document.createElement('button');
+  const me = o.players.find(p => p.id === o.me), mine = me?.hero ?? null;
+  pickRows($('lobbyHeroes'), i => {
+    const def = HEROES[i], by = o.players.find(p => p.hero === i), b = document.createElement('button');
     b.className = 'pick' + (mine === i ? ' mine' : by ? ' taken' : '');
     b.style.setProperty('--c', def.col);
     b.disabled = !!by && by.id !== o.me;
@@ -123,18 +144,29 @@ export function renderLobby(o: { code: string; players: Player[]; me: string; ho
     label.innerHTML = `${def.name}<em>${by ? (by.id === o.me ? 'ты' : by.name) : 'свободен'}</em>`;
     b.append(label);
     b.addEventListener('click', () => o.onPick(mine === i ? null : i));
-    box.appendChild(b);
+    return b;
   });
   $('lobbyPlayers').innerHTML = o.players.map(p => {
     const def = p.hero !== null ? HEROES[p.hero] : null;
-    return `<li><i style="--c:${def?.col ?? '#3a2d22'}"></i><b>${escapeHtml(p.name)}</b>${p.id === 'host' ? ' · хозяин' : ''}${p.id === o.me ? ' · ты' : ''}<span class="muted">${def ? def.name : 'выбирает героя'}</span></li>`;
+    // the host has no «Готов» of its own: it starts the game when the rest are ready
+    const ready = p.id === 'host' ? '' : p.ready ? '<span class="rdy on">готов</span>' : '<span class="rdy">не готов</span>';
+    return `<li><i style="--c:${def?.col ?? '#3a2d22'}"></i><b>${escapeHtml(p.name)}</b>${p.id === 'host' ? ' · хозяин' : ''}${p.id === o.me ? ' · ты' : ''}<span class="muted">${def ? def.name : 'выбирает героя'}</span>${ready}</li>`;
   }).join('');
-  const allPicked = o.players.every(p => p.hero !== null);
+  const go = startable(o.players), waiting = o.players.filter(p => p.id !== 'host' && !p.ready);
   $('lobbyStartBtn').hidden = !o.host;
-  $<HTMLButtonElement>('lobbyStartBtn').disabled = !allPicked;
+  $<HTMLButtonElement>('lobbyStartBtn').disabled = !go;
+  const rb = $<HTMLButtonElement>('lobbyReadyBtn');
+  rb.hidden = o.host;
+  rb.disabled = mine === null;
+  rb.textContent = me?.ready ? 'Не готов' : 'Готов';
+  rb.classList.toggle('big', !me?.ready);
+  rb.setAttribute('aria-pressed', String(!!me?.ready));
   $('lobbyHint').textContent = o.host
-    ? (allPicked ? `Игроков: ${o.players.length}. Можно начинать: враги подстроятся под число героев.` : 'Начать можно, когда все выбрали героя.')
-    : 'Игру начнёт хозяин комнаты.';
+    ? go ? `Игроков: ${o.players.length}. Можно начинать: враги подстроятся под число героев.`
+      : !o.players.every(p => p.hero !== null) ? 'Начать можно, когда все выберут героя и нажмут «Готов».'
+      : `Ждём, пока нажмут «Готов»: ${waiting.map(p => p.name).join(', ')}.`
+    : mine === null ? 'Выбери героя и нажми «Готов».'
+    : me?.ready ? 'Игру начнёт хозяин комнаты.' : 'Нажми «Готов», когда соберёшься.';
 }
 
 export function resetLobby() {

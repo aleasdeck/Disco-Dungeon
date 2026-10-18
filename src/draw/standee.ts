@@ -84,6 +84,26 @@ function blur(src: Uint8Array, W: number, H: number, r: number): Float32Array {
   return a;
 }
 
+/** Close the empty patches enclosed by the plate that are smaller than `limit` pixels: plastic fills them. */
+function fillSpecks(shape: Uint8Array, plate: Uint8Array, W: number, H: number, limit: number) {
+  const seen = new Uint8Array(W * H), stack: number[] = [], patch: number[] = [];
+  for (let s = 0; s < W * H; s++) {
+    if (plate[s] || seen[s]) continue;
+    let open = false;
+    patch.length = 0;
+    stack.push(s);
+    seen[s] = 1;
+    while (stack.length) {
+      const i = stack.pop()!, x = i % W, y = (i - x) / W;
+      patch.push(i);
+      if (x === 0 || y === 0 || x === W - 1 || y === H - 1) open = true;
+      for (const j of [x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1, y > 0 ? i - W : -1, y < H - 1 ? i + W : -1])
+        if (j >= 0 && !plate[j] && !seen[j]) { seen[j] = 1; stack.push(j); }
+    }
+    if (!open && patch.length < limit) for (const i of patch) { shape[i] = 255; plate[i] = 255; }
+  }
+}
+
 const mixRgb = (a: Rgb, b: Rgb, t: number): Rgb => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
 /** Colour of the plate's edge at depth t (0 front face, 1 back face): a glossy lip, then darker toward the back. */
@@ -124,6 +144,8 @@ export function makeStandee(img: HTMLImageElement, facing: 'left' | 'right', rel
     shape[i] = Math.min(255, pic[i * 4 + 3] * 6);
     plate[i] = shape[i] >= 128 ? 255 : 0;
   }
+  // a gap in the figure too narrow for the plate's margin to go round would leave a speck in the plastic: fill it
+  fillSpecks(shape, plate, w, h, B * B / 2);
   c.clearRect(0, 0, w, h);
 
   // the edge: each pixel takes the shallowest copy of the outline, swept back toward the back face, that covers it

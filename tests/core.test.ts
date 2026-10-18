@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, isRanged, mobSize } from '../src/data';
-import { FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_HEAR, PETARD_LURE, PETARD_PER_DISC, KINDS, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
+import { ART, FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { CAVE, MOB_CAP, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
+import { CAVE, MOB_CAP, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
 import { FLOORS, FORGE_ROWS, LAYERS, agreed, genFloor, newRun } from '../src/run';
 import { makeRng } from '../src/rng';
 import { EVENTS, applyFx, canPick, eventDef, eventOf, fxParts, rolled } from '../src/events';
 import { CAMP_HEAL, DIG_MAX, campDo, campLeave, canCamp, digOre, type CampState } from '../src/camp';
+import { ARTIFACTS, BELLY, OFFER, lootAgreed, newLoot, rollOffer, settleLoot } from '../src/artifacts';
 
 /** Put every living hero on its own rune, as players do before the fight. */
 const placeAll = (g: Game) => g.alive().forEach((h, k) => g.movePad(h, k));
@@ -59,41 +60,53 @@ describe('room generator', () => {
 });
 
 describe('resources', () => {
-  it('puts one ore vein in a plain fight, two in an elite one and the most in the ore cave', () => {
+  it('puts one ore vein in a plain fight, two in an elite one and two to six in the ore cave', () => {
     const veins = (type: 'fight' | 'elite' | 'treasure' | 'boss', seed: number) =>
       generate({ seed, depth: type === 'boss' ? LAYERS : 5, floor: 0, type }).nodes.filter(n => n.k === 'ore').length;
     for (let seed = 1; seed < 30; seed++) {
       expect(veins('fight', seed)).toBe(1);
       expect(veins('elite', seed)).toBe(2);
       expect(veins('boss', seed)).toBe(1);
-      expect(veins('treasure', seed)).toBe(3);
+      expect(veins('treasure', seed)).toBeGreaterThanOrEqual(2);
+      expect(veins('treasure', seed)).toBeLessThanOrEqual(6);
     }
   });
 });
 
 describe('ore cave', () => {
   const cave = (seed: number, heroes: number) => generate({ seed, depth: LAYERS + 2, floor: 1, type: 'treasure', heroes });
-  const sum = (n: number[]) => n.reduce((a, b) => a + b, 0);
 
-  it('holds no enemies, one big vein on 2 × 2 cells, two small ones and two mushroom patches, the same for any party', () => {
-    for (let seed = 1; seed < 40; seed++) for (const heroes of [1, 2, 3]) {
-      const L = cave(seed, heroes), [big, ...rest] = L.nodes;
-      const small = rest.filter(n => n.k === 'ore'), herbs = rest.filter(n => n.k === 'herb');
-      expect(L.mobs).toHaveLength(0);
-      expect(big).toMatchObject({ k: 'ore', s: 2, r: CAVE.big.r, ch: CAVE.big.ch, left: CAVE.big.ch });
-      expect(small).toHaveLength(2);
-      for (const n of small) { expect(n).toMatchObject({ ch: CAVE.small, left: CAVE.small }); expect(n.s).toBeUndefined(); }
-      expect(herbs).toHaveLength(2);
-      expect(rest).toHaveLength(4);
+  it('holds no enemies and its own stock: a big vein on 2 × 2 cells or none, 2–5 small ones, 0–2 mushroom patches, the same for any party', () => {
+    const seen = { big: new Set<number>(), ore: new Set<number>(), herb: new Set<number>() };
+    for (let seed = 1; seed < 80; seed++) {
+      const stock = caveStock({ seed, depth: LAYERS + 2 });
+      for (const k of ['big', 'ore', 'herb'] as const) seen[k].add(stock[k]);
+      for (const heroes of [1, 2, 3]) {
+        const L = cave(seed, heroes), big = L.nodes.filter(n => n.s), rest = L.nodes.filter(n => !n.s);
+        const small = rest.filter(n => n.k === 'ore'), herbs = rest.filter(n => n.k === 'herb');
+        expect(L.mobs).toHaveLength(0);
+        expect(big).toHaveLength(stock.big);
+        for (const n of big) expect(n).toMatchObject({ k: 'ore', s: 2, r: CAVE.big.r, ch: CAVE.big.ch, left: CAVE.big.ch });
+        expect(small).toHaveLength(stock.ore);
+        for (const n of small) expect(n).toMatchObject({ ch: CAVE.small.ch, left: CAVE.small.ch });
+        expect(herbs).toHaveLength(stock.herb);
+        expect(rest).toHaveLength(stock.ore + stock.herb);
+        expect(L.nodes).toEqual(cave(seed, 1).nodes);
+      }
     }
-    expect(sum(cave(7, 1).nodes.map(n => n.ch))).toBe(sum(cave(7, 3).nodes.map(n => n.ch)));
+    // every count turns up
+    expect([...seen.big].sort()).toEqual([0, 1]);
+    expect([...seen.ore].sort()).toEqual([2, 3, 4, 5]);
+    expect([...seen.herb].sort()).toEqual([0, 1, 2]);
   });
 
   it('gives 4 minus the heroes turns: three alone, one for three heroes', () => {
     expect([1, 2, 3].map(heroes => caveTurns({ heroes }))).toEqual([3, 2, 1]);
   });
 
-  const enter = (picks: number[], seed = 11) => {
+  // a cave with the big vein, in a clear line from the first rune, and a mushroom patch
+  const FULL = 4;
+  const enter = (picks: number[], seed = FULL) => {
     const g = new Game();
     g.party = newParty(picks);
     g.loadRoom({ seed, depth: LAYERS + 2, floor: 1, type: 'treasure' });
@@ -122,8 +135,9 @@ describe('ore cave', () => {
   });
 
   it('stays open while mushrooms are left, ends at once when everything is spent, and counts the ore mined', () => {
+    expect(caveStock({ seed: FULL, depth: LAYERS + 2 })).toMatchObject({ big: 1, herb: 1 });
     const { g, won } = enter([0]);
-    const [big] = g.S.nodes;
+    const big = g.S.nodes.find(n => n.s)!;
     // the veins spent, a mushroom patch left: a throw may still go for health
     for (const n of g.S.nodes) n.left = n.k === 'herb' ? 1 : 0;
     g.update(1 / 60);
@@ -199,8 +213,9 @@ describe('difficulty along a floor', () => {
     for (let seed = 1; seed < 40; seed++) {
       const L = room(FLOORS - 1, LAYERS - 2, seed), area = L.floor.reduce((a, b) => a + b, 0);
       const busy = L.mobs.length + L.blocks.length + L.pits.length + L.haz.size + L.nodes.length;
+      // a vein, the trio's mushroom patches and up to three crystals
       expect(L.nodes.length).toBeGreaterThanOrEqual(3);
-      expect(L.nodes.length).toBeLessThanOrEqual(5);
+      expect(L.nodes.length).toBeLessThanOrEqual(1 + PARTY_SCALE[3].herbs + 3);
       expect(L.decals.length).toBeLessThanOrEqual(6);
       expect(busy / area).toBeLessThan(0.2);
     }
@@ -414,6 +429,24 @@ describe('party size', () => {
       for (const n of L.nodes) expect(n.left).toBe(PARTY_SCALE[1].ch[n.k] ?? n.ch);
     });
     expect(sum(one.map(L => sum(L.nodes.filter(n => n.k === 'ore').map(n => n.left))))).toBeLessThan(sum(three.map(L => sum(L.nodes.filter(n => n.k === 'ore').map(n => n.left)))));
+    // every hero buys their own upgrades, and the blacksmith's gift, the cave and the events pay the same to any party,
+    // so a bigger party's veins hold more than a lone hero's for every hero
+    for (const heroes of [2, 3]) expect(PARTY_SCALE[heroes].ch.ore! / heroes).toBeGreaterThan(PARTY_SCALE[1].ch.ore!);
+  });
+
+  it('gives a bigger party more mushroom patches, apart from each other, and as many heals for every hero', () => {
+    const heals = (heroes: number) => PARTY_SCALE[heroes].herbs * (PARTY_SCALE[heroes].ch.herb ?? NODES.herb.ch);
+    for (const heroes of [1, 2, 3]) {
+      expect(heals(heroes) / heroes).toBe(heals(1));
+      for (const spec of specs) {
+        // the ore cave keeps its two patches for any party (see its own tests)
+        if (spec.type === 'treasure') continue;
+        const herbs = generate({ ...spec, heroes }).nodes.filter(n => n.k === 'herb');
+        expect(herbs).toHaveLength(PARTY_SCALE[heroes].herbs);
+        expect(sum(herbs.map(n => n.left))).toBe(heals(heroes));
+        for (const [k, a] of herbs.entries()) for (const b of herbs.slice(k + 1)) expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(4 * TILE);
+      }
+    }
   });
 
   it('builds each room for the party that enters it, and the summoners raise fewer mobs for a lone hero', () => {
@@ -691,6 +724,16 @@ describe('map events', () => {
     expect(h.discs).toBe(HAND_MAX);
   });
 
+  it('«Влюблённый сундук» can give a trophy, shared out in its own window afterwards', () => {
+    const hand = eventDef('mimic').choices.find(c => c.win.fx.some(f => f.k === 'art'))!;
+    expect(hand.odds).toBe(0.5);
+    const party = newParty([0, 1]), bank = { ore: 3 }, before = JSON.stringify(party);
+    applyFx(hand.win.fx, party, bank, 1);
+    expect(JSON.stringify(party)).toBe(before);
+    expect(bank.ore).toBe(3);
+    expect(fxParts(hand.win.fx, true)[0]).toEqual({ t: 'Трофей: один из трёх на выбор', good: true });
+  });
+
   it('leaves its shield and its curse for the next fight only', () => {
     const g = new Game();
     g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
@@ -791,6 +834,78 @@ describe('the camp', () => {
     campLeave(camp, party, bank);
     expect(party[1].hp).toBe(5 + CAMP_HEAL);
     expect(camp.did[party[0].i].k).toBe('dig');
+  });
+});
+
+describe('boss trophies', () => {
+  it('offers three different artifacts nobody in the party has, the same on every screen', () => {
+    const party = newParty([0, 1, 2]);
+    expect(rollOffer(4242, party)).toEqual(rollOffer(4242, party));
+    for (let s = 0; s < 100; s++) {
+      const offer = rollOffer(s * 977, party);
+      expect(offer).toHaveLength(OFFER);
+      expect(new Set(offer).size).toBe(OFFER);
+    }
+    party[0].arts = ARTIFACTS.slice(0, 10).map(a => a.key);
+    party[2].arts = ARTIFACTS.slice(10, 20).map(a => a.key);
+    for (let s = 0; s < 50; s++) for (const k of rollOffer(s, party)) expect(party.flatMap(h => h.arts!)).not.toContain(k);
+    // every artifact turns up in some offer
+    const seen = new Set(Array.from({ length: 300 }, (_, s) => rollOffer(s, [])).flat());
+    expect(seen.size).toBe(ARTIFACTS.length);
+  });
+
+  it('gives a lone hero the one picked', () => {
+    const party = newParty([1]), loot = newLoot(77, 0, party);
+    loot.picks[party[0].i] = 2;
+    expect(lootAgreed(loot, [party[0].i])).toBe(true);
+    settleLoot(loot, party, [party[0].i]);
+    expect(party[0].arts).toEqual([loot.offer[2]]);
+    // once shared out it stays that way
+    settleLoot(loot, party, [party[0].i]);
+    expect(party[0].arts).toHaveLength(1);
+  });
+
+  it('online waits until every player here picks a different one; a duo leaves the third behind', () => {
+    const party = newParty([0, 2]), loot = newLoot(78, 1, party), table = party.map(h => h.i);
+    loot.picks[0] = 1;
+    expect(lootAgreed(loot, table)).toBe(false);
+    loot.picks[2] = 1;
+    expect(lootAgreed(loot, table)).toBe(false);
+    loot.picks[2] = 0;
+    expect(lootAgreed(loot, table)).toBe(true);
+    settleLoot(loot, party, table);
+    expect(party[0].arts).toEqual([loot.offer[1]]);
+    expect(party[1].arts).toEqual([loot.offer[0]]);
+    expect(Object.values(loot.done!)).not.toContain(loot.offer[2]);
+  });
+
+  it('shares all three among a trio, and a hero whose player dropped out gets what is left', () => {
+    const party = newParty([0, 1, 2]), loot = newLoot(79, 0, party), table = [0, 2];
+    loot.picks[0] = 2;
+    loot.picks[2] = 0;
+    expect(lootAgreed(loot, table)).toBe(true);
+    settleLoot(loot, party, table);
+    expect(party.map(h => h.arts![0])).toEqual([loot.offer[2], loot.offer[1], loot.offer[0]]);
+  });
+
+  it('adds the beer belly\'s health at once', () => {
+    const party = newParty([0]), loot = newLoot(80, 0, party);
+    loot.offer = ['belly', 'tea', 'cup'];
+    party[0].hp = 20;
+    loot.picks[party[0].i] = 0;
+    settleLoot(loot, party, [party[0].i]);
+    expect(party[0].max).toBe(HEROES[0].hp + BELLY);
+    expect(party[0].hp).toBe(20 + BELLY);
+  });
+
+  it('keeps the trophies a hero carries through a snapshot', () => {
+    const g = new Game();
+    g.party = newParty([0, 1]);
+    g.party[1].arts = ['bells'];
+    g.loadRoom({ seed: 5, depth: 1, floor: 0, type: 'fight' });
+    const c = new Game();
+    applySnapshot(c, JSON.parse(JSON.stringify(snapshot(g))));
+    expect(c.party[1].arts).toEqual(['bells']);
   });
 });
 
@@ -903,23 +1018,31 @@ describe('placement and discs', () => {
     expect(g.bank.ore).toBe(ore);
   });
 
-  it('starts every fight without sparks, except full ones for every hero after the altar', () => {
+  it('carries every hero\'s sparks into the next room, and the altar fills them up', () => {
     const g = fresh(), sparks = () => g.party.map(h => h.sparks);
-    for (const h of g.party) h.sparks = 2;
+    g.party[0].sparks = 2; g.party[1].sparks = AB_COST; g.party[2].sparks = 0;
     g.bank.ore = 5;
     g.loadRoom({ seed: 3, depth: 2, floor: 0, type: 'fight' });
-    expect(sparks()).toEqual([0, 0, 0]);
+    expect(sparks()).toEqual([2, AB_COST, 0]);
     expect(g.bank.ore).toBe(5);
+    // a fallen hero keeps them too, for when they get up
+    g.party[0].hp = 0;
+    g.loadRoom({ seed: 3, depth: 3, floor: 0, type: 'fight' });
+    expect(sparks()).toEqual([2, AB_COST, 0]);
+    g.party[0].hp = g.party[0].max;
     // the disco god's altar: a dance gives full sparks in the next fight, not this one
     applyFx(eventDef('altar').choices[0].win.fx, g.party, g.bank, 1);
-    expect(sparks()).toEqual([0, 0, 0]);
+    expect(sparks()).toEqual([2, AB_COST, 0]);
     g.loadRoom({ seed: 4, depth: 3, floor: 0, type: 'fight' });
     expect(sparks()).toEqual([AB_COST, AB_COST, AB_COST]);
     // full sparks pay for the ability right away
     placeAll(g); g.startFight();
     expect(g.party.every(h => g.canUseAbility(h))).toBe(true);
+    g.useAbility(g.party[0]);
     g.loadRoom({ seed: 5, depth: 4, floor: 0, type: 'fight' });
-    expect(sparks()).toEqual([0, 0, 0]);
+    expect(sparks()).toEqual([0, AB_COST, AB_COST]);
+    // a new run starts without them
+    expect(newParty().map(h => h.sparks)).toEqual([0, 0, 0]);
   });
   it('ends the fight the moment the last enemy falls, with throws still left', () => {
     const g = fresh();
@@ -932,6 +1055,243 @@ describe('placement and discs', () => {
     expect(g.S.phase).toBe('over');
     expect(won).toBe(true);
     expect(g.party.some(h => h.hand > 0)).toBe(true);
+  });
+});
+
+describe('trophies in play', () => {
+  /** A fight on floor 0 for one hero carrying the given trophies, with just the given enemies in a row along the top. */
+  const arena = (arts: string[], kinds: (keyof typeof MOBS)[] = ['golem'], hero = 0) => {
+    const g = new Game();
+    g.party = newParty([hero]);
+    g.party[0].arts = arts;
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    g.S.mobs = kinds.map((k, i) => newMob(k, 40 + i * 30, 30, 1, 0));
+    g.S.nodes = [];
+    g.S.blocks = [];
+    g.S.pits = [];
+    g.S.haz = new Set();
+    placeAll(g); g.startFight();
+    return g;
+  };
+  const disc = (g: Game, x: number, y: number, vx: number, vy: number, more: Partial<Disc> = {}): Disc =>
+    ({ hero: g.party[0], x, y, vx, vy, r: 5, m: 4, e: 0.6, fr: 1, fall: 0, gone: false, charged: false, bounces: 0, spin: 0, hits: 0, ab: false, rico: 0, ...more });
+  /** Damage of one disc running square into the first enemy from below. */
+  const blow = (arts: string[], more: Partial<Disc> = {}) => {
+    const g = arena(arts), m = g.S.mobs[0];
+    m.armor = 0;
+    const hp = m.hp;
+    g.S.discs = [disc(g, m.x, m.y + m.r + 5.5, 0, -200, more)];
+    g.step(1 / 60);
+    return hp - m.hp;
+  };
+
+  it('«Стеклянный глаз» makes a sure hit triple, «Бильярдный мел» counts one off the walls', () => {
+    const plain = blow([], { bounces: 1 });
+    expect(blow([])).toBe(Math.ceil(plain * CRIT));
+    expect(blow(['glasseye'])).toBe(Math.ceil(plain * ART.critBig));
+    expect(blow([], { bounces: 2 })).toBe(plain);
+    expect(blow(['chalk'], { bounces: 2 })).toBe(Math.ceil(plain * CRIT));
+  });
+
+  it('«Пружина» adds a point a bounce up to four, «Нож» goes through armour', () => {
+    const plain = blow([], { bounces: 3 });
+    expect(blow(['spring'], { bounces: 3 })).toBe(plain + 3);
+    expect(blow(['spring'], { bounces: 9 })).toBe(plain + ART.springMax);
+    const arm = (arts: string[]) => {
+      const g = arena(arts), m = g.S.mobs[0], hp = m.hp;
+      m.armor = 99;
+      g.S.discs = [disc(g, m.x, m.y + m.r + 5.5, 0, -200)];
+      g.step(1 / 60);
+      return hp - m.hp;
+    };
+    expect(arm([])).toBe(0);
+    expect(arm(['opener'])).toBeGreaterThan(0);
+  });
+
+  it('«Бубенцы» ring a hero\'s own discs together and make the clash triple', () => {
+    const clash = (arts: string[]) => {
+      const g = arena(arts), a = disc(g, 100, 100, 150, 0), b = disc(g, 111, 100, -150, 0);
+      g.S.discs = [a, b];
+      g.step(1 / 120);
+      return { charged: a.charged && b.charged, txt: g.S.floats.map(f => f.txt) };
+    };
+    expect(clash([]).charged).toBe(false);
+    const rung = clash(['bells']);
+    expect(rung.charged).toBe(true);
+    expect(rung.txt).toContain('ЗВОН ×3');
+    expect(blow(['bells'], { charged: true, bounces: 1 })).toBe(blow([], { bounces: 1 }) * ART.bells);
+  });
+
+  it('«Надувные труселя»: the disc rolls over the holes, and spikes under it don\'t hurt', () => {
+    const roll = (arts: string[]) => {
+      const g = arena(arts), h = g.party[0], hp = h.hp;
+      g.S.pits = [{ k: '1x1', cells: [[6, 4]] }];
+      const d = disc(g, 4 * TILE, 4.5 * TILE, 250, 0);
+      g.S.discs = [d];
+      let far = d.x;
+      for (let k = 0; k < 240 && !d.fall; k++) { g.step(1 / 120); far = Math.max(far, d.x); }
+      return { fall: d.fall, x: far, hurt: hp - h.hp };
+    };
+    expect(roll([]).fall).toBeGreaterThan(0);
+    const safe = roll(['undies']);
+    expect(safe.fall).toBe(0);
+    expect(safe.x).toBeGreaterThan(7 * TILE);
+    expect(safe.hurt).toBe(0);
+    // the aim line runs on over the hole too
+    const aim = (arts: string[]) => {
+      const g = arena(arts), p = g.spot(g.party[0])!, i = Math.floor(p.x / TILE), j = Math.floor(p.y / TILE) - 2;
+      g.S.mobs = [];
+      g.S.pits = [{ k: '1x1', cells: [[i, j]] }];
+      const pr = g.predict(g.party[0], 0, -40, 0);
+      return pr.path[pr.path.length - 1][1] - j * TILE;
+    };
+    expect(aim([])).toBeGreaterThan(0);
+    expect(aim(['undies'])).toBeLessThan(0);
+    const spikes = (arts: string[]) => {
+      const g = arena(arts), h = g.party[0], hp = h.hp;
+      g.S.discs = [disc(g, 5 * TILE + 8, 5 * TILE + 8, 0, 0, { hits: 1 })];
+      g.S.haz.add(hazKey(5, 5));
+      endAll(g);
+      g.update(0.02);
+      return hp - h.hp;
+    };
+    expect(spikes([])).toBeGreaterThan(0);
+    expect(spikes(['undies'])).toBe(0);
+  });
+
+  it('«Золотая челюсть» takes a whole vein in one hit', () => {
+    const mine = (arts: string[]) => {
+      const g = arena(arts), n = { k: 'ore' as const, name: 'Рудная жила', r: 7, ch: 3, x: 88, y: 88, left: 3, hit: 0, s: 1 };
+      g.S.nodes = [n];
+      g.S.discs = [disc(g, n.x, n.y + n.r + 5.5, 0, -60)];
+      g.step(1 / 60);
+      return { ore: g.bank.ore, left: n.left };
+    };
+    expect(mine([])).toEqual({ ore: 1, left: 2 });
+    expect(mine(['denture'])).toEqual({ ore: 3, left: 0 });
+  });
+
+  it('«Ракушка» shields every turn, «Третья рука» adds a disc, «Батарейка» fills the sparks, «Энергетик» makes the ability cheaper', () => {
+    const g = arena(['cup', 'hand', 'battery', 'energy']), h = g.party[0];
+    expect(h.shield).toBe(ART.cup);
+    expect(h.hand).toBe(h.discs + 1);
+    expect(h.sparks).toBe(AB_COST);
+    h.sparks = ART.energyCost;
+    expect(g.canUseAbility(h)).toBe(true);
+    g.useAbility(h);
+    expect(h.sparks).toBe(0);
+    endAll(g);
+    for (let k = 0; k < 600 && g.S.turn === 1; k++) g.update(0.05);
+    expect(g.S.turn).toBe(2);
+    expect(h.shield).toBe(ART.cup);
+    expect(h.hand).toBe(h.discs + 1);
+    const plain = arena([]);
+    expect(plain.party[0].shield).toBe(0);
+    plain.party[0].sparks = ART.energyCost;
+    expect(plain.canUseAbility(plain.party[0])).toBe(false);
+  });
+
+  it('«Носок» saves the hero from a deadly blow once a room', () => {
+    const g = arena(['sock']), h = g.party[0];
+    g.hurtHero(h, h.hp + 5);
+    expect(h.hp).toBe(1);
+    g.hurtHero(h, 3);
+    expect(h.hp).toBeLessThanOrEqual(0);
+  });
+
+  it('a kill by the hero\'s disc mends it with «Клыки» and drops ore with «Копилка»', () => {
+    const g = arena(['fangs', 'piggy'], ['skel', 'skel']), h = g.party[0], [a, b] = g.S.mobs;
+    h.hp = 10;
+    g.hurtMob(a, 99, '#fff', false, 0.6, h);
+    expect(h.hp).toBe(10 + ART.fangs);
+    expect(g.bank.ore).toBe(1);
+    // a kill nobody's disc made pays nothing
+    g.hurtMob(b, 99);
+    expect(g.bank.ore).toBe(1);
+  });
+
+  it('«Ёж в штанах» pricks an enemy that strikes up close', () => {
+    const g = arena(['hedgehog'], ['skel']), h = g.party[0], m = g.S.mobs[0], p = g.spot(h)!;
+    m.x = p.x < g.S.Wx / 2 ? p.x + TILE : p.x - TILE; m.y = p.y; m.tx = m.x; m.ty = m.y;
+    const hp = m.hp;
+    m.intent = { t: 'hit', hero: h.i, dmg: 2 };
+    endAll(g);
+    for (let k = 0; k < 200 && g.S.turn === 1; k++) g.update(0.05);
+    expect(hp - m.hp).toBe(ART.hedgehog);
+  });
+
+  it('«Ромашковый чай» puts the enemies\' rage off by three turns', () => {
+    expect(arena(['tea']).rageFrom()).toBe(RAGE_FROM + ART.tea);
+    expect(arena([]).rageFrom()).toBe(RAGE_FROM);
+  });
+
+  it('«Бумеранг» brings a miss back into the hand once a turn', () => {
+    const g = arena(['boomerang']), h = g.party[0], hand = h.hand;
+    g.throwDisc(h, 0, 5);
+    expect(h.hand).toBe(hand - 1);
+    for (let k = 0; k < 600 && g.moving(); k++) g.step(1 / 120);
+    g.step(1 / 120);
+    expect(h.hand).toBe(hand);
+    expect(g.S.floats.some(f => f.txt === 'вернулся!')).toBe(true);
+    g.throwDisc(h, 0, 5);
+    for (let k = 0; k < 600 && g.moving(); k++) g.step(1 / 120);
+    g.step(1 / 120);
+    expect(h.hand).toBe(hand - 1);
+  });
+
+  it('«Поднос» widens the disc, «Полироль» lets it roll further, «Смазка» spares the speed of two bounces', () => {
+    const g = arena(['tray', 'polish']), h = g.party[0];
+    g.throwDisc(h, 0, 20);
+    expect(g.S.discs[0].r).toBeCloseTo(h.def.r * ART.trayR);
+    expect(g.S.discs[0].fr).toBeCloseTo(h.def.fr * ART.polishFr);
+    const len = (arts: string[]) => {
+      const a = arena(arts), at = a.spot(a.party[0])!, sx = at.x < a.S.Wx / 2 ? 1 : -1, sy = at.y < a.S.Wy / 2 ? 1 : -1;
+      a.S.mobs = [];
+      // into the open room, soft enough to stop before the far wall
+      const p = a.predict(a.party[0], 9 * sx, 9 * sy, 9).path;
+      return Math.hypot(p[p.length - 1][0] - p[0][0], p[p.length - 1][1] - p[0][1]);
+    };
+    expect(len(['polish'])).toBeGreaterThan(len([]) * 1.3);
+    const wall = (arts: string[]) => {
+      const a = arena(arts);
+      a.throwDisc(a.party[0], 0, 0.0001 - 40);
+      const d = a.S.discs[0];
+      d.x = 100; d.y = d.r + 1; d.vx = 0; d.vy = -200;
+      a.step(1 / 120);
+      return Math.hypot(d.vx, d.vy);
+    };
+    expect(wall(['lube'])).toBeGreaterThan(wall([]) * 1.3);
+  });
+
+  it('«Диско-шар» throws a light spot off a bounce at the nearest enemy, three at most a throw', () => {
+    const g = arena(['mirrorball'], ['skel']), m = g.S.mobs[0], hp = m.hp, d = disc(g, m.x + 30, 6, 0, -200);
+    g.S.discs = [d];
+    g.step(1 / 120);
+    expect(hp - m.hp).toBe(ART.beamDmg);
+    expect(g.S.zaps.some(z => z.beam)).toBe(true);
+    d.beams = ART.beamMax;
+    d.y = 6; d.vy = -200;
+    g.step(1 / 120);
+    expect(hp - m.hp).toBe(ART.beamDmg);
+  });
+
+  it('«Стельки» keep more of the disc\'s speed off an enemy', () => {
+    const left = (arts: string[]) => {
+      const g = arena(arts), m = g.S.mobs[0];
+      const d = disc(g, m.x, m.y + m.r + 5.5, 0, -200);
+      g.S.discs = [d];
+      g.step(1 / 60);
+      return Math.hypot(d.vx, d.vy);
+    };
+    expect(left(['insoles'])).toBeGreaterThan(left([]) * 1.5);
+  });
+
+  it('«Рентген-очки» show the aim line on through three bounces', () => {
+    // Ricochet's disc keeps enough speed for three bounces and more
+    const g = arena(['xray'], ['golem'], 1), at = g.spot(g.party[0])!, sx = at.x < g.S.Wx / 2 ? 1 : -1, sy = at.y < g.S.Wy / 2 ? 1 : -1;
+    g.S.mobs = [];
+    expect(g.predict(g.party[0], 50 * sx, 31 * sy, 0).bounces.length).toBe(1);
+    expect(g.predict(g.party[0], 50 * sx, 31 * sy, ART.xrayBounces).bounces.length).toBe(ART.xrayBounces + 1);
   });
 });
 
@@ -1526,6 +1886,10 @@ describe('pressure in a fight', () => {
     cli.canControl = o => o.i === 0;
     applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
     expect([cli.heroOf(0).sparks, cli.heroOf(2).sparks]).toEqual([2, 2]);
+    // and they come along into the next room on every screen
+    host.loadRoom({ seed: 22, depth: 3, floor: 0, type: 'fight' });
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    expect([cli.heroOf(0).sparks, cli.heroOf(2).sparks]).toEqual([2, 2]);
   });
 
   it('a crystal holds one ability: soft hits take a spark each, and it keeps what a hero had no room for', () => {
@@ -1723,7 +2087,7 @@ describe('hero abilities work through the discs', () => {
   });
 });
 
-describe('the three new heroes', () => {
+describe('the heroes past the first three', () => {
   const at = (key: string) => HEROES.findIndex(d => d.key === key);
   /** A floor 0 fight for the given heroes, the given enemies at the given cells and nothing else in the room. */
   const arena = (picks: number[], mobs: [keyof typeof MOBS, number, number][]) => {
@@ -1745,14 +2109,17 @@ describe('the three new heroes', () => {
     return d;
   };
 
-  it('six heroes to pick from, two of each kind, each with its own colour, disc and ability; online still three seats', () => {
-    expect(HEROES.map(d => d.key)).toEqual(['bastion', 'ricochet', 'ash', 'cook', 'sharp', 'electra']);
-    // the pick screens lay them out three to a row: each column is one kind
-    expect(HEROES.slice(3).map(d => d.role)).toEqual(HEROES.slice(0, 3).map(d => d.role));
-    for (const role of ['Танк', 'Урон', 'Зона']) expect(HEROES.filter(d => d.role === role)).toHaveLength(2);
-    expect(new Set(HEROES.map(d => d.col)).size).toBe(6);
-    expect(new Set(HEROES.map(d => d.ab)).size).toBe(6);
-    expect(HEROES[at('electra')].fem && HEROES[at('cook')].fem && !HEROES[at('sharp')].fem).toBe(true);
+  it('nine heroes to pick from, each with its own colour, disc and ability, a row of each kind; online still three seats', () => {
+    expect(HEROES.map(d => d.key)).toEqual(['bastion', 'ricochet', 'ash', 'cook', 'sharp', 'electra', 'kid', 'bum', 'genius']);
+    // the pick screens lay them out a row per disc size, the biggest first: two «толстяки», four «нормисы», three «дрищи»
+    expect(KINDS.map(k => k.row)).toEqual(['Толстяки', 'Нормисы', 'Дрищи']);
+    expect(heroesByKind().map(row => row.map(i => HEROES[i].key))).toEqual([['bastion', 'cook'], ['ash', 'electra', 'bum', 'genius'], ['ricochet', 'sharp', 'kid']]);
+    expect(heroesByKind().flat().length).toBe(HEROES.length);
+    // a heroine's card says it her way
+    expect(HEROES.map(kindOf)).toEqual(['Толстяк', 'Дрищ', 'Нормиска', 'Толстуха', 'Дрищ', 'Нормиска', 'Дрищ', 'Нормис', 'Нормис']);
+    expect(new Set(HEROES.map(d => d.col)).size).toBe(HEROES.length);
+    expect(new Set(HEROES.map(d => d.ab)).size).toBe(HEROES.length);
+    expect(HEROES[at('electra')].fem && HEROES[at('cook')].fem && !HEROES[at('sharp')].fem && !HEROES[at('bum')].fem).toBe(true);
     // the cook is the tank: the most health of all
     expect(HEROES[at('cook')].hp).toBe(Math.max(...HEROES.map(d => d.hp)));
     expect(MAX_PLAYERS).toBe(3);
@@ -1945,6 +2312,278 @@ describe('the three new heroes', () => {
     o.endTurn(oh);
     for (let k = 0; k < 120 && o.S.phase === 'throw'; k++) o.update(1 / 60);
     expect(oh.hp).toBe(hp - 2 - o.S.biome.hazDmg);
+  });
+
+  /** Ends the heroes' turn and plays the enemies' out, to the start of the next turn. */
+  const turn = (g: Game) => {
+    const t = g.S.turn;
+    g.S.discs = [];
+    endAll(g);
+    for (let k = 0; k < 4000 && g.S.turn === t; k++) g.update(1 / 60);
+  };
+
+  it('the kid: his disc drops a firecracker at each of its first two bounces off walls, where the cook\'s would drop a dish', () => {
+    const g = arena([at('kid')], [['archer', 1, 1]]), kid = g.party[0];
+    kid.sparks = AB_COST;
+    g.useAbility(kid);
+    g.throwDisc(kid, 60, 0);
+    const d = g.S.discs[0];
+    expect(d.ab).toBe(true);
+    Object.assign(d, { vx: 420, vy: 0, e: 0.95 });
+    for (let k = 0; k < 60 * 30 && g.moving(); k++) g.update(1 / 60);
+    expect(d.bounces).toBeGreaterThan(PETARD_PER_DISC);
+    expect(g.S.bombs).toHaveLength(PETARD_PER_DISC);
+    for (const b of g.S.bombs) {
+      expect(b.t).toBe(FOOD_FLY);
+      expect(cellCentre(...cellAt(b.x, b.y))).toEqual({ x: b.x, y: b.y });
+      expect([b.by, b.h]).toEqual([d.id, kid.i]);
+    }
+    expect(new Set(g.S.bombs.map(b => hazKey(...cellAt(b.x, b.y)))).size).toBe(PETARD_PER_DISC);
+    expect(g.S.food).toEqual([]);
+  });
+
+  it('the kid: a bounce off an enemy drops no firecracker, one off another disc does', () => {
+    const g = arena([at('kid'), at('cook')], [['skel', 5, 3]]), [kid, cook] = g.party, [skel] = g.S.mobs;
+    const d = into(g, kid, skel, true);
+    g.step(1 / 120);
+    expect(d.vy).toBeGreaterThan(0);
+    expect(g.S.bombs).toEqual([]);
+    // his disc runs into the cook's lying still in the middle of the room
+    const c = cellCentre(5, 6);
+    g.S.discs = [];
+    const rest = into(g, cook, { ...c, r: cook.def.r }, false, 0);
+    Object.assign(rest, { x: c.x, y: c.y });
+    const hit = into(g, kid, rest, true);
+    for (let k = 0; k < 3; k++) g.step(1 / 120);
+    expect(g.S.bombs).toHaveLength(1);
+    expect(g.S.bombs[0].by).toBe(hit.id);
+  });
+
+  it('the kid: in the enemies\' turn a firecracker goes off once an enemy is within a cell of it, and hurts every enemy that close', () => {
+    const g = arena([at('kid')], [['skel', 7, 5], ['king', 2, 2], ['archer', 5, 9]]), kid = g.party[0];
+    const [skel, king, archer] = g.S.mobs;
+    const put = (m: Mob, i: number, j: number) => { const c = cellCentre(i, j, mobSize(m.k)); m.x = m.tx = c.x; m.y = m.ty = c.y; };
+    put(king, 2, 2);
+    g.S.bombs = [{ ...cellCentre(5, 5), fx: 0, fy: 0, h: kid.i, t: FOOD_FLY }];
+    // in the heroes' turn it only crackles, even with an enemy right by it
+    put(skel, 6, 5);
+    g.step(1 / 120);
+    expect(g.S.bombs).toHaveLength(1);
+    g.S.phase = 'enemy';
+    put(skel, 7, 5);
+    // two cells off is out of its reach
+    g.step(1 / 120);
+    expect(g.S.bombs).toHaveLength(1);
+    // the skeleton steps right next to it, the big king's corner a cell off on the slant: both get it, through the
+    // king's armour, and the archer far off doesn't
+    put(skel, 6, 5);
+    put(king, 3, 3);
+    g.step(1 / 120);
+    expect(g.S.bombs).toEqual([]);
+    expect([skel.hp, king.hp, archer.hp]).toEqual([99 - PETARD_DMG, 99 - PETARD_DMG, 99]);
+    expect(g.S.floats.some(f => f.txt === 'БАХ!')).toBe(true);
+    // still in the air it doesn't go off, only as it lands
+    g.S.bombs = [{ ...cellCentre(5, 5), fx: cellCentre(5, 2).x, fy: cellCentre(5, 2).y, h: kid.i, t: 0 }];
+    g.step(1 / 120);
+    expect(g.S.bombs).toHaveLength(1);
+    for (let k = 0; k < 120 && g.S.bombs.length; k++) g.step(1 / 120);
+    expect(g.S.bombs).toEqual([]);
+    expect(skel.hp).toBe(99 - 2 * PETARD_DMG);
+  });
+
+  it('the kid: an enemy coming up to a firecracker or walking past it sets it off, and one it fells stops where it fell', () => {
+    // four cells off the rat hears it and runs to it, six cells off it runs past it at the hero
+    for (const [far, hp] of [[4, 99], [4, PETARD_DMG], [6, 99]]) {
+      const g = arena([at('kid')], [['rat', 1, 1]]), kid = g.party[0], [rat] = g.S.mobs;
+      kid.hp = kid.max = 99;
+      // the rat along the row, the firecracker two cells from the hero on its way
+      const [i, j] = cellAt(g.spot(kid)!.x, g.spot(kid)!.y), dx = isFloor(g.S, i + 4, j) ? 1 : -1, start = cellCentre(i + far * dx, j);
+      rat.x = rat.tx = start.x; rat.y = rat.ty = start.y; rat.hp = hp;
+      g.pickIntents();
+      g.S.bombs = [{ ...cellCentre(i + 2 * dx, j), fx: 0, fy: 0, h: kid.i, t: FOOD_FLY - 1e-6 }];
+      g.step(1 / 120);
+      expect(!!rat.intent!.bang).toBe(far - 2 <= PETARD_HEAR);
+      turn(g);
+      expect(g.S.bombs).toEqual([]);
+      if (hp > PETARD_DMG) {
+        expect(rat.hp).toBe(hp - PETARD_DMG);
+        expect(kid.hp).toBe(99);
+        continue;
+      }
+      // felled a cell short of the firecracker, it lies there in the middle of its cell and never gets to bite
+      expect(rat.hp).toBeLessThanOrEqual(0);
+      expect(cellAt(rat.x, rat.y)).toEqual([i + 3 * dx, j]);
+      expect(cellCentre(i + 3 * dx, j)).toEqual({ x: rat.x, y: rat.y });
+      expect(kid.hp).toBe(99);
+    }
+  });
+
+  it('the kid: a firecracker draws the two enemies nearest it within three cells, and they strike nobody that turn', () => {
+    const g = arena([at('kid')], [['skel', 9, 7], ['skel', 6, 6], ['skel', 8, 3], ['skel', 2, 2]]), kid = g.party[0];
+    const [close, near, third, far] = g.S.mobs;
+    kid.hp = kid.max = 99;
+    // the hero in the corner, the first skeleton right by him and about to strike
+    expect(cellAt(g.spot(kid)!.x, g.spot(kid)!.y)).toEqual([10, 8]);
+    g.pickIntents();
+    expect(close.intent!.t).toBe('hit');
+    const blow = g.incoming(kid);
+    expect(blow).toBeGreaterThan(0);
+    // a firecracker lands two cells up the slant from him: the skeleton by him is a cell off it, the next two and three cells
+    const b = cellCentre(8, 6);
+    g.S.bombs = [{ ...b, fx: 0, fy: 0, h: kid.i, t: FOOD_FLY - 1e-6 }];
+    g.step(1 / 120);
+    expect(PETARD_LURE).toBe(2);
+    expect([close, near, third, far].map(m => m.intent!.bang ?? null)).toEqual([b, b, null, null]);
+    expect(close.intent).toMatchObject({ t: 'move', dmg: 0 });
+    expect(g.incoming(kid)).toBe(0);
+    turn(g);
+    // the one by it set it off as the enemies' turn began, the other ran up to where it crackled
+    expect(g.S.bombs).toEqual([]);
+    expect([close.hp, near.hp, third.hp, far.hp]).toEqual([99 - PETARD_DMG, 99, 99, 99]);
+    expect(kid.hp).toBe(99);
+    const [ni, nj] = cellAt(near.x, near.y);
+    expect(Math.max(Math.abs(ni - 8), Math.abs(nj - 6))).toBe(1);
+    // with it gone they go for the hero again
+    expect([close, near].map(m => m.intent!.bang)).toEqual([undefined, undefined]);
+    expect(close.intent!.t).toBe('hit');
+  });
+
+  it('the kid: each enemy runs to the nearest firecracker; one casting a spell goes on with it', () => {
+    const g = arena([at('kid')], [['skel', 2, 2], ['skel', 5, 2], ['king', 7, 5]]), kid = g.party[0], [a, b, king] = g.S.mobs;
+    g.pickIntents();
+    king.intent = { t: 'slam', hero: -1, dmg: 3 };
+    const p = cellCentre(3, 3), q = cellCentre(6, 3);
+    g.S.bombs = [{ ...p, fx: 0, fy: 0, h: kid.i, t: FOOD_FLY - 1e-6 }, { ...q, fx: 0, fy: 0, h: kid.i, t: FOOD_FLY - 1e-6 }];
+    g.step(1 / 120);
+    expect([a.intent!.bang, b.intent!.bang]).toEqual([p, q]);
+    expect(king.intent!.t).toBe('slam');
+  });
+
+  it('the bum: his disc lets out a cloud of gas at its first bounce, five cells across with the corners cut off', () => {
+    const g = arena([at('bum')], [['skel', 6, 6]]), bum = g.party[0], [skel] = g.S.mobs;
+    const d = into(g, bum, skel, true);
+    g.step(1 / 120);
+    // on the cell the disc bounced in, just under the skeleton
+    expect(g.S.gas).toEqual([{ i: 6, j: 7, left: GAS_TURNS, t: 0 }]);
+    expect(d).toMatchObject({ gas: true });
+    let n = 0;
+    for (let b = -3; b <= 3; b++) for (let a = -3; a <= 3; a++) if (g.gasAt(6 + a, 7 + b)) n++;
+    expect(n).toBe(21);
+    expect([g.gasAt(8, 9), g.gasAt(8, 8), g.gasAt(6, 9), g.gasAt(9, 7)]).toEqual([false, true, true, false]);
+    // without the ability, or on its later bounces, his disc lets nothing out
+    g.S.discs = [];
+    g.S.gas[0].left = 1;
+    into(g, bum, skel, false);
+    g.step(1 / 120);
+    expect(g.S.gas[0].left).toBe(1);
+    // a second cloud on the same cell starts its turns over instead of piling up
+    g.S.discs = [];
+    into(g, bum, skel, true);
+    g.step(1 / 120);
+    expect(g.S.gas).toEqual([{ i: 6, j: 7, left: GAS_TURNS, t: 0 }]);
+  });
+
+  it('the bum: an enemy in his gas strikes 30% weaker and chokes at the start of each move; the cloud lasts three turns', () => {
+    // the gas takes 5% of an enemy's full health a move, rounded up, at least 1, a boss's too
+    expect([gasDmg(99), gasDmg(28), gasDmg(20), gasDmg(4), gasDmg(235)]).toEqual([5, 2, 1, 1, 12]);
+    const g = arena([at('bum')], [['archer', 6, 6]]), bum = g.party[0], [archer] = g.S.mobs;
+    bum.hp = bum.max = 99;
+    const full = archer.intent!.dmg;
+    expect(archer.intent!.t).toBe('hit');
+    into(g, bum, archer, true);
+    g.step(1 / 120);
+    expect(g.inGas(archer)).toBe(true);
+    // the badge shows the weaker shot straight away
+    const weak = Math.max(1, Math.round(full * (1 - GAS_WEAK)));
+    expect(weak).toBeLessThan(full);
+    expect(archer.intent!.dmg).toBe(weak);
+    const hp = archer.hp;
+    turn(g);
+    expect(hp - archer.hp).toBe(gasDmg(archer.max));
+    expect(bum.max - bum.hp).toBe(weak);
+    expect(g.S.gas[0].left).toBe(GAS_TURNS - 1);
+    turn(g);
+    turn(g);
+    expect(hp - archer.hp).toBe(GAS_TURNS * gasDmg(archer.max));
+    expect(g.S.gas).toEqual([]);
+    // the air clears and it shoots full again
+    expect(archer.intent!.dmg).toBe(full + g.rage());
+  });
+
+  it('the ice genius: one hit of his disc slows an enemy to a cell on its next move, two freeze it for that turn', () => {
+    /** His disc with the ability on hits m: from below, or from above if there's wall below it. */
+    const hit = (g: Game, h: HeroState, m: Mob) => {
+      g.S.discs = [];
+      const d = into(g, h, m, true);
+      if (!isFloor(g.S, ...cellAt(d.x, d.y))) { d.y = 2 * m.y - d.y; d.vy = -d.vy; }
+      g.step(1 / 120);
+    };
+    const moved = (frost: number) => {
+      const g = arena([at('genius')], frost >= 2 ? [['rat', 1, 1], ['archer', 1, 1]] : [['rat', 1, 1]]), h = g.party[0], [rat, archer] = g.S.mobs;
+      h.hp = h.max = 99;
+      // the rat six cells off along the row; once frozen, an archer halfway
+      const [i, j] = cellAt(g.spot(h)!.x, g.spot(h)!.y), dx = isFloor(g.S, i + 6, j) ? 1 : -1;
+      const put = (m: Mob, n: number) => { const c = cellCentre(i + n * dx, j); m.x = m.tx = c.x; m.y = m.ty = c.y; };
+      put(rat, 6);
+      if (archer) put(archer, 3);
+      g.pickIntents();
+      for (let k = 0; k < frost; k++) hit(g, h, rat);
+      expect(rat.frost).toBe(frost || undefined);
+      expect(g.frozen(rat)).toBe(frost >= 2);
+      // a frozen shooter doesn't shoot: it counts for nothing on the hero's health bar
+      if (frost >= 2) {
+        for (let k = 0; k < 2; k++) hit(g, h, archer);
+        expect(g.incoming(h)).toBe(0);
+      }
+      turn(g);
+      const [ri] = cellAt(rat.x, rat.y);
+      if (frost >= 2) {
+        expect(h.hp).toBe(99);
+        // the next turn the frost is gone and the archer shoots again
+        expect([rat.frost, archer.frost]).toEqual([undefined, undefined]);
+        expect(archer.intent!.t).toBe('hit');
+        turn(g);
+        expect(h.hp).toBeLessThan(99);
+      }
+      return Math.abs(ri - (i + 6 * dx));
+    };
+    expect(moved(0)).toBeGreaterThan(FROST_STEPS);
+    expect(moved(1)).toBe(FROST_STEPS);
+    expect(moved(2)).toBe(0);
+  });
+
+  it('the ice genius: a frosted enemy takes half as much again from the heroes\' discs, fire and gas the same as ever', () => {
+    const g = arena([at('genius'), at('cook')], [['skel', 3, 3], ['skel', 7, 3]]), [ice, cook] = g.party, [cold, warm] = g.S.mobs;
+    const hit = (h: HeroState, m: Mob, ab: boolean) => { g.S.discs = []; const d = into(g, h, m, ab); g.step(1 / 120); return d; };
+    // his own frosting hit does as much as ever, the cook's after it more
+    const d = hit(ice, cold, true);
+    const first = Math.ceil((d.m * 200) / 120);
+    expect(99 - cold.hp).toBe(first);
+    expect(cold.frost).toBe(1);
+    const c = hit(cook, warm, false), plain = Math.ceil((c.m * 200) / 120);
+    expect(99 - warm.hp).toBe(plain);
+    hit(cook, cold, false);
+    expect(99 - first - cold.hp).toBe(Math.ceil(plain * (1 + FROST_VULN)));
+    expect(FROST_VULN).toBe(0.5);
+    // burning, it loses no more than its fire
+    cold.burn = 4;
+    const hp = cold.hp;
+    g.S.phase = 'enemy'; g.S.actor = -1;
+    (g as unknown as { nextActor: () => boolean }).nextActor();
+    expect(hp - cold.hp).toBe(4);
+  });
+
+  it('the kid\'s firecrackers and the bum\'s gas travel to the other screens with the snapshot', () => {
+    const host = new Game(), cli = new Game();
+    host.party = newParty([at('kid'), at('bum')]);
+    host.loadRoom({ seed: 21, depth: 2, floor: 0, type: 'fight' });
+    host.S.bombs = [{ x: 40, y: 40, fx: 30, fy: 40, by: 5, h: at('kid'), t: FOOD_FLY }];
+    host.S.gas = [{ i: 4, j: 5, left: 2, t: 1.5 }];
+    cli.send = () => {};
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    expect(cli.S.bombs).toEqual(host.S.bombs);
+    expect(cli.S.gas).toEqual(host.S.gas);
+    expect(cli.gasAt(6, 6)).toBe(true);
   });
 });
 

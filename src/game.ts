@@ -1,9 +1,10 @@
 // Combat rules: turn flow, disc physics, damage, abilities.
 // Rendering and input live elsewhere; this module only changes state.
 
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, CRIT_COS, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, ZAP, ZAP_REACH, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, CRIT_COS, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, FROST_VULN, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_HEAR, PETARD_LURE, PETARD_MAX, PETARD_PER_DISC, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, ZAP, ZAP_REACH, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
 import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { mulberry32 } from './rng';
+import { has } from './artifacts';
 import type { Sfx } from './audio/sfx';
 import { caveTurns, cellAt, cellCentre, generate, hazKey, isFloor, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
 
@@ -34,10 +35,16 @@ export interface HeroState {
   fire: number;
   /** The ability is on for the rest of this turn: the discs thrown now shield, set on fire or keep their speed. */
   boost: boolean;
-  /** Sparks for the ability, 0 to AB_COST: a spark crystal fills every hero's at once, each spends its own, and they last one fight. */
+  /** Sparks for the ability, 0 to AB_COST: a spark crystal fills every hero's at once, each spends its own, and they last the whole run. */
   sparks: number;
   /** The last knock it took: the figure rocks on its stand for a moment. */
   knock?: Knock;
+  /** The floor bosses' trophies the hero has taken (src/artifacts.ts); saves from before them have none. */
+  arts?: string[];
+  /** «Бумеранг»: the turn its miss last came back to the hand. */
+  boomed?: number;
+  /** «Счастливый носок»: it has already saved the hero from a deadly blow in this room. */
+  lucky?: boolean;
 }
 
 export interface Disc {
@@ -67,6 +74,16 @@ export interface Disc {
   rico: number;
   /** The cook's ability: dishes this disc has dropped so far. */
   food?: number;
+  /** The kid's ability: firecrackers this disc has dropped so far. */
+  bombs?: number;
+  /** The bum's ability: this disc has let its cloud of gas out already. */
+  gas?: boolean;
+  /** «Смазка»: bounces off walls and blocks left that cost the disc no speed. */
+  slick?: number;
+  /** «Карманный диско-шар»: light spots this disc's bounces have thrown so far. */
+  beams?: number;
+  /** «Бумеранг»: a miss that went back into the hand; it is off the table and nobody walks over to it. */
+  back?: boolean;
   /**
    * One of the two side discs of the card sharp's fan, a phantom: smaller and weaker, its miss goes unremarked, and a hole
    * or a hazard it ends up in doesn't hurt him.
@@ -81,6 +98,13 @@ export interface Disc {
 export interface Food { x: number; y: number; fx: number; fy: number; k: number; by?: number; t: number }
 /** Seconds a dropped dish takes to land. */
 export const FOOD_FLY = 0.35;
+/**
+ * A firecracker the kid's disc dropped: it flies in like a dish, from (fx, fy) to (x, y) in the middle of a cell, for FOOD_FLY
+ * seconds, then lies there till an enemy comes within a cell of it. `by` is the disc that dropped it, `h` its hero, `t` its age.
+ */
+export interface Bomb { x: number; y: number; fx: number; fy: number; by?: number; h: number; t: number }
+/** A cloud of the bum's gas: its middle cell, the enemy turns it has left, and its age, for the eye. */
+export interface Gas { i: number; j: number; left: number; t: number }
 /** How close a disc's edge must pass the middle of a dish to pick it up: the dish fills most of its cell. */
 const FOOD_R = 6;
 /** How many cells from where a dish was flung it may end up, when the cells nearer are taken. */
@@ -91,7 +115,7 @@ const FOOD_SPREAD = 2;
  * hit, `b` is the physics step it struck on, `s` shapes the zigzag, `t` its age.
  */
 /** A stroke of lightning from (x0, y0) at height h0 to (x1, y1) at height h1. */
-export interface Zap { x0: number; y0: number; h0: number; x1: number; y1: number; h1: number; t: number; b: number; s: number }
+export interface Zap { x0: number; y0: number; h0: number; x1: number; y1: number; h1: number; t: number; b: number; s: number; beam?: boolean }
 /** Seconds a stroke of lightning stays on screen. */
 export const ZAP_T = 0.55;
 
@@ -123,6 +147,10 @@ export interface State extends Layout {
   discs: Disc[];
   /** The cook's dishes on the floor; they last the fight. */
   food: Food[];
+  /** The kid's firecrackers on the floor, till they go off. */
+  bombs: Bomb[];
+  /** The bum's clouds of gas over the floor. */
+  gas: Gas[];
   zaps: Zap[];
   floats: Float[];
   sparks: Spark[];
@@ -184,6 +212,17 @@ const did = (o: { fem?: boolean }, he: string, she = he + 'а') => (o.fem ? she 
 
 type Pt = { x: number; y: number };
 
+/**
+ * The trophies' numbers (src/artifacts.ts). «Поднос» widens the disc, «Полироль» cuts its friction, «Смазка» spares it the
+ * speed of its first bounces, «Стельки» keep more of its speed off an enemy, «Пружина» adds a point a bounce, «Диско-шар»
+ * throws a light spot off a bounce at the nearest enemy, «Ракушка» shields every turn, «Ёж» pricks back, «Клыки» heal
+ * a kill, «Чай» puts the rage off, «Энергетик» makes the ability cheaper, «Рентген» shows the bounces.
+ */
+export const ART = {
+  trayR: 1.33, polishFr: 0.67, slick: 2, insolesE: 0.75, springMax: 4, beamDmg: 1, beamReach: 5 * TILE, beamMax: 3,
+  cup: 3, hedgehog: 3, fangs: 2, tea: 3, energyCost: 2, xrayBounces: 3, critBig: 3, bells: 3,
+};
+
 /** Cells a walker covers each enemy turn: its speed in cells, at least one. */
 export const stepsOf = (m: Mob) => Math.max(1, Math.round(m.speed / TILE));
 
@@ -201,8 +240,8 @@ export function pointAt(w: Pt[], d: number): Pt {
 
 /**
  * Ore belongs to the whole party: any hero's hit fills the pool, any hero spends from it, and it lasts the whole run.
- * Sparks are each hero's own to spend (`HeroState.sparks`), though a crystal fills everyone's, and last one fight; every hero
- * starts the next one with `boon` of them (the altar's gift, usually none). An event may also leave the next fight a `shield`
+ * Sparks are each hero's own to spend (`HeroState.sparks`), though a crystal fills everyone's, and last the whole run; the
+ * altar's gift tops every hero up to `boon` of them at the next fight (usually none). An event may also leave the next fight a `shield`
  * for every hero, `rage`: that much harder blows from its enemies, or a curse that room's spec carries: `smoke` over the
  * floor, a `strobe` that hides the aiming line.
  */
@@ -220,7 +259,7 @@ export function newParty(picks: number[] = [0, 1, 2]): HeroState[] {
 function heroStart(hp: number) {
   return {
     hp, max: hp, shield: 0, up: { m: 0, pw: 0, e: 0 }, discs: HAND_START,
-    pad: null as number | null, at: null as Pt | null, from: null as Pt | null, leap: 0, hand: HAND_START, thrown: false, flash: 0, chill: 0, fire: 0, boost: false, sparks: 0,
+    pad: null as number | null, at: null as Pt | null, from: null as Pt | null, leap: 0, hand: HAND_START, thrown: false, flash: 0, chill: 0, fire: 0, boost: false, sparks: 0, arts: [] as string[],
   };
 }
 
@@ -288,9 +327,16 @@ export class Game {
     this.pickup.clear();
     this.walked = { key: '', n: 0 };
     this.hopped.clear();
-    // sparks don't carry over: every fight starts without them, or full after the altar
+    // sparks carry over from the last room, and the altar fills them up
     const boon = Math.min(AB_COST, this.bank.boon ?? 0), shield = this.bank.shield ?? 0;
-    for (const h of this.party) Object.assign(h, { pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? h.discs : 0, thrown: false, shield: h.hp > 0 ? shield : 0, flash: 0, chill: 0, fire: 0, boost: false, sparks: boon });
+    for (const h of this.party) {
+      // «Батарейка» fills the sparks at the start of every fight, «Ракушка» shields from the first blow on
+      const full = has(h, 'battery') ? AB_COST : boon, cup = has(h, 'cup') ? ART.cup : 0;
+      Object.assign(h, {
+        pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? this.handOf(h) : 0, thrown: false, shield: h.hp > 0 ? shield + cup : 0, flash: 0, chill: 0, fire: 0,
+        boost: false, sparks: Math.min(AB_COST, Math.max(h.sparks, full)), boomed: 0, lucky: false,
+      });
+    }
     // an event's curse: the room's enemies come in angrier
     if (this.bank.rage) for (const m of L.mobs) m.dmg += this.bank.rage;
     this.bank.boon = 0;
@@ -298,7 +344,7 @@ export class Game {
     delete this.bank.rage;
     delete this.bank.smoke;
     delete this.bank.strobe;
-    this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], food: [], zaps: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [], away: this.online ? this.S?.away ?? [] : [] };
+    this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], food: [], bombs: [], gas: [], zaps: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [], away: this.online ? this.S?.away ?? [] : [] };
     // every rune starts empty: the players put their heroes on them before the fight
     this.pickActive();
     this.pickIntents();
@@ -310,7 +356,7 @@ export class Game {
   showRoom(spec: RoomSpec) {
     this.walked = { key: '', n: 0 };
     this.hopped.clear();
-    this.S = { ...generate(spec), spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], food: [], zaps: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [], away: [] };
+    this.S = { ...generate(spec), spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], food: [], bombs: [], gas: [], zaps: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [], away: [] };
     this.pickActive();
   }
 
@@ -359,6 +405,14 @@ export class Game {
     return k === 'e' ? Math.min(E_MAX, h.def.e + h.up.e * step) : h.def[k] * (1 + h.up[k] * step);
   };
   get hero() { return this.heroOf(this.act); }
+
+  /** Sparks the hero's ability costs: fewer with «Энергетик». */
+  abCost(h: HeroState) { return has(h, 'energy') ? ART.energyCost : AB_COST; }
+  /** Discs the hero throws a turn: the ones bought, and one more with «Третья рука». */
+  handOf(h: HeroState) { return h.discs + (has(h, 'hand') ? 1 : 0); }
+  /** The size of the hero's disc and its friction on the floor, as the trophies change them. */
+  discR(h: HeroState) { return h.def.r * (has(h, 'tray') ? ART.trayR : 1); }
+  discFr(h: HeroState) { return h.def.fr * (has(h, 'polish') ? ART.polishFr : 1); }
 
   select(i: number) {
     const h = this.party.find(o => o.i === i);
@@ -512,9 +566,9 @@ export class Game {
       const c = Math.cos(a), sn = Math.sin(a), ux = (dx * c - dy * sn) / L, uy = (dx * sn + dy * c) / L;
       return {
         id: next(), vol, hero: h, x: p.x + ux * 6, y: p.y + uy * 6, vx: ux * L * s, vy: uy * L * s,
-        r: h.def.r * (fan ? FAN_R : 1), m: this.stat(h, 'm') * (fan ? FAN_M : 1), e: this.stat(h, 'e'), fr: h.def.fr,
+        r: this.discR(h) * (fan ? FAN_R : 1), m: this.stat(h, 'm') * (fan ? FAN_M : 1), e: this.stat(h, 'e'), fr: this.discFr(h),
         fall: 0, gone: false, charged: false, bounces: 0, spin: 0, hits: 0,
-        ab: h.boost, rico: h.boost && h.def.key === 'ricochet' ? AB_BOUNCES : 0, ...(fan ? { fan } : {}),
+        ab: h.boost, rico: h.boost && h.def.key === 'ricochet' ? AB_BOUNCES : 0, ...(fan ? { fan } : {}), ...(has(h, 'lube') ? { slick: ART.slick } : {}),
       };
     };
     // the card sharp's fan: a disc out of each sleeve first, the one he aimed last, so he goes after that one
@@ -537,43 +591,54 @@ export class Game {
 
   /**
    * Where a throw with pull-back (dx, dy) would roll, ignoring other discs: path points, the bounce points along it,
-   * and the mob it would hit first. Stops after `maxBounces` bounces (the aim line uses 0: it ends at the first obstacle).
+   * and the mob it would hit first. It rolls by the same rules as a thrown disc, step for step. Stops after `maxBounces`
+   * bounces (the aim line uses 0: it ends at the first obstacle; «Рентген-очки» show three).
    */
   predict(h: HeroState, dx: number, dy: number, maxBounces = 2) {
     const S = this.S, L = Math.hypot(dx, dy), path: [number, number][] = [], bounces: [number, number][] = [], p = this.spot(h);
     if (!p || L < 4) return { path, bounces, hit: null as Mob | null };
-    const s = this.power(h), dt = 1 / 60;
-    const d = { x: p.x + (dx / L) * 6, y: p.y + (dy / L) * 6, vx: dx * s, vy: dy * s, r: h.def.r, e: this.stat(h, 'e') } as Disc;
-    const boxes = standing(S.blocks).concat(S.rock);
+    const s = this.power(h);
+    const d = {
+      hero: h, x: p.x + (dx / L) * 6, y: p.y + (dy / L) * 6, vx: dx * s, vy: dy * s, r: this.discR(h), e: this.stat(h, 'e'), fr: this.discFr(h), spin: 0,
+      rico: h.boost && h.def.key === 'ricochet' ? AB_BOUNCES : 0, slick: has(h, 'lube') ? ART.slick : 0,
+    } as Disc;
+    const boxes = standing(S.blocks).concat(S.rock), over = has(h, 'undies');
+    // a bounce that costs no speed spends one of the disc's sure bounces, as in play
+    const keep = () => this.keep(d), spend = () => { if (d.rico > 0) d.rico--; else if (d.slick) d.slick--; };
     path.push([d.x, d.y]);
-    for (let k = 0; k < 600; k++) {
-      const v = Math.hypot(d.vx, d.vy);
-      if (v < 8) break;
-      const nv = Math.max(0, v - muAt(S, d.x, d.y) * h.def.fr * dt);
-      d.vx *= nv / v; d.vy *= nv / v;
-      // sub-steps keep fast discs from tunnelling through a one-tile block
-      for (let sub = 0; sub < 4; sub++) {
-        d.x += (d.vx * dt) / 4; d.y += (d.vy * dt) / 4;
-        let hitWall = false;
-        if (d.x < d.r) { d.x = d.r; d.vx = -d.vx * d.e; hitWall = true; }
-        if (d.y < d.r) { d.y = d.r; d.vy = -d.vy * d.e; hitWall = true; }
-        if (d.x > S.Wx - d.r) { d.x = S.Wx - d.r; d.vx = -d.vx * d.e; hitWall = true; }
-        if (d.y > S.Wy - d.r) { d.y = S.Wy - d.r; d.vy = -d.vy * d.e; hitWall = true; }
-        for (const b of boxes) if (this.bounceBox(d, b) > 0) hitWall = true;
-        for (const n of S.nodes) if (n.left > 0 && this.bounceStatic(d, n) > 0) hitWall = true;
-        const m = S.mobs.find(o => this.solid(o) && Math.hypot(d.x - o.x, d.y - o.y) < d.r + o.r);
-        if (m) { path.push([d.x, d.y]); return { path, bounces, hit: m }; }
-        if (pitAt(S.pits, d.x, d.y)) { path.push([d.x, d.y]); return { path, bounces, hit: null }; }
-        if (hitWall) {
-          bounces.push([d.x, d.y]);
-          path.push([d.x, d.y]);
-          if (bounces.length > maxBounces) return { path, bounces, hit: null };
-        }
+    for (let k = 0; k < 1800; k++) {
+      if (Math.hypot(d.vx, d.vy) < 2) break;
+      this.glide(d, STEP);
+      let hitWall = false;
+      const k0 = keep();
+      if (d.x < d.r) { d.x = d.r; d.vx = -d.vx * k0; hitWall = true; }
+      if (d.y < d.r) { d.y = d.r; d.vy = -d.vy * k0; hitWall = true; }
+      if (d.x > S.Wx - d.r) { d.x = S.Wx - d.r; d.vx = -d.vx * k0; hitWall = true; }
+      if (d.y > S.Wy - d.r) { d.y = S.Wy - d.r; d.vy = -d.vy * k0; hitWall = true; }
+      if (!over && pitAt(S.pits, d.x, d.y)) { path.push([d.x, d.y]); return { path, bounces, hit: null }; }
+      for (const b of boxes) if (this.bounceBox(d, b, keep()) > 0) hitWall = true;
+      for (const n of S.nodes) if (n.left > 0 && this.bounceStatic(d, n, NODE_E) > 0) hitWall = true;
+      const m = S.mobs.find(o => this.solid(o) && Math.hypot(d.x - o.x, d.y - o.y) < d.r + o.r);
+      if (m) { path.push([d.x, d.y]); return { path, bounces, hit: m }; }
+      if (hitWall) {
+        spend();
+        bounces.push([d.x, d.y]);
+        path.push([d.x, d.y]);
+        if (bounces.length > maxBounces) return { path, bounces, hit: null };
       }
-      if (k % 3 === 0) path.push([d.x, d.y]);
+      if (k % 6 === 0) path.push([d.x, d.y]);
     }
     path.push([d.x, d.y]);
     return { path, bounces, hit: null as Mob | null };
+  }
+
+  /** A disc rolls on for dt: it slows on the floor (a Ricochet disc with sure bounces left keeps a good clip) and moves. */
+  private glide(d: Disc, dt: number) {
+    const v = Math.hypot(d.vx, d.vy);
+    if (d.rico > 0 && v > 0) { const nv = Math.max(v, AB_SPEED); d.vx *= nv / v; d.vy *= nv / v; d.spin += nv * dt * 0.08; }
+    else if (v > 0) { const nv = Math.max(0, v - muAt(this.S, d.x, d.y) * d.fr * dt); d.vx *= nv / v; d.vy *= nv / v; d.spin += nv * dt * 0.08; }
+    d.x += d.vx * dt;
+    d.y += d.vy * dt;
   }
 
   /** Cost of the next extra disc, or 0 when the hero already has the most. */
@@ -610,14 +675,14 @@ export class Game {
    * and it goes on once a turn on the hero's own sparks.
    */
   canUseAbility(h = this.hero) {
-    return this.S.phase === 'throw' && h.hp > 0 && h.hand > 0 && !h.boost && !this.ended(h) && h.sparks >= AB_COST && this.liveMobs().length > 0;
+    return this.S.phase === 'throw' && h.hp > 0 && h.hand > 0 && !h.boost && !this.ended(h) && h.sparks >= this.abCost(h) && this.liveMobs().length > 0;
   }
 
   useAbility(h = this.hero) {
     if (!this.canUseAbility(h)) return;
     this.sfx('ability', 0.7, h.i);
     if (this.send) { this.send({ k: 'ability', h: h.i }); return; }
-    h.sparks -= AB_COST;
+    h.sparks -= this.abCost(h);
     h.boost = true;
     const p = this.spot(h);
     if (p) {
@@ -629,12 +694,13 @@ export class Game {
 
   /**
    * A disc thrown with the ability on hits an enemy: Bastion's shields the whole party, Ash's stokes the enemy's fire,
-   * Electra's strikes lightning, the cook's drops a dish. This goes before the hit's damage; Electra's lightning comes after it.
+   * Electra's strikes lightning, the cook's drops a dish, the bum's lets out its gas. This goes before the hit's damage;
+   * Electra's lightning and the ice genius's frost come after it.
    */
   private abilityHit(d: Disc, m: Mob) {
     const k = d.hero.def.key;
-    if (k === 'cook') this.dropFood(d, d.x - m.x, d.y - m.y);
-    else if (k === 'bastion') {
+    this.abBounce(d, d.x - m.x, d.y - m.y, true);
+    if (k === 'bastion') {
       for (const o of this.alive()) {
         o.shield += AB_SHIELD;
         const p = this.spot(o);
@@ -652,11 +718,11 @@ export class Game {
    * Electra's lightning off a hit on m: it strikes m (unless the disc has just felled it), then leaps to the nearest enemy
    * not struck yet within ZAP_REACH of the last one, as many times as ZAP has strokes, each weaker, through armour.
    */
-  private zap(m: Mob) {
+  private zap(m: Mob, by?: HeroState) {
     const hit = new Set<Mob>([m]);
     let at: Pt = m, k = 0;
     // the first stroke falls on the struck enemy from above, the rest leap from one to the next at chest height
-    if (m.hp > 0) { this.hurtMob(m, ZAP[k++], '#7fe3ff', true, 0.5); this.bolt(m.x, m.y, 60, m.x, m.y, 14, 0.6); }
+    if (m.hp > 0) { this.hurtMob(m, ZAP[k++], '#7fe3ff', true, 0.5, by); this.bolt(m.x, m.y, 60, m.x, m.y, 14, 0.6); }
     while (k < ZAP.length) {
       let to: Mob | null = null, best = ZAP_REACH;
       for (const o of this.S.mobs) {
@@ -666,40 +732,221 @@ export class Game {
       if (!to) break;
       hit.add(to);
       this.bolt(at.x, at.y, 16, to.x, to.y, 16, 1);
-      this.hurtMob(to, ZAP[k++], '#7fe3ff', true, 0.5);
+      this.hurtMob(to, ZAP[k++], '#7fe3ff', true, 0.5, by);
       at = to;
     }
     this.sfx('zap', 0.8);
   }
 
   /** A stroke of lightning between two points, `p` how bright. */
-  private bolt(x0: number, y0: number, h0: number, x1: number, y1: number, h1: number, p: number) {
-    this.S.zaps.push({ x0, y0, h0, x1, y1, h1, t: 0, b: this.tick, s: Math.floor(this.fx() * 1e9) });
-    this.burst(x1, y1, '#7fe3ff', Math.round(6 * p));
+  private bolt(x0: number, y0: number, h0: number, x1: number, y1: number, h1: number, p: number, beam = false) {
+    this.S.zaps.push({ x0, y0, h0, x1, y1, h1, t: 0, b: this.tick, s: Math.floor(this.fx() * 1e9), ...(beam ? { beam } : {}) });
+    this.burst(x1, y1, beam ? '#ffe27a' : '#7fe3ff', Math.round(6 * p));
   }
 
   /**
-   * The cook's disc bounced off something; (nx, ny) points from it toward the disc. While the disc has dishes left it drops
-   * one, which flies back out into the room about a cell and lands in the middle of a cell of open floor: one dish to a
-   * cell, so a bounce next to a dish already lying there puts the new one on the nearest free cell beside it. No dish
-   * lands under an enemy, a resource, a block, in a hole, on spikes or lava, or on a rune or a hero's cell.
+   * A disc with its ability on bounced off something (a wall, a block, a resource, another disc or, `foe`, an enemy); (nx, ny)
+   * points from it toward the disc. The cook's drops a dish, the kid's a firecracker (off anything but an enemy), the bum's
+   * lets its gas out on its first bounce.
    */
-  private dropFood(d: Disc, nx: number, ny: number) {
+  private abBounce(d: Disc, nx: number, ny: number, foe = false) {
+    if (!d.ab) return;
+    const k = d.hero.def.key;
+    if (k === 'cook') this.dropFood(d, nx, ny);
+    else if (k === 'kid' && !foe) this.dropBomb(d, nx, ny);
+    else if (k === 'bum') this.puff(d);
+  }
+
+  /**
+   * Where a thing flung off a bounce lands; (nx, ny) points from what the disc bounced off toward it. It flies back out into
+   * the room about a cell and lands in the middle of a cell of open floor: one dish or firecracker to a cell, so a bounce
+   * next to one already lying there puts the new one on the nearest free cell beside it. Nothing lands under an enemy, a
+   * resource, a block, in a hole, on spikes or lava, or on a rune or a hero's cell. Null when there's no room.
+   */
+  private landing(d: Disc, nx: number, ny: number): Pt | null {
     const S = this.S, L = Math.hypot(nx, ny);
-    if ((d.food ?? 0) >= FOOD_PER_DISC || S.food.length >= FOOD_MAX || !L) return;
+    if (!L) return null;
     nx /= L; ny /= L;
     const side = (this.fx() - 0.5) * 12, x = d.x + nx * 16 - ny * side, y = d.y + ny * 16 + nx * side;
     const taken = this.occupied(null, true), stands = this.standCells(), fi = Math.floor(x / TILE), fj = Math.floor(y / TILE);
-    let best: { x: number; y: number } | null = null, bd = Infinity;
+    const lying = (c: Pt) => S.food.some(f => f.x === c.x && f.y === c.y) || S.bombs.some(b => b.x === c.x && b.y === c.y);
+    let best: Pt | null = null, bd = Infinity;
     for (let j = fj - FOOD_SPREAD; j <= fj + FOOD_SPREAD; j++) for (let i = fi - FOOD_SPREAD; i <= fi + FOOD_SPREAD; i++) {
       if (!this.cellFree(i, j, taken) || S.haz.has(hazKey(i, j)) || stands.has(hazKey(i, j))) continue;
       const c = cellCentre(i, j), dd = Math.hypot(c.x - x, c.y - y);
-      if (dd >= bd || S.food.some(f => f.x === c.x && f.y === c.y)) continue;
+      if (dd >= bd || lying(c)) continue;
       best = c; bd = dd;
     }
-    if (!best) return;
-    S.food.push({ ...best, fx: d.x, fy: d.y, k: Math.floor(this.fx() * 4), by: d.id, t: 0 });
+    return best;
+  }
+
+  /** The cook's disc drops a dish off a bounce, while it has dishes left and the floor has room for one. */
+  private dropFood(d: Disc, nx: number, ny: number) {
+    const S = this.S;
+    if ((d.food ?? 0) >= FOOD_PER_DISC || S.food.length >= FOOD_MAX) return;
+    const at = this.landing(d, nx, ny);
+    if (!at) return;
+    S.food.push({ ...at, fx: d.x, fy: d.y, k: Math.floor(this.fx() * 4), by: d.id, t: 0 });
     d.food = (d.food ?? 0) + 1;
+  }
+
+  /** A disc bounced off another one: the kid's drops a firecracker, if its ability is on. */
+  private kidBounce(d: Disc, nx: number, ny: number) {
+    if (d.ab && d.hero.def.key === 'kid') this.dropBomb(d, nx, ny);
+  }
+
+  /** The kid's disc drops a firecracker off a bounce, the same way the cook's drops a dish. */
+  private dropBomb(d: Disc, nx: number, ny: number) {
+    const S = this.S;
+    if ((d.bombs ?? 0) >= PETARD_PER_DISC || S.bombs.length >= PETARD_MAX) return;
+    const at = this.landing(d, nx, ny);
+    if (!at) return;
+    S.bombs.push({ ...at, fx: d.x, fy: d.y, by: d.id, h: d.hero.i, t: 0 });
+    d.bombs = (d.bombs ?? 0) + 1;
+  }
+
+  /** Whether an enemy stands within `r` cells of a firecracker (any of its cells, counting diagonals), or on it. */
+  near(m: Mob, b: Pt, r = 1) {
+    const sz = mobSize(m.k), [i, j] = cellAt(m.x, m.y, sz), bi = Math.floor(b.x / TILE), bj = Math.floor(b.y / TILE);
+    return bi >= i - r && bi < i + sz + r && bj >= j - r && bj < j + sz + r;
+  }
+
+  /** In the enemies' turn, every firecracker that has landed and has an enemy within a cell of it goes off. */
+  private fuse() {
+    const S = this.S;
+    if (S.phase !== 'enemy') return;
+    for (const b of S.bombs.slice()) if (b.t >= FOOD_FLY && this.liveMobs().some(m => this.near(m, b))) this.blast(b);
+  }
+
+  /**
+   * The firecrackers crackle: each draws the PETARD_LURE enemies nearest it out of those within PETARD_HEAR cells that mean
+   * to go for a hero and can walk up to it, the nearest pairs first, every enemy to one firecracker. Those go for the noise
+   * this turn instead; one no longer drawn goes back to the hero it was after. Bosses' blows on everyone, heals and summons
+   * go ahead as they were, an enemy that never walks can't come.
+   */
+  private listen() {
+    const S = this.S, bombs = S.bombs.filter(b => b.t >= FOOD_FLY);
+    const can = this.liveMobs().filter(m => m.speed > 0 && m.intent && (m.intent.t === 'hit' || m.intent.t === 'move' || m.intent.t === 'charge'));
+    const pairs: { b: Bomb; m: Mob; d: number }[] = [];
+    for (const b of bombs) for (const m of can) if (this.near(m, b, PETARD_HEAR)) pairs.push({ b, m, d: Math.hypot(b.x - m.x, b.y - m.y) });
+    pairs.sort((p, q) => p.d - q.d);
+    const drawn = new Map<Mob, Intent>(), count = new Map<Bomb, number>();
+    for (const { b, m } of pairs) {
+      if (drawn.has(m) || (count.get(b) ?? 0) >= PETARD_LURE) continue;
+      const it = this.lureTo(m, b);
+      if (!it) continue;
+      drawn.set(m, it);
+      count.set(b, (count.get(b) ?? 0) + 1);
+    }
+    for (const m of can) {
+      const it = drawn.get(m);
+      if (it) m.intent = it;
+      else if (m.intent!.bang) { m.intent = { t: 'move', hero: m.intent!.hero, dmg: 0 }; this.retune(m); }
+    }
+  }
+
+  /** An enemy going for the firecracker at b instead of hero `it.hero`: as far as its steps take it this turn. Null when walled off. */
+  private lureTo(m: Mob, b: Pt): Intent | null {
+    const way = this.route(m, b);
+    if (!way) return null;
+    return { t: 'move', hero: m.intent?.hero ?? 0, dmg: 0, bang: { x: b.x, y: b.y }, way, go: wayLen(way.slice(0, this.stopAt(m, way) + 1)) };
+  }
+
+  /**
+   * A firecracker goes off: every enemy within a cell of it takes PETARD_DMG through armour, and the figures around jolt. An enemy felled
+   * on its walk stops on the cell where it fell.
+   */
+  private blast(b: Bomb) {
+    const S = this.S, by = S.heroes.find(h => h.i === b.h);
+    S.bombs = S.bombs.filter(o => o !== b);
+    this.float(b.x, b.y - 10, 'БАХ!', '#ffb347');
+    this.burst(b.x, b.y, '#ffb347', 18);
+    this.burst(b.x, b.y, '#fff1a8', 10);
+    S.shake = Math.max(S.shake, 0.15);
+    this.sfx('boom');
+    for (const m of this.liveMobs()) {
+      if (!this.near(m, b)) continue;
+      this.hurtMob(m, PETARD_DMG, '#ffb347', true, 0.7, by);
+      this.knock(m, m.x, m.y, b.x, b.y, 0.7);
+      if (m.hp <= 0 && m.walk && S.phase === 'enemy' && S.mobs[S.actor] === m) {
+        const c = cellCentre(...cellAt(m.x, m.y, mobSize(m.k)), mobSize(m.k));
+        m.x = m.tx = c.x; m.y = m.ty = c.y; m.walk = undefined; m.hop = 0;
+      }
+    }
+    this.tremor(b.x, b.y, 0.5, b);
+  }
+
+  /** Whether the cell (i, j) is in a cloud of gas: within GAS_R of its middle each way, the corners cut off. */
+  gasAt(i: number, j: number) {
+    return this.S.gas.some(g => { const a = Math.abs(i - g.i), b = Math.abs(j - g.j); return a <= GAS_R && b <= GAS_R && (a < GAS_R || b < GAS_R); });
+  }
+
+  /** Whether an enemy stands in the gas: any of its cells in a cloud. */
+  inGas(m: Mob) {
+    if (!this.S.gas.length) return false;
+    const sz = mobSize(m.k), [i, j] = cellAt(m.x, m.y, sz);
+    for (let b = 0; b < sz; b++) for (let a = 0; a < sz; a++) if (this.gasAt(i + a, j + b)) return true;
+    return false;
+  }
+
+  /** A blow by m: GAS_WEAK weaker while it stands in the gas, never under one. */
+  private cut(m: Mob, n: number) {
+    return n > 0 && this.inGas(m) ? Math.max(1, Math.round(n * (1 - GAS_WEAK))) : n;
+  }
+
+  /**
+   * The bum's disc bounces for the first time: a cloud of gas rises on the cell under it. A cloud already on that cell starts
+   * its turns over; past GAS_MAX the oldest clears. The enemies it takes in strike weaker at once.
+   */
+  private puff(d: Disc) {
+    const S = this.S;
+    if (d.gas) return;
+    d.gas = true;
+    const i = Math.floor(d.x / TILE), j = Math.floor(d.y / TILE);
+    S.gas = S.gas.filter(g => g.i !== i || g.j !== j);
+    S.gas.push({ i, j, left: GAS_TURNS, t: 0 });
+    if (S.gas.length > GAS_MAX) S.gas.shift();
+    this.float(d.x, d.y - 10, 'фу-у!', '#b9e34f');
+    this.burst(d.x, d.y, '#9fd34a', 14);
+    this.sfx('gas');
+    for (const m of this.liveMobs()) if (this.inGas(m)) this.retune(m);
+  }
+
+  /** An enemy frozen stiff: hit twice by the ice genius's disc this turn, it skips its next move. */
+  frozen(m: Mob) {
+    return (m.frost ?? 0) >= 2;
+  }
+
+  /** Cells a walker covers on its next move: a frosted one only FROST_STEPS. */
+  private steps(m: Mob) {
+    return m.frost ? Math.min(FROST_STEPS, stepsOf(m)) : stepsOf(m);
+  }
+
+  /** The ice genius's disc hits an enemy: once, and it barely crawls next move; twice, and it skips the move. */
+  private freeze(m: Mob) {
+    if (m.hp <= 0) return;
+    m.frost = (m.frost ?? 0) + 1;
+    this.float(m.x, m.y - 14, this.frozen(m) ? 'заморожен!' : 'замедлен', '#bdf2ff');
+    this.burst(m.x, m.y, '#cfefff', this.frozen(m) ? 16 : 8);
+    this.sfx('freeze', this.frozen(m) ? 1 : 0.6);
+    this.retune(m);
+  }
+
+  /**
+   * Gas or frost has just caught an enemy in the heroes' turn: what it means to do this turn is worked out afresh, so the
+   * badge shows it. A frosted walker gets as far as its steps take it, a gassed blow is weaker.
+   */
+  private retune(m: Mob) {
+    const it = m.intent;
+    if (!it || m.hp <= 0) return;
+    if (it.t === 'slam') { it.dmg = this.slamDmg(m, it.chill); return; }
+    // drawn by a firecracker, a frosted walker gets that much less far toward it
+    if (it.bang) { m.intent = this.lureTo(m, it.bang) ?? it; return; }
+    if (it.t !== 'hit' && it.t !== 'move' && it.t !== 'charge') return;
+    const h = this.heroOf(it.hero), p = this.spot(h);
+    if (h.hp <= 0 || !p) return;
+    if (isRanged(m.k)) m.intent = this.shoot(m, [h], 0);
+    else if (it.t !== 'charge') m.intent = this.chase(m, h, this.route(m, p));
   }
 
   /** Dishes on the floor this disc rolls over: the hero who threw it eats, if hurt, any but the dishes this disc dropped. */
@@ -737,7 +984,8 @@ export class Game {
 
   /** Turn from which the enemies grow angrier every turn. */
   rageFrom() {
-    return this.S.spec.type === 'boss' ? RAGE_FROM_BOSS : RAGE_FROM;
+    // «Ромашковый чай» in anyone's bag calms the whole room down for a while
+    return (this.S.spec.type === 'boss' ? RAGE_FROM_BOSS : RAGE_FROM) + (this.S.heroes.some(h => has(h, 'tea')) ? ART.tea : 0);
   }
 
   /** Extra damage every enemy deals this turn: one more for each turn the fight has dragged past rageFrom. */
@@ -755,7 +1003,7 @@ export class Game {
     let n = h.fire > 0 && S.phase !== 'enemy' ? 2 : 0;
     for (const m of this.liveMobs()) {
       const it = m.intent;
-      if (it && !this.acted(m) && ((it.t === 'hit' && it.hero === h.i) || it.t === 'slam')) n += it.dmg;
+      if (it && !this.acted(m) && !this.frozen(m) && ((it.t === 'hit' && it.hero === h.i) || it.t === 'slam')) n += it.dmg;
     }
     return Math.max(0, n - h.shield);
   }
@@ -776,7 +1024,7 @@ export class Game {
     const S = this.S, d = MOBS[m.k], it = m.intent;
     if (m.hp <= 0 || S.phase === 'over' || (!d.acts && !d.charge)) return null;
     // the move picked for this turn, unless it is made already or has come to nothing (the one to heal has fallen)
-    if (it && it.t !== 'hit' && it.t !== 'move' && !this.acted(m) && !this.idle(m)) return { name: specialName(it.t, it.chill), turns: 0 };
+    if (it && it.t !== 'hit' && it.t !== 'move' && !this.acted(m) && !this.idle(m) && !this.frozen(m)) return { name: specialName(it.t, it.chill), turns: 0 };
     for (let k = 1; k <= 6; k++) {
       const t = S.turn + k, a = d.acts?.find(o => t % o.every === o.at && this.able(m, o));
       if (a) return { name: specialName(a.k, a.chill), turns: k };
@@ -800,7 +1048,7 @@ export class Game {
   }
 
   pickIntents() {
-    const S = this.S, hs = this.alive().filter(h => this.spot(h)), rage = this.rage();
+    const S = this.S, hs = this.alive().filter(h => this.spot(h));
     if (!hs.length) return;
     const taken: { x: number; y: number }[] = [];
     this.liveMobs().forEach((m, i) => {
@@ -808,7 +1056,7 @@ export class Game {
       for (const a of d.acts ?? []) {
         if (S.turn % a.every !== a.at) continue;
         const it = this.special(m, a, hs, taken);
-        if (it) { if (it.t === 'slam') it.dmg += rage; m.intent = it; return; }
+        if (it) { if (it.t === 'slam') it.dmg = this.slamDmg(m, it.chill); m.intent = it; return; }
       }
       if (isRanged(m.k)) { m.intent = this.shoot(m, hs, S.turn + i); return; }
       let best = hs[0], way: Pt[] | null = null, bd = Infinity;
@@ -818,11 +1066,20 @@ export class Game {
       }
       m.intent = this.chase(m, best, way);
     });
+    this.listen();
   }
 
-  /** What a walker or a shooter deals this turn: a bomber after lighting its fuse twice as much, plus the rage of a long fight. */
+  /**
+   * What a walker or a shooter deals this turn: a bomber after lighting its fuse twice as much, plus the rage of a long fight,
+   * and less from the gas.
+   */
   private blow(m: Mob) {
-    return (MOBS[m.k].charge ? m.dmg * 2 : m.dmg) + this.rage();
+    return this.cut(m, (MOBS[m.k].charge ? m.dmg * 2 : m.dmg) + this.rage());
+  }
+
+  /** What a blow on the whole party deals, a blizzard less: the rage of a long fight on top, less from the gas. */
+  private slamDmg(m: Mob, chill?: boolean) {
+    return this.cut(m, Math.ceil(m.dmg * (chill ? 0.5 : 0.6)) + this.rage());
   }
 
   /**
@@ -832,9 +1089,11 @@ export class Game {
   private chase(m: Mob, h: HeroState, way: Pt[] | null): Intent {
     // walled off from the hero: it stays put
     if (!way) return { t: 'move', hero: h.i, dmg: 0 };
-    const p = this.spot(h)!, n = way.length - 1, go = wayLen(way.slice(0, this.stopAt(m, way) + 1)), eta = Math.max(1, Math.ceil(n / stepsOf(m)));
+    // a frosted walker covers fewer cells this turn only
+    const p = this.spot(h)!, n = way.length - 1, go = wayLen(way.slice(0, this.stopAt(m, way) + 1)), now = this.steps(m);
+    const eta = n <= now ? 1 : 1 + Math.ceil((n - now) / stepsOf(m));
     if (!isRanged(m.k)) way.push({ x: p.x, y: p.y });
-    return n <= stepsOf(m) ? { t: 'hit', hero: h.i, dmg: this.blow(m), way, go, eta: 1 } : { t: 'move', hero: h.i, dmg: 0, way, go, eta };
+    return n <= now ? { t: 'hit', hero: h.i, dmg: this.blow(m), way, go, eta: 1 } : { t: 'move', hero: h.i, dmg: 0, way, go, eta };
   }
 
   /**
@@ -865,12 +1124,15 @@ export class Game {
   private rechase() {
     for (const m of this.liveMobs()) {
       const it = m.intent;
-      if (!it || (it.t !== 'hit' && it.t !== 'move' && it.t !== 'charge')) continue;
+      if (it?.t === 'slam') it.dmg = this.slamDmg(m, it.chill);
+      if (!it || it.bang || (it.t !== 'hit' && it.t !== 'move' && it.t !== 'charge')) continue;
       const h = this.heroOf(it.hero), p = this.spot(h);
       if (h.hp <= 0 || !p) continue;
       if (isRanged(m.k)) m.intent = this.shoot(m, it.t === 'charge' ? this.alive().filter(o => this.spot(o)) : [h], 0);
       else if (it.t !== 'charge') m.intent = this.chase(m, h, this.route(m, p));
     }
+    // and the firecrackers draw the enemies nearest them afresh, from where everybody stands now
+    this.listen();
   }
 
   /**
@@ -908,7 +1170,7 @@ export class Game {
   /** The intent for a mob's special act this turn, or null when it can't do it (nobody to heal, no room to summon). */
   private special(m: Mob, a: MobAct, hs: HeroState[], taken: { x: number; y: number }[]): Intent | null {
     const S = this.S;
-    if (a.k === 'slam') return { t: 'slam', hero: -1, dmg: Math.ceil(m.dmg * (a.chill ? 0.5 : 0.6)), chill: a.chill };
+    if (a.k === 'slam') return { t: 'slam', hero: -1, dmg: 0, chill: a.chill };
     if (a.k === 'heal') {
       const hurt = this.liveMobs().filter(o => o !== m && o.hp < o.max).sort((p, q) => p.hp / p.max - q.hp / q.max)[0];
       // enemies of a smaller party have less HP, so they mend for less too
@@ -1045,8 +1307,13 @@ export class Game {
     }
   }
 
-  hurtMob(m: Mob, n: number, col = '#fff', pierce = false, p = 0.6) {
+  /**
+   * Damage an enemy; `by` is the hero whose disc (or its lightning, firecracker or light spot) dealt it, for the trophies
+   * that pay for kills. A hero's blow on an enemy the ice genius has frosted hits FROST_VULN harder; fire and gas don't.
+   */
+  hurtMob(m: Mob, n: number, col = '#fff', pierce = false, p = 0.6, by?: HeroState) {
     if (m.hp <= 0) return;
+    if (by && m.frost) { n = Math.ceil(n * (1 + FROST_VULN)); this.burst(m.x, m.y, '#cfefff', 6); }
     if (m.armor && !pierce && n < m.armor) { this.float(m.x, m.y, 'броня', '#c7cbe0'); this.sfx('armor'); return; }
     m.hp -= n;
     m.flash = 0.15;
@@ -1060,11 +1327,23 @@ export class Game {
     if (m.hp <= 0) {
       m.dead = 0.001; this.burst(m.x, m.y, '#ffd34d', 22); this.float(m.x, m.y - 6, 'повержен', '#ffd34d');
       if (m.burn > 0) this.spreadFire(m);
+      if (by) this.killed(m, by);
       if (d.lava) {
         const S = this.S, i = Math.floor(m.x / TILE), j = Math.floor(m.y / TILE);
         if (isFloor(S, i, j) && this.stands().every(p => Math.hypot(p.x - (i * TILE + 8), p.y - (j * TILE + 8)) > 20)) { S.haz.add(hazKey(i, j)); this.float(m.x, m.y + 4, 'лава!', '#ff7a3d'); }
       }
     }
+  }
+
+  /** A hero's disc has felled an enemy: «Клыки» mend the hero, «Копилка» drops ore into the pool. */
+  private killed(m: Mob, h: HeroState) {
+    const p = this.spot(h);
+    if (has(h, 'fangs') && h.hp > 0 && h.hp < h.max) {
+      const hl = Math.min(ART.fangs, h.max - h.hp);
+      h.hp += hl;
+      if (p) this.float(p.x, p.y - 4, `+${hl} HP`, '#7be39a');
+    }
+    if (has(h, 'piggy')) { this.bank.ore++; this.mined++; this.float(m.x, m.y + 8, '+1 руда', '#ffb070'); }
   }
 
   /** A burning enemy falls: what is left of its fire leaps onto the nearest enemy still standing. */
@@ -1104,6 +1383,8 @@ export class Game {
     h.shield -= blk;
     const dmg = n - blk;
     h.hp -= dmg;
+    // «Счастливый носок»: once a room a deadly blow leaves the hero standing on 1
+    if (h.hp <= 0 && dmg > 0 && has(h, 'sock') && !h.lucky) { h.hp = 1; h.lucky = true; this.float(p.x, p.y - 14, 'носок спас!', '#ffe27a'); }
     h.flash = 0.2;
     // a blow knocks the figure away from the enemy; spikes, lava and fire just make it jump
     const kp = (0.35 + Math.min(n, 10) / 14) * (dmg ? 1 : 0.6);
@@ -1155,25 +1436,63 @@ export class Game {
     return -vn;
   }
 
-  /** Share of its speed a disc keeps off a wall or a block: all of it while a Ricochet disc has sure bounces left. */
+  /** Share of its speed a disc keeps off a wall or a block: all of it while it has sure bounces left (Ricochet's, «Смазка»). */
   private keep(d: Disc) {
-    return d.rico > 0 ? 1 : d.e;
+    return d.rico > 0 || (d.slick ?? 0) > 0 ? 1 : d.e;
   }
 
   /**
    * A bounce off a wall or a block at speed v: it clacks, louder the harder. (nx, ny) points from the wall into the room:
-   * the cook's disc drops a dish that way.
+   * the cook's disc drops a dish that way, the kid's a firecracker.
    */
   private bounced(d: Disc, v: number, nx: number, ny: number) {
     d.bounces++;
     if (d.rico > 0) d.rico--;
+    else if (d.slick) d.slick--;
     if (v > 15) this.sfx('wall', Math.min(1, v / 300));
-    if (d.ab && d.hero.def.key === 'cook') this.dropFood(d, nx, ny);
+    this.abBounce(d, nx, ny);
+    if (v > 40 && has(d.hero, 'mirrorball') && (d.beams ?? 0) < ART.beamMax) this.beam(d);
+  }
+
+  /** «Карманный диско-шар»: a bounce throws a light spot at the nearest enemy within reach, through armour. */
+  private beam(d: Disc) {
+    let to: Mob | null = null, best = ART.beamReach;
+    for (const o of this.S.mobs) {
+      const far = Math.hypot(o.x - d.x, o.y - d.y) - o.r;
+      if (this.solid(o) && far <= best) { best = far; to = o; }
+    }
+    if (!to) return;
+    d.beams = (d.beams ?? 0) + 1;
+    this.bolt(d.x, d.y, 3, to.x, to.y, 14, 0.7, true);
+    this.hurtMob(to, ART.beamDmg, '#ffe27a', true, 0.4, d.hero);
   }
 
   /** Which way from a block a disc that has just bounced off it lies: from the block's nearest point to the disc's centre. */
   private boxNormal(d: Disc, b: { x0: number; y0: number; x1: number; y1: number }): [number, number] {
     return [d.x - Math.max(b.x0, Math.min(d.x, b.x1)), d.y - Math.max(b.y0, Math.min(d.y, b.y1))];
+  }
+
+  /** How many times harder a hero's disc charged by a clash («Звон») hits: twice, three times with «Бубенцы». */
+  private ring(h: HeroState) {
+    return has(h, 'bells') ? ART.bells : 2;
+  }
+
+  /**
+   * «Бумеранг»: once a turn the hero's disc that has come to rest without touching an enemy or a resource goes back into
+   * the hand, while the hero is still throwing. It leaves the table; nobody walks over to it.
+   */
+  private boomerang(d: Disc) {
+    const h = d.hero;
+    if (!has(h, 'boomerang') || d.fan || d.back || d.hits || d.gone || d.fall || this.S.phase !== 'throw' || h.hp <= 0 || h.boomed === this.S.turn) return false;
+    if (Math.hypot(d.vx, d.vy) >= 2 || this.ended(h)) return false;
+    d.back = true;
+    d.gone = true;
+    d.vx = d.vy = 0;
+    h.hand++;
+    h.boomed = this.S.turn;
+    this.float(d.x, d.y, 'вернулся!', '#ffe27a');
+    this.burst(d.x, d.y, h.def.col, 8);
+    return true;
   }
 
   inBlock(x: number, y: number, r: number) {
@@ -1189,18 +1508,15 @@ export class Game {
     this.fx = mulberry32(Math.imul(this.tick, 0x9e3779b1));
     const born = S.sparks.length;
     for (const d of this.bodies()) {
-      const v = Math.hypot(d.vx, d.vy);
       // a disc with sure bounces left rolls on without slowing, and even a soft throw goes at a good clip
-      if (d.rico > 0 && v > 0) { const nv = Math.max(v, AB_SPEED); d.vx *= nv / v; d.vy *= nv / v; d.spin += nv * dt * 0.08; }
-      else if (v > 0) { const nv = Math.max(0, v - muAt(S, d.x, d.y) * d.fr * dt); d.vx *= nv / v; d.vy *= nv / v; d.spin += nv * dt * 0.08; }
-      d.x += d.vx * dt;
-      d.y += d.vy * dt;
+      this.glide(d, dt);
       const v0 = Math.hypot(d.vx, d.vy);
       if (d.x < d.r) { d.x = d.r; d.vx = -d.vx * this.keep(d); this.bounced(d, v0, 1, 0); }
       if (d.y < d.r) { d.y = d.r; d.vy = -d.vy * this.keep(d); this.bounced(d, v0, 0, 1); }
       if (d.x > S.Wx - d.r) { d.x = S.Wx - d.r; d.vx = -d.vx * this.keep(d); this.bounced(d, v0, -1, 0); }
       if (d.y > S.Wy - d.r) { d.y = S.Wy - d.r; d.vy = -d.vy * this.keep(d); this.bounced(d, v0, 0, -1); }
-      if (pitAt(S.pits, d.x, d.y)) {
+      // «Надувные труселя»: the disc floats over the holes and never drops in
+      if (!has(d.hero, 'undies') && pitAt(S.pits, d.x, d.y)) {
         d.fall = 0.001; d.vx = d.vy = 0;
         this.sfx('pit');
         // a phantom just melts away down there
@@ -1227,26 +1543,33 @@ export class Game {
         if (n.left <= 0) continue;
         // a resource soaks up most of the disc's run: collecting costs the throw
         const vn = this.bounceStatic(d, n, NODE_E);
-        // the cook's dish drops off a resource as off an enemy, soft touch or not
-        if (vn > 5 && d.ab && d.hero.def.key === 'cook') this.dropFood(d, d.x - n.x, d.y - n.y);
+        // a dish, a firecracker or the gas comes off a resource as off an enemy, soft touch or not
+        if (vn > 5) this.abBounce(d, d.x - n.x, d.y - n.y);
         if (vn <= 30) continue;
         d.hits++;
         // even Ricochet's ability doesn't carry a disc on through a resource
         d.rico = 0;
         const big = Math.ceil((d.m * vn) / 120) >= 4, h = d.hero, q = big ? 2 : 1;
         n.hit = 0.2;
-        if (n.k !== 'spk') n.left--;
-        if (n.k === 'ore') { this.bank.ore += q; this.mined += q; this.float(n.x, n.y, `+${q} руда`, '#ffb070'); }
+        // «Золотая челюсть» bites the whole vein out at once, takes as much of the crystal as everyone has room for,
+        // and eats as many mushrooms as it takes to heal up (one at the least)
+        const all = has(h, 'denture');
+        if (n.k === 'ore') { const k = all ? n.left : 1, got = q * k; n.left -= k; this.bank.ore += got; this.mined += got; this.float(n.x, n.y, `+${got} руда`, '#ffb070'); }
         // sparks go to every hero still standing, whoever threw the disc, each up to what one ability costs; the crystal
         // loses only what was taken, so sparks nobody had room for stay in it for later
         if (n.k === 'spk') {
-          const all = this.alive();
+          const live = this.alive();
           let got = 0;
-          for (const o of all) { const k = Math.min(q, n.left, AB_COST - o.sparks); o.sparks += k; got = Math.max(got, k); }
+          for (const o of live) { const k = Math.min(all ? AB_COST : q, n.left, AB_COST - o.sparks); o.sparks += k; got = Math.max(got, k); }
           n.left -= got;
-          this.float(n.x, n.y, got ? `+${got} искр${got > 1 ? 'ы' : 'а'}${all.length > 1 ? ' всем' : ''}` : 'искры полны', '#c9a8ff');
+          this.float(n.x, n.y, got ? `+${got} искр${got > 1 ? 'ы' : 'а'}${live.length > 1 ? ' всем' : ''}` : 'искры полны', '#c9a8ff');
         }
-        if (n.k === 'herb') { const hl = Math.min(h.max - h.hp, 1 + 2 * q); h.hp += hl; this.float(n.x, n.y, hl ? `+${hl} HP` : 'HP полное', '#7be39a'); }
+        if (n.k === 'herb') {
+          const each = 1 + 2 * q, k = all ? Math.max(1, Math.min(n.left, Math.ceil((h.max - h.hp) / each))) : 1, hl = Math.min(h.max - h.hp, each * k);
+          n.left -= k;
+          h.hp += hl;
+          this.float(n.x, n.y, hl ? `+${hl} HP` : 'HP полное', '#7be39a');
+        }
         this.chips(n.k, n.x, n.y, n.r, d, q);
         this.sfx(n.k === 'spk' ? 'sparks' : n.k);
         if (n.left <= 0) this.float(n.x, n.y - 6, 'истощено', '#c7cbe0');
@@ -1254,27 +1577,31 @@ export class Game {
       }
       for (const m of S.mobs) {
         if (!this.solid(m)) continue;
-        const v = Math.hypot(d.vx, d.vy), vn = this.bounceStatic(d, m, d.rico > 0 ? 1 : MOB_E);
+        const h = d.hero, v = Math.hypot(d.vx, d.vy), vn = this.bounceStatic(d, m, d.rico > 0 ? 1 : has(h, 'insoles') ? ART.insolesE : MOB_E);
         if (vn <= 5) continue;
         if (d.rico > 0) d.rico--;
         let dmg = Math.ceil((d.m * vn) / 120);
-        // straight from the rune into the enemy, square on: a precise throw hits much harder
-        const crit = d.bounces === 0 && d.hits === 0 && vn >= v * CRIT_COS;
+        // straight from the rune into the enemy, square on: a precise throw hits much harder («Бильярдный мел»: off the walls too)
+        const crit = (d.bounces === 0 || has(h, 'chalk')) && d.hits === 0 && vn >= v * CRIT_COS;
         d.hits++;
-        if (crit) dmg = Math.ceil(dmg * CRIT);
-        if (d.hero.def.key === 'ricochet') dmg += Math.min(d.bounces, 4);
-        if (d.charged) { dmg *= 2; d.charged = false; }
+        if (crit) dmg = Math.ceil(dmg * (has(h, 'glasseye') ? ART.critBig : CRIT));
+        if (h.def.key === 'ricochet') dmg += Math.min(d.bounces, 4);
+        // «Скрипучая пружина»: every bounce on the way adds a point, Ricochet's own on top
+        if (has(h, 'spring')) dmg += Math.min(d.bounces, ART.springMax);
+        if (d.charged) { dmg *= this.ring(h); d.charged = false; }
         if (crit && m.hp > 0) { this.float(m.x, m.y - 24, 'ТОЧНО!', '#ffe27a'); this.sfx('crit'); }
         // the ability goes first: fire on an enemy this very hit kills leaps on to the next one
         if (d.ab) this.abilityHit(d, m);
-        this.hurtMob(m, dmg, '#fff', false, Math.min(1, vn / 250));
-        if (d.ab && d.hero.def.key === 'electra') this.zap(m);
+        this.hurtMob(m, dmg, '#fff', has(h, 'opener'), Math.min(1, vn / 250), h);
+        if (d.ab && h.def.key === 'electra') this.zap(m, h);
+        if (d.ab && h.def.key === 'genius') this.freeze(m);
         this.burst(d.x, d.y, d.hero.def.col, 8);
         // the figure rocks away from the disc, a big one less; a sure hit or a kill shakes the table
         this.knock(m, m.x, m.y, d.x, d.y, Math.min(1, 0.3 + vn / 260) * Math.min(1, (7 / m.r) ** 0.6));
         if (crit || m.hp <= 0) this.tremor(m.x, m.y, crit ? 0.6 : 0.45, m);
         changed = true;
       }
+      if (this.boomerang(d)) changed = true;
     }
     const bs = this.bodies();
     for (let i = 0; i < bs.length; i++) for (let j = i + 1; j < bs.length; j++) {
@@ -1290,16 +1617,24 @@ export class Game {
       const e = Math.min(a.e, b.e), j2 = (-(1 + e) * rv) / (1 / a.m + 1 / b.m);
       a.vx -= (j2 * nx) / a.m; a.vy -= (j2 * ny) / a.m;
       b.vx += (j2 * nx) / b.m; b.vy += (j2 * ny) / b.m;
-      // "Звон": discs of two different heroes collide hard, both deal double on their next hit
-      if (-rv > 40 && a.hero !== b.hero) {
+      // "Звон": discs of two different heroes collide hard, both deal double on their next hit; with «Бубенцы» a hero's
+      // own discs ring off each other too, and its discs deal triple
+      if (-rv > 40 && (a.hero !== b.hero || has(a.hero, 'bells'))) {
         a.charged = b.charged = true;
-        const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-        this.float(mx, my, 'ЗВОН ×2', '#b893ff');
+        const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, ka = this.ring(a.hero), kb = this.ring(b.hero);
+        this.float(mx, my, ka === kb ? `ЗВОН ×${ka}` : `ЗВОН ×${Math.min(ka, kb)}/×${Math.max(ka, kb)}`, '#b893ff');
         this.burst(mx, my, '#b893ff', 10);
         this.sfx('clink', Math.min(1, -rv / 300));
       } else if (-rv > 15) this.sfx('wall', Math.min(1, -rv / 400));
+      // the kid's firecrackers come off another disc as off a wall
+      if (-rv > 15) { this.kidBounce(a, -nx, -ny); this.kidBounce(b, nx, ny); }
     }
     for (const f of S.food) if (f.t < FOOD_FLY) f.t = Math.min(FOOD_FLY, f.t + dt);
+    let landed = false;
+    for (const b of S.bombs) if (b.t < FOOD_FLY) { b.t = Math.min(FOOD_FLY, b.t + dt); landed ||= b.t >= FOOD_FLY; }
+    // a firecracker down on the floor starts crackling: the enemies nearest it turn to the noise
+    if (landed && S.phase !== 'enemy') { this.listen(); changed = true; }
+    if (S.bombs.length) this.fuse();
     for (let k = born; k < S.sparks.length; k++) S.sparks[k].b = this.tick;
     this.inStep = false;
     this.heard = Math.max(this.heard, this.tick);
@@ -1327,7 +1662,8 @@ export class Game {
       if (d.gone || d.fall || d.hero.hp <= 0) continue;
       if (d.fan) continue;
       if (!d.hits) this.float(d.x, d.y, 'мимо', '#c7cbe0');
-      if (S.haz.has(hazKey(Math.floor(d.x / 16), Math.floor(d.y / 16)))) {
+      // «Надувные труселя»: spikes and lava under the disc don't hurt
+      if (S.haz.has(hazKey(Math.floor(d.x / 16), Math.floor(d.y / 16))) && !has(d.hero, 'undies')) {
         this.float(d.x, d.y, S.biome.haz === 'lava' ? 'лава!' : 'шипы!', '#ff4d6a');
         this.hurtHero(d.hero, S.biome.hazDmg);
       }
@@ -1365,7 +1701,8 @@ export class Game {
     for (const h of S.heroes) {
       const p = this.spot(h);
       if (!p) continue;
-      const last = h.hp > 0 ? S.discs.filter(d => d.hero === h).pop() : undefined;
+      // a miss «Бумеранг» brought back is in the hand, not on the table
+      const last = h.hp > 0 ? S.discs.filter(d => d.hero === h && !d.back).pop() : undefined;
       // a fallen hero lies where it fell
       if (!last) taken[Math.floor(p.y / TILE) * gw + Math.floor(p.x / TILE)] = 1;
       else if (last.fall) home.push(h);
@@ -1427,7 +1764,7 @@ export class Game {
       S.actor = k;
       S.clock = 0;
       S.attacked = false;
-      const burnt = m.burn > 0;
+      const burnt = m.burn > 0, gassed = this.inGas(m);
       // fire takes as many HP as it has, through armour, and dies down by one
       if (burnt) {
         const fire = m.burn--;
@@ -1435,8 +1772,15 @@ export class Game {
         this.note(`${m.name} горит: −${fire}`);
         if (m.hp <= 0) this.note(`${m.name} ${did(MOBS[m.k], 'сгорел')}`);
       }
+      // the gas it starts its move in chokes it, through armour too
+      if (gassed && m.hp > 0) {
+        const gas = gasDmg(m.max);
+        this.hurtMob(m, gas, '#b9e34f', true);
+        this.note(`${m.name} дышит газом: −${gas}`);
+        if (m.hp <= 0) this.note(`${m.name} ${did(MOBS[m.k], 'задохнулся', 'задохнулась')}`);
+      }
       this.planWalk(m);
-      if (burnt || (m.hp > 0 && !this.idle(m))) return true;
+      if (burnt || gassed || (m.hp > 0 && !this.idle(m))) return true;
     }
     return false;
   }
@@ -1450,9 +1794,10 @@ export class Game {
     m.fx = m.tx = m.x;
     m.fy = m.ty = m.y;
     m.walk = undefined;
-    if (m.hp <= 0 || !it || it.hero < 0 || m.speed === 0) return;
-    const h = this.heroOf(it.hero), p = this.spot(h), aim = isRanged(m.k);
-    if (h.hp <= 0 || !p || (aim && this.sees(m, h))) return;
+    if (m.hp <= 0 || !it || it.hero < 0 || m.speed === 0 || this.frozen(m)) return;
+    // one drawn by a firecracker runs to where it crackled, even when another enemy has set it off on the way
+    const h = this.heroOf(it.hero), p = it.bang ?? this.spot(h), aim = !it.bang && isRanged(m.k);
+    if (!p || (!it.bang && (h.hp <= 0 || (aim && this.sees(m, h))))) return;
     // the room has changed since the intent was picked: the enemies before it have moved, an icicle may have broken
     const way = this.route(m, p, true, aim);
     if (!way) return;
@@ -1466,6 +1811,8 @@ export class Game {
   /** An enemy with nothing to do on its move: walled off, or the one it was after has already fallen. */
   private idle(m: Mob) {
     const it = m.intent!;
+    // frozen stiff, it still takes its turn to stand there
+    if (this.frozen(m)) return false;
     if (it.t === 'move') return !m.walk;
     if (it.t === 'hit') { const h = this.heroOf(it.hero); return h.hp <= 0 || !this.spot(h); }
     if (it.t === 'heal') { const o = this.S.mobs[it.mob!]; return !o || o.hp <= 0; }
@@ -1489,7 +1836,7 @@ export class Game {
    */
   private stopAt(m: Mob, cells: Pt[]) {
     const sz = mobSize(m.k), taken = this.occupied(m, true), stands = this.standCells();
-    let k = Math.min(cells.length - 1, stepsOf(m));
+    let k = Math.min(cells.length - 1, this.steps(m));
     while (k > 0) {
       const [i, j] = cellAt(cells[k].x, cells[k].y, sz);
       if (this.fits(i, j, sz, taken) && !this.onStand(i, j, sz, stands)) break;
@@ -1608,6 +1955,12 @@ export class Game {
   private mobAct(m: Mob) {
     const S = this.S, it = m.intent, d = MOBS[m.k];
     if (m.hp <= 0 || !it) return;
+    if (this.frozen(m)) {
+      this.float(m.x, m.y - 10, 'заморожен', '#bdf2ff');
+      this.sfx('ice');
+      this.note(`${m.name} ${did(d, 'заморожен')} и пропускает ход`);
+      return;
+    }
     if (it.t === 'slam') {
       m.flash = 0.12; S.shake = 0.3;
       this.sfx('slam');
@@ -1651,7 +2004,7 @@ export class Game {
       this.note(`${m.name} ${did(d, 'поджёг', 'подожгла')} фитиль` + (m.walk ? ` и ${did(d, 'пошёл', 'пошла')} к ${this.heroOf(it.hero).def.dat}` : ''));
     } else if (it.t === 'move') {
       // walled off, it stayed put: nothing to tell
-      if (m.walk) this.note(`${m.name} идёт к ${this.heroOf(it.hero).def.dat}`);
+      if (m.walk) this.note(it.bang ? `${m.name} ${did(d, 'побежал', 'побежала')} на треск петарды` : `${m.name} идёт к ${this.heroOf(it.hero).def.dat}`);
     } else if (it.t === 'hit') {
       const h = this.heroOf(it.hero);
       const p = this.spot(h);
@@ -1664,6 +2017,12 @@ export class Game {
         const blk = this.hurtHero(h, it.dmg, '', m); m.flash = 0.12;
         const how = !isRanged(m.k) ? `${did(d, 'ударил')} ${h.def.acc}` : d.charge ? `${did(d, 'бросил')} бомбу в ${h.def.acc}` : `${did(d, 'выстрелил')} в ${h.def.acc}`;
         this.noteBlow(`${m.name} ${how} на ${it.dmg}`, h, blk);
+        // «Ёж в штанах» pricks whoever strikes up close
+        if (!isRanged(m.k) && has(h, 'hedgehog')) {
+          this.float(m.x, m.y - 12, 'ёж!', '#c9a86a');
+          this.hurtMob(m, ART.hedgehog, '#c9a86a', true, 0.5);
+          this.note(`Ёж уколол ${d.acc} на ${ART.hedgehog}` + (m.hp <= 0 ? `, ${did(d, 'пал')}` : ''));
+        }
         if (d.chill && h.hp > 0) this.chillHero(h);
         if (d.fire && h.hp > 0) { h.fire = 1; this.float(p.x, p.y - 8, 'горит!', '#ff7a3d'); }
       } else if (isRanged(m.k)) {
@@ -1691,7 +2050,10 @@ export class Game {
     S.turn++;
     S.discs = [];
     S.done = [];
-    for (const h of S.heroes) { h.shield = 0; h.thrown = false; h.boost = false; h.hand = h.hp > 0 ? h.discs : 0; if (h.chill > 0) h.chill--; }
+    // the frost wears off after one enemy turn, a cloud of gas thins out turn by turn
+    for (const m of S.mobs) delete m.frost;
+    S.gas = S.gas.filter(g => --g.left > 0);
+    for (const h of S.heroes) { h.shield = h.hp > 0 && has(h, 'cup') ? ART.cup : 0; h.thrown = false; h.boost = false; h.hand = h.hp > 0 ? this.handOf(h) : 0; if (h.chill > 0) h.chill--; }
     S.phase = 'throw';
     this.sfx('yourTurn');
     this.pickActive();
@@ -1876,6 +2238,7 @@ export class Game {
     }
     S.sparks = S.sparks.filter(p => p.t < (p.life ?? 0.5));
     for (const z of S.zaps) z.t += dt;
+    for (const g of S.gas) g.t += dt;
     S.zaps = S.zaps.filter(z => z.t < ZAP_T);
     for (const f of S.floats) f.t += dt;
     S.floats = S.floats.filter(f => f.t < 1.6);

@@ -5,7 +5,7 @@ import { adsr, bass, bell, brass, clap, cowbell, filt, gain, guitar, hat, kick, 
 
 export type Sfx =
   | 'click' | 'launch' | 'wall' | 'clink' | 'hit' | 'crit' | 'kill' | 'armor' | 'ore' | 'sparks' | 'herb' | 'ice' | 'shatter'
-  | 'pit' | 'hurt' | 'ability' | 'enemyTurn' | 'yourTurn' | 'step' | 'slam' | 'win' | 'lose' | 'zap' | 'eat';
+  | 'pit' | 'hurt' | 'ability' | 'enemyTurn' | 'yourTurn' | 'step' | 'slam' | 'win' | 'lose' | 'zap' | 'eat' | 'gas' | 'boom' | 'freeze';
 
 type Play = (b: Band, o: AudioNode, t: number, p: number) => void;
 
@@ -109,6 +109,28 @@ const SOUNDS: Record<Sfx, Play> = {
     tone(b, o, t + 0.1, 'sine', 380, 160, 0.08, 0.45);
     guitar(b, o, t + 0.16, ['G4', 'B4', 'D5'], 0.7, { wah: 1800, len: 0.16 });
   },
+  // a long wet raspberry: a low buzzing saw wobbling down through a closing filter, over a puff of hiss
+  gas: (b, o, t) => {
+    const ctx = b.ctx, lp = filt(ctx, 'lowpass', 900, 6), g = gain(ctx, 0), s = osc(ctx, 'sawtooth', 95, t, t + 0.75);
+    s.frequency.setValueAtTime(95, t);
+    for (let k = 1; k <= 8; k++) s.frequency.linearRampToValueAtTime(k % 2 ? 70 - k * 3 : 105 - k * 4, t + k * 0.08);
+    lp.frequency.exponentialRampToValueAtTime(250, t + 0.7);
+    s.connect(lp).connect(g).connect(o);
+    adsr(g.gain, t, 0.6, { a: 0.02, d: 0.2, s: 0.7, r: 0.12, peak: 0.6 });
+    hiss(b, o, t + 0.05, 0.6, 0.2, { f: 700, q: 0.7 });
+  },
+  // a firecracker: a sharp crack of noise and a thump, and a crackle of little pops after it
+  boom: (b, o, t) => {
+    kick(b, o, t, 1, { f0: 160, f1: 40, dec: 0.35 });
+    hiss(b, o, t, 0.25, 0.9, { type: 'highpass', f: 1200, q: 0.5 });
+    for (let k = 0; k < 5; k++) hiss(b, o, t + 0.12 + k * 0.05 + (k % 2) * 0.02, 0.03, 0.4 - k * 0.05, { f: 3000 + k * 400, q: 2 });
+  },
+  // ice: a glassy creak and high bells, harder for a freeze than for a chill
+  freeze: (b, o, t, p) => {
+    tone(b, o, t, 'triangle', 2600, 1300, 0.12, 0.25 + 0.2 * p);
+    ['B6', 'F#6', 'D#6'].slice(0, p > 0.8 ? 3 : 2).forEach((m, i) => bell(b, o, t + 0.04 + i * 0.05, note(m), 0.45, { ratio: 2.76, dec: 0.45 }));
+    hiss(b, o, t, 0.2, 0.2, { type: 'highpass', f: 6500 });
+  },
   lose: (b, o, t) => {
     scratch(b, o, t, true);
     syndrum(b, o, t + 0.3, 0.8, { f0: 600, f1: 60, dec: 1 });
@@ -120,7 +142,7 @@ const SOUNDS: Record<Sfx, Play> = {
 const TRIM: Record<Sfx, number> = {
   click: 3.7, launch: -6.0, wall: 4.0, clink: -0.7, hit: -2.0, crit: -3.2, kill: -1.6, armor: 0.5, ore: 4.4, sparks: 2.6, herb: 10.5,
   ice: 6.3, shatter: 4.6, pit: -7.0, hurt: -7.7, ability: -4.3, enemyTurn: -5.4, yourTurn: 3.9, step: -0.4, slam: -4.3, win: -2.3, lose: -1.9,
-  zap: 0, eat: 6,
+  zap: 0, eat: 6, gas: 2, boom: -3, freeze: 4,
 };
 
 /** How long each sound lasts, about: the trim node is let go after it. */

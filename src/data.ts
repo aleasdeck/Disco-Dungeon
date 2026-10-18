@@ -50,6 +50,33 @@ export const FAN_M = 0.7;
  * or stops on spikes or lava costs him no health.
  */
 export const FAN_R = 0.7;
+/**
+ * The bum's «Амбре»: the first bounce of his disc lets out a cloud of green gas GAS_R cells each way with the corners
+ * cut off (21 cells), for GAS_TURNS enemy turns. An enemy in it as its move begins loses GAS_PCT of its full health,
+ * rounded up, through armour, and strikes GAS_WEAK weaker on that move. Clouds don't add up; past GAS_MAX the oldest clears.
+ */
+export const GAS_R = 2;
+export const GAS_TURNS = 3;
+export const GAS_PCT = 0.05;
+export const GAS_WEAK = 0.3;
+export const GAS_MAX = 6;
+/**
+ * The kid's «Отвлекуха»: his disc drops a firecracker at each of its first PETARD_PER_DISC bounces off anything but an enemy,
+ * laid like the cook's dishes. It crackles where it lies: of the enemies within PETARD_HEAR cells of it that mean to go for
+ * a hero, the PETARD_LURE nearest go for the noise instead and strike nobody on that move. In the enemies' turn it goes off
+ * as soon as an enemy is within a cell of it, PETARD_DMG through armour to every enemy that near; it lies there till then.
+ */
+export const PETARD_PER_DISC = 2;
+export const PETARD_DMG = 2;
+export const PETARD_HEAR = 3;
+export const PETARD_LURE = 2;
+export const PETARD_MAX = 6;
+/**
+ * The ice genius's «Заморозка»: an enemy his disc hits once walks at most FROST_STEPS cells on its next move, hit twice it
+ * skips the move. Either way, till the frost wears off it takes FROST_VULN more from the heroes' discs and tricks, rounded up.
+ */
+export const FROST_STEPS = 1;
+export const FROST_VULN = 0.5;
 /** Online, at most this many players sit at one table: rooms are built for one to three heroes. */
 export const MAX_PLAYERS = 3;
 /** Ore for each level of a disc stat; a party can't buy everything in one run, so it has to choose. */
@@ -128,6 +155,9 @@ export const BOOT_GAGS = [
   'Бастион втягивает живот перед зеркалом',
   'Зажигалка чиркает. Загорелось с пятого раза',
   'Рикошет отскакивает от стен. Просто так, для разминки',
+  'Шкет поджёг петарду в почтовом ящике. Опять',
+  'Перегар ищет закуску. Нашёл воблу у себя в кармане',
+  'Отморозок замораживает пиво. Пиво против',
   'Ледяная ведьма жалуется, что ей холодно',
   'Ледяной лич размораживает пельмени',
   'Бес-кочегар подкидывает в печь чужие носки',
@@ -256,6 +286,9 @@ export const MOBS: Record<MobKind, MobDef> = {
 /** Shoots across the room, at a hero it sees, instead of walking up to strike. */
 export const isRanged = (k: MobKind) => MOBS[k].reach >= 999;
 
+/** What the bum's gas takes off an enemy of full health `max` at the start of its move: a share of it, at least 1. */
+export const gasDmg = (max: number) => Math.max(1, Math.ceil(max * GAS_PCT));
+
 /** Cells a mob covers on each side. */
 export const mobSize = (k: MobKind) => MOBS[k].size ?? 1;
 
@@ -284,8 +317,6 @@ export interface HeroDef {
   col: string;
   dk: string;
   skin: string;
-  /** What the hero is for in the party: «Танк», «Урон» or «Зона». */
-  role: string;
   /** Health at the start of a run: the tank has the most, the light fast disc the least. */
   hp: number;
   r: number;
@@ -303,36 +334,67 @@ export interface HeroDef {
 
 export const HEROES: HeroDef[] = [
   {
-    key: 'bastion', name: 'Бастион', acc: 'Бастиона', dat: 'Бастиону', col: '#4f9a8f', dk: '#2b5a53', skin: '#e3a882', role: 'Танк', hp: 30, r: 6, m: 4, e: 0.55, fr: 1.1, pw: 0.75,
+    key: 'bastion', name: 'Бастион', acc: 'Бастиона', dat: 'Бастиону', col: '#4f9a8f', dk: '#2b5a53', skin: '#e3a882', hp: 30, r: 6, m: 4, e: 0.55, fr: 1.1, pw: 0.75,
     ab: 'Щитобой', abTxt: `До конца хода каждое попадание его диска по врагу даёт всем героям +${AB_SHIELD} щита.`, abCol: '#3fc4b6',
     abMore: 'Щиты копятся с каждым попаданием и держатся до следующего хода.',
   },
   {
-    key: 'ricochet', name: 'Рикошет', acc: 'Рикошета', dat: 'Рикошету', col: '#c9a03a', dk: '#6f5420', skin: '#e3a882', role: 'Урон', hp: 18, r: 4, m: 1.2, e: 0.95, fr: 0.8, pw: 1.25,
+    key: 'ricochet', name: 'Рикошет', acc: 'Рикошета', dat: 'Рикошету', col: '#c9a03a', dk: '#6f5420', skin: '#e3a882', hp: 18, r: 4, m: 1.2, e: 0.95, fr: 0.8, pw: 1.25,
     ab: 'Шальной диск', abTxt: `До конца хода его диски первые ${AB_BOUNCES} отскоков не теряют скорость, даже от врагов.`, abCol: '#ffd34d',
     abMore: 'Один бросок прошивает всю толпу, а слабый бросок всё равно летит быстро. Ресурс гасит такой диск, как обычный.',
   },
   {
-    key: 'ash', name: 'Зажигалка', acc: 'Зажигалку', dat: 'Зажигалке', fem: true, col: '#b85a2e', dk: '#5e2a14', skin: '#d8b59a', role: 'Зона', hp: 22, r: 5, m: 2, e: 0.75, fr: 1, pw: 1,
+    key: 'ash', name: 'Зажигалка', acc: 'Зажигалку', dat: 'Зажигалке', fem: true, col: '#b85a2e', dk: '#5e2a14', skin: '#d8b59a', hp: 22, r: 5, m: 2, e: 0.75, fr: 1, pw: 1,
     ab: 'Поджог', abTxt: `До конца хода каждое попадание её диска добавляет врагу ${AB_BURN} огня. Огонь копится.`, abCol: '#ff7a3d',
     abMore: 'В свой ход враг теряет столько HP, сколько на нём огня, сквозь броню, и огонь стихает на 1. С павшего огонь перекидывается на ближайшего врага.',
   },
   {
-    key: 'cook', name: 'Поварёшка', acc: 'Поварёшку', dat: 'Поварёшке', fem: true, col: '#7f8f3a', dk: '#434b1c', skin: '#e3a882', role: 'Танк', hp: 32, r: 6, m: 3.2, e: 0.6, fr: 1.1, pw: 0.8,
+    key: 'cook', name: 'Поварёшка', acc: 'Поварёшку', dat: 'Поварёшке', fem: true, col: '#7f8f3a', dk: '#434b1c', skin: '#e3a882', hp: 32, r: 6, m: 3.2, e: 0.6, fr: 1.1, pw: 0.8,
     ab: 'Добавка', abTxt: `До конца хода её диск на первых ${FOOD_PER_DISC} отскоках роняет еду: +${FOOD_HEAL} HP тому, чей диск её подберёт.`, abCol: '#9fe06a',
     abMore: 'Еда ложится в клетку, по одной на клетку. Подбирает её любой диск, кроме уронившего; раненому нужнее, поэтому здоровый её не трогает. Отскакивать от еды нельзя, диски катятся по ней, и лежит она до конца боя.',
   },
   {
-    key: 'sharp', name: 'Шулер', acc: 'Шулера', dat: 'Шулеру', col: '#7d4fa6', dk: '#3f2659', skin: '#e3a882', role: 'Урон', hp: 20, r: 4, m: 1.8, e: 0.85, fr: 0.85, pw: 1.2,
+    key: 'sharp', name: 'Шулер', acc: 'Шулера', dat: 'Шулеру', col: '#7d4fa6', dk: '#3f2659', skin: '#e3a882', hp: 20, r: 4, m: 1.8, e: 0.85, fr: 0.85, pw: 1.2,
     ab: 'Веер', abTxt: `До конца хода вместо одного диска летят веером три: крайние фантомные и бьют на ${Math.round((1 - FAN_M) * 100)}% слабее.`, abCol: '#ff7ad1',
     abMore: 'Фантомы поменьше и розовые, летят из рукавов чуть в стороны от прицела. Фантом в дыре, на шипах или в лаве Шулера не ранит. Ходит он за средним диском, а фантомы лежат, где остановились, до конца хода.',
   },
   {
-    key: 'electra', name: 'Электра', acc: 'Электру', dat: 'Электре', fem: true, col: '#3f74c2', dk: '#1f3a66', skin: '#e8b994', role: 'Зона', hp: 22, r: 5, m: 2.0, e: 0.8, fr: 0.9, pw: 1.1,
+    key: 'electra', name: 'Электра', acc: 'Электру', dat: 'Электре', fem: true, col: '#3f74c2', dk: '#1f3a66', skin: '#e8b994', hp: 22, r: 5, m: 2.0, e: 0.8, fr: 0.9, pw: 1.1,
     ab: 'Цепная молния', abTxt: `До конца хода каждое попадание её диска бьёт молнией: ${ZAP[0]} по врагу, потом ${ZAP.slice(1).join(' и ')} по соседям.`, abCol: '#7fe3ff',
     abMore: `Молния бьёт сквозь броню и перескакивает на ближайшего врага в ${ZAP_REACH / 16} клетках, которого ещё не била. Если диск добил врага, молния начинает с соседа.`,
   },
+  {
+    key: 'kid', name: 'Шкет', acc: 'Шкета', dat: 'Шкету', col: '#d0528b', dk: '#6b2347', skin: '#f0c09a', hp: 20, r: 4, m: 1.7, e: 0.9, fr: 0.85, pw: 1,
+    ab: 'Отвлекуха', abTxt: `До конца хода его диск на первых ${PETARD_PER_DISC} отскоках не от врагов роняет петарду. На треск бегут ${PETARD_LURE} ближайших врага.`, abCol: '#ffb347',
+    abMore: `Петарда ложится в клетку, как еда Поварёшки, и трещит, пока лежит. Из врагов в ${PETARD_HEAR} клетках от неё ${PETARD_LURE} ближайших идут к ней, а не к героям, и в этот ход никого не бьют. Кто зайдёт в клетку рядом с ней, тот её подорвёт: по ${PETARD_DMG} сквозь броню всем врагам рядом. Призыв, лечение и удар по всем враги делают как обычно.`,
+  },
+  {
+    key: 'bum', name: 'Перегар', acc: 'Перегара', dat: 'Перегару', col: '#7b6a4e', dk: '#3b3224', skin: '#d9b08c', hp: 24, r: 5, m: 2.2, e: 0.7, fr: 1.05, pw: 1,
+    ab: 'Амбре', abTxt: `До конца хода первый отскок его диска пускает газ на ${GAS_TURNS} хода: враги в нём теряют ${Math.round(GAS_PCT * 100)}% HP за ход и бьют слабее.`, abCol: '#b9e34f',
+    abMore: `Облако круглое, ${GAS_R * 2 + 1} на ${GAS_R * 2 + 1} клеток без углов. Враг, который начинает в нём свой ход, теряет ${Math.round(GAS_PCT * 100)}% здоровья (не меньше 1) сквозь броню и бьёт на ${Math.round(GAS_WEAK * 100)}% слабее. Облака не складываются.`,
+  },
+  {
+    key: 'genius', name: 'Отморозок', acc: 'Отморозка', dat: 'Отморозку', col: '#3a9cb8', dk: '#1b4d5c', skin: '#cfe0e4', hp: 22, r: 5, m: 2, e: 0.85, fr: 0.9, pw: 1,
+    ab: 'Заморозка', abTxt: `До конца хода его диск морозит: после одного попадания враг еле ползёт, после двух пропускает ход. Урон по нему +${Math.round(FROST_VULN * 100)}%.`, abCol: '#bdf2ff',
+    abMore: `Замедленный враг в свой ход проходит не больше ${FROST_STEPS === 1 ? 'клетки' : FROST_STEPS + ' клеток'}, но бьёт и стреляет, как обычно. Замороженный стоит и ничего не делает: ни удара, ни выстрела, ни призыва. Пока мороз держится, а это до конца ближайшего хода врагов, диски и умения героев бьют врага на ${Math.round(FROST_VULN * 100)}% сильнее.`,
+  },
 ];
+
+/** The kinds of heroes by disc size, the biggest first, a row each on the pick screens: the row's tab, the word on a hero's card, a heroine's own. */
+export const KINDS = [
+  { r: 6, row: 'Толстяки', one: 'Толстяк', fem: 'Толстуха' },
+  { r: 5, row: 'Нормисы', one: 'Нормис', fem: 'Нормиска' },
+  { r: 4, row: 'Дрищи', one: 'Дрищ', fem: 'Дрищ' },
+];
+
+/** What kind of hero this is, by its disc: «Толстяк», or «Толстуха» for a heroine. */
+export const kindOf = (def: HeroDef) => {
+  const k = KINDS.find(k => k.r === def.r)!;
+  return def.fem ? k.fem : k.one;
+};
+
+/** Hero indexes grouped by kind, a list per kind in KINDS order, each in HEROES order. */
+export const heroesByKind = () => KINDS.map(k => HEROES.flatMap((h, i) => (h.r === k.r ? [i] : [])));
 
 export const HERO_FIG = 34;
 /** Hero stand radius in world units: a cell is 16 across, so the stand sits inside its cell with a rim of floor around it. */
@@ -383,7 +445,7 @@ export type RoomType = 'fight' | 'elite' | 'treasure' | 'camp' | 'forge' | 'even
 export const ROOM_TYPES: Record<RoomType, { name: string; col: string; min: number; txt: string }> = {
   fight: { name: 'Бой', col: '#c2364f', min: 2, txt: 'Обычные мобы, рудная жила, кристалл искр и грибы.' },
   elite: { name: 'Элитный бой', col: '#7a1d33', min: 3, txt: 'Сильный враг этажа и свита. Две рудные жилы вместо одной.' },
-  treasure: { name: 'Рудная пещера', col: '#d39612', min: 1, txt: 'Врагов нет: одна большая рудная жила, две малые и грибы. Ходов 4 минус число героев, втроём один.' },
+  treasure: { name: 'Рудная пещера', col: '#d39612', min: 1, txt: 'Врагов нет: от двух до пяти малых жил, иногда большая и до двух грядок грибов. Ходов 4 минус число героев, втроём один.' },
   camp: { name: 'Костёр', col: '#e8642c', min: 0.5, txt: 'У огня каждый делает одно: отдыхает, перевязывает товарища или копает руду.' },
   forge: { name: 'Кузнец', col: '#5d6488', min: 1, txt: `Прокачка дисков за руду, только здесь. И ещё 0–${FORGE_ORE} руды в подарок, как повезёт.` },
   event: { name: 'Событие', col: '#6b4fa8', min: 0.75, txt: 'Странная встреча и выбор: награда, риск или беда.' },

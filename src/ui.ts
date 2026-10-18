@@ -2,13 +2,14 @@
 // the enemy queue with what each will do, map / journal / menu), my hero's corner (portrait with its statuses, discs,
 // health with the shield on it, the sparks bar running into the ability button) and one big button for the turn.
 
-import { AB_COST, CRIT, E_MAX, ENEMY_BASE, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, fullHit, isRanged, type MobKind, type StatKey } from './data';
+import { AB_COST, CRIT, E_MAX, ENEMY_BASE, FROST_STEPS, FROST_VULN, GAS_WEAK, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, fullHit, gasDmg, isRanged, type MobKind, type StatKey } from './data';
 import { envArt, eventArt, sprites, uiArt } from './assets';
 import type { Game, HeroState } from './game';
 import type { Mob } from './room';
 import { BASE_TH, drawHeroFigure, drawMiniature, drawMobFigure } from './draw/figures';
 import { lg } from './draw/util';
-import { art, fillIcons, icon } from './icons';
+import { art, artIcon, fillIcons, icon } from './icons';
+import { artDef } from './artifacts';
 import { hl } from './hl';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -337,6 +338,8 @@ export class Hud {
   private intent(m: Mob): { badge: string; txt: string } {
     const g = this.g, it = m.intent;
     if (!it) return { badge: '', txt: 'Ничего не делает' };
+    // frozen stiff, whatever it meant to do
+    if (g.frozen(m) && !g.acted(m)) return { badge: `<span class="ib sp">${icon('chill')}</span>`, txt: `${MOBS[m.k].fem ? 'Заморожена' : 'Заморожен'}: пропустит ход` };
     const tgt = it.hero >= 0 ? g.heroOf(it.hero) : null, far = isRanged(m.k), bomb = !!MOBS[m.k].charge;
     // a shooter's blow and its walk to where it sees the hero carry a bow by the badge
     const acc = tgt?.def.acc ?? '', out = far && !!it.way && it.way.length > 1, bow = far ? icon('bow', 'qbow') : '';
@@ -344,6 +347,8 @@ export class Hud {
       const how = !far ? `ударит ${acc}` : bomb ? `бросит бомбу в ${acc}` : `выстрелит в ${acc}`;
       return { badge: `${bow}<span class="ib hit" style="--c:${tgt!.def.col}">${it.dmg}</span>`, txt: cap(out ? `выйдет на линию огня и ${how}` : how) + ` на ${it.dmg}` };
     }
+    // drawn by the kid's firecracker: it runs to the noise and strikes nobody this turn
+    if (it.bang) return { badge: `<span class="ib sp">${icon('petard')}</span>`, txt: `Бежит на треск петарды и в этот ход ${!far ? 'никого не ударит' : bomb ? 'не бросит бомбу' : 'не выстрелит'}` };
     if (it.t === 'move') {
       const txt = !far ? `Идёт к ${tgt!.def.dat}` + (it.eta ? `, ударит через ${turns(it.eta)}` : '')
         : `Не видит ${acc}` + (it.way ? ': идёт на линию огня' + (it.eta && !bomb ? `, выстрелит через ${turns(it.eta)}` : '') : '');
@@ -361,6 +366,10 @@ export class Hud {
   private mobStatus(m: Mob): Status[] {
     const g = this.g, out: Status[] = [];
     if (m.burn > 0) out.push({ k: 'fire', n: m.burn, t: `Горит: в начале своего хода потеряет ${Math.min(m.burn, m.hp)}` });
+    if (g.inGas(m)) out.push({ k: 'gas', t: `В газу: в начале своего хода потеряет ${Math.min(gasDmg(m.max), m.hp)} и ударит на ${Math.round(GAS_WEAK * 100)}% слабее` });
+    const brittle = `; урон от дисков и умений героев +${Math.round(FROST_VULN * 100)}%`;
+    if (g.frozen(m)) out.push({ k: 'chill', t: 'Заморожен: пропустит ход' + brittle });
+    else if (m.frost) out.push({ k: 'slow', t: `Замедлен: в свой ход пройдёт не больше ${FROST_STEPS === 1 ? 'клетки' : FROST_STEPS + ' клеток'}` + brittle });
     if (isRanged(m.k)) out.push({ k: 'bow', t: 'Дальний бой: стреляет только в того, кого видит' });
     if (m.armor) out.push({ k: 'armor', n: m.armor, t: `Броня ${m.armor}` });
     if (!g.solid(m)) out.push({ k: 'ghost', t: 'Бесплотен в этот ход: диски пролетают насквозь' });
@@ -454,10 +463,10 @@ export class Hud {
     $('fStatus').innerHTML = statusHtml(st);
 
     // the discs of this turn as a stack of pucks with the hero's disc on top: the ones still in hand bright, the thrown ones dark
-    const out = S.phase === 'throw' && g.ended(h) ? h.discs : h.discs - h.hand, top = envArt.get('disc_' + h.def.key);
-    $('fDiscs').innerHTML = Array.from({ length: h.discs }, (_, k) => `<i class="${k < out ? '' : 'on'}"></i>`).join('');
+    const per = g.handOf(h), out = S.phase === 'throw' && g.ended(h) ? per : per - h.hand, top = envArt.get('disc_' + h.def.key);
+    $('fDiscs').innerHTML = Array.from({ length: per }, (_, k) => `<i class="${k < out ? '' : 'on'}"></i>`).join('');
     $('fDiscs').style.setProperty('--disc', top ? `url("${top.src}")` : 'none');
-    $('fDiscs').title = `Диски: ${h.hand} из ${h.discs} за ход`;
+    $('fDiscs').title = `Диски: ${h.hand} из ${per} за ход`;
 
     // health and the shield on top of it: the bar holds both, squeezing when they add up to more than the most health
     const inc = g.incoming(h), dead = h.hp > 0 && inc >= h.hp, tot = Math.max(h.max, h.hp + h.shield);
@@ -480,7 +489,8 @@ export class Hud {
     wrap.title = [h.shield > 0 ? `Щит ${h.shield}: снимается первым.` : '', inc ? `Враги в этот ход снимут ${inc} HP, если их не остановить.` : ''].filter(Boolean).join(' ');
 
     // the sparks bar beside the ability button: three cells, one per spark; full, they light up and the button pulses
-    const sp = Math.min(AB_COST, h.sparks), full = sp >= AB_COST;
+    // «Энергетик» makes the ability cheaper: the button lights up as soon as there are enough
+    const sp = Math.min(AB_COST, h.sparks), cost = g.abCost(h), full = sp >= cost;
     $('fSpk').querySelectorAll('i').forEach((c, k) => c.classList.toggle('on', k < sp));
     $('fSpk').classList.toggle('full', full);
     $('abName').textContent = h.def.ab;
@@ -492,7 +502,7 @@ export class Hud {
     ab.classList.toggle('full', full);
     ab.classList.toggle('on', h.boost);
     ab.style.setProperty('--ab', h.def.abCol);
-    ab.title = `${h.def.ab}: ${h.def.abTxt} ${h.def.abMore} Стоит ${AB_COST} искры, включается до броска.` + (h.boost ? ' Включено до конца хода.' : '');
+    ab.title = `${h.def.ab}: ${h.def.abTxt} ${h.def.abMore} Стоит ${cost} искры, включается до броска.` + (h.boost ? ' Включено до конца хода.' : '');
   }
 
   /** My hero's card from the portrait: how hard the disc hits, its upgrades and the ability in full. */
@@ -507,7 +517,11 @@ export class Hud {
     $('ups').innerHTML = `<h3 style="color:${h.def.col}">${h.def.name}</h3>`
       + `<p class="hc-hit" title="Сильнее всего диск бьёт на полной натяжке; прямо в лоб урон удваивается">удар до ${hit}, в лоб ×${CRIT}</p>`
       + upRows(g, h) + '<small class="ups-note">Прокачка у кузнеца на карте</small>'
-      + `<p class="hc-ab"><b>${h.def.ab}.</b> ${h.def.abTxt} ${h.def.abMore}</p>`;
+      + `<p class="hc-ab"><b>${h.def.ab}.</b> ${h.def.abTxt} ${h.def.abMore}</p>`
+      + (h.arts?.length ? `<div class="hc-arts"><small class="ups-note">Трофеи боссов</small>${h.arts.map(k => {
+        const a = artDef(k);
+        return `<div class="hc-art" title="${a.gag}">${artIcon(k, 'hc-art-ico')}<b>${a.name}</b><small>${a.txt}</small></div>`;
+      }).join('')}</div>` : '');
   }
 
   // ------------------------------------------------------------ the turn button
