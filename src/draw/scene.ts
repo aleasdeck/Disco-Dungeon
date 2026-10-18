@@ -1278,7 +1278,7 @@ export class SceneRenderer {
       c.strokeStyle = 'rgba(70,105,20,.8)'; c.lineWidth = 1.2; c.stroke();
       c.restore();
     }
-    // a firecracker's reach: the 3 × 3 cells round it, dashed in its fuse's orange
+    // a firecracker's reach: the 3 × 3 cells round it, where the first enemy to step sets it off, dashed in its fuse's orange
     c.save();
     c.setLineDash([2, 2]);
     c.strokeStyle = 'rgba(255,170,60,.7)';
