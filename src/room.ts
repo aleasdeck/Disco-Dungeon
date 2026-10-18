@@ -91,6 +91,8 @@ export interface ResNode {
   y: number;
   left: number;
   hit: number;
+  /** Cells it covers on each side: the ore cave's big vein stands on 2 × 2 cells, the rest on one. */
+  s?: number;
 }
 
 /**
@@ -412,14 +414,25 @@ const SOLO: MobKind[] = ['golem', 'necro', 'witch', 'yeti', 'bomber'];
 
 /**
  * Resources in each kind of fight room: one of each, so the floor stays clear. Ore is scarce, so a party can't buy
- * every upgrade in one run; an elite fight pays a second vein, the ore cave the most.
+ * every upgrade in one run; an elite fight pays a second vein. The ore cave has its big vein on top of these (CAVE).
  */
 export const NODE_SETS: Partial<Record<RoomType, NodeKind[]>> = {
   fight: ['ore', 'spk', 'herb'],
   elite: ['ore', 'ore', 'spk', 'herb'],
   boss: ['ore', 'spk', 'herb'],
-  treasure: ['ore', 'ore', 'ore', 'spk', 'herb'],
+  treasure: ['ore', 'ore'],
 };
+
+/**
+ * The ore cave holds no enemies: one big vein in the middle of the room, the two small ones of NODE_SETS off to the sides,
+ * and only `turns` minus the heroes to mine them: three turns for a lone hero, one for three heroes, who throw three
+ * times as many discs a turn. It ends once the turns run out or every vein is spent. Its veins hold as many charges
+ * whatever the party: the turns already make up for its size.
+ */
+export const CAVE = { turns: 4, big: { r: 12, ch: 6 }, small: 2 };
+
+/** Turns the party has in the ore cave: 4 minus the heroes, at least one. */
+export const caveTurns = (spec: Pick<RoomSpec, 'heroes'>) => Math.max(1, CAVE.turns - Math.max(1, Math.min(3, spec.heroes ?? 3)));
 
 /** How much every enemy's HP grows per room of the run (on top of MOB_HP_MUL). */
 export const HP_STEP = 0.065;
@@ -569,6 +582,16 @@ export function generate(spec: RoomSpec): Layout {
     }
   }
 
+  // the ore cave's big vein stands in the middle of the room, a straight throw from every rune, on 2 × 2 cells;
+  // it goes in before the blocks, so they keep out of its way
+  const cave = type === 'treasure';
+  let big: ResNode | null = null;
+  if (cave) {
+    const { r, ch } = CAVE.big, centre = (x: number, y: number) => Math.abs(x / Wx - 0.5) < 0.18 && Math.abs(y / Wy - 0.5) < 0.18;
+    const q = placeCell(2, r, centre) ?? placeCell(2, r, mid) ?? placeCell(2, r, any) ?? placeCell(2, r, any, true);
+    if (q) { big = { k: 'ore', ...NODES.ore, r, ch, x: q[0], y: q[1], left: ch, hit: 0, s: 2 }; objs.push({ x: q[0], y: q[1], r }); }
+  }
+
   const blocks: Block[] = [];
   const SHAPES = BLOCK_SHAPES.slice(0, tier.blockKinds);
   const cluster = (cell: (i: number, j: number) => Block) => {
@@ -626,7 +649,7 @@ export function generate(spec: RoomSpec): Layout {
   };
   const count = Math.min(roll(tier.mobs) + f + extra.mobs, MOB_CAP);
   let mk: MobKind[];
-  if (type === 'treasure') mk = cast.early.filter((k, i, a) => a.indexOf(k) === i).slice(0, fewer(2, 1));
+  if (type === 'treasure') mk = [];
   else if (type === 'boss') mk = [cast.boss, ...draw(fewer(1 + f + extra.mobs, 0), SOLO)];
   else if (type === 'elite') mk = [cast.elite, ...draw(fewer(count - 1, 0), [cast.elite])];
   else mk = draw(fewer(count, 1));
@@ -640,10 +663,14 @@ export function generate(spec: RoomSpec): Layout {
   }
 
   const nodes: ResNode[] = [];
+  if (cave && big) nodes.push(big);
+  // in the ore cave the small veins stand apart, from the big one and from each other
+  const apart = (x: number, y: number) => !cave || nodes.every(n => Math.hypot(x - n.x, y - n.y) > (n.s ? 3 : 2.5) * TILE);
   const kinds = NODE_SETS[type] ?? NODE_SETS.fight!;
   for (const k of kinds) {
-    const q = placeCell(1, NODES[k].r, type === 'treasure' ? any : flank) ?? placeCell(1, NODES[k].r, mid) ?? placeCell(1, NODES[k].r, any) ?? placeCell(1, NODES[k].r, any, true);
-    if (q) { const ch = sc.ch[k] ?? NODES[k].ch; nodes.push({ k, ...NODES[k], ch, x: q[0], y: q[1], left: ch, hit: 0 }); objs.push({ x: q[0], y: q[1], r: NODES[k].r }); }
+    const side = (x: number, y: number) => flank(x, y) && apart(x, y);
+    const q = placeCell(1, NODES[k].r, side) ?? placeCell(1, NODES[k].r, apart) ?? placeCell(1, NODES[k].r, mid) ?? placeCell(1, NODES[k].r, any) ?? placeCell(1, NODES[k].r, any, true);
+    if (q) { const ch = cave ? CAVE.small : sc.ch[k] ?? NODES[k].ch; nodes.push({ k, ...NODES[k], ch, x: q[0], y: q[1], left: ch, hit: 0 }); objs.push({ x: q[0], y: q[1], r: NODES[k].r }); }
   }
 
   const haz = new Set<string>();
