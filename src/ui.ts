@@ -492,7 +492,7 @@ export class Hud {
     // the shield has no badge of its own: the blue chunk shows it, the number is in the hint
     wrap.title = [h.shield > 0 ? `Щит ${h.shield}: снимается первым.` : '', inc ? `Враги в этот ход снимут ${inc} HP, если их не остановить.` : ''].filter(Boolean).join(' ');
 
-    // the sparks bar beside the ability button: three cells, one per spark; full, they light up and the button pulses
+    // the sparks under the health: two pieces, the gem itself being the third; full, they light up and the gem pulses
     // «Энергетик» makes the ability cheaper: the button lights up as soon as there are enough
     const sp = Math.min(AB_COST, h.sparks), cost = g.abCost(h), full = sp >= cost;
     $('fSpk').querySelectorAll('i').forEach((c, k) => c.classList.toggle('on', k < sp));
