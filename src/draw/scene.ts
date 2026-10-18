@@ -1215,7 +1215,7 @@ export class SceneRenderer {
     if (im) {
       this.standee(im, sx, sy + 1, BOMB_W * 1.5);
       const H = (BOMB_W * 1.5 * im.height) / im.width;
-      tipX = sx + BOMB_W * 1.5 * 0.2; tipY = sy + 1 - H * 0.93;
+      tipX = sx + BOMB_W * 1.5 * 0.25; tipY = sy + 1 - H * 0.95;
     } else {
       c.lineJoin = 'round';
       rr(c, sx - BOMB_W / 2, sy - BOMB_W * 1.7, BOMB_W, BOMB_W * 1.7, 1.2); fs(c, '#d23a3a', 1);
@@ -1501,16 +1501,24 @@ export class SceneRenderer {
     c.fillStyle = 'rgba(225,246,255,.55)'; c.fill();
     c.strokeStyle = '#7fc8e8'; c.lineWidth = 0.9; c.stroke();
     if (frozen) {
-      const w = R * 2.3, h = fig + 5, top = y - BASE_TH - h, d = w * 0.22;
-      // a block of ice: a front face, a top and a side, glassy blue with the figure showing through
-      pth(c, [[x - w / 2, y - 1], [x + w / 2, y - 1], [x + w / 2, top + d], [x - w / 2, top + d]]);
-      c.fillStyle = 'rgba(170,225,255,.42)'; c.fill(); c.strokeStyle = '#2b6f93'; c.lineWidth = 1.2; c.stroke();
-      pth(c, [[x - w / 2, top + d], [x + w / 2, top + d], [x + w / 2 - d, top], [x - w / 2 - d, top]]);
+      // a block of ice on the enemy's own cells: its sides run along the floor's grid, so it turns with the room like
+      // a stone block, glassy blue with the figure showing through
+      const { P, cam } = this, sz = mobSize(m.k), [i, j] = cellAt(m.x, m.y, sz), H = BASE_TH + fig + 5;
+      const x0 = i * TILE + 0.6, y0 = j * TILE + 0.6, x1 = (i + sz) * TILE - 0.6, y1 = (j + sz) * TILE - 0.6;
+      const sides: [Vec, Vec, Vec][] = [[[x1, y0], [x1, y1], [1, 0]], [[x0, y1], [x1, y1], [0, 1]], [[x0, y0], [x0, y1], [-1, 0]], [[x0, y0], [x1, y0], [0, -1]]];
+      c.strokeStyle = '#2b6f93'; c.lineWidth = 1.2;
+      for (const [a, b, n] of sides) {
+        const k = cam.facing(n[0], n[1]);
+        if (k <= 1e-6) continue;
+        pth(c, [P(...a), P(...b), P(...b, H), P(...a, H)]);
+        c.fillStyle = `rgba(175,228,255,${(0.34 + 0.16 * (0.5 + 0.5 * cam.sideways(n[0], n[1]))).toFixed(2)})`; c.fill(); c.stroke();
+      }
+      pth(c, [P(x0, y0, H), P(x1, y0, H), P(x1, y1, H), P(x0, y1, H)]);
       c.fillStyle = 'rgba(230,248,255,.7)'; c.fill(); c.stroke();
-      pth(c, [[x - w / 2, top + d], [x - w / 2 - d, top], [x - w / 2 - d, y - 1 - d], [x - w / 2, y - 1]]);
-      c.fillStyle = 'rgba(200,238,255,.5)'; c.fill(); c.stroke();
+      // two glints across the top
+      const at = (u: number, v: number) => P(x0 + (x1 - x0) * u, y0 + (y1 - y0) * v, H);
       c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = 1.3;
-      c.beginPath(); c.moveTo(x - w * 0.3, top + d + 4); c.lineTo(x - w * 0.1, top + d + 1.5); c.moveTo(x - w * 0.32, top + d + 9); c.lineTo(x - w * 0.22, top + d + 7); c.stroke();
+      c.beginPath(); c.moveTo(...at(0.2, 0.3)); c.lineTo(...at(0.45, 0.25)); c.moveTo(...at(0.25, 0.55)); c.lineTo(...at(0.38, 0.5)); c.stroke();
       c.restore();
       return;
     }
