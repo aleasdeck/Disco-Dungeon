@@ -1,7 +1,7 @@
 // Draws one frame of a room: walls, floor, obstacles, resources, discs and miniatures.
 // Everything is drawn in iso space through the camera, so zoom and rotation are free.
 
-import { WALL_WORDS, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize } from '../data';
+import { WALL_WORDS, FAN_R, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize } from '../data';
 import { KX, KY, type Camera, type Vec } from '../camera';
 import { FOOD_FLY, ZAP_T, type Disc, type Food, type Game, type HeroState, type Spark, type Zap } from '../game';
 import { cellAt, floorAt, hazKey, inPit, isFloor, pitAt, type Block, type Decal, type Edge, type Mob, type Pit, type ResNode } from '../room';
@@ -21,6 +21,37 @@ const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-
 
 /** Room art from the manifest; anything missing is drawn by code in the same cartoon look. */
 const env = (k: string) => envArt.get(k);
+
+/** The card sharp's phantom discs: pink where his disc is purple, inked the same, and see-through. */
+const PHANTOM = { col: '#f06ac6', dk: '#7a2463', ink: '#3a0c2c', alpha: 0.66 };
+const rgb = (hex: string) => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+const phantoms = new WeakMap<HTMLImageElement, HTMLCanvasElement | null>();
+/**
+ * His disc's picture recoloured for a phantom, made once: by brightness, ink stays ink, the purple turns pink and the
+ * white emblem stays white. Null where the picture can't be read back.
+ */
+const phantomArt = (img: HTMLImageElement) => {
+  if (phantoms.has(img)) return phantoms.get(img)!;
+  let out: HTMLCanvasElement | null = null;
+  try {
+    const cv = document.createElement('canvas'), w = (cv.width = img.naturalWidth), h = (cv.height = img.naturalHeight), x = cv.getContext('2d')!;
+    x.drawImage(img, 0, 0);
+    const px = x.getImageData(0, 0, w, h), d = px.data, ink = rgb(PHANTOM.ink), pk = rgb(PHANTOM.col), white = [255, 255, 255];
+    // his purple is about this bright: darker goes toward the ink, lighter toward white
+    const mid = 0.42;
+    for (let k = 0; k < d.length; k += 4) {
+      const l = (0.299 * d[k] + 0.587 * d[k + 1] + 0.114 * d[k + 2]) / 255, lo = l < mid;
+      const a = lo ? ink : pk, b = lo ? pk : white, t = lo ? l / mid : (l - mid) / (1 - mid);
+      for (let c = 0; c < 3; c++) d[k + c] = a[c] + (b[c] - a[c]) * t;
+    }
+    x.putImageData(px, 0, 0);
+    out = cv;
+  } catch {
+    // a picture from elsewhere can't be read back: the phantom is drawn by code
+  }
+  phantoms.set(img, out);
+  return out;
+};
 
 /** The cook's dishes, by `Food.k`: their pictures are food_<name> in the manifest, else drawn by code. */
 const DISHES = ['cutlet', 'sausage', 'pie', 'drumstick'];
@@ -1138,16 +1169,27 @@ export class SceneRenderer {
   }
 
   private drawPuck(d: Disc) {
+    const { c } = this;
+    if (!d.fan) return this.puck(d);
+    // a phantom shimmers a little, see-through all the while
+    c.save();
+    c.globalAlpha = PHANTOM.alpha + (reduce ? 0 : Math.sin(this.t * 5 + (d.id ?? 0)) * 0.08);
+    this.puck(d);
+    c.restore();
+  }
+
+  private puck(d: Disc) {
     const { c, P } = this;
     let s = 1, hh = 0;
     if (d.fall) { s = Math.max(0, 1 - d.fall * 2); hh = -d.fall * 20; }
     if (s <= 0) return;
-    const col = d.hero.def.col, dk = d.hero.def.dk;
-    const rx = d.r * 1.35 * s, ry = d.r * 0.68 * s, th = 3.4 * s, [x, y] = P(d.x, d.y, hh);
-    if (!d.fall) { ell(c, x + 1, y + 1.5, rx + 0.5, ry + 0.5); c.fillStyle = 'rgba(20,10,5,.35)'; c.fill(); }
+    const ph = !!d.fan, col = ph ? PHANTOM.col : d.hero.def.col, dk = ph ? PHANTOM.dk : d.hero.def.dk;
+    // a phantom is a thinner puck too, as much as it is a smaller one
+    const rx = d.r * 1.35 * s, ry = d.r * 0.68 * s, th = 3.4 * s * (ph ? FAN_R : 1), [x, y] = P(d.x, d.y, hh);
+    if (!d.fall) { ell(c, x + 1, y + 1.5, rx + 0.5, ry + 0.5); c.fillStyle = `rgba(20,10,5,${ph ? 0.2 : 0.35})`; c.fill(); }
     // a fat puck: dark rim band, flat enamel top, a raised ring and the hero's emblem, all inked
-    c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, Math.PI); c.lineTo(x - rx, y - th); c.ellipse(x, y - th, rx, ry, 0, Math.PI, 0, true); c.closePath(); fs(c, dk, 1.5);
-    const di = env(`disc_${d.hero.def.key}`);
+    c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, Math.PI); c.lineTo(x - rx, y - th); c.ellipse(x, y - th, rx, ry, 0, Math.PI, 0, true); c.closePath(); fs(c, dk, ph ? 1.1 : 1.5);
+    const art = env(`disc_${d.hero.def.key}`), di = art && ph ? phantomArt(art) : art;
     if (di) {
       c.save(); c.translate(x, y - th); c.scale(1, ry / rx); c.rotate(d.spin); c.drawImage(di, -rx * 1.04, -rx * 1.04, rx * 2.08, rx * 2.08); c.restore();
       this.discGlow(d, x, y - th, rx, ry);
@@ -1168,8 +1210,8 @@ export class SceneRenderer {
   /** Rings over a disc's top: the hero's ability colour while it carries the ability, violet while charged by a clash. */
   private discGlow(d: Disc, x: number, y: number, rx: number, ry: number) {
     const { c } = this;
-    // Ricochet's disc glows only while it still has sure bounces
-    if (d.ab && !d.fall && (d.hero.def.key !== 'ricochet' || d.rico > 0)) {
+    // Ricochet's disc glows only while it still has sure bounces; a phantom is the ability's colour all over already
+    if (d.ab && !d.fall && !d.fan && (d.hero.def.key !== 'ricochet' || d.rico > 0)) {
       c.save();
       c.strokeStyle = d.hero.def.abCol; c.lineWidth = 1.6; c.globalAlpha = 0.65 + Math.sin(this.t * 10) * 0.25;
       ell(c, x, y, rx + 2.2, ry + 1.6); c.stroke();
