@@ -48,7 +48,7 @@ let camp: CampState | null = null;
 /** The seed of the camp this player has left for the map: its window stays shut. */
 let campShut = -1;
 /** Client: what this player asked the host to do at the camp, while the answer is on its way. */
-let campAsked: CampPick['k'] | undefined;
+let campAsked: CampPick | undefined;
 let view = { w: 0, h: 0, dpr: 1 };
 
 // ------------------------------------------------------------ camera
@@ -286,7 +286,7 @@ campView.onPick = pick => {
   const me = game.online ? myHero() : game.party[0]?.i ?? null;
   if (me === null) return;
   if (mode === 'client') {
-    campAsked = pick.k;
+    campAsked = pick;
     showCamp();
     net.send({ t: 'camp', pick });
   } else campPick(me, pick);

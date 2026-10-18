@@ -983,6 +983,10 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .camp-who b { font: 600 15px Oswald, sans-serif; color: var(--text); }
 .camp-who.dead img { filter: grayscale(1) brightness(0.6); }
 #campLeave { justify-self: end; align-self: flex-end; margin-top: 4px; }
+/* whom to bandage: the question over the teammates' slabs, and a short slab back to the other picks */
+.camp-ask { margin: 0; font: 600 17px/1.2 Oswald, sans-serif; color: var(--muted); letter-spacing: 0.02em; }
+.ev-opt.camp-back { justify-self: start; width: auto; padding: 6px 22px 7px; }
+.ev-opt.camp-back b { font-size: 16px; color: var(--text); }
 @media (max-height: 520px) and (orientation: landscape) {
   .art-panel #campScreen .ev-panel { padding: 20px 24px; }
   .camp-opt:has(> i[data-art]:not(:empty)) { padding-left: 56px; }
