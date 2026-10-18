@@ -1808,8 +1808,11 @@ describe('the three new heroes', () => {
     for (const f of g.S.food) {
       expect(f.t).toBe(FOOD_FLY);
       expect(isFloor(g.S, Math.floor(f.x / TILE), Math.floor(f.y / TILE))).toBe(true);
+      // each dish lies in the middle of a cell, one to a cell
+      expect(cellCentre(...cellAt(f.x, f.y))).toEqual({ x: f.x, y: f.y });
       expect(f.by).toBe(d.id);
     }
+    expect(new Set(g.S.food.map(f => hazKey(...cellAt(f.x, f.y)))).size).toBe(FOOD_PER_DISC);
     // the cook's own disc rolled over its dishes and left them; a hurt Ricochet's disc eats one
     const f = g.S.food[0];
     g.S.food = [f];
@@ -1823,6 +1826,35 @@ describe('the three new heroes', () => {
     for (let k = 0; k < 30; k++) g.step(1 / 120);
     expect(rico.hp).toBe(rico.max - 5 + FOOD_HEAL);
     expect(g.S.food).toHaveLength(0);
+  });
+
+  it('the cook: a dish flung at a cell already holding one lands on the free cell beside it, never on anything standing', () => {
+    const g = arena([at('cook')], [['skel', 9, 1]]), cook = g.party[0];
+    const drop = (d: object, nx: number, ny: number) => (g as unknown as { dropFood: (d: object, nx: number, ny: number) => void }).dropFood(d, nx, ny);
+    // her disc bounces three times on the same spot, one cell left of the cell (4, 4), which the dishes fly toward
+    const c = cellCentre(4, 4), d = { id: 5, hero: cook, x: c.x - 16, y: c.y, food: 0 };
+    for (let k = 0; k < FOOD_PER_DISC; k++) drop(d, 1, 0);
+    const cells = g.S.food.map(f => cellAt(f.x, f.y));
+    expect(cells[0]).toEqual([4, 4]);
+    expect(new Set(cells.map(q => hazKey(...q))).size).toBe(FOOD_PER_DISC);
+    for (const [i, j] of cells) expect(Math.max(Math.abs(i - 4), Math.abs(j - 4))).toBeLessThanOrEqual(1);
+    // an enemy on that cell, spikes above and below it, a hole right of it and a hero left of it: the dish goes
+    // to a corner cell beside it
+    g.S.food = [];
+    const m = g.S.mobs[0];
+    m.x = m.tx = c.x; m.y = m.ty = c.y;
+    g.S.haz = new Set([hazKey(4, 3), hazKey(4, 5)]);
+    g.S.pits = [{ k: '1x1', cells: [[5, 4]] }];
+    cook.at = cellCentre(3, 4);
+    drop({ ...d, food: 0 }, 1, 0);
+    expect(g.S.food).toHaveLength(1);
+    const [i, j] = cellAt(g.S.food[0].x, g.S.food[0].y);
+    expect([Math.abs(i - 4), Math.abs(j - 4)]).toEqual([1, 1]);
+    // with every cell around taken there's nowhere to put one, and nothing drops
+    g.S.food = [];
+    for (let b = -2; b <= 2; b++) for (let a = -2; a <= 2; a++) g.S.haz.add(hazKey(4 + a, 4 + b));
+    drop({ ...d, food: 0 }, 1, 0);
+    expect(g.S.food).toEqual([]);
   });
 
   it('the cook: dishes travel to the other screens with the snapshot', () => {

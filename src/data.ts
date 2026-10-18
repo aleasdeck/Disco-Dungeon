@@ -31,9 +31,10 @@ export const AB_SPEED = 180;
 export const ZAP = [4, 3, 2];
 export const ZAP_REACH = 6 * 16;
 /**
- * The cook's food: her disc drops a dish at each of its first FOOD_PER_DISC bounces (walls, blocks, enemies). It lands a
- * little way off and heals FOOD_HEAL to the hero whose disc rolls over it, any disc but the one that dropped it; a hero at
- * full health leaves it lying. Discs roll over food, nothing bounces off it, and it lies there till the fight ends.
+ * The cook's food: her disc drops a dish at each of its first FOOD_PER_DISC bounces (walls, blocks, enemies). It lands in
+ * the middle of a cell about a cell off, one dish to a cell (a taken cell sends it to the nearest free one beside), and heals
+ * FOOD_HEAL to the hero whose disc rolls over it, any disc but the one that dropped it; a hero at full health leaves it
+ * lying. Discs roll over food, nothing bounces off it, and it lies there till the fight ends.
  */
 export const FOOD_PER_DISC = 3;
 export const FOOD_HEAL = 3;
@@ -319,7 +320,7 @@ export const HEROES: HeroDef[] = [
   {
     key: 'cook', name: 'Поварёшка', acc: 'Поварёшку', dat: 'Поварёшке', fem: true, col: '#7f8f3a', dk: '#434b1c', skin: '#e3a882', role: 'Танк', hp: 32, r: 6, m: 3.2, e: 0.6, fr: 1.1, pw: 0.8,
     ab: 'Добавка', abTxt: `До конца хода её диск на первых ${FOOD_PER_DISC} отскоках роняет еду: +${FOOD_HEAL} HP тому, чей диск её подберёт.`, abCol: '#9fe06a',
-    abMore: 'Еду подбирает любой диск, кроме уронившего; раненому нужнее, поэтому здоровый её не трогает. Отскакивать от еды нельзя, диски катятся по ней, и лежит она до конца боя.',
+    abMore: 'Еда ложится в клетку, по одной на клетку. Подбирает её любой диск, кроме уронившего; раненому нужнее, поэтому здоровый её не трогает. Отскакивать от еды нельзя, диски катятся по ней, и лежит она до конца боя.',
   },
   {
     key: 'sharp', name: 'Шулер', acc: 'Шулера', dat: 'Шулеру', col: '#7d4fa6', dk: '#3f2659', skin: '#e3a882', role: 'Урон', hp: 20, r: 4, m: 1.8, e: 0.85, fr: 0.85, pw: 1.2,
