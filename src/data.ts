@@ -22,6 +22,26 @@ export const AB_BURN = 4;
 export const AB_BOUNCES = 8;
 /** While a Ricochet disc still has sure bounces left it never rolls slower than this. */
 export const AB_SPEED = 180;
+/**
+ * Electra's lightning: each hit of her disc strikes the enemy, then leaps on to the nearest enemy not struck yet within
+ * ZAP_REACH of the last one, and on once more, weaker each time. It goes through armour.
+ */
+export const ZAP = [4, 3, 2];
+export const ZAP_REACH = 6 * 16;
+/**
+ * The cook's food: her disc drops a dish at each of its first FOOD_PER_DISC bounces (walls, blocks, enemies). It lands a
+ * little way off and heals FOOD_HEAL to the hero whose disc rolls over it, any disc but the one that dropped it; a hero at
+ * full health leaves it lying. Discs roll over food, nothing bounces off it, and it lies there till the fight ends.
+ */
+export const FOOD_PER_DISC = 3;
+export const FOOD_HEAL = 3;
+/** Most dishes on the floor at once: a full floor takes no more. */
+export const FOOD_MAX = 9;
+/** The card sharp's fan: two more discs fly out at this angle on each side of the thrown one, dealing this share of its damage. */
+export const FAN_ANGLE = 0.16;
+export const FAN_M = 0.7;
+/** Online, at most this many players sit at one table: rooms are built for one to three heroes. */
+export const MAX_PLAYERS = 3;
 /** Ore for each level of a disc stat; a party can't buy everything in one run, so it has to choose. */
 export const UP_COST = [3, 4, 6];
 
@@ -250,6 +270,8 @@ export interface HeroDef {
   col: string;
   dk: string;
   skin: string;
+  /** What the hero is for in the party: «Танк», «Урон» or «Зона». */
+  role: string;
   /** Health at the start of a run: the tank has the most, the light fast disc the least. */
   hp: number;
   r: number;
@@ -267,19 +289,34 @@ export interface HeroDef {
 
 export const HEROES: HeroDef[] = [
   {
-    key: 'bastion', name: 'Бастион', acc: 'Бастиона', dat: 'Бастиону', col: '#4f9a8f', dk: '#2b5a53', skin: '#e3a882', hp: 30, r: 6, m: 4, e: 0.55, fr: 1.1, pw: 0.75,
+    key: 'bastion', name: 'Бастион', acc: 'Бастиона', dat: 'Бастиону', col: '#4f9a8f', dk: '#2b5a53', skin: '#e3a882', role: 'Танк', hp: 30, r: 6, m: 4, e: 0.55, fr: 1.1, pw: 0.75,
     ab: 'Щитобой', abTxt: `До конца хода каждое попадание его диска по врагу даёт всем героям +${AB_SHIELD} щита.`, abCol: '#3fc4b6',
     abMore: 'Щиты копятся с каждым попаданием и держатся до следующего хода.',
   },
   {
-    key: 'ricochet', name: 'Рикошет', acc: 'Рикошета', dat: 'Рикошету', col: '#c9a03a', dk: '#6f5420', skin: '#e3a882', hp: 18, r: 4, m: 1.2, e: 0.95, fr: 0.8, pw: 1.25,
+    key: 'ricochet', name: 'Рикошет', acc: 'Рикошета', dat: 'Рикошету', col: '#c9a03a', dk: '#6f5420', skin: '#e3a882', role: 'Урон', hp: 18, r: 4, m: 1.2, e: 0.95, fr: 0.8, pw: 1.25,
     ab: 'Шальной диск', abTxt: `До конца хода его диски первые ${AB_BOUNCES} отскоков не теряют скорость, даже от врагов.`, abCol: '#ffd34d',
     abMore: 'Один бросок прошивает всю толпу, а слабый бросок всё равно летит быстро. Ресурс гасит такой диск, как обычный.',
   },
   {
-    key: 'ash', name: 'Пепельница', acc: 'Пепельницу', dat: 'Пепельнице', fem: true, col: '#b85a2e', dk: '#5e2a14', skin: '#d8b59a', hp: 22, r: 5, m: 2, e: 0.75, fr: 1, pw: 1,
+    key: 'ash', name: 'Пепельница', acc: 'Пепельницу', dat: 'Пепельнице', fem: true, col: '#b85a2e', dk: '#5e2a14', skin: '#d8b59a', role: 'Зона', hp: 22, r: 5, m: 2, e: 0.75, fr: 1, pw: 1,
     ab: 'Поджог', abTxt: `До конца хода каждое попадание её диска добавляет врагу ${AB_BURN} огня. Огонь копится.`, abCol: '#ff7a3d',
     abMore: 'В свой ход враг теряет столько HP, сколько на нём огня, сквозь броню, и огонь стихает на 1. С павшего огонь перекидывается на ближайшего врага.',
+  },
+  {
+    key: 'cook', name: 'Поварёшка', acc: 'Поварёшку', dat: 'Поварёшке', fem: true, col: '#7f8f3a', dk: '#434b1c', skin: '#e3a882', role: 'Танк', hp: 32, r: 6, m: 3.2, e: 0.6, fr: 1.1, pw: 0.8,
+    ab: 'Добавка', abTxt: `До конца хода её диск на первых ${FOOD_PER_DISC} отскоках роняет еду: +${FOOD_HEAL} HP тому, чей диск её подберёт.`, abCol: '#9fe06a',
+    abMore: 'Еду подбирает любой диск, кроме уронившего; раненому нужнее, поэтому здоровый её не трогает. Отскакивать от еды нельзя, диски катятся по ней, и лежит она до конца боя.',
+  },
+  {
+    key: 'sharp', name: 'Шулер', acc: 'Шулера', dat: 'Шулеру', col: '#7d4fa6', dk: '#3f2659', skin: '#e3a882', role: 'Урон', hp: 20, r: 4, m: 1.8, e: 0.85, fr: 0.85, pw: 1.2,
+    ab: 'Веер', abTxt: `До конца хода вместо одного диска летят веером три, крайние бьют на ${Math.round((1 - FAN_M) * 100)}% слабее.`, abCol: '#ff7ad1',
+    abMore: 'Два диска из рукавов летят чуть в стороны от прицела. Ходит он за средним, а крайние лежат, где остановились, до конца хода.',
+  },
+  {
+    key: 'electra', name: 'Электра', acc: 'Электру', dat: 'Электре', fem: true, col: '#3f74c2', dk: '#1f3a66', skin: '#e8b994', role: 'Зона', hp: 22, r: 5, m: 2.0, e: 0.8, fr: 0.9, pw: 1.1,
+    ab: 'Цепная молния', abTxt: `До конца хода каждое попадание её диска бьёт молнией: ${ZAP[0]} по врагу, потом ${ZAP.slice(1).join(' и ')} по соседям.`, abCol: '#7fe3ff',
+    abMore: `Молния бьёт сквозь броню и перескакивает на ближайшего врага в ${ZAP_REACH / 16} клетках, которого ещё не била. Если диск добил врага, молния начинает с соседа.`,
   },
 ];
 

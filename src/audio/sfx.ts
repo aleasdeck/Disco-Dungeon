@@ -5,7 +5,7 @@ import { adsr, bass, bell, brass, clap, cowbell, filt, gain, guitar, hat, kick, 
 
 export type Sfx =
   | 'click' | 'launch' | 'wall' | 'clink' | 'hit' | 'crit' | 'kill' | 'armor' | 'ore' | 'sparks' | 'herb' | 'ice' | 'shatter'
-  | 'pit' | 'hurt' | 'ability' | 'enemyTurn' | 'yourTurn' | 'step' | 'slam' | 'win' | 'lose';
+  | 'pit' | 'hurt' | 'ability' | 'enemyTurn' | 'yourTurn' | 'step' | 'slam' | 'win' | 'lose' | 'zap' | 'eat';
 
 type Play = (b: Band, o: AudioNode, t: number, p: number) => void;
 
@@ -99,6 +99,16 @@ const SOUNDS: Record<Sfx, Play> = {
     for (let k = 0; k < 6; k++) bell(b, o, t + 8 * T + k * 0.06, note('C7', [0, 4, 7, 12, 7, 4][k]), 0.3, { dec: 0.6 });
     hat(b, o, t + 8 * T, 1, { open: true, dec: 0.5 });
   },
+  // a crackle: a buzzing square diving down over a burst of hiss, twice
+  zap: (b, o, t, p) => {
+    for (const [dt, f] of [[0, 1400], [0.05, 1000]]) { tone(b, o, t + dt, 'square', f, 90, 0.09, 0.18 + 0.15 * p); hiss(b, o, t + dt, 0.06, 0.3 + 0.2 * p, { type: 'highpass', f: 4500 }); }
+  },
+  // a munch: two quick low bloops and a wah lick
+  eat: (b, o, t) => {
+    tone(b, o, t, 'sine', 420, 180, 0.08, 0.5);
+    tone(b, o, t + 0.1, 'sine', 380, 160, 0.08, 0.45);
+    guitar(b, o, t + 0.16, ['G4', 'B4', 'D5'], 0.7, { wah: 1800, len: 0.16 });
+  },
   lose: (b, o, t) => {
     scratch(b, o, t, true);
     syndrum(b, o, t + 0.3, 0.8, { f0: 600, f1: 60, dec: 1 });
@@ -110,6 +120,7 @@ const SOUNDS: Record<Sfx, Play> = {
 const TRIM: Record<Sfx, number> = {
   click: 3.7, launch: -6.0, wall: 4.0, clink: -0.7, hit: -2.0, crit: -3.2, kill: -1.6, armor: 0.5, ore: 4.4, sparks: 2.6, herb: 10.5,
   ice: 6.3, shatter: 4.6, pit: -7.0, hurt: -7.7, ability: -4.3, enemyTurn: -5.4, yourTurn: 3.9, step: -0.4, slam: -4.3, win: -2.3, lose: -1.9,
+  zap: 0, eat: 6,
 };
 
 /** How long each sound lasts, about: the trim node is let go after it. */

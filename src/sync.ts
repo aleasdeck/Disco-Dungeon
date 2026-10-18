@@ -2,7 +2,7 @@
 // Rooms are rebuilt from their spec (generation is seeded), so only what changes travels.
 
 import { AB_COST, HEROES } from './data';
-import type { Bank, Cue, Disc, Float, Game, HeroState, Phase, Spark, State } from './game';
+import type { Bank, Cue, Disc, Float, Food, Game, HeroState, Phase, Spark, State } from './game';
 import type { Mob, RoomSpec } from './room';
 import type { CampState } from './camp';
 import type { EventState } from './events';
@@ -34,6 +34,8 @@ export interface Snapshot {
   /** Hit points left on each icicle, in block order. */
   ice?: number[];
   discs: (Omit<Disc, 'hero'> & { hero: number })[];
+  /** The cook's dishes on the floor; older saves have none. */
+  food?: Food[];
   floats: Float[];
   /** Only the sparks every screen can't make itself: the ones the discs' hits throw, each screen throws on its own. */
   sparks: Spark[];
@@ -57,6 +59,7 @@ export function snapshot(g: Game): Snapshot {
     nodes: S.nodes.map(n => [n.left, n.hit]),
     ice: S.blocks.filter(b => b.ice).map(b => b.hp!),
     discs: S.discs.filter(d => !d.gone).map(d => ({ ...d, hero: d.hero.i })),
+    food: S.food,
     floats: S.floats,
     sparks: S.sparks.filter(p => p.b === undefined),
     bank: g.bank,
@@ -111,6 +114,7 @@ export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boo
   S.nodes.forEach((n, k) => { if (s.nodes[k]) [n.left, n.hit] = s.nodes[k]; });
   if (s.ice) S.blocks.filter(b => b.ice).forEach((b, k) => { if (s.ice![k] !== undefined) b.hp = s.ice![k]; });
   S.discs = s.discs.map(d => ({ ...d, hero: g.heroOf(d.hero) }));
+  S.food = (s.food ?? []).map(f => ({ ...f }));
   Object.assign(g.bank, bank);
   if (s.haz) S.haz = new Set(s.haz);
   g.forge = s.forge ?? 0;
