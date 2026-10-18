@@ -1,7 +1,7 @@
 // Draws one frame of a room: walls, floor, obstacles, resources, discs and miniatures.
 // Everything is drawn in iso space through the camera, so zoom and rotation are free.
 
-import { WALL_WORDS, FAN_R, GAS_R, GAS_TURNS, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize } from '../data';
+import { WALL_WORDS, FAN_R, GAS_R, GAS_TURNS, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, heroFig, mobSize, type NodeKind } from '../data';
 import { KX, KY, type Camera, type Vec } from '../camera';
 import { ART, FOOD_FLY, ZAP_T, type Bomb, type Disc, type Food, type Game, type Gas, type HeroState, type Spark, type Zap } from '../game';
 import { cellAt, floorAt, hazKey, inPit, isFloor, pitAt, type Block, type Decal, type Edge, type Mob, type Pit, type ResNode } from '../room';
@@ -22,6 +22,21 @@ const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-
 
 /** Room art from the manifest; anything missing is drawn by code in the same cartoon look. */
 const env = (k: string) => envArt.get(k);
+
+/**
+ * Resource pictures: the full one (`key`) stands for a full stock and `<key>_<n>` for n of its `pieces` left, as wide as
+ * `w` either way. A mushroom is a heal and a crystal a spark, so a patch shows how many are left; an ore vein holds one
+ * to six charges by the party, so its seven gold nuggets go in step with them.
+ */
+const NODE_ART: Record<NodeKind, { key: string; pieces: number; w: number }> = {
+  ore: { key: 'ore', pieces: 7, w: 21 },
+  spk: { key: 'crystal', pieces: 3, w: 15.5 },
+  herb: { key: 'mushrooms', pieces: 3, w: 19 },
+};
+
+/** Pieces of a resource's picture still standing with `left` of its `ch` charges. */
+const nodePieces = (k: NodeKind, left: number, ch: number) =>
+  k === 'ore' ? Math.ceil((NODE_ART.ore.pieces * left) / ch) : Math.min(NODE_ART[k].pieces, left);
 
 /** The card sharp's phantom discs: pink where his disc is purple, inked the same, and see-through. */
 const PHANTOM = { col: '#f06ac6', dk: '#7a2463', ink: '#3a0c2c', alpha: 0.66 };
@@ -1088,8 +1103,12 @@ export class SceneRenderer {
   private drawNodeShape(n: ResNode, left: number, f: boolean) {
     // the cave's big vein is the same boulder, as big as its 2 × 2 cells
     const c = this.c, [x, y] = this.P(n.x, n.y), q = left / n.ch, z = n.s ?? 1;
-    const ni = env(n.k === 'ore' ? 'ore' : n.k === 'spk' ? 'crystal' : 'mushrooms');
-    if (ni) { this.standee(ni, x, y + 3 * z, (n.k === 'ore' ? 21 : n.k === 'spk' ? 15.5 : 19) * (0.6 + 0.4 * q) * z, f); return; }
+    const art = NODE_ART[n.k], ni = env(art.key);
+    if (ni) {
+      const k = nodePieces(n.k, left, n.ch);
+      this.standee((k < art.pieces && env(`${art.key}_${k}`)) || ni, x, y + 3 * z, art.w * z, f);
+      return;
+    }
     const W = (col: string) => (f ? '#ffffff' : col);
     c.lineJoin = 'round';
     if (n.k === 'ore') {
@@ -1126,7 +1145,7 @@ export class SceneRenderer {
     } else {
       // mushrooms straight on the floor, big one behind
       const sh: [number, number, number][] = [[0, -1.5, 1.35], [5, 1.5, 0.85], [-5, 1.5, 0.7]];
-      for (const [ox, oy, s] of sh.slice(0, left === n.ch ? 3 : left)) {
+      for (const [ox, oy, s] of sh.slice(0, nodePieces(n.k, left, n.ch))) {
         const mx = x + ox, my = y + oy;
         rr(c, mx - 1.6 * s, my - 6 * s, 3.2 * s, 6 * s, 1.2 * s); fs(c, W('#f1e7d0'), 1);
         c.beginPath(); c.ellipse(mx, my - 6 * s, 5.2 * s, 5 * s, 0, Math.PI, 0); c.quadraticCurveTo(mx, my - 4 * s, mx - 5.2 * s, my - 6 * s); c.closePath();
@@ -1196,7 +1215,7 @@ export class SceneRenderer {
     if (im) {
       this.standee(im, sx, sy + 1, BOMB_W * 1.5);
       const H = (BOMB_W * 1.5 * im.height) / im.width;
-      tipX = sx + BOMB_W * 1.5 * 0.2; tipY = sy + 1 - H * 0.93;
+      tipX = sx + BOMB_W * 1.5 * 0.25; tipY = sy + 1 - H * 0.95;
     } else {
       c.lineJoin = 'round';
       rr(c, sx - BOMB_W / 2, sy - BOMB_W * 1.7, BOMB_W, BOMB_W * 1.7, 1.2); fs(c, '#d23a3a', 1);
@@ -1259,7 +1278,7 @@ export class SceneRenderer {
       c.strokeStyle = 'rgba(70,105,20,.8)'; c.lineWidth = 1.2; c.stroke();
       c.restore();
     }
-    // a firecracker's reach: the 3 × 3 cells round it, dashed in its fuse's orange
+    // a firecracker's reach: the 3 × 3 cells round it, where the first enemy to step sets it off, dashed in its fuse's orange
     c.save();
     c.setLineDash([2, 2]);
     c.strokeStyle = 'rgba(255,170,60,.7)';
@@ -1411,18 +1430,18 @@ export class SceneRenderer {
     const target = g.liveMobs()[0] ?? S.nodes.filter(n => n.left > 0).sort((a, b) => b.r - a.r)[0] ?? { x: S.Wx / 2, y: S.Wy / 2 };
     if (lifted) { ell(c, sx, sy0, HERO_BASE * 1.27, HERO_BASE * 0.64); c.fillStyle = 'rgba(0,0,0,.35)'; c.fill(); }
     drawMiniature(c, {
-      key: h.def.key, x: sx, y: sy, baseR: HERO_BASE, baseCol: h.def.col, fig: HERO_FIG,
+      key: h.def.key, x: sx, y: sy, baseR: HERO_BASE, baseCol: h.def.col, fig: heroFig(h.def),
       faceRight: this.faceRight(p.x, p.y, target.x, target.y), flash: h.flash > 0, hop: at ? 0 : g.figureAt(h)!.lift,
       alpha: dead ? 0.45 : carried ? 0.3 : lifted ? 0.85 : 1,
       hp: dead || carried ? undefined : { now: h.hp, max: h.max },
       pose: lifted ? undefined : this.pose(h.knock, p.x, p.y, HERO_BASE),
       light: S.biome.light,
-      placeholder: (cc, x, y, fl) => drawHeroFigure(cc, h.i, x, y, 0.8, fl, this.t),
+      placeholder: (cc, x, y, fl) => drawHeroFigure(cc, h.i, x, y, (0.8 * heroFig(h.def)) / HERO_FIG, fl, this.t),
     });
     if (dead || carried) return;
     // with friends on the field a small gold arrow just over the head says which figure is yours
     if (g.hero === h && g.party.length > 1 && S.phase !== 'over') {
-      const yy = sy - BASE_TH - HERO_FIG - 4 - (reduce ? 0 : Math.sin(this.t * 6) * 1.2);
+      const yy = sy - BASE_TH - heroFig(h.def) - 4 - (reduce ? 0 : Math.sin(this.t * 6) * 1.2);
       pth(c, [[sx - 3, yy - 3], [sx + 3, yy - 3], [sx, yy + 1]]);
       fs(c, '#ffd34d', 0.8);
     }
@@ -1482,16 +1501,24 @@ export class SceneRenderer {
     c.fillStyle = 'rgba(225,246,255,.55)'; c.fill();
     c.strokeStyle = '#7fc8e8'; c.lineWidth = 0.9; c.stroke();
     if (frozen) {
-      const w = R * 2.3, h = fig + 5, top = y - BASE_TH - h, d = w * 0.22;
-      // a block of ice: a front face, a top and a side, glassy blue with the figure showing through
-      pth(c, [[x - w / 2, y - 1], [x + w / 2, y - 1], [x + w / 2, top + d], [x - w / 2, top + d]]);
-      c.fillStyle = 'rgba(170,225,255,.42)'; c.fill(); c.strokeStyle = '#2b6f93'; c.lineWidth = 1.2; c.stroke();
-      pth(c, [[x - w / 2, top + d], [x + w / 2, top + d], [x + w / 2 - d, top], [x - w / 2 - d, top]]);
+      // a block of ice on the enemy's own cells: its sides run along the floor's grid, so it turns with the room like
+      // a stone block, glassy blue with the figure showing through
+      const { P, cam } = this, sz = mobSize(m.k), [i, j] = cellAt(m.x, m.y, sz), H = BASE_TH + fig + 5;
+      const x0 = i * TILE + 0.6, y0 = j * TILE + 0.6, x1 = (i + sz) * TILE - 0.6, y1 = (j + sz) * TILE - 0.6;
+      const sides: [Vec, Vec, Vec][] = [[[x1, y0], [x1, y1], [1, 0]], [[x0, y1], [x1, y1], [0, 1]], [[x0, y0], [x0, y1], [-1, 0]], [[x0, y0], [x1, y0], [0, -1]]];
+      c.strokeStyle = '#2b6f93'; c.lineWidth = 1.2;
+      for (const [a, b, n] of sides) {
+        const k = cam.facing(n[0], n[1]);
+        if (k <= 1e-6) continue;
+        pth(c, [P(...a), P(...b), P(...b, H), P(...a, H)]);
+        c.fillStyle = `rgba(175,228,255,${(0.34 + 0.16 * (0.5 + 0.5 * cam.sideways(n[0], n[1]))).toFixed(2)})`; c.fill(); c.stroke();
+      }
+      pth(c, [P(x0, y0, H), P(x1, y0, H), P(x1, y1, H), P(x0, y1, H)]);
       c.fillStyle = 'rgba(230,248,255,.7)'; c.fill(); c.stroke();
-      pth(c, [[x - w / 2, top + d], [x - w / 2 - d, top], [x - w / 2 - d, y - 1 - d], [x - w / 2, y - 1]]);
-      c.fillStyle = 'rgba(200,238,255,.5)'; c.fill(); c.stroke();
+      // two glints across the top
+      const at = (u: number, v: number) => P(x0 + (x1 - x0) * u, y0 + (y1 - y0) * v, H);
       c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = 1.3;
-      c.beginPath(); c.moveTo(x - w * 0.3, top + d + 4); c.lineTo(x - w * 0.1, top + d + 1.5); c.moveTo(x - w * 0.32, top + d + 9); c.lineTo(x - w * 0.22, top + d + 7); c.stroke();
+      c.beginPath(); c.moveTo(...at(0.2, 0.3)); c.lineTo(...at(0.45, 0.25)); c.moveTo(...at(0.25, 0.55)); c.lineTo(...at(0.38, 0.5)); c.stroke();
       c.restore();
       return;
     }

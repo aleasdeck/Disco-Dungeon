@@ -1,7 +1,7 @@
 // Combat rules: turn flow, disc physics, damage, abilities.
 // Rendering and input live elsewhere; this module only changes state.
 
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, CRIT_COS, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, FROST_VULN, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_HEAR, PETARD_LURE, PETARD_MAX, PETARD_PER_DISC, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, ZAP, ZAP_REACH, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, CRIT_COS, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_MAX, PETARD_TURNS, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, ZAP, ZAP_REACH, frostVuln, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
 import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { mulberry32 } from './rng';
 import { has } from './artifacts';
@@ -74,8 +74,6 @@ export interface Disc {
   rico: number;
   /** The cook's ability: dishes this disc has dropped so far. */
   food?: number;
-  /** The kid's ability: firecrackers this disc has dropped so far. */
-  bombs?: number;
   /** The bum's ability: this disc has let its cloud of gas out already. */
   gas?: boolean;
   /** «Смазка»: bounces off walls and blocks left that cost the disc no speed. */
@@ -102,7 +100,7 @@ export const FOOD_FLY = 0.35;
  * A firecracker the kid's disc dropped: it flies in like a dish, from (fx, fy) to (x, y) in the middle of a cell, for FOOD_FLY
  * seconds, then lies there till an enemy comes within a cell of it. `by` is the disc that dropped it, `h` its hero, `t` its age.
  */
-export interface Bomb { x: number; y: number; fx: number; fy: number; by?: number; h: number; t: number }
+export interface Bomb { x: number; y: number; fx: number; fy: number; by?: number; h: number; t: number; left: number }
 /** A cloud of the bum's gas: its middle cell, the enemy turns it has left, and its age, for the eye. */
 export interface Gas { i: number; j: number; left: number; t: number }
 /** How close a disc's edge must pass the middle of a dish to pick it up: the dish fills most of its cell. */
@@ -147,7 +145,7 @@ export interface State extends Layout {
   discs: Disc[];
   /** The cook's dishes on the floor; they last the fight. */
   food: Food[];
-  /** The kid's firecrackers on the floor, till they go off. */
+  /** The kid's firecracker on the floor, till it goes off or fizzles out. */
   bombs: Bomb[];
   /** The bum's clouds of gas over the floor. */
   gas: Gas[];
@@ -675,7 +673,12 @@ export class Game {
    * and it goes on once a turn on the hero's own sparks.
    */
   canUseAbility(h = this.hero) {
-    return this.S.phase === 'throw' && h.hp > 0 && h.hand > 0 && !h.boost && !this.ended(h) && h.sparks >= this.abCost(h) && this.liveMobs().length > 0;
+    return this.S.phase === 'throw' && h.hp > 0 && h.hand > 0 && !h.boost && !this.ended(h) && h.sparks >= this.abCost(h) && this.liveMobs().length > 0 && !this.petardOut(h);
+  }
+
+  /** The kid's firecracker is still on the field, so his ability has nothing to lay. */
+  petardOut(h: HeroState) {
+    return h.def.key === 'kid' && this.S.bombs.length >= PETARD_MAX;
   }
 
   useAbility(h = this.hero) {
@@ -795,14 +798,13 @@ export class Game {
     if (d.ab && d.hero.def.key === 'kid') this.dropBomb(d, nx, ny);
   }
 
-  /** The kid's disc drops a firecracker off a bounce, the same way the cook's drops a dish. */
+  /** The kid's disc drops a firecracker off a bounce, the same way the cook's drops a dish, unless one is on the field already. */
   private dropBomb(d: Disc, nx: number, ny: number) {
     const S = this.S;
-    if ((d.bombs ?? 0) >= PETARD_PER_DISC || S.bombs.length >= PETARD_MAX) return;
+    if (S.bombs.length >= PETARD_MAX) return;
     const at = this.landing(d, nx, ny);
     if (!at) return;
-    S.bombs.push({ ...at, fx: d.x, fy: d.y, by: d.id, h: d.hero.i, t: 0 });
-    d.bombs = (d.bombs ?? 0) + 1;
+    S.bombs.push({ ...at, fx: d.x, fy: d.y, by: d.id, h: d.hero.i, t: 0, left: PETARD_TURNS });
   }
 
   /** Whether an enemy stands within `r` cells of a firecracker (any of its cells, counting diagonals), or on it. */
@@ -811,16 +813,20 @@ export class Game {
     return bi >= i - r && bi < i + sz + r && bj >= j - r && bj < j + sz + r;
   }
 
-  /** In the enemies' turn, every firecracker that has landed and has an enemy within a cell of it goes off. */
+  /** In the enemies' turn, a firecracker that has landed goes off on the first enemy within a cell of it, the nearest if two are. */
   private fuse() {
     const S = this.S;
     if (S.phase !== 'enemy') return;
-    for (const b of S.bombs.slice()) if (b.t >= FOOD_FLY && this.liveMobs().some(m => this.near(m, b))) this.blast(b);
+    for (const b of S.bombs.slice()) {
+      if (b.t < FOOD_FLY) continue;
+      const m = this.liveMobs().filter(o => this.near(o, b)).sort((p, q) => Math.hypot(p.x - b.x, p.y - b.y) - Math.hypot(q.x - b.x, q.y - b.y))[0];
+      if (m) this.blast(b, m);
+    }
   }
 
   /**
-   * The firecrackers crackle: each draws the PETARD_LURE enemies nearest it out of those within PETARD_HEAR cells that mean
-   * to go for a hero and can walk up to it, the nearest pairs first, every enemy to one firecracker. Those go for the noise
+   * The firecrackers crackle, loud enough for the whole room: each draws the PETARD_LURE enemies nearest it out of those that
+   * mean to go for a hero and can walk up to it, the nearest pairs first, every enemy to one firecracker. Those go for the noise
    * this turn instead; one no longer drawn goes back to the hero it was after. Bosses' blows on everyone, heals and summons
    * go ahead as they were, an enemy that never walks can't come.
    */
@@ -828,7 +834,7 @@ export class Game {
     const S = this.S, bombs = S.bombs.filter(b => b.t >= FOOD_FLY);
     const can = this.liveMobs().filter(m => m.speed > 0 && m.intent && (m.intent.t === 'hit' || m.intent.t === 'move' || m.intent.t === 'charge'));
     const pairs: { b: Bomb; m: Mob; d: number }[] = [];
-    for (const b of bombs) for (const m of can) if (this.near(m, b, PETARD_HEAR)) pairs.push({ b, m, d: Math.hypot(b.x - m.x, b.y - m.y) });
+    for (const b of bombs) for (const m of can) pairs.push({ b, m, d: Math.hypot(b.x - m.x, b.y - m.y) });
     pairs.sort((p, q) => p.d - q.d);
     const drawn = new Map<Mob, Intent>(), count = new Map<Bomb, number>();
     for (const { b, m } of pairs) {
@@ -853,10 +859,10 @@ export class Game {
   }
 
   /**
-   * A firecracker goes off: every enemy within a cell of it takes PETARD_DMG through armour, and the figures around jolt. An enemy felled
-   * on its walk stops on the cell where it fell.
+   * A firecracker goes off under enemy m: it takes PETARD_DMG through armour and the figures around jolt; the firecracker is gone.
+   * An enemy felled on its walk stops on the cell where it fell.
    */
-  private blast(b: Bomb) {
+  private blast(b: Bomb, m: Mob) {
     const S = this.S, by = S.heroes.find(h => h.i === b.h);
     S.bombs = S.bombs.filter(o => o !== b);
     this.float(b.x, b.y - 10, 'БАХ!', '#ffb347');
@@ -864,14 +870,11 @@ export class Game {
     this.burst(b.x, b.y, '#fff1a8', 10);
     S.shake = Math.max(S.shake, 0.15);
     this.sfx('boom');
-    for (const m of this.liveMobs()) {
-      if (!this.near(m, b)) continue;
-      this.hurtMob(m, PETARD_DMG, '#ffb347', true, 0.7, by);
-      this.knock(m, m.x, m.y, b.x, b.y, 0.7);
-      if (m.hp <= 0 && m.walk && S.phase === 'enemy' && S.mobs[S.actor] === m) {
-        const c = cellCentre(...cellAt(m.x, m.y, mobSize(m.k)), mobSize(m.k));
-        m.x = m.tx = c.x; m.y = m.ty = c.y; m.walk = undefined; m.hop = 0;
-      }
+    this.hurtMob(m, PETARD_DMG, '#ffb347', true, 0.7, by);
+    this.knock(m, m.x, m.y, b.x, b.y, 0.7);
+    if (m.hp <= 0 && m.walk && S.phase === 'enemy' && S.mobs[S.actor] === m) {
+      const c = cellCentre(...cellAt(m.x, m.y, mobSize(m.k)), mobSize(m.k));
+      m.x = m.tx = c.x; m.y = m.ty = c.y; m.walk = undefined; m.hop = 0;
     }
     this.tremor(b.x, b.y, 0.5, b);
   }
@@ -1309,11 +1312,11 @@ export class Game {
 
   /**
    * Damage an enemy; `by` is the hero whose disc (or its lightning, firecracker or light spot) dealt it, for the trophies
-   * that pay for kills. A hero's blow on an enemy the ice genius has frosted hits FROST_VULN harder; fire and gas don't.
+   * that pay for kills. A hero's blow on an enemy the ice genius has frosted hits harder (`frostVuln`); fire and gas don't.
    */
   hurtMob(m: Mob, n: number, col = '#fff', pierce = false, p = 0.6, by?: HeroState) {
     if (m.hp <= 0) return;
-    if (by && m.frost) { n = Math.ceil(n * (1 + FROST_VULN)); this.burst(m.x, m.y, '#cfefff', 6); }
+    if (by && m.frost) { n = Math.ceil(n * (1 + frostVuln(m.frost))); this.burst(m.x, m.y, '#cfefff', 6); }
     if (m.armor && !pierce && n < m.armor) { this.float(m.x, m.y, 'броня', '#c7cbe0'); this.sfx('armor'); return; }
     m.hp -= n;
     m.flash = 0.15;
@@ -2050,9 +2053,11 @@ export class Game {
     S.turn++;
     S.discs = [];
     S.done = [];
-    // the frost wears off after one enemy turn, a cloud of gas thins out turn by turn
+    // the frost wears off after one enemy turn, a cloud of gas thins out turn by turn, a firecracker nobody came to fizzles out
     for (const m of S.mobs) delete m.frost;
     S.gas = S.gas.filter(g => --g.left > 0);
+    for (const b of S.bombs) if (--b.left <= 0) { this.float(b.x, b.y - 10, 'пшик', '#c9c2b4'); this.burst(b.x, b.y, '#9a948a', 8); }
+    S.bombs = S.bombs.filter(b => b.left > 0);
     for (const h of S.heroes) { h.shield = h.hp > 0 && has(h, 'cup') ? ART.cup : 0; h.thrown = false; h.boost = false; h.hand = h.hp > 0 ? this.handOf(h) : 0; if (h.chill > 0) h.chill--; }
     S.phase = 'throw';
     this.sfx('yourTurn');
