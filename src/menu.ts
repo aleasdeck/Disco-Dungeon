@@ -1,6 +1,6 @@
 // Main menu and its screens: collection, settings and the online lobby.
 
-import { BIOMES, HEROES, MOB_HP_MUL, MOBS, ROLES, fullHit, heroesByRole, type MobKind } from './data';
+import { BIOMES, HEROES, MOB_HP_MUL, MOBS, ROLE_ROWS, fullHit, heroesByRole, type MobKind } from './data';
 import { drawPortrait, mobIcon } from './ui';
 import { ARTIFACTS } from './artifacts';
 import { artIcon } from './icons';
@@ -26,7 +26,7 @@ function pickRows(box: HTMLElement, card: (i: number) => HTMLElement) {
   heroesByRole().forEach((list, r) => {
     const tab = document.createElement('b');
     tab.className = 'pick-role';
-    tab.textContent = ROLES[r];
+    tab.textContent = ROLE_ROWS[r];
     box.append(tab, ...list.map(card));
   });
 }
@@ -38,7 +38,7 @@ export function renderCollection(tab: 'heroes' | 'mobs' | 'arts') {
   const grid = $('colGrid');
   grid.innerHTML = '';
   if (tab === 'heroes') {
-    // the same order as the pick screens: tanks, then damage, then zone
+    // the same order as the pick screens: the biggest discs first
     heroesByRole().flat().forEach(i => {
       const def = HEROES[i], card = document.createElement('article');
       card.className = 'card';
