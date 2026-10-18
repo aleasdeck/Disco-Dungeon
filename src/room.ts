@@ -420,14 +420,14 @@ export const NODE_SETS: Partial<Record<RoomType, NodeKind[]>> = {
   fight: ['ore', 'spk', 'herb'],
   elite: ['ore', 'ore', 'spk', 'herb'],
   boss: ['ore', 'spk', 'herb'],
-  treasure: ['ore', 'ore'],
+  treasure: ['ore', 'ore', 'herb', 'herb'],
 };
 
 /**
- * The ore cave holds no enemies: one big vein in the middle of the room, the two small ones of NODE_SETS off to the sides,
- * and only `turns` minus the heroes to mine them: three turns for a lone hero, one for three heroes, who throw three
- * times as many discs a turn. It ends once the turns run out or every vein is spent. Its veins hold as many charges
- * whatever the party: the turns already make up for its size.
+ * The ore cave holds no enemies: one big vein in the middle of the room, the two small veins and two mushroom patches
+ * of NODE_SETS off to the sides, and only `turns` minus the heroes: three turns for a lone hero, one for three heroes,
+ * who throw three times as many discs a turn. Each throw goes for ore or for health. It ends once the turns run out
+ * or nothing is left to hit. Its veins hold as many charges whatever the party: the turns already make up for its size.
  */
 export const CAVE = { turns: 4, big: { r: 12, ch: 6 }, small: 2 };
 
@@ -664,13 +664,13 @@ export function generate(spec: RoomSpec): Layout {
 
   const nodes: ResNode[] = [];
   if (cave && big) nodes.push(big);
-  // in the ore cave the small veins stand apart, from the big one and from each other
+  // in the ore cave the small veins and the mushrooms stand apart, from the big vein and from each other
   const apart = (x: number, y: number) => !cave || nodes.every(n => Math.hypot(x - n.x, y - n.y) > (n.s ? 3 : 2.5) * TILE);
   const kinds = NODE_SETS[type] ?? NODE_SETS.fight!;
   for (const k of kinds) {
     const side = (x: number, y: number) => flank(x, y) && apart(x, y);
     const q = placeCell(1, NODES[k].r, side) ?? placeCell(1, NODES[k].r, apart) ?? placeCell(1, NODES[k].r, mid) ?? placeCell(1, NODES[k].r, any) ?? placeCell(1, NODES[k].r, any, true);
-    if (q) { const ch = cave ? CAVE.small : sc.ch[k] ?? NODES[k].ch; nodes.push({ k, ...NODES[k], ch, x: q[0], y: q[1], left: ch, hit: 0 }); objs.push({ x: q[0], y: q[1], r: NODES[k].r }); }
+    if (q) { const ch = cave && k === 'ore' ? CAVE.small : sc.ch[k] ?? NODES[k].ch; nodes.push({ k, ...NODES[k], ch, x: q[0], y: q[1], left: ch, hit: 0 }); objs.push({ x: q[0], y: q[1], r: NODES[k].r }); }
   }
 
   const haz = new Set<string>();

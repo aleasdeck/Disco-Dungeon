@@ -457,9 +457,9 @@ game.onRoomEnd = win => {
     if (boss) run.floor++;
     choosing = true;
     votes = {};
-    // the ore cave ends when its turns are up or its veins are spent: it tells how much ore it gave
+    // the ore cave ends when its turns are up or everything in it is spent: it tells how much ore it gave
     const cave = game.cave(), rooms = `Пройдено комнат: ${run.path.reduce((a, p) => a + p.length, 0)} из ${FLOORS * LAYERS}.`;
-    showEnd({ title: boss ? `Этаж ${run.floor} пройден` : cave ? (game.cleared() ? 'Жилы выбиты' : 'Ходы кончились') : 'Комната зачищена',
+    showEnd({ title: boss ? `Этаж ${run.floor} пройден` : cave ? (game.cleared() ? 'Пещера выбрана дочиста' : 'Ходы кончились') : 'Комната зачищена',
       text: cave ? `Добыто руды: ${game.mined}. ${rooms}` : `Ходов: ${S.turn}. ${rooms}`, kind: 'map' });
     shareMap();
   }, 900);
