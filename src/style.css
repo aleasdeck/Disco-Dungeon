@@ -274,23 +274,28 @@ i.ico { display: inline-block; font-style: normal; }
   width: calc(var(--bw) * var(--u)); height: calc(var(--bh) * var(--u)); pointer-events: auto;
 }
 
-/* the discs of this turn: a column of cells, one a disc, the first at the bottom; the ones still in hand show the hero's
-   disc (--disc, the room's picture; a puck in the hero's colour without it), the thrown ones go dark from the top down */
+/* the discs of this turn: a stack of casino chips, the first at the bottom, stretched to fill the column; one still in hand
+   shows the hero's disc on top (--disc, the room's picture; his colour without it) over a side in his dark colour with
+   light marks, the thrown ones fade from the top down */
 .discs {
-  --bx: -14; --by: -14; --bw: 106; --bh: 295;
-  display: flex; flex-direction: column-reverse; box-sizing: border-box; padding: calc(14 * var(--u));
-  background: #241a14 content-box; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5));
+  --bx: 0; --by: 0; --bw: 78; --bh: 267; --e: calc(30 * var(--u)); --mk: color-mix(in srgb, var(--c, #888) 40%, #f4ead8);
+  display: flex; flex-direction: column-reverse; box-sizing: border-box; padding: calc(var(--e) / 2) 0;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35));
 }
-.discs i {
-  flex: 1; margin: calc(7 * var(--u));
-  background: var(--disc, radial-gradient(closest-side, var(--c) 86%, #120c09 88% 98%, transparent)) center / contain no-repeat;
+.discs i { position: relative; flex: 1; }
+/* the side: its foot curves round the top of the chip below and throws a thin shadow on it */
+.discs i::before {
+  content: ''; position: absolute; inset: 0 0 calc(var(--e) / -2);
+  border-radius: 0 0 50% 50% / 0 0 calc(var(--e) / 2) calc(var(--e) / 2);
+  background: linear-gradient(90deg, transparent 9%, var(--mk) 9% 17%, transparent 17% 43%, var(--mk) 43% 57%, transparent 57% 83%, var(--mk) 83% 91%, transparent 91%) color-mix(in srgb, var(--c, #888) 62%, #000);
+  box-shadow: 0 calc(5 * var(--u)) 0 rgba(0, 0, 0, 0.45);
 }
-.discs i:not(.on) { filter: grayscale(0.9) brightness(0.35); opacity: 0.7; }
-.art-discs_1 .discs { background: center / 100% 100% no-repeat; }
-.art-discs_1 .discs[data-n='1'] { background-image: var(--ui-discs_1); }
-.art-discs_2 .discs[data-n='2'] { background-image: var(--ui-discs_2); }
-.art-discs_3 .discs[data-n='3'] { background-image: var(--ui-discs_3); }
-.art-discs_4 .discs[data-n='4'] { background-image: var(--ui-discs_4); }
+/* the top, the hero's disc seen from the side: only the top chip's shows whole */
+.discs i::after {
+  content: ''; position: absolute; left: 0; right: 0; top: calc(var(--e) / -2); height: var(--e); border-radius: 50%;
+  background: var(--disc, none) center / 100% 100% no-repeat var(--c, #888);
+}
+.discs i:not(.on) { opacity: 0.3; filter: grayscale(1) brightness(0.5); }
 
 .hpbar { --bx: 79; --by: -14; --bw: 458; --bh: 230; }
 .track { position: absolute; inset: 6%; background: #241a14; clip-path: var(--cut-bar); }
@@ -762,17 +767,17 @@ i.ico { display: inline-block; font-style: normal; }
 /* ---------- painted cardboard plates and icons (public/assets/ui): each takes over from the drawn one once its picture loads */
 /* the turn button (turn, drawn by art/ui/draw_corner.py): mustard board standing on the block, its top rising to the right,
    its bottom following the health's dip; the words tilted along its top */
-.art-turn .turn-btn { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); }
+.art-turn .turn-btn { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)); }
 .art-turn .tb-plate { clip-path: none; background: var(--ui-turn) center / 100% 100% no-repeat; transition: filter 0.2s; }
 .art-turn .tb-plate::before, .art-turn .tb-plate::after { display: none; }
 .art-turn .turn-btn b, .art-turn .turn-btn small { transform: rotate(-7deg); }
 .art-turn .turn-btn.idle .tb-plate { filter: saturate(0.45) brightness(0.7); }
 .art-turn .turn-btn.idle b { color: #1c120a; }
-.art-turn .turn-btn.lit { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 16px rgba(255, 200, 80, 0.8)); animation: lit-art 1.6s ease-in-out infinite; }
+.art-turn .turn-btn.lit { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 0 16px rgba(255, 200, 80, 0.8)); animation: lit-art 1.6s ease-in-out infinite; }
 .art-turn .turn-btn.confirm .tb-plate { filter: hue-rotate(-16deg) saturate(1.5); }
 .art-turn .turn-btn.wait .tb-plate { filter: grayscale(0.75) brightness(0.62); }
 .art-turn .turn-btn.enemy .tb-plate { filter: hue-rotate(-45deg) saturate(1.9) brightness(0.9); }
-@keyframes lit-art { 50% { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 28px rgba(255, 210, 90, 1)); } }
+@keyframes lit-art { 50% { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 0 28px rgba(255, 210, 90, 1)); } }
 @media (prefers-reduced-motion: reduce) { .art-turn .turn-btn.lit { animation: none; } }
 /* a phone held upright keeps the glow still */
 @media (orientation: portrait) and (max-width: 700px) { .art-turn .turn-btn.lit { animation: none; } }
@@ -784,13 +789,13 @@ i.ico { display: inline-block; font-style: normal; }
 .art-btn_dark .ore-chip { clip-path: none; background: var(--ui-btn_dark) center / 100% 100% no-repeat; padding: 4px 18px 4px 10px; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
 
 /* the gem (gem, drawn by art/ui/draw_corner.py with the health and the sparks): a notch on its left for the health's point */
-.art-gem .ability { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); background: var(--ui-gem) center / 100% 100% no-repeat; }
+.art-gem .ability { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)); background: var(--ui-gem) center / 100% 100% no-repeat; }
 .art-gem .ability::before, .art-gem .ability::after { display: none; }
-.art-gem .ability:disabled { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) saturate(0.4) brightness(0.65); }
-.art-gem .ability.full { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 12px #c9a8ff); }
+.art-gem .ability:disabled { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) saturate(0.4) brightness(0.65); }
+.art-gem .ability.full { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 0 12px #c9a8ff); }
 .art-gem .ability.full:not(.on) { animation-name: ab-full-art; }
-@keyframes ab-full-art { 50% { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 26px #e2d4ff) brightness(1.22); } }
-.art-gem .ability.on { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px var(--ab)); }
+@keyframes ab-full-art { 50% { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 0 26px #e2d4ff) brightness(1.22); } }
+.art-gem .ability.on { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 0 14px var(--ab)); }
 .art-gem .ability b { padding: 2px 5px; background: rgba(18, 12, 9, 0.6); }
 /* the ability's own picture fills the gem's middle face instead of its name */
 .ability .ab-ico { position: absolute; left: 44.4%; top: 33.4%; width: 32%; height: 33.2%; z-index: 1; pointer-events: none; }
@@ -845,22 +850,22 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 
 /* the health and the sparks as die-cut cardboard (art/ui/draw_corner.py draws them from Vladislav's sketch) */
 /* health: a bow tie with a dip on top, a waist below and a point on the right going into the gem (hp_empty, hp_full,
-   hp_shield: one shape, stretched whole). The red runs from x 36 to 879 of 916, so .track is that span and the fills stay
+   hp_shield: one shape, stretched whole). The red runs from x 28 to 888 of 916, so .track is that span and the fills stay
    plain percentages of it; each fill shows the same picture at the bar's full size (cqw/cqh of the track), shifted by where
    the fill starts (--x, set with it) */
-.art-hp_empty.art-hp_full .corner .hpbar { background: var(--ui-hp_empty) center / 100% 100% no-repeat; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
-.art-hp_empty.art-hp_full .corner .hpbar .track { inset: 0 4.039% 0 3.930%; clip-path: none; background: none; container-type: size; }
+.art-hp_empty.art-hp_full .corner .hpbar { background: var(--ui-hp_empty) center / 100% 100% no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)); }
+.art-hp_empty.art-hp_full .corner .hpbar .track { inset: 0 3.057% 0 3.057%; clip-path: none; background: none; container-type: size; }
 .art-hp_empty.art-hp_full .corner .hpbar.shielded .track { box-shadow: none; }
-.art-hp_empty.art-hp_full .corner .track > * { background: var(--ui-hp_full) calc(-4.270cqw - var(--x, 0) * 1cqw) 0 / 108.66cqw 100cqh no-repeat; }
+.art-hp_empty.art-hp_full .corner .track > * { background: var(--ui-hp_full) calc(-3.256cqw - var(--x, 0) * 1cqw) 0 / 106.51cqw 100cqh no-repeat; }
 .art-hp_empty.art-hp_full .corner .track s { background-image: var(--ui-hp_shield); }
 .art-hp_empty.art-hp_full .corner .track s.risk, .art-hp_empty.art-hp_full .corner .track em { filter: brightness(1.7) saturate(0.5); }
 /* the sparks: three pieces of one crystal, each its own picture in its own box */
-.art-spk_1_on .spk i { clip-path: none; background: center / 100% 100% no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
+.art-spk_1_on .spk i { clip-path: none; background: center / 100% 100% no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)); }
 .art-spk_1_off .spk i:nth-child(1) { background-image: var(--ui-spk_1_off); }
 .art-spk_2_off .spk i:nth-child(2) { background-image: var(--ui-spk_2_off); }
 .art-spk_1_on .spk i.on:nth-child(1) { background-image: var(--ui-spk_1_on); }
 .art-spk_2_on .spk i.on:nth-child(2) { background-image: var(--ui-spk_2_on); }
-.art-spk_1_on .spk.full i { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 6px #c9a8ff); }
+.art-spk_1_on .spk.full i { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 0 6px #c9a8ff); }
 
 /* the menus stand on a painted disco dungeon instead of the dimmed room */
 .art-menu_bg .overlay.solid { background: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_bg) center / cover no-repeat; }

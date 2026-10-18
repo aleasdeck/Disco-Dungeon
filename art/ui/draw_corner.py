@@ -1,30 +1,32 @@
-"""Draws the fight corner's pieces as die-cut cardboard stickers (beige rim, black ink, flat print), after Vladislav's sketch
-of 2026-10-18: next to the portrait a column of disc cells (split by how many discs the hero throws), then a big health
-bar like a bow tie (a dip on top, a waist below, its right end a point), the sparks as a crystal strip under it split in
-two by a crack, and the ability gem standing the full height on the right with a notch the health bar's point goes into
-and a foot under the bar's end: the gem is the third spark, so the strip's second crack is the gem's edge. Over the bar's
-right half and the gem the turn button, its bottom following the bar's top.
+"""Draws the fight corner's pieces as die-cut cardboard stickers (a beige rim, flat print, no ink line: Vladislav had the
+outline taken off and the shading flattened), after his sketch of 2026-10-18: next to the portrait a column for the stack
+of discs (drawn by style.css as chips), then a big health bar like a bow tie (a dip on top, a waist below, its right end a
+point), the sparks as a crystal strip under it split in two by a crack, and the ability gem standing the full height on
+the right with a notch the health bar's point goes into and a foot under the bar's end: the gem is the third spark, so the
+strip's second crack is the gem's edge. Over the bar's right half and the gem the turn button, its bottom following the
+bar's top.
 
 All pieces share one plan: the block is 713 x 267 units (x right, y down; the column starts at x 0; the turn button stands
-above it, at negative y). Pieces sit apart by a
-cut of 9..15 units; each sticker's rim only reaches halfway across a cut, so two pieces never paint over each other's ink.
-Run from the repo root:
+above it, at negative y). Pieces sit apart by a cut of 9..15 units; each sticker's rim only reaches halfway across a cut,
+so two pieces never paint over each other. Run from the repo root:
 
-    python3 art/ui/draw_corner.py
+    python3 art/ui/draw_corner.py [folder] [rim]
 
-It writes public/assets/ui/discs_1..4, hp_empty|hp_full|hp_shield, spk_1..2_on|off, gem and turn (.webp) and prints the
-numbers style.css needs: each picture's box in units, the red span of the health bar, and the outlines of the gem and the
-button as clip-path polygons, for where a tap lands.
+It writes hp_empty|hp_full|hp_shield, spk_1..2_on|off, gem and turn (.webp) to public/assets/ui/ (or the folder; rim is
+the rim's width in pixels, 0 for none) and prints the numbers style.css needs: each picture's box in units, the red span
+of the health bar, and the outlines of the gem and the button as clip-path polygons, for where a tap lands.
 """
+import sys
+
 from PIL import Image, ImageDraw
 import numpy as np
 
-OUT = 'public/assets/ui/'
+OUT = (sys.argv[1].rstrip('/') + '/') if len(sys.argv) > 1 else 'public/assets/ui/'
 U = 2.0  # pixels per unit
 SS = 4  # supersampling
 M = 14  # margin round each picture, units
-INK, RIM = 8, 12  # pixels at 1x: ink line half outside the outline, rim past it
-RIM_COL, RIM_EDGE, INK_COL = (220, 207, 177), (176, 158, 118), (10, 4, 2)
+RIM = float(sys.argv[2]) if len(sys.argv) > 2 else 20  # the beige rim round the print, pixels at 1x
+RIM_COL, RIM_EDGE = (220, 207, 177), (176, 158, 118)
 BW, BH = 713, 267
 
 DISC = [(0, 0), (78, 0), (78, 267), (0, 267)]
@@ -70,6 +72,7 @@ for k in range(2):
 foot = crack(CRACKS[1], CUT)
 GEM = BODY[:4] + foot[::-1] + [q for q in SPK_T if q[0] > foot[0][0]][:-1] + [(511, 202), (523, 196)] + BODY[5:]
 
+# the disc column has no picture (style.css stacks chips in it), but its cut still bounds the others' rims
 PIECES = {'discs': DISC, 'hp': HP, 'spk_1': SPK[0], 'spk_2': SPK[1], 'gem': GEM, 'turn': TURN}
 
 
@@ -127,9 +130,9 @@ def box(name):
     return x0, y0, x1 - x0, y1 - y0
 
 
-def sticker(name, paint, lines=()):
-    """the piece's rim (only on its own side of each cut), the print inside, then the ink; paint(d, px) prints the inside
-    with px mapping plan units to pixels; lines are ink strokes inside it (plan units, width in pixels at 1x)"""
+def sticker(name, paint):
+    """the piece's rim (only on its own side of each cut), then the print inside; paint(d, px) prints the inside with px
+    mapping plan units to pixels"""
     x0, y0, w, h = box(name)
     W, H = round(w * U * SS), round(h * U * SS)
 
@@ -137,22 +140,19 @@ def sticker(name, paint, lines=()):
         return ((q[0] - x0) * U * SS, (q[1] - y0) * U * SS)
 
     p = [px(q) for q in PIECES[name]]
-    rim = Image.new('RGBA', (W, H), (0, 0, 0, 0))
-    d = ImageDraw.Draw(rim)
-    outline(d, p, 2 * (INK + RIM) * SS + 3 * SS, RIM_EDGE + (255,))
-    outline(d, p, 2 * (INK + RIM) * SS, RIM_COL + (255,))
-    d.polygon(p, fill=RIM_COL + (255,))
     img = Image.new('RGBA', (W, H), (0, 0, 0, 0))
-    img.paste(rim, (0, 0), own_mask(list(PIECES).index(name), x0, y0, w, h))
+    if RIM:
+        rim = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+        d = ImageDraw.Draw(rim)
+        outline(d, p, 2 * RIM * SS + 3 * SS, RIM_EDGE + (255,))
+        outline(d, p, 2 * RIM * SS, RIM_COL + (255,))
+        d.polygon(p, fill=RIM_COL + (255,))
+        img.paste(rim, (0, 0), own_mask(list(PIECES).index(name), x0, y0, w, h))
     inside = Image.new('RGBA', (W, H), (0, 0, 0, 0))
-    d = ImageDraw.Draw(inside)
-    paint(d, px)
-    for ln, width in lines:
-        d.line([px(q) for q in ln], fill=INK_COL + (255,), width=round(width * SS), joint='curve')
+    paint(ImageDraw.Draw(inside), px)
     mask = Image.new('L', (W, H), 0)
     ImageDraw.Draw(mask).polygon(p, fill=255)
     img.paste(inside, (0, 0), mask)
-    outline(ImageDraw.Draw(img), p, 2 * INK * SS, INK_COL + (255,))
     return img.resize((W // SS, H // SS), Image.LANCZOS)
 
 
@@ -166,20 +166,12 @@ def save(img, key, seed):
 
 css = {}
 
-# ---------- the disc column: one cell per disc, cut by ink lines ----------
-for n in range(1, 5):
-    def paint(d, px):
-        d.rectangle([px((-M, -M)), px((BW, BH + M))], fill=(46, 36, 28, 255))
-    cuts = [([(0, BH * k / n), (78, BH * k / n)], 1.6 * INK) for k in range(1, n)]
-    save(sticker('discs', paint, cuts), f'discs_{n}', 20 + n)
-css['discs'] = box('discs')
-
 # ---------- health: one shape in three prints ----------
-band = [(x, y - 40) for x, y in HP[:4]] + [(x, y + 26) for x, y in HP[:4]][::-1]
+band = [(x, y - 40) for x, y in HP[:4]] + [(x, y + 22) for x, y in HP[:4]][::-1]
 for key, col in [('hp_empty', (46, 36, 28)), ('hp_full', (200, 45, 59)), ('hp_shield', (119, 172, 211))]:
     def paint(d, px, col=col):
         d.rectangle([px((-M, -M)), px((BW, BH + M))], fill=col + (255,))
-        d.polygon([px(q) for q in band], fill=lighter(col, 14) + (255,))
+        d.polygon([px(q) for q in band], fill=lighter(col, 9) + (255,))
     save(sticker('hp', paint), key, 7)
 css['hp'] = box('hp')
 red = np.asarray(Image.open(OUT + 'hp_full.webp').convert('RGB')).astype(int)
@@ -187,45 +179,37 @@ xs = np.where(((red[..., 0] > 170) & (red[..., 1] < 90)).any(axis=0))[0]
 r0, r1 = xs.min(), xs.max() + 1
 HW = red.shape[1]
 
-# ---------- sparks: one crystal in two pieces, its ridge a bit above the middle, a shine along the top ----------
+# ---------- sparks: one crystal in two pieces, its upper half a shade lighter ----------
 ridge = [at(x, 0.45) for x in range(80, 530, 4)]
 upper = [(80, 150)] + [(x, edge_y(SPK_T, x) - 20) for x, _ in SPK_T] + [(530, 150)] + ridge[::-1]
-shine = [at(x, 0.1) for x in range(96, 500, 4)] + [at(x, 0.2) for x in range(96, 500, 4)][::-1]
 COLS = {
-    'on': dict(base=(112, 50, 118), up=(166, 89, 184), shine=(214, 170, 232)),
-    'off': dict(base=(52, 46, 66), up=(71, 62, 88), shine=(98, 90, 118)),
+    'on': dict(base=(124, 58, 136), up=(142, 74, 156)),
+    'off': dict(base=(54, 48, 68), up=(62, 55, 77)),
 }
 for k in range(2):
     for state, c in COLS.items():
         def paint(d, px, c=c):
             d.rectangle([px((-M, -M)), px((BW, BH + M))], fill=c['base'] + (255,))
             d.polygon([px(q) for q in upper], fill=c['up'] + (255,))
-            d.polygon([px(q) for q in shine], fill=c['shine'] + (255,))
-        save(sticker(f'spk_{k + 1}', paint, [(ridge, 0.9 * INK)]), f'spk_{k + 1}_{state}', 11 + k)
+        save(sticker(f'spk_{k + 1}', paint), f'spk_{k + 1}_{state}', 11 + k)
     css[f'spk_{k + 1}'] = box(f'spk_{k + 1}')
 
-# ---------- the gem: facets round a flat middle face of its body, lit from the top left; the foot one dark facet ----------
+# ---------- the gem: facets round a flat middle face of its body, a shade apart, lit from the top left; the foot one facet ----------
 cx = sum(x for x, _ in BODY) / len(BODY) + 12
 cy = BH / 2
 inner = [(cx + (x - cx) * 0.5, cy + (y - cy) * 0.52) for x, y in BODY]
-SHADES = [(196, 128, 214), (166, 89, 184), (92, 40, 98), (70, 30, 76), (112, 50, 118), (140, 70, 150)]
+SHADES = [(154, 86, 170), (142, 74, 158), (112, 50, 126), (104, 46, 118), (120, 56, 134), (134, 66, 150)]
 
 
 def paint_gem(d, px):
-    d.rectangle([px((-M, -M)), px((BW + M, BH + M))], fill=(86, 36, 92, 255))
+    d.rectangle([px((-M, -M)), px((BW + M, BH + M))], fill=(108, 48, 122, 255))
     for i in range(len(BODY)):
         j = (i + 1) % len(BODY)
         d.polygon([px(BODY[i]), px(BODY[j]), px(inner[j]), px(inner[i])], fill=SHADES[i] + (255,))
-    d.polygon([px(q) for q in inner], fill=(132, 64, 146, 255))
-    d.polygon([px(q) for q in [inner[0], inner[1], (inner[1][0] - 20, inner[1][1] + 26), (inner[0][0] + 6, inner[0][1] + 26)]],
-              fill=(160, 96, 176, 255))
-    # a lighter band along the foot's top, like the shine on the sparks
-    d.polygon([px(q) for q in [(foot[0][0] - 10, edge_y(SPK_T, foot[0][0]) - 10), (523, 190), (514, 230), (foot[0][0], 222)]],
-              fill=(120, 56, 128, 255))
+    d.polygon([px(q) for q in inner], fill=(130, 62, 146, 255))
 
 
-facets = [([BODY[i], inner[i]], 0.6 * INK) for i in range(len(BODY))] + [(inner + inner[:1], 0.6 * INK), ([BODY[4], BODY[5]], 0.6 * INK)]
-save(sticker('gem', paint_gem, facets), 'gem', 31)
+save(sticker('gem', paint_gem), 'gem', 31)
 css['gem'] = box('gem')
 
 # ---------- the turn button: mustard board with a lighter band along its top ----------
@@ -235,7 +219,7 @@ turn_band = [(250, -120), (520, -150), (520, -112), (262, -78)]
 
 def paint_turn(d, px):
     d.rectangle([px((150, -160)), px((700, 40))], fill=MUSTARD + (255,))
-    d.polygon([px(q) for q in turn_band], fill=lighter(MUSTARD, 18) + (255,))
+    d.polygon([px(q) for q in turn_band], fill=lighter(MUSTARD, 10) + (255,))
 
 
 save(sticker('turn', paint_turn), 'turn', 41)

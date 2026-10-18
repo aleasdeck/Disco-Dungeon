@@ -462,12 +462,11 @@ export class Hud {
     if (h.fire > 0) st.push({ k: 'fire', n: 2, t: 'Горит: в ход врагов потеряет 2' });
     $('fStatus').innerHTML = statusHtml(st);
 
-    // the discs of this turn as a column of cells, the first at the bottom: the ones still in hand show the hero's disc, the
-    // thrown ones (from the top down) go dark
+    // the discs of this turn as a stack of chips, the first at the bottom: the ones still in hand show the hero's disc, the
+    // thrown ones (from the top down) fade
     const per = g.handOf(h), out = S.phase === 'throw' && g.ended(h) ? per : per - h.hand, discPic = envArt.get('disc_' + h.def.key);
     const discs = $('fDiscs');
     discs.innerHTML = Array.from({ length: per }, (_, k) => `<i class="${k < per - out ? 'on' : ''}"></i>`).join('');
-    discs.dataset.n = String(per);
     if (discPic) discs.style.setProperty('--disc', `url("${discPic.src}")`);
     else discs.style.removeProperty('--disc');
     discs.title = `Диски: ${h.hand} из ${per} за ход`;
