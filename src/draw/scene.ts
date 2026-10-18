@@ -55,8 +55,8 @@ const phantomArt = (img: HTMLImageElement) => {
 
 /** The cook's dishes, by `Food.k`: their pictures are food_<name> in the manifest, else drawn by code. */
 const DISHES = ['cutlet', 'sausage', 'pie', 'drumstick'];
-/** How wide a dish's plate stands, in iso units: it fills most of the cell it lies in. */
-const FOOD_W = 22;
+/** How wide a dish's plate stands, in iso units: about half the cell it lies in, so neighbouring plates keep apart. */
+const FOOD_W = 16;
 /** How far below the middle of its cell a plate's front rim comes, as a share of its width: the plate sits centred on the cell. */
 const FOOD_RIM = 0.28;
 
