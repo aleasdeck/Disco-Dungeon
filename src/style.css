@@ -170,8 +170,6 @@ i.ico { display: inline-block; font-style: normal; }
 .queue li.now .qb::after { content: ''; position: absolute; inset: -5px; border: 3px solid var(--gold-1); clip-path: var(--cut-tile); }
 .queue li.done { opacity: 0.4; }
 .qi { position: absolute; right: -9px; bottom: -7px; }
-.cd { font: 600 10px/1 Oswald, sans-serif; color: #c9a8ff; margin-top: 9px; white-space: nowrap; }
-.cd:empty { display: none; }
 /* a badge in the colour of the hero it is after: a number for a blow, a hollow ring for walking up, every colour for a blow on all */
 .ib {
   display: grid; place-items: center; min-width: 24px; height: 24px; padding: 0 4px;

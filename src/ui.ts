@@ -185,7 +185,7 @@ export class Hud {
 
   constructor(private g: Game) {
     fillIcons();
-    // the strip's height for the boss's bar under it: the strip grows with the boss's countdown, and upright with a second row
+    // the strip's height for the boss's bar under it: upright the strip grows a second row
     const top = $('hudTop');
     new ResizeObserver(() => document.documentElement.style.setProperty('--top-h', top.offsetHeight + 'px')).observe(top);
     $('abBtn').addEventListener('click', () => g.useAbility());
@@ -376,19 +376,17 @@ export class Hud {
     const key = live.map(m => S.mobs.indexOf(m) + m.k + (sprites.has(m.k) ? '+' : '')).join();
     if (key !== this.queueKey) {
       this.queueKey = key;
-      box.innerHTML = live.map(m => `<li data-m="${S.mobs.indexOf(m)}"><button type="button" class="qb"><img src="${mobFace(m.k)}" alt=""><span class="qi"></span></button><small class="cd"></small></li>`).join('');
+      box.innerHTML = live.map(m => `<li data-m="${S.mobs.indexOf(m)}"><button type="button" class="qb"><img src="${mobFace(m.k)}" alt=""><span class="qi"></span></button></li>`).join('');
       if (this.card >= 0 && !live.some(m => S.mobs.indexOf(m) === this.card)) { this.pinned = false; this.closeCard(); }
     }
     const now = S.phase === 'enemy' ? S.mobs[S.actor] : undefined;
     box.querySelectorAll<HTMLElement>('li[data-m]').forEach(li => {
-      const m = S.mobs[Number(li.dataset.m)], it = this.intent(m), sp = g.specialIn(m);
+      const m = S.mobs[Number(li.dataset.m)], it = this.intent(m);
       li.classList.toggle('now', m === now);
       li.classList.toggle('done', g.acted(m));
       li.classList.toggle('boss', !!MOBS[m.k].boss);
       const qi = li.querySelector('.qi')!;
       if (qi.innerHTML !== it.badge) qi.innerHTML = it.badge;
-      // a special move coming up later says how soon; this turn's shows on the badge itself
-      li.querySelector('.cd')!.textContent = sp && sp.turns > 0 && sp.turns <= 3 ? `${sp.name} ${sp.turns}` : '';
       li.querySelector('button')!.setAttribute('aria-label', `${m.name}, ${m.hp} из ${m.max}. ${it.txt}`);
     });
   }
