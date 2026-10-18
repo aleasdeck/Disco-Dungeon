@@ -424,8 +424,15 @@ export const NODE_SETS: Partial<Record<RoomType, NodeKind[]>> = {
   treasure: ['ore', 'ore', 'herb', 'herb'],
 };
 
-/** Chance of a second spark crystal in a fight: a crystal is one ability, so a fight pays for one at least and usually for two. */
-export const SPK_TWO = 0.75;
+/**
+ * A spark crystal holds one ability, and the bigger the room, the more of them: one up to the first of these many floor
+ * cells (holes left out), two up to the second, three past it. The first rows of a floor are small rooms with one,
+ * the last rooms and the boss's mostly have three.
+ */
+export const SPK_AREA = [100, 130];
+
+/** Spark crystals for a room with this many cells of floor outside its holes. */
+export const crystals = (cells: number) => 1 + SPK_AREA.filter(a => cells > a).length;
 
 /**
  * The ore cave holds no enemies: one big vein in the middle of the room, the two small veins and two mushroom patches
@@ -495,9 +502,10 @@ export function generate(spec: RoomSpec): Layout {
   const placeCell = (s: number, r: number, test: (x: number, y: number) => boolean, tight = false): [number, number] | null => {
     for (let k = 0; k < 300; k++) {
       const i = ri(0, gw - s), j = ri(0, gh - s), c = cellCentre(i, j, s);
-      let ok = test(c.x, c.y) && free(c.x, c.y, r, tight ? -2 : 6) && clearOfRock(geo, c.x, c.y, r + (tight ? 1 : 6));
+      let ok = free(c.x, c.y, r, tight ? -2 : 6) && clearOfRock(geo, c.x, c.y, r + (tight ? 1 : 6));
       for (let b = 0; b < s && ok; b++) for (let a = 0; a < s && ok; a++) ok = isFloor(geo, i + a, j + b) && !taken.has(hazKey(i + a, j + b));
-      if (ok) { take(i, j, s); return [c.x, c.y]; }
+      // the test last: in the boss room it walks the floor
+      if (ok && test(c.x, c.y)) { take(i, j, s); return [c.x, c.y]; }
     }
     return null;
   };
@@ -702,13 +710,15 @@ export function generate(spec: RoomSpec): Layout {
   if (cave && big) nodes.push(big);
   // in the ore cave the small veins and the mushrooms stand apart, from the big vein and from each other
   const apart = (x: number, y: number) => !cave || nodes.every(n => Math.hypot(x - n.x, y - n.y) > (n.s ? 3 : 2.5) * TILE);
-  const set = NODE_SETS[type] ?? NODE_SETS.fight!;
-  // most fights get a second crystal; its own stream, so the roll doesn't reshuffle the room
-  const kinds = set.includes('spk') && makeRng(spec.seed * 31 + spec.depth + 4513).next() < SPK_TWO ? [...set, 'spk' as const] : set;
-  for (const k of kinds) {
+  const ground = floor.reduce((a, b) => a + b, 0) - pits.reduce((a, p) => a + p.cells.length, 0);
+  // a bigger room's second and third crystals come last, and stay out if no fair place is left for them
+  const set = NODE_SETS[type] ?? NODE_SETS.fight!, more = set.includes('spk') ? crystals(ground) - 1 : 0;
+  const kinds = [...set, ...Array<NodeKind>(more).fill('spk')];
+  for (const [n, k] of kinds.entries()) {
     const open = (x: number, y: number) => !cuts([[Math.floor(x / TILE), Math.floor(y / TILE)]]);
     const side = (x: number, y: number) => flank(x, y) && apart(x, y) && open(x, y);
-    const q = placeCell(1, NODES[k].r, side) ?? placeCell(1, NODES[k].r, (x, y) => apart(x, y) && open(x, y)) ?? placeCell(1, NODES[k].r, (x, y) => mid(x, y) && open(x, y)) ?? placeCell(1, NODES[k].r, open) ?? placeCell(1, NODES[k].r, any, true);
+    const extra = n >= set.length;
+    const q = placeCell(1, NODES[k].r, side) ?? placeCell(1, NODES[k].r, (x, y) => apart(x, y) && open(x, y)) ?? placeCell(1, NODES[k].r, (x, y) => mid(x, y) && open(x, y)) ?? placeCell(1, NODES[k].r, open) ?? (extra ? null : placeCell(1, NODES[k].r, any, true));
     if (!q) continue;
     const ch = cave && k === 'ore' ? CAVE.small : sc.ch[k] ?? NODES[k].ch;
     nodes.push({ k, ...NODES[k], ch, x: q[0], y: q[1], left: ch, hit: 0 });

@@ -3,7 +3,7 @@ import { Camera, FIT, KEEP, type Vec } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, FAN_ANGLE, FAN_M, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, isRanged, mobSize } from '../src/data';
 import { FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { CAVE, MOB_CAP, PARTY_SCALE, SPK_TWO, caveTurns, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
+import { CAVE, MOB_CAP, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
 import { FLOORS, FORGE_ROWS, LAYERS, agreed, genFloor, newRun } from '../src/run';
 import { makeRng } from '../src/rng';
 import { EVENTS, applyFx, canPick, eventDef, eventOf, fxParts, rolled } from '../src/events';
@@ -169,19 +169,30 @@ describe('difficulty along a floor', () => {
     }
   });
 
-  it('puts one spark crystal in every fight and a second one in most, each holding one ability for any party', () => {
-    let two = 0, n = 0;
-    for (let seed = 1; seed < 120; seed++)
-      for (const [type, row, f] of [['fight', 1 + (seed % (LAYERS - 2)), seed % FLOORS], ['elite', 4, seed % FLOORS], ['boss', LAYERS - 1, seed % FLOORS]] as const)
-        for (const heroes of type === 'boss' && seed % 4 ? [] : [1, 2, 3]) {
+  it('puts one to three spark crystals in a fight by the size of the room, each holding one ability for any party', () => {
+    expect([crystals(80), crystals(SPK_AREA[0]), crystals(SPK_AREA[0] + 1), crystals(SPK_AREA[1]), crystals(SPK_AREA[1] + 1), crystals(200)]).toEqual([1, 1, 2, 2, 3, 3]);
+    const seen: Record<number, number[]> = {};
+    let short = 0, n = 0;
+    for (let seed = 1; seed < 60; seed++)
+      for (let row = 0; row < LAYERS; row++) {
+        const f = seed % FLOORS, type = row === LAYERS - 1 ? 'boss' : row === 4 && seed % 2 ? 'elite' : 'fight';
+        if (type === 'boss' && seed % 4) continue;
+        for (const heroes of [1, 3]) {
           const L = generate({ seed, depth: f * LAYERS + row + 1, floor: f, type, heroes }), spk = L.nodes.filter(k => k.k === 'spk');
+          const open = L.floor.reduce((a, b) => a + b, 0) - L.pits.reduce((a, p) => a + p.cells.length, 0);
+          // a second or third crystal stays out of the rare room with no fair place left for it
           expect(spk.length).toBeGreaterThanOrEqual(1);
-          expect(spk.length).toBeLessThanOrEqual(2);
+          expect(spk.length).toBeLessThanOrEqual(crystals(open));
+          n++;
+          if (spk.length < crystals(open)) short++;
           for (const c of spk) expect([c.ch, c.left]).toEqual([AB_COST, AB_COST]);
-          if (heroes === 3) { n++; if (spk.length === 2) two++; }
+          (seen[row] ??= []).push(spk.length);
         }
-    expect(two / n).toBeGreaterThan(SPK_TWO - 0.1);
-    expect(two / n).toBeLessThan(SPK_TWO + 0.1);
+      }
+    expect(short / n).toBeLessThan(0.05);
+    // the first room of a floor is small, the boss's big
+    expect(seen[0].every(n => n === 1)).toBe(true);
+    expect(seen[LAYERS - 1].filter(n => n === 3).length).toBeGreaterThan(seen[LAYERS - 1].length / 2);
   });
 
   it('keeps even the last rooms of the last floor uncluttered', () => {
@@ -189,7 +200,7 @@ describe('difficulty along a floor', () => {
       const L = room(FLOORS - 1, LAYERS - 2, seed), area = L.floor.reduce((a, b) => a + b, 0);
       const busy = L.mobs.length + L.blocks.length + L.pits.length + L.haz.size + L.nodes.length;
       expect(L.nodes.length).toBeGreaterThanOrEqual(3);
-      expect(L.nodes.length).toBeLessThanOrEqual(4);
+      expect(L.nodes.length).toBeLessThanOrEqual(5);
       expect(L.decals.length).toBeLessThanOrEqual(6);
       expect(busy / area).toBeLessThan(0.2);
     }
