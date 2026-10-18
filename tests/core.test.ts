@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, FROST_STEPS, GAS_DMG, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_PER_DISC, RAGE_FROM, ROLES, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, heroesByRole, isRanged, mobSize } from '../src/data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, FROST_STEPS, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_PER_DISC, RAGE_FROM, ROLES, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroesByRole, isRanged, mobSize } from '../src/data';
 import { ART, FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { CAVE, MOB_CAP, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
@@ -2413,6 +2413,8 @@ describe('the heroes past the first three', () => {
   });
 
   it('the bum: an enemy in his gas strikes 30% weaker and chokes at the start of each move; the cloud lasts three turns', () => {
+    // the gas takes 15% of an enemy's full health a move, rounded up, at least 1; a boss only 5%
+    expect([gasDmg('archer', 99), gasDmg('skel', 20), gasDmg('rat', 4), gasDmg('king', 200), gasDmg('lich', 117)]).toEqual([15, 3, 1, 10, 6]);
     const g = arena([at('bum')], [['archer', 6, 6]]), bum = g.party[0], [archer] = g.S.mobs;
     bum.hp = bum.max = 99;
     const full = archer.intent!.dmg;
@@ -2426,12 +2428,12 @@ describe('the heroes past the first three', () => {
     expect(archer.intent!.dmg).toBe(weak);
     const hp = archer.hp;
     turn(g);
-    expect(hp - archer.hp).toBe(GAS_DMG);
+    expect(hp - archer.hp).toBe(gasDmg(archer.k, archer.max));
     expect(bum.max - bum.hp).toBe(weak);
     expect(g.S.gas[0].left).toBe(GAS_TURNS - 1);
     turn(g);
     turn(g);
-    expect(hp - archer.hp).toBe(GAS_TURNS * GAS_DMG);
+    expect(hp - archer.hp).toBe(GAS_TURNS * gasDmg(archer.k, archer.max));
     expect(g.S.gas).toEqual([]);
     // the air clears and it shoots full again
     expect(archer.intent!.dmg).toBe(full + g.rage());
