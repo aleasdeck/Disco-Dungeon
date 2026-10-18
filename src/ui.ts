@@ -1,9 +1,9 @@
 // DOM HUD in the corners, so the room keeps the middle of the screen: the top strip (the party, ore, where we are,
-// the enemy queue with what each will do, map / journal / menu), my hero's corner (portrait with its statuses, discs,
-// health with the shield on it, the sparks bar running into the ability button) and one big button for the turn.
+// the enemy queue with what each will do, map / journal / menu), my hero's corner (portrait with its statuses, a column of
+// discs, health with the shield on it, the sparks under it and the ability gem) and one big button for the turn.
 
 import { AB_COST, CRIT, E_MAX, ENEMY_BASE, FROST_STEPS, GAS_WEAK, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, frostVuln, fullHit, gasDmg, isRanged, type MobKind, type StatKey } from './data';
-import { eventArt, sprites, uiArt } from './assets';
+import { envArt, eventArt, sprites, uiArt } from './assets';
 import type { Game, HeroState } from './game';
 import type { Mob } from './room';
 import { BASE_TH, drawHeroFigure, drawMiniature, drawMobFigure } from './draw/figures';
@@ -462,10 +462,14 @@ export class Hud {
     if (h.fire > 0) st.push({ k: 'fire', n: 2, t: 'Горит: в ход врагов потеряет 2' });
     $('fStatus').innerHTML = statusHtml(st);
 
-    // the discs of this turn as a little stack: the ones still in hand in the hero's colour, the thrown ones dark
-    const per = g.handOf(h), out = S.phase === 'throw' && g.ended(h) ? per : per - h.hand;
-    $('fDiscs').innerHTML = Array.from({ length: per }, (_, k) => `<i class="${k < per - out ? 'on' : ''}"></i>`).join('');
-    $('fDiscs').title = `Диски: ${h.hand} из ${per} за ход`;
+    // the discs of this turn as a stack of chips, the first at the bottom: the ones still in hand show the hero's disc, the
+    // thrown ones (from the top down) fade
+    const per = g.handOf(h), out = S.phase === 'throw' && g.ended(h) ? per : per - h.hand, discPic = envArt.get('disc_' + h.def.key);
+    const discs = $('fDiscs');
+    discs.innerHTML = Array.from({ length: per }, (_, k) => `<i class="${k < per - out ? 'on' : ''}"></i>`).join('');
+    if (discPic) discs.style.setProperty('--disc', `url("${discPic.src}")`);
+    else discs.style.removeProperty('--disc');
+    discs.title = `Диски: ${h.hand} из ${per} за ход`;
 
     // health and the shield on top of it: the bar holds both, squeezing when they add up to more than the most health
     const inc = g.incoming(h), dead = h.hp > 0 && inc >= h.hp, tot = Math.max(h.max, h.hp + h.shield);
@@ -487,7 +491,7 @@ export class Hud {
     // the shield has no badge of its own: the blue chunk shows it, the number is in the hint
     wrap.title = [h.shield > 0 ? `Щит ${h.shield}: снимается первым.` : '', inc ? `Враги в этот ход снимут ${inc} HP, если их не остановить.` : ''].filter(Boolean).join(' ');
 
-    // the sparks bar beside the ability button: three cells, one per spark; full, they light up and the button pulses
+    // the sparks under the health: two pieces, the gem itself being the third; full, they light up and the gem pulses
     // «Энергетик» makes the ability cheaper: the button lights up as soon as there are enough
     const sp = Math.min(AB_COST, h.sparks), cost = g.abCost(h), full = sp >= cost;
     $('fSpk').querySelectorAll('i').forEach((c, k) => c.classList.toggle('on', k < sp));
