@@ -1,6 +1,6 @@
 // Main menu and its screens: collection, settings and the online lobby.
 
-import { BIOMES, HEROES, MOB_HP_MUL, MOBS, ROLES, fullHit, heroesByRole, type MobKind } from './data';
+import { BIOMES, HEROES, MOB_HP_MUL, KINDS, MOBS, fullHit, heroesByKind, kindOf, type MobKind } from './data';
 import { drawPortrait, mobIcon } from './ui';
 import { ARTIFACTS } from './artifacts';
 import { artIcon } from './icons';
@@ -20,13 +20,13 @@ export function show(screen: Screen | null) {
 
 const FLOOR_NAMES = BIOMES.map(b => b.name);
 
-/** Heroes as the pick screens show them: a row for each role, its name on a tab at the row's start, then its heroes' cards. */
+/** Heroes as the pick screens show them: a row for each kind, its name on a tab at the row's start, then its heroes' cards. */
 function pickRows(box: HTMLElement, card: (i: number) => HTMLElement) {
   box.innerHTML = '';
-  heroesByRole().forEach((list, r) => {
+  heroesByKind().forEach((list, r) => {
     const tab = document.createElement('b');
     tab.className = 'pick-role';
-    tab.textContent = ROLES[r];
+    tab.textContent = KINDS[r].row;
     box.append(tab, ...list.map(card));
   });
 }
@@ -38,15 +38,15 @@ export function renderCollection(tab: 'heroes' | 'mobs' | 'arts') {
   const grid = $('colGrid');
   grid.innerHTML = '';
   if (tab === 'heroes') {
-    // the same order as the pick screens: tanks, then damage, then zone
-    heroesByRole().flat().forEach(i => {
+    // the same order as the pick screens: the biggest discs first
+    heroesByKind().flat().forEach(i => {
       const def = HEROES[i], card = document.createElement('article');
       card.className = 'card';
       const cv = document.createElement('canvas');
       drawPortrait(cv, { i, def });
       // starting health, then the same words as the disc upgrades: damage of a full straight throw, speed next to Ash's, speed kept off a wall
       const stats = `<dt>HP</dt><dd>${def.hp}</dd><dt>Урон</dt><dd>${fullHit(def.m, def.pw)}</dd><dt>Скорость</dt><dd>${Math.round(def.pw * 100)}%</dd><dt>Отскок</dt><dd>${Math.round(def.e * 100)}%</dd>`;
-      card.innerHTML = `<div></div><div><h3 style="color:${def.col}">${def.name}</h3><p>${def.role}. Способность «${def.ab}»: ${def.abTxt} ${def.abMore}</p>`
+      card.innerHTML = `<div></div><div><h3 style="color:${def.col}">${def.name}</h3><p>${kindOf(def)}. Способность «${def.ab}»: ${def.abTxt} ${def.abMore}</p>`
         + `<dl>${stats}<dt>Диск</dt><dd>${def.r * 2}</dd></dl></div>`;
       card.firstElementChild!.replaceWith(cv);
       grid.appendChild(card);
@@ -83,13 +83,13 @@ export function renderHeroSelect(picked: number, onPick: (hero: number) => void)
     drawPortrait(cv, { i, def });
     b.append(cv);
     const label = document.createElement('span');
-    label.innerHTML = `${def.name}<em>${def.role}</em>`;
+    label.innerHTML = `${def.name}<em>${kindOf(def)}</em>`;
     b.append(label);
     b.addEventListener('click', () => onPick(i));
     return b;
   });
   const def = HEROES[picked];
-  $('heroInfo').innerHTML = `<b style="color:${def.col}">${def.name}</b>. ${def.role}. HP ${def.hp}, урон ${fullHit(def.m, def.pw)}, скорость ${Math.round(def.pw * 100)}%, отскок ${Math.round(def.e * 100)}%. `
+  $('heroInfo').innerHTML = `<b style="color:${def.col}">${def.name}</b>. ${kindOf(def)}. HP ${def.hp}, урон ${fullHit(def.m, def.pw)}, скорость ${Math.round(def.pw * 100)}%, отскок ${Math.round(def.e * 100)}%. `
     + `Способность «${def.ab}»: ${def.abTxt}`;
 }
 
