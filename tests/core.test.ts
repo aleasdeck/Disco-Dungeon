@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_MAX, PETARD_TURNS, KINDS, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, KINDS, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
 import { ART, FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { CAVE, MOB_CAP, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
@@ -2349,26 +2349,51 @@ describe('the heroes past the first three', () => {
     kid.sparks = 2 * AB_COST;
     g.useAbility(kid);
     // two discs this turn, both bouncing round the room: only the first lays one
-    for (let n = 0; n < 2; n++) {
+    const bounce = () => {
       g.throwDisc(kid, 60, 0);
-      Object.assign(g.S.discs[n], { vx: 420, vy: 0, e: 0.95 });
+      Object.assign(g.S.discs[g.S.discs.length - 1], { vx: 420, vy: 0, e: 0.95 });
       for (let k = 0; k < 60 * 30 && g.moving(); k++) g.update(1 / 60);
-    }
-    expect(PETARD_MAX).toBe(1);
-    expect(g.S.bombs).toHaveLength(1);
-    const [b] = g.S.bombs;
-    // far from the archer, nobody comes; while it lies there the ability won't go on
-    Object.assign(b, cellCentre(9, 2));
+    };
+    bounce();
+    const first = g.S.bombs[0];
+    bounce();
+    expect(g.S.bombs).toEqual([first]);
+    // far from the archer, nobody comes
+    Object.assign(first, cellCentre(9, 2));
     expect(PETARD_TURNS).toBe(3);
     for (const left of [2, 1]) {
       turn(g);
       expect(g.S.bombs.map(o => o.left)).toEqual([left]);
-      expect(g.canUseAbility(kid)).toBe(false);
     }
     turn(g);
     expect(g.S.bombs).toEqual([]);
     expect(g.S.floats.some(f => f.txt === 'пшик')).toBe(true);
+  });
+
+  it('the kid: switched on again, his ability moves the firecracker, which lasts three turns from there', () => {
+    const g = arena([at('kid')], [['skel', 1, 1]]), kid = g.party[0], [skel] = g.S.mobs;
+    kid.hp = kid.max = 99;
+    const old = { ...cellCentre(9, 2), fx: 0, fy: 0, h: kid.i, t: FOOD_FLY - 1e-6, left: 1, turn: 0 };
+    g.S.bombs = [old];
+    g.step(1 / 120);
+    expect(skel.intent!.bang).toEqual(cellCentre(9, 2));
+    // the ability goes on with one lying there
+    kid.sparks = AB_COST;
     expect(g.canUseAbility(kid)).toBe(true);
+    g.useAbility(kid);
+    g.throwDisc(kid, 60, 0);
+    const d = g.S.discs[0];
+    Object.assign(d, { vx: 420, vy: 0, e: 0.95 });
+    for (let k = 0; k < 60 * 30 && g.moving(); k++) g.update(1 / 60);
+    // the old one is gone, the new one lies where this disc dropped it
+    expect(g.S.bombs).toHaveLength(1);
+    const [b] = g.S.bombs;
+    expect(b).not.toBe(old);
+    expect([b.by, b.left, b.turn]).toEqual([d.id, PETARD_TURNS, g.S.turn]);
+    // the skeleton it drew now goes for the new one
+    expect(skel.intent!.bang).toEqual({ x: b.x, y: b.y });
+    turn(g);
+    expect(g.S.bombs.map(o => o.left)).toEqual([PETARD_TURNS - 1]);
   });
 
   it('the kid: a bounce off an enemy drops no firecracker, one off another disc does', () => {
@@ -2393,7 +2418,7 @@ describe('the heroes past the first three', () => {
     const [skel, king, archer] = g.S.mobs;
     const put = (m: Mob, i: number, j: number) => { const c = cellCentre(i, j, mobSize(m.k)); m.x = m.tx = c.x; m.y = m.ty = c.y; };
     put(king, 2, 2);
-    g.S.bombs = [{ ...cellCentre(5, 5), fx: 0, fy: 0, h: kid.i, t: FOOD_FLY, left: PETARD_TURNS }];
+    g.S.bombs = [{ ...cellCentre(5, 5), fx: 0, fy: 0, h: kid.i, t: FOOD_FLY, left: PETARD_TURNS, turn: 0 }];
     // in the heroes' turn it only crackles, even with an enemy right by it
     put(skel, 6, 5);
     g.step(1 / 120);
@@ -2411,7 +2436,7 @@ describe('the heroes past the first three', () => {
     expect(g.S.bombs).toEqual([]);
     expect([skel.hp, king.hp, archer.hp]).toEqual([99 - PETARD_DMG, 99, 99]);
     // the king alone by one: it goes off on him, through his armour
-    g.S.bombs = [{ ...cellCentre(5, 5), fx: 0, fy: 0, h: kid.i, t: FOOD_FLY, left: PETARD_TURNS }];
+    g.S.bombs = [{ ...cellCentre(5, 5), fx: 0, fy: 0, h: kid.i, t: FOOD_FLY, left: PETARD_TURNS, turn: 0 }];
     put(skel, 8, 5);
     g.step(1 / 120);
     expect(g.S.bombs).toEqual([]);
@@ -2420,7 +2445,7 @@ describe('the heroes past the first three', () => {
     put(king, 2, 2);
     expect(g.S.floats.some(f => f.txt === 'БАХ!')).toBe(true);
     // still in the air it doesn't go off, only as it lands
-    g.S.bombs = [{ ...cellCentre(5, 5), fx: cellCentre(5, 2).x, fy: cellCentre(5, 2).y, h: kid.i, t: 0, left: PETARD_TURNS }];
+    g.S.bombs = [{ ...cellCentre(5, 5), fx: cellCentre(5, 2).x, fy: cellCentre(5, 2).y, h: kid.i, t: 0, left: PETARD_TURNS, turn: 0 }];
     g.step(1 / 120);
     expect(g.S.bombs).toHaveLength(1);
     for (let k = 0; k < 120 && g.S.bombs.length; k++) g.step(1 / 120);
@@ -2437,7 +2462,7 @@ describe('the heroes past the first three', () => {
       const [i, j] = cellAt(g.spot(kid)!.x, g.spot(kid)!.y), dx = isFloor(g.S, i + 4, j) ? 1 : -1, start = cellCentre(i + far * dx, j);
       rat.x = rat.tx = start.x; rat.y = rat.ty = start.y; rat.hp = hp;
       g.pickIntents();
-      g.S.bombs = [{ ...cellCentre(i + 2 * dx, j), fx: 0, fy: 0, h: kid.i, t: FOOD_FLY - 1e-6, left: PETARD_TURNS }];
+      g.S.bombs = [{ ...cellCentre(i + 2 * dx, j), fx: 0, fy: 0, h: kid.i, t: FOOD_FLY - 1e-6, left: PETARD_TURNS, turn: 0 }];
       g.step(1 / 120);
       expect(!!rat.intent!.bang).toBe(true);
       turn(g);
@@ -2461,7 +2486,7 @@ describe('the heroes past the first three', () => {
     // six cells off along the top: two cells a turn, it gets there on the last turn the firecracker lasts
     const b = cellCentre(7, 2);
     g.pickIntents();
-    g.S.bombs = [{ ...b, fx: 0, fy: 0, h: kid.i, t: FOOD_FLY - 1e-6, left: PETARD_TURNS }];
+    g.S.bombs = [{ ...b, fx: 0, fy: 0, h: kid.i, t: FOOD_FLY - 1e-6, left: PETARD_TURNS, turn: 0 }];
     g.step(1 / 120);
     expect(skel.intent!.bang).toEqual(b);
     turn(g);
@@ -2486,7 +2511,7 @@ describe('the heroes past the first three', () => {
     expect(blow).toBeGreaterThan(0);
     // a firecracker lands two cells up the slant from him: the skeleton by him is a cell off it, the next two and three cells
     const b = cellCentre(8, 6);
-    g.S.bombs = [{ ...b, fx: 0, fy: 0, h: kid.i, t: FOOD_FLY - 1e-6, left: PETARD_TURNS }];
+    g.S.bombs = [{ ...b, fx: 0, fy: 0, h: kid.i, t: FOOD_FLY - 1e-6, left: PETARD_TURNS, turn: 0 }];
     g.step(1 / 120);
     expect(PETARD_LURE).toBe(2);
     expect([close, near, third, far].map(m => m.intent!.bang ?? null)).toEqual([b, b, null, null]);
@@ -2509,7 +2534,7 @@ describe('the heroes past the first three', () => {
     g.pickIntents();
     king.intent = { t: 'slam', hero: -1, dmg: 3 };
     const p = cellCentre(4, 3);
-    g.S.bombs = [{ ...p, fx: 0, fy: 0, h: kid.i, t: FOOD_FLY - 1e-6, left: PETARD_TURNS }];
+    g.S.bombs = [{ ...p, fx: 0, fy: 0, h: kid.i, t: FOOD_FLY - 1e-6, left: PETARD_TURNS, turn: 0 }];
     g.step(1 / 120);
     expect([a.intent!.bang, b.intent!.bang]).toEqual([p, p]);
     expect(king.intent!.t).toBe('slam');
@@ -2638,7 +2663,7 @@ describe('the heroes past the first three', () => {
     const host = new Game(), cli = new Game();
     host.party = newParty([at('kid'), at('bum')]);
     host.loadRoom({ seed: 21, depth: 2, floor: 0, type: 'fight' });
-    host.S.bombs = [{ x: 40, y: 40, fx: 30, fy: 40, by: 5, h: at('kid'), t: FOOD_FLY, left: 2 }];
+    host.S.bombs = [{ x: 40, y: 40, fx: 30, fy: 40, by: 5, h: at('kid'), t: FOOD_FLY, left: 2, turn: 1 }];
     host.S.gas = [{ i: 4, j: 5, left: 2, t: 1.5 }];
     cli.send = () => {};
     applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
