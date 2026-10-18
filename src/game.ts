@@ -1223,14 +1223,16 @@ export class Game {
         // even Ricochet's ability doesn't carry a disc on through a resource
         d.rico = 0;
         const big = Math.ceil((d.m * vn) / 120) >= 4, h = d.hero, q = big ? 2 : 1;
-        n.left--;
         n.hit = 0.2;
+        if (n.k !== 'spk') n.left--;
         if (n.k === 'ore') { this.bank.ore += q; this.mined += q; this.float(n.x, n.y, `+${q} руда`, '#ffb070'); }
-        // sparks go to every hero still standing, whoever threw the disc, each up to what one ability costs
+        // one hit fills the sparks of every hero still standing, whoever threw the disc, up to what one ability costs;
+        // the crystal loses only what was taken, so sparks nobody had room for stay in it for later
         if (n.k === 'spk') {
           const all = this.alive();
           let got = 0;
-          for (const o of all) { const k = Math.min(q, AB_COST - o.sparks); o.sparks += k; got = Math.max(got, k); }
+          for (const o of all) { const k = Math.min(n.left, AB_COST - o.sparks); o.sparks += k; got = Math.max(got, k); }
+          n.left -= got;
           this.float(n.x, n.y, got ? `+${got} искр${got > 1 ? 'ы' : 'а'}${all.length > 1 ? ' всем' : ''}` : 'искры полны', '#c9a8ff');
         }
         if (n.k === 'herb') { const hl = Math.min(h.max - h.hp, 1 + 2 * q); h.hp += hl; this.float(n.x, n.y, hl ? `+${hl} HP` : 'HP полное', '#7be39a'); }
