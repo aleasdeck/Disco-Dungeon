@@ -34,7 +34,7 @@ export interface HeroState {
   fire: number;
   /** The ability is on for the rest of this turn: the discs thrown now shield, set on fire or keep their speed. */
   boost: boolean;
-  /** Sparks for the ability, 0 to AB_COST: each hero gathers its own with its discs, and they last one fight. */
+  /** Sparks for the ability, 0 to AB_COST: a spark crystal fills every hero's at once, each spends its own, and they last one fight. */
   sparks: number;
   /** The last knock it took: the figure rocks on its stand for a moment. */
   knock?: Knock;
@@ -166,10 +166,10 @@ export function pointAt(w: Pt[], d: number): Pt {
 
 /**
  * Ore belongs to the whole party: any hero's hit fills the pool, any hero spends from it, and it lasts the whole run.
- * Sparks are each hero's own (`HeroState.sparks`) and last one fight; every hero starts the next one with `boon` of them
- * (the altar's gift, usually none). An event may also leave the next fight a `shield` for every hero, `rage`: that much
- * harder blows from its enemies, or a curse that room's spec carries: `smoke` over the floor, a `strobe` that hides the
- * aiming line.
+ * Sparks are each hero's own to spend (`HeroState.sparks`), though a crystal fills everyone's, and last one fight; every hero
+ * starts the next one with `boon` of them (the altar's gift, usually none). An event may also leave the next fight a `shield`
+ * for every hero, `rage`: that much harder blows from its enemies, or a curse that room's spec carries: `smoke` over the
+ * floor, a `strobe` that hides the aiming line.
  */
 export interface Bank { ore: number; boon?: number; shield?: number; rage?: number; smoke?: boolean; strobe?: boolean }
 
@@ -1040,8 +1040,13 @@ export class Game {
         n.left--;
         n.hit = 0.2;
         if (n.k === 'ore') { this.bank.ore += q; this.float(n.x, n.y, `+${q} руда`, '#ffb070'); }
-        // sparks go to the hero who threw the disc, up to what one ability costs
-        if (n.k === 'spk') { const got = Math.min(q, AB_COST - h.sparks); h.sparks += got; this.float(n.x, n.y, got ? `+${got} искр${got > 1 ? 'ы' : 'а'}` : 'искры полны', '#c9a8ff'); }
+        // sparks go to every hero still standing, whoever threw the disc, each up to what one ability costs
+        if (n.k === 'spk') {
+          const all = this.alive();
+          let got = 0;
+          for (const o of all) { const k = Math.min(q, AB_COST - o.sparks); o.sparks += k; got = Math.max(got, k); }
+          this.float(n.x, n.y, got ? `+${got} искр${got > 1 ? 'ы' : 'а'}${all.length > 1 ? ' всем' : ''}` : 'искры полны', '#c9a8ff');
+        }
         if (n.k === 'herb') { const hl = Math.min(h.max - h.hp, 1 + 2 * q); h.hp += hl; this.float(n.x, n.y, hl ? `+${hl} HP` : 'HP полное', '#7be39a'); }
         this.chips(n.k, n.x, n.y, n.r, d, q);
         this.sfx(n.k === 'spk' ? 'sparks' : n.k);
