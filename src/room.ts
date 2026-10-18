@@ -683,15 +683,15 @@ export function generate(spec: RoomSpec): Layout {
   const mobs: Mob[] = [];
   for (const k of mk) {
     // a cut corner can eat the far half, so a mob that finds no room there stands anywhere short of the runes
-    const sz = mobSize(k), r = MOBS[k].r, open = MOBS[k].boss ? main() : null;
+    const sz = mobSize(k), r = MOBS[k].r, piece = MOBS[k].boss ? main() : null;
     // the boss starts on the biggest piece of floor, never shut in a pocket of blocks
-    const onMain = (x: number, y: number) => !open || open.id[(y / TILE - 1) * gw + x / TILE - 1] === open.at;
+    const onMain = (x: number, y: number) => !piece || piece.id[(y / TILE - 1) * gw + x / TILE - 1] === piece.at;
     const far2 = (x: number, y: number) => far(x, y) && onMain(x, y), short = (x: number, y: number) => x / Wx + y / Wy < 1.25 && onMain(x, y);
-    const q = placeCell(sz, r, far2) ?? placeCell(sz, r, short) ?? placeCell(sz, r, far2, true) ?? placeCell(sz, r, short, true) ?? (open && placeCell(sz, r, onMain, true)) ?? placeCell(sz, r, any, true);
+    const q = placeCell(sz, r, far2) ?? placeCell(sz, r, short) ?? placeCell(sz, r, far2, true) ?? placeCell(sz, r, short, true) ?? (piece && placeCell(sz, r, onMain, true)) ?? placeCell(sz, r, any, true);
     if (!q) continue;
     mobs.push(newMob(k, q[0], q[1], hpMul, dmgAdd, dmgMul));
     objs.push({ x: q[0], y: q[1], r: MOBS[k].r });
-    if (open) bossCell = (q[1] / TILE - 1) * gw + q[0] / TILE - 1;
+    if (piece) bossCell = (q[1] / TILE - 1) * gw + q[0] / TILE - 1;
   }
 
   const nodes: ResNode[] = [];
