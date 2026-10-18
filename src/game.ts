@@ -1,7 +1,7 @@
 // Combat rules: turn flow, disc physics, damage, abilities.
 // Rendering and input live elsewhere; this module only changes state.
 
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, CRIT_COS, E_MAX, FAN_ANGLE, FAN_M, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, ZAP, ZAP_REACH, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, CRIT_COS, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, ZAP, ZAP_REACH, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
 import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { mulberry32 } from './rng';
 import type { Sfx } from './audio/sfx';
@@ -67,7 +67,10 @@ export interface Disc {
   rico: number;
   /** The cook's ability: dishes this disc has dropped so far. */
   food?: number;
-  /** One of the two side discs of the card sharp's fan: weaker, and its miss goes unremarked. */
+  /**
+   * One of the two side discs of the card sharp's fan, a phantom: smaller and weaker, its miss goes unremarked, and a hole
+   * or a hazard it ends up in doesn't hurt him.
+   */
   fan?: boolean;
 }
 
@@ -507,7 +510,7 @@ export class Game {
       const c = Math.cos(a), sn = Math.sin(a), ux = (dx * c - dy * sn) / L, uy = (dx * sn + dy * c) / L;
       return {
         id: next(), vol, hero: h, x: p.x + ux * 6, y: p.y + uy * 6, vx: ux * L * s, vy: uy * L * s,
-        r: h.def.r, m: this.stat(h, 'm') * (fan ? FAN_M : 1), e: this.stat(h, 'e'), fr: h.def.fr,
+        r: h.def.r * (fan ? FAN_R : 1), m: this.stat(h, 'm') * (fan ? FAN_M : 1), e: this.stat(h, 'e'), fr: h.def.fr,
         fall: 0, gone: false, charged: false, bounces: 0, spin: 0, hits: 0,
         ab: h.boost, rico: h.boost && h.def.key === 'ricochet' ? AB_BOUNCES : 0, ...(fan ? { fan } : {}),
       };
@@ -1193,9 +1196,9 @@ export class Game {
       if (d.y > S.Wy - d.r) { d.y = S.Wy - d.r; d.vy = -d.vy * this.keep(d); this.bounced(d, v0, 0, -1); }
       if (pitAt(S.pits, d.x, d.y)) {
         d.fall = 0.001; d.vx = d.vy = 0;
-        this.float(d.x, d.y, 'провал', '#c7cbe0');
         this.sfx('pit');
-        this.hurtHero(d.hero, 2);
+        // a phantom just melts away down there
+        if (!d.fan) { this.float(d.x, d.y, 'провал', '#c7cbe0'); this.hurtHero(d.hero, 2); }
         changed = true;
         continue;
       }
@@ -1314,7 +1317,8 @@ export class Game {
     for (const d of S.discs) {
       d.vx = d.vy = 0;
       if (d.gone || d.fall || d.hero.hp <= 0) continue;
-      if (!d.hits && !d.fan) this.float(d.x, d.y, 'мимо', '#c7cbe0');
+      if (d.fan) continue;
+      if (!d.hits) this.float(d.x, d.y, 'мимо', '#c7cbe0');
       if (S.haz.has(hazKey(Math.floor(d.x / 16), Math.floor(d.y / 16)))) {
         this.float(d.x, d.y, S.biome.haz === 'lava' ? 'лава!' : 'шипы!', '#ff4d6a');
         this.hurtHero(d.hero, S.biome.hazDmg);

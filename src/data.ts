@@ -44,6 +44,11 @@ export const BOSS_HEAL = 0.5;
 /** The card sharp's fan: two more discs fly out at this angle on each side of the thrown one, dealing this share of its damage. */
 export const FAN_ANGLE = 0.16;
 export const FAN_M = 0.7;
+/**
+ * The fan's side discs are phantoms: this share of his disc's size, pink and see-through, and one that drops into a hole
+ * or stops on spikes or lava costs him no health.
+ */
+export const FAN_R = 0.7;
 /** Online, at most this many players sit at one table: rooms are built for one to three heroes. */
 export const MAX_PLAYERS = 3;
 /** Ore for each level of a disc stat; a party can't buy everything in one run, so it has to choose. */
@@ -318,8 +323,8 @@ export const HEROES: HeroDef[] = [
   },
   {
     key: 'sharp', name: 'Шулер', acc: 'Шулера', dat: 'Шулеру', col: '#7d4fa6', dk: '#3f2659', skin: '#e3a882', role: 'Урон', hp: 20, r: 4, m: 1.8, e: 0.85, fr: 0.85, pw: 1.2,
-    ab: 'Веер', abTxt: `До конца хода вместо одного диска летят веером три, крайние бьют на ${Math.round((1 - FAN_M) * 100)}% слабее.`, abCol: '#ff7ad1',
-    abMore: 'Два диска из рукавов летят чуть в стороны от прицела. Ходит он за средним, а крайние лежат, где остановились, до конца хода.',
+    ab: 'Веер', abTxt: `До конца хода вместо одного диска летят веером три: крайние фантомные и бьют на ${Math.round((1 - FAN_M) * 100)}% слабее.`, abCol: '#ff7ad1',
+    abMore: 'Фантомы поменьше и розовые, летят из рукавов чуть в стороны от прицела. Фантом в дыре, на шипах или в лаве Шулера не ранит. Ходит он за средним диском, а фантомы лежат, где остановились, до конца хода.',
   },
   {
     key: 'electra', name: 'Электра', acc: 'Электру', dat: 'Электре', fem: true, col: '#3f74c2', dk: '#1f3a66', skin: '#e8b994', role: 'Зона', hp: 22, r: 5, m: 2.0, e: 0.8, fr: 0.9, pw: 1.1,
