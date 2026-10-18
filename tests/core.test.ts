@@ -179,6 +179,22 @@ describe('difficulty along a floor', () => {
     }
   });
 
+  it('fills every boss room with columns, holes and hazards, and never cuts the boss off from a rune', () => {
+    const g = new Game();
+    let middle = 0;
+    for (let f = 0; f < FLOORS; f++) for (let seed = 1; seed < 60; seed++) {
+      g.loadRoom({ seed, depth: f * LAYERS + LAYERS, floor: f, type: 'boss', heroes: 1 + (seed % 3) });
+      const L = g.S, area = L.floor.reduce((a, b) => a + b, 0), boss = L.mobs.find(m => MOBS[m.k].boss)!;
+      expect(L.blocks.length).toBeGreaterThanOrEqual(3);
+      expect(L.pits.length).toBeGreaterThan(0);
+      if ([...L.haz].some(k => { const [i, j] = k.split(',').map(Number); return Math.abs((i + 0.5) / L.gw + (j + 0.5) / L.gh - 1) < 0.2; })) middle++;
+      expect((L.mobs.length + L.blocks.length + L.pits.length + L.haz.size + L.nodes.length) / area).toBeLessThan(0.2);
+      for (const p of L.pads) expect(g.route(boss, p, false)).not.toBeNull();
+    }
+    // hazards lie across the middle of the room too, not only along its walls
+    expect(middle).toBeGreaterThan(FLOORS * 59 * 0.6);
+  });
+
   it('hits harder on later floors and in the last rooms before the boss', () => {
     expect(room(0, 0, 3).dmgAdd).toBe(0);
     expect(room(0, LAYERS - 2, 3).dmgAdd).toBe(1);
@@ -223,10 +239,10 @@ describe('holes in the floor', () => {
         expect(seen.size).toBe(p.cells.length);
       }
     }
-    // the first rows get only small ones, the boss fights on whole floor
+    // the first rows get only small ones, the boss small enough for it to walk round
     for (let seed = 1; seed < 40; seed++) {
       expect(generate({ seed, depth: 3, floor: 0, type: 'fight' }).pits.every(p => p.cells.length <= 2)).toBe(true);
-      expect(generate({ seed, depth: LAYERS, floor: 0, type: 'boss' }).pits).toHaveLength(0);
+      expect(generate({ seed, depth: LAYERS, floor: 0, type: 'boss' }).pits.every(p => p.cells.length <= 4)).toBe(true);
     }
   });
 

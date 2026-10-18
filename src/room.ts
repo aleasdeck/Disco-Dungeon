@@ -272,7 +272,8 @@ export const TIERS: Tier[] = [
   { gw: [13, 14], gh: [10, 11], shapes: ['alcove', 'funnel', 'corner'], blocks: [2, 2], blockKinds: 4, pits: [0, 1], pitCells: 4, haz: [2, 3], mobs: [3, 3] },
   { gw: [14, 15], gh: [11, 12], shapes: ['funnel', 'cross', 'alcove'], blocks: [2, 3], blockKinds: 5, pits: [1, 2], pitCells: 9, haz: [3, 3], mobs: [3, 4] },
 ];
-export const BOSS_TIER: Tier = { gw: [14, 15], gh: [12, 12], shapes: ['rect', 'cross'], blocks: [1, 2], blockKinds: 3, pits: [0, 0], pitCells: 0, haz: [2, 3], mobs: [3, 3] };
+/** The boss fights among as many columns, holes and hazards as the last room before it; its holes stay small enough to walk round. */
+export const BOSS_TIER: Tier = { gw: [14, 15], gh: [12, 12], shapes: ['rect', 'cross'], blocks: [3, 3], blockKinds: 5, pits: [1, 2], pitCells: 4, haz: [3, 3], mobs: [3, 3] };
 
 /** Most floor cells the holes of one room take: next to a 3 × 3 hole there is room only for a 1 × 1. */
 export const PIT_CELLS = 10;
@@ -508,14 +509,16 @@ export function generate(spec: RoomSpec): Layout {
 
   const pits: Pit[] = [];
   const holes = new Set<string>();
-  /** Which piece of open floor each spot an s × s walker can stand on belongs to, with the holes (and `extra`) cut out; -1 where it can't stand. */
+  /** Cells under blocks and resources: walkers go round them as round the holes. */
+  const shut = new Set<string>();
+  /** Which piece of open floor each spot an s × s walker can stand on belongs to, with the holes, blocks, resources (and `extra`) cut out; -1 where it can't stand. */
   const parts = (s: number, extra?: Set<string>) => {
     const id = new Int32Array(gw * gh).fill(-1);
     const fits = (i: number, j: number) => {
       if (i < 0 || j < 0 || i > gw - s || j > gh - s) return false;
       for (let b = 0; b < s; b++) for (let a = 0; a < s; a++) {
         const k = hazKey(i + a, j + b);
-        if (!isFloor(geo, i + a, j + b) || holes.has(k) || extra?.has(k)) return false;
+        if (!isFloor(geo, i + a, j + b) || holes.has(k) || shut.has(k) || extra?.has(k)) return false;
       }
       return true;
     };
@@ -543,6 +546,30 @@ export function generate(spec: RoomSpec): Layout {
     }
     return false;
   });
+  /** The top-left cell of the boss, once it stands. */
+  let bossCell = -1;
+  /** The piece of floor a 2 × 2 boss walks, as parts(2) ids and the id of that piece: the one it stands on, before that the biggest. */
+  const main = (extra?: Set<string>) => {
+    const id = parts(2, extra), size = new Map<number, number>();
+    if (bossCell >= 0) return { id, at: id[bossCell] };
+    for (const v of id) if (v >= 0) size.set(v, (size.get(v) ?? 0) + 1);
+    return { id, at: [...size].sort((a, b) => b[1] - a[1])[0]?.[0] ?? -1 };
+  };
+  const padCells = new Set(pads.map(p => hazKey(Math.floor(p.x / TILE), Math.floor(p.y / TILE))));
+  /** How many runes a 2 × 2 boss on its piece of floor can step right next to, off every rune, with `extra` cells shut too. */
+  const reach = (extra?: Set<string>) => {
+    const { id, at } = main(extra);
+    return pads.filter(p => {
+      const ti = Math.floor(p.x / TILE), tj = Math.floor(p.y / TILE);
+      for (let j = tj - 2; j <= tj + 1; j++) for (let i = ti - 2; i <= ti + 1; i++) {
+        if (i < 0 || j < 0 || i > gw - 2 || j > gh - 2 || id[j * gw + i] !== at) continue;
+        if (![0, 1].some(b => [0, 1].some(a => padCells.has(hazKey(i + a, j + b))))) return true;
+      }
+      return false;
+    }).length;
+  };
+  // the boss is the one enemy two cells wide: nothing put in its room may cut it off from a rune it could get to
+  const cuts = (cells: [number, number][]) => type === 'boss' && reach(new Set(cells.map(([i, j]) => hazKey(i, j)))) < reach();
   /**
    * A hole of the given shape, turned any way, between the runes and the enemies. It keeps a ring of open floor around it,
    * so no wall or rune touches it, stays two cells clear of the other holes, and never cuts off a way across the room,
@@ -556,7 +583,7 @@ export function generate(spec: RoomSpec): Layout {
       const cx = cells.reduce((n, c) => n + c[0] + 0.5, 0) / cells.length * TILE, cy = cells.reduce((n, c) => n + c[1] + 0.5, 0) / cells.length * TILE;
       let ok = mid(cx, cy) && pits.every(q => q.cells.every(([a, b]) => cells.every(([i, j]) => Math.max(Math.abs(a - i), Math.abs(b - j)) >= 3)));
       for (const [i, j] of cells) for (let b = -1; b <= 1 && ok; b++) for (let a = -1; a <= 1 && ok; a++) ok = isFloor(geo, i + a, j + b) && !taken.has(hazKey(i + a, j + b));
-      if (ok && !splits(new Set(cells.map(([i, j]) => hazKey(i, j))))) return { k, cells };
+      if (ok && !splits(new Set(cells.map(([i, j]) => hazKey(i, j)))) && !cuts(cells)) return { k, cells };
     }
     return null;
   };
@@ -599,8 +626,8 @@ export function generate(spec: RoomSpec): Layout {
       const tx = ri(1, gw - 4), ty = ri(1, gh - 4), sh = pick(SHAPES);
       const cells = sh.map(([a, b]) => cell(tx + a, ty + b));
       // blocks keep a free tile between themselves and the rock so discs can't get wedged
-      if (cells.every(c => free(c.x0 + 8, c.y0 + 8, 11, 4) && clearOfRock(geo, c.x0 + 8, c.y0 + 8, 20))) {
-        for (const c of cells) { blocks.push(c); objs.push({ x: c.x0 + 8, y: c.y0 + 8, r: 11 }); take(c.x0 / TILE, c.y0 / TILE); }
+      if (cells.every(c => free(c.x0 + 8, c.y0 + 8, 11, 4) && clearOfRock(geo, c.x0 + 8, c.y0 + 8, 20)) && !cuts(cells.map(c => [c.x0 / TILE, c.y0 / TILE]))) {
+        for (const c of cells) { blocks.push(c); objs.push({ x: c.x0 + 8, y: c.y0 + 8, r: 11 }); take(c.x0 / TILE, c.y0 / TILE); shut.add(hazKey(c.x0 / TILE, c.y0 / TILE)); }
         return;
       }
     }
@@ -656,10 +683,15 @@ export function generate(spec: RoomSpec): Layout {
   const mobs: Mob[] = [];
   for (const k of mk) {
     // a cut corner can eat the far half, so a mob that finds no room there stands anywhere short of the runes
-    const sz = mobSize(k), r = MOBS[k].r;
-    const short = (x: number, y: number) => x / Wx + y / Wy < 1.25;
-    const q = placeCell(sz, r, far) ?? placeCell(sz, r, short) ?? placeCell(sz, r, far, true) ?? placeCell(sz, r, short, true) ?? placeCell(sz, r, any, true);
-    if (q) { mobs.push(newMob(k, q[0], q[1], hpMul, dmgAdd, dmgMul)); objs.push({ x: q[0], y: q[1], r: MOBS[k].r }); }
+    const sz = mobSize(k), r = MOBS[k].r, open = MOBS[k].boss ? main() : null;
+    // the boss starts on the biggest piece of floor, never shut in a pocket of blocks
+    const onMain = (x: number, y: number) => !open || open.id[(y / TILE - 1) * gw + x / TILE - 1] === open.at;
+    const far2 = (x: number, y: number) => far(x, y) && onMain(x, y), short = (x: number, y: number) => x / Wx + y / Wy < 1.25 && onMain(x, y);
+    const q = placeCell(sz, r, far2) ?? placeCell(sz, r, short) ?? placeCell(sz, r, far2, true) ?? placeCell(sz, r, short, true) ?? (open && placeCell(sz, r, onMain, true)) ?? placeCell(sz, r, any, true);
+    if (!q) continue;
+    mobs.push(newMob(k, q[0], q[1], hpMul, dmgAdd, dmgMul));
+    objs.push({ x: q[0], y: q[1], r: MOBS[k].r });
+    if (open) bossCell = (q[1] / TILE - 1) * gw + q[0] / TILE - 1;
   }
 
   const nodes: ResNode[] = [];
@@ -668,21 +700,24 @@ export function generate(spec: RoomSpec): Layout {
   const apart = (x: number, y: number) => !cave || nodes.every(n => Math.hypot(x - n.x, y - n.y) > (n.s ? 3 : 2.5) * TILE);
   const kinds = NODE_SETS[type] ?? NODE_SETS.fight!;
   for (const k of kinds) {
-    const side = (x: number, y: number) => flank(x, y) && apart(x, y);
-    const q = placeCell(1, NODES[k].r, side) ?? placeCell(1, NODES[k].r, apart) ?? placeCell(1, NODES[k].r, mid) ?? placeCell(1, NODES[k].r, any) ?? placeCell(1, NODES[k].r, any, true);
-    if (q) { const ch = cave && k === 'ore' ? CAVE.small : sc.ch[k] ?? NODES[k].ch; nodes.push({ k, ...NODES[k], ch, x: q[0], y: q[1], left: ch, hit: 0 }); objs.push({ x: q[0], y: q[1], r: NODES[k].r }); }
+    const open = (x: number, y: number) => !cuts([[Math.floor(x / TILE), Math.floor(y / TILE)]]);
+    const side = (x: number, y: number) => flank(x, y) && apart(x, y) && open(x, y);
+    const q = placeCell(1, NODES[k].r, side) ?? placeCell(1, NODES[k].r, (x, y) => apart(x, y) && open(x, y)) ?? placeCell(1, NODES[k].r, (x, y) => mid(x, y) && open(x, y)) ?? placeCell(1, NODES[k].r, open) ?? placeCell(1, NODES[k].r, any, true);
+    if (!q) continue;
+    const ch = cave && k === 'ore' ? CAVE.small : sc.ch[k] ?? NODES[k].ch;
+    nodes.push({ k, ...NODES[k], ch, x: q[0], y: q[1], left: ch, hit: 0 });
+    objs.push({ x: q[0], y: q[1], r: NODES[k].r });
+    shut.add(hazKey(Math.floor(q[0] / TILE), Math.floor(q[1] / TILE)));
   }
 
   const haz = new Set<string>();
-  // the boss fights in the open: its hazards hug the walls instead of the middle
-  const hazZone = type === 'boss' ? (x: number, y: number) => { const s = x / Wx + y / Wy; return mid(x, y) && (s < 0.8 || s > 1.2 || x < 40 || y < 40); } : mid;
   const hazOk = (tx: number, ty: number) => {
     const cx = tx * TILE + 8, cy = ty * TILE + 8;
-    return isFloor(geo, tx, ty) && !haz.has(hazKey(tx, ty)) && hazZone(cx, cy) && pads.every(p => Math.hypot(p.x - cx, p.y - cy) > 26) && objs.every(o => Math.hypot(o.x - cx, o.y - cy) > o.r + 4);
+    return isFloor(geo, tx, ty) && !haz.has(hazKey(tx, ty)) && mid(cx, cy) && pads.every(p => Math.hypot(p.x - cx, p.y - cy) > 26) && objs.every(o => Math.hypot(o.x - cx, o.y - cy) > o.r + 4);
   };
   const nHaz = roll(tier.haz) + (t === 0 ? Math.min(f, 1) : f) + extra.haz;
-  // before the boss a strip of three tiles cuts the room
-  if (t === TIERS.length - 1 && type !== 'treasure') {
+  // before the boss and around it a strip of three tiles cuts the room
+  if (t >= TIERS.length - 1 && type !== 'treasure') {
     for (let tr = 0; tr < 60; tr++) {
       const tx = ri(2, gw - 4), ty = ri(2, gh - 4), hor = R.next() < 0.5;
       const cells = [0, 1, 2].map(k => (hor ? [tx + k, ty] : [tx, ty + k]));
