@@ -1,7 +1,7 @@
 // Combat rules: turn flow, disc physics, damage, abilities.
 // Rendering and input live elsewhere; this module only changes state.
 
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, CRIT_COS, E_MAX, FAN_ANGLE, FAN_M, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, ZAP, ZAP_REACH, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, CRIT_COS, E_MAX, FAN_ANGLE, FAN_M, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, ZAP, ZAP_REACH, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
 import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { mulberry32 } from './rng';
 import type { Sfx } from './audio/sfx';
@@ -1689,10 +1689,23 @@ export class Game {
   }
 
   private finish() {
+    const win = this.alive().length > 0;
     this.S.phase = 'over';
-    this.sfx(this.alive().length > 0 ? 'win' : 'lose');
+    if (win && this.S.spec.type === 'boss') this.bossHeal();
+    this.sfx(win ? 'win' : 'lose');
     this.onChange();
-    this.onRoomEnd(this.alive().length > 0);
+    this.onRoomEnd(win);
+  }
+
+  /** The floor's boss is beaten: every hero gets back half their most health, up to the top, and the fallen get up with half. */
+  private bossHeal() {
+    for (const h of this.S.heroes) {
+      const was = Math.max(0, h.hp), hl = Math.min(h.max - was, Math.ceil(h.max * BOSS_HEAL));
+      if (hl <= 0) continue;
+      h.hp = was + hl;
+      const p = this.figureAt(h);
+      if (p) { this.float(p.x, p.y - 6, `+${hl} HP`, '#7be39a'); this.burst(p.x, p.y, '#7be39a', 10); }
+    }
   }
 
   update(dt: number) {

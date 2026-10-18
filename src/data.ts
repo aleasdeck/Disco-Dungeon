@@ -39,6 +39,8 @@ export const FOOD_PER_DISC = 3;
 export const FOOD_HEAL = 3;
 /** Most dishes on the floor at once: a full floor takes no more. */
 export const FOOD_MAX = 9;
+/** Beating a floor's boss gives every hero back this share of their most health, up to the top; a fallen hero gets up with it. */
+export const BOSS_HEAL = 0.5;
 /** The card sharp's fan: two more discs fly out at this angle on each side of the thrown one, dealing this share of its damage. */
 export const FAN_ANGLE = 0.16;
 export const FAN_M = 0.7;

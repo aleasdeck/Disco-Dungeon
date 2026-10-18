@@ -460,8 +460,11 @@ game.onRoomEnd = win => {
     votes = {};
     // the ore cave ends when its turns are up or everything in it is spent: it tells how much ore it gave
     const cave = game.cave(), rooms = `Пройдено комнат: ${run.path.reduce((a, p) => a + p.length, 0)} из ${FLOORS * LAYERS}.`;
+    // the boss gave every hero back half their health as it fell (Game.bossHeal)
+    const solo = game.party.length === 1 && game.party[0].def;
+    const healed = !boss ? '' : solo ? `${solo.name} ${solo.fem ? 'восстановила' : 'восстановил'} половину здоровья. ` : 'Герои восстановили половину здоровья. ';
     showEnd({ title: boss ? `Этаж ${run.floor} пройден` : cave ? (game.cleared() ? 'Пещера выбрана дочиста' : 'Ходы кончились') : 'Комната зачищена',
-      text: cave ? `Добыто руды: ${game.mined}. ${rooms}` : `Ходов: ${S.turn}. ${rooms}`, kind: 'map' });
+      text: cave ? `Добыто руды: ${game.mined}. ${rooms}` : `Ходов: ${S.turn}. ${healed}${rooms}`, kind: 'map' });
     shareMap();
   }, 900);
 };
