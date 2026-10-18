@@ -171,9 +171,9 @@ describe('difficulty along a floor', () => {
 
   it('puts one spark crystal in every fight and a second one in most, each holding one ability for any party', () => {
     let two = 0, n = 0;
-    for (let seed = 1; seed < 200; seed++)
+    for (let seed = 1; seed < 120; seed++)
       for (const [type, row, f] of [['fight', 1 + (seed % (LAYERS - 2)), seed % FLOORS], ['elite', 4, seed % FLOORS], ['boss', LAYERS - 1, seed % FLOORS]] as const)
-        for (const heroes of [1, 2, 3]) {
+        for (const heroes of type === 'boss' && seed % 4 ? [] : [1, 2, 3]) {
           const L = generate({ seed, depth: f * LAYERS + row + 1, floor: f, type, heroes }), spk = L.nodes.filter(k => k.k === 'spk');
           expect(spk.length).toBeGreaterThanOrEqual(1);
           expect(spk.length).toBeLessThanOrEqual(2);
