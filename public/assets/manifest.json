@@ -111,6 +111,30 @@
     "wall_prison": "env/wall_prison.webp"
   },
   "ui": {
+    "art_xray": "ui/art_xray.webp",
+    "art_polish": "ui/art_polish.webp",
+    "art_tray": "ui/art_tray.webp",
+    "art_lube": "ui/art_lube.webp",
+    "art_bells": "ui/art_bells.webp",
+    "art_glasseye": "ui/art_glasseye.webp",
+    "art_chalk": "ui/art_chalk.webp",
+    "art_spring": "ui/art_spring.webp",
+    "art_insoles": "ui/art_insoles.webp",
+    "art_opener": "ui/art_opener.webp",
+    "art_mirrorball": "ui/art_mirrorball.webp",
+    "art_undies": "ui/art_undies.webp",
+    "art_cup": "ui/art_cup.webp",
+    "art_hedgehog": "ui/art_hedgehog.webp",
+    "art_fangs": "ui/art_fangs.webp",
+    "art_belly": "ui/art_belly.webp",
+    "art_sock": "ui/art_sock.webp",
+    "art_tea": "ui/art_tea.webp",
+    "art_denture": "ui/art_denture.webp",
+    "art_battery": "ui/art_battery.webp",
+    "art_energy": "ui/art_energy.webp",
+    "art_piggy": "ui/art_piggy.webp",
+    "art_boomerang": "ui/art_boomerang.webp",
+    "art_hand": "ui/art_hand.webp",
     "ab_ash": "ui/ab_ash.webp",
     "ab_bastion": "ui/ab_bastion.webp",
     "ab_cook": "ui/ab_cook.webp",
@@ -206,6 +230,8 @@
     "goblin": "events/goblin.webp",
     "dj": "events/dj.webp",
     "camp": "events/camp.webp",
-    "forge": "events/forge.webp"
+    "forge": "events/forge.webp",
+    "loot_king": "events/loot_king.webp",
+    "loot_lich": "events/loot_lich.webp"
   }
 }

@@ -322,6 +322,12 @@ i.ico { display: inline-block; font-style: normal; }
 .hc-hit { margin: 0; color: var(--gold); font-size: 13px; }
 .hc-ab { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
 .hc-ab b { color: #c9a8ff; }
+/* the floor bosses' trophies the hero carries: a picture, the name and what it does */
+.hc-arts { display: grid; gap: 4px; margin-top: 4px; }
+.hc-art { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 8px; align-items: center; }
+.hc-art .hc-art-ico { grid-row: span 2; width: 28px; height: 28px; }
+.hc-art b { font: 600 13px Oswald, sans-serif; color: var(--gold); }
+.hc-art small { font-size: 11px; color: var(--muted); line-height: 1.2; }
 .hero-card .up { grid-template-columns: minmax(0, 1fr) auto 44px; }
 .hero-card .up-txt { display: block; }
 
@@ -612,6 +618,8 @@ i.ico { display: inline-block; font-style: normal; }
 .card p { margin: 0 0 6px; font-size: 13px; color: #d6cfbd; }
 .card dl { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; margin: 0; font-size: 12px; color: #b2a38c; }
 .card dd { margin: 0; color: #f0e5d0; }
+.col-art-ico { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 10px; border: 1.5px solid var(--ink); background: #1d1611; }
+.col-art-ico > .ico, .col-art-ico > .art { width: 56px; height: 56px; border: 0; background: none; border-radius: 0; }
 .end-panel p { color: var(--muted); margin: 10px 0 16px; }
 .help-panel ul { text-align: left; padding-left: 18px; margin: 12px 0 16px; color: var(--muted); }
 .help-panel li { margin: 6px 0; }
@@ -979,6 +987,29 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
   .camp-opt:has(> .camp-mate) { padding-right: 96px; }
   .camp-mate { width: 80px; right: 10px; }
   .camp-mate img { width: 28px; height: 28px; }
+}
+
+/* ---------- the boss's trophies: the event window's dress, a trophy's picture on each slab and the faces of whoever wants it */
+.loot-opt { padding-left: 76px; min-height: 64px; align-content: center; }
+.loot-opt:has(> .ev-who) { padding-right: 96px; }
+.loot-ico { position: absolute; left: 12px; top: 50%; width: 52px; height: 52px; transform: translateY(-50%) rotate(-6deg); filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45)); }
+.loot-ico > .ico, .loot-ico > .art { display: block; width: 100%; height: 100%; }
+/* a trophy two players want: its faces shake a little until one gives way */
+.loot-opt.picked:has(.ev-who img + img) .ev-who { animation: loot-tug 0.5s ease-in-out 3; }
+@keyframes loot-tug { 25% { transform: translate(-3px, -50%); } 75% { transform: translate(3px, -50%); } }
+.ev-out.loot-got { position: relative; }
+.ev-out.loot-got b { color: var(--gold-1); }
+.loot-whose { display: flex; align-items: center; gap: 6px; font: 600 15px Oswald, sans-serif; color: var(--c); }
+.loot-whose img { width: 26px; height: 26px; clip-path: var(--cut-face); background: var(--c); }
+#lootLeave { justify-self: end; align-self: flex-end; margin-top: 4px; }
+@media (max-height: 520px) and (orientation: landscape) {
+  .art-panel #lootScreen .ev-panel { padding: 20px 24px; }
+  .loot-opt { padding-left: 58px; min-height: 0; }
+  .loot-ico { left: 8px; width: 40px; height: 40px; }
+}
+@media (orientation: portrait) and (max-width: 700px) {
+  #lootScreen { align-items: start; }
+  .loot-opt:has(> .ev-who) { padding-right: 80px; }
 }
 
 /* ---------- the blacksmith's window: the event window's dress, with this screen's own hero's upgrades on its slabs,

@@ -19,6 +19,8 @@ import { applyFx, canPick, eventDef, eventOf, rolled, type EventState } from './
 import { EventView, type EventVotes } from './eventview';
 import { campDo, campLeave, type CampPick, type CampState } from './camp';
 import { CampView } from './campview';
+import { lootAgreed, newLoot, settleLoot, type LootState } from './artifacts';
+import { LootView, type LootVotes } from './lootview';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -30,6 +32,7 @@ const hud = new Hud(game);
 const mapView = new MapView();
 const evView = new EventView();
 const campView = new CampView();
+const lootView = new LootView();
 const scene = new SceneRenderer();
 
 let run: Run = newRun();
@@ -49,6 +52,10 @@ let camp: CampState | null = null;
 let campShut = -1;
 /** Client: what this player asked the host to do at the camp, while the answer is on its way. */
 let campAsked: CampPick | undefined;
+/** The floor boss's trophies the party shares out after the fight; the map waits until they are shared. */
+let loot: LootState | null = null;
+/** The seed of the trophies this player has read and closed: the window stays shut for them. */
+let lootShut = -1;
 let view = { w: 0, h: 0, dpr: 1 };
 
 // ------------------------------------------------------------ camera
@@ -208,6 +215,8 @@ function startRun(picks?: number[]) {
   showEvent();
   camp = null;
   showCamp();
+  loot = null;
+  showLoot();
   // a quiet room behind the map so the screen is never empty
   game.loadRoom({ seed: run.seed, depth: 1, floor: 0, type: 'fight' });
   controls.fit();
@@ -243,6 +252,9 @@ function choose(id: string) {
     camp = null;
     showCamp();
   }
+  // the boss's hoard stays behind on the last floor
+  loot = null;
+  showLoot();
   if (COMBAT_ROOMS.includes(n.type)) {
     choosing = false;
     game.loadRoom({ seed: run.seed + depth * 97 + n.i, depth, floor: f, type: n.type });
@@ -334,6 +346,7 @@ evView.onLeave = () => {
   if (ev) evShut = ev.seed;
   showEvent();
   showMap(true);
+  showLoot();
 };
 
 /** Host: a player points at one of the event's choices. */
@@ -354,11 +367,15 @@ function settleEvent(opt: number) {
   game.bank.ore -= c.pay ?? 0;
   applyFx(out.fx, game.party, game.bank, ev.seed);
   ev.done = { opt, won };
-  choosing = true;
+  // a trophy: the party shares out three before the map opens again, once the outcome is read
+  const l = out.fx.some(f => f.k === 'art') ? newLoot(ev.seed * 7 + 3, run.floor, game.party) : null;
+  if (l?.offer.length) loot = { ...l, from: ev.key };
+  choosing = !loot;
   votes = {};
   hud.buildAllies();
   game.onChange();
   showEvent();
+  showLoot();
   shareMap();
 }
 
@@ -375,6 +392,74 @@ function eventVotes(): EventVotes | undefined {
     : idle.length ? `Ещё не выбрали: ${idle.join(', ')}.`
     : 'Голоса разошлись. Договоритесь и нажмите одно и то же.';
   return { faces, mine: me !== null ? cast[me] ?? null : null, note };
+}
+
+/**
+ * Show the trophies' window while the party stands over the boss's hoard, until this player has read who got what and
+ * closed it. An event's trophies wait until this player has read the event's outcome.
+ */
+function showLoot() {
+  const open = !!loot && !(loot.done && lootShut === loot.seed) && !(loot.from && ev && evShut !== ev.seed);
+  $('lootScreen').hidden = !open;
+  if (!open) return;
+  const mine = game.online ? myHero() : game.party[0]?.i ?? null, me = game.party.find(h => h.i === mine) ?? null;
+  lootView.render(loot!, me, game.party, lootVotes(), game.online ? h => players.find(p => p.hero === h.i)?.name ?? h.def.name : undefined);
+}
+
+// alone a tap takes the trophy; online it points at the one the player wants, and they are shared out once no two want the same
+lootView.onPick = opt => {
+  if (!loot || loot.done) return;
+  const me = game.online ? myHero() : game.party[0]?.i ?? null;
+  if (me === null) return;
+  if (mode === 'client') {
+    loot = { ...loot, picks: { ...loot.picks, [me]: opt } };
+    showLoot();
+    net.send({ t: 'loot', opt });
+  } else lootPick(me, opt);
+};
+lootView.onLeave = () => {
+  if (loot) lootShut = loot.seed;
+  showLoot();
+  showMap(true);
+};
+
+/** The heroes whose players share the trophies out: online the ones here, alone the lone hero. */
+const lootTable = () => (game.online ? atTable() : game.party.slice(0, 1).map(h => h.i));
+
+/** Host (or a lone player): a player points at a trophy for their hero. */
+function lootPick(hero: number, opt: number) {
+  if (!loot || loot.done || loot.offer[opt] === undefined) return;
+  loot.picks[hero] = opt;
+  if (lootAgreed(loot, lootTable())) shareLoot();
+  else { showLoot(); shareMap(); }
+}
+
+/** Hand the trophies out as picked (the heroes of players who dropped out get what is left); then the map is open again. */
+function shareLoot() {
+  if (!loot || loot.done) return;
+  settleLoot(loot, game.party, lootTable());
+  choosing = true;
+  votes = {};
+  hud.buildAllies();
+  game.onChange();
+  showLoot();
+  shareMap();
+}
+
+/** Online: whose face stands on which trophy, and whom the share-out still waits for. Alone there is nothing to show. */
+function lootVotes(): LootVotes | undefined {
+  const table = mode === 'host' ? atTable() : mode === 'client' ? voters : [];
+  if (!loot || table.length < 2) return undefined;
+  const me = myHero(), picks = loot.picks;
+  const nameOf = (h: number) => players.find(p => p.hero === h)?.name ?? HEROES[h].name;
+  const faces: LootVotes['faces'] = {};
+  for (const h of table) if (picks[h] !== undefined) (faces[picks[h]] ??= []).push({ col: HEROES[h].col, name: nameOf(h), me: h === me, face: faceUrl(game.party.find(o => o.i === h) ?? { i: h, def: HEROES[h] }) });
+  const idle = table.filter(h => picks[h] === undefined).map(h => (h === me ? 'ты' : nameOf(h)));
+  const clash = Object.values(faces).some(f => f.length > 1);
+  const note = clash ? 'Двое тянут один трофей. Договоритесь, кому что.'
+    : idle.length === table.length ? (table.length < loot.offer.length ? 'Каждый берёт свой трофей, лишний останется лежать.' : 'Каждый берёт свой трофей, один на двоих не взять.')
+    : `Ещё не выбрали: ${idle.join(', ')}.`;
+  return { faces, mine: me !== null ? picks[me] ?? null : null, note };
 }
 
 // alone a click on the map goes there; online it is a vote, and the party goes once everyone here picked the same room
@@ -412,7 +497,7 @@ function settle() {
 /** Host: tell everyone where the party stands on the map, and show it on the host's own map too. */
 function shareMap() {
   if (mode !== 'host' || !started) return;
-  const m: MapState = { run, choosing, votes, voters: atTable(), ev, camp };
+  const m: MapState = { run, choosing, votes, voters: atTable(), ev, camp, loot };
   net.broadcast({ t: 'map', m });
   if (!$('mapScreen').hidden) showMap(true);
 }
@@ -456,8 +541,19 @@ game.onRoomEnd = win => {
           + (game.party.length > 1 ? ` Дошли до конца: ${left}.` : '') });
     }
     if (boss) run.floor++;
-    choosing = true;
     votes = {};
+    // the floor's boss leaves trophies: the party shares them out before the map opens again
+    if (boss) {
+      const l = newLoot(run.seed + run.floor * 977 + S.spec.depth, S.spec.floor, game.party);
+      if (l.offer.length) {
+        loot = l;
+        choosing = false;
+        showLoot();
+        shareMap();
+        return;
+      }
+    }
+    choosing = true;
     // the ore cave ends when its turns are up or everything in it is spent: it tells how much ore it gave
     const cave = game.cave(), rooms = `Пройдено комнат: ${run.path.reduce((a, p) => a + p.length, 0)} из ${FLOORS * LAYERS}.`;
     // the boss gave every hero back half their health as it fell (Game.bossHeal)
@@ -533,7 +629,7 @@ function openSettings(from: typeof settingsFrom) {
   show('settingsScreen');
 }
 $('mSettings').addEventListener('click', () => openSettings('menu'));
-document.querySelectorAll<HTMLButtonElement>('#collection .tab').forEach(b => b.addEventListener('click', () => renderCollection(b.dataset.tab as 'heroes' | 'mobs')));
+document.querySelectorAll<HTMLButtonElement>('#collection .tab').forEach(b => b.addEventListener('click', () => renderCollection(b.dataset.tab as 'heroes' | 'mobs' | 'arts')));
 $('colBack').addEventListener('click', openMenu);
 $('setBack').addEventListener('click', () => (settingsFrom === 'pause' ? show('pause') : openMenu()));
 const syncSettings = bindSettings(() => { applyQuality(); sizeCanvas(); });
@@ -562,7 +658,7 @@ function leaveOnline() {
   players = [];
   started = false;
   wait('');
-  if (mode !== 'solo') { setOnline('menu'); ev = null; showEvent(); camp = null; showCamp(); }
+  if (mode !== 'solo') { setOnline('menu'); ev = null; showEvent(); camp = null; showCamp(); loot = null; showLoot(); }
 }
 
 function lobbyView() {
@@ -601,6 +697,8 @@ function backToLobby() {
   for (const p of players) p.ready = false;
   ev = null;
   showEvent();
+  loot = null;
+  showLoot();
   hideEnd();
   showMap(false);
   net.broadcast({ t: 'lobbyBack' });
@@ -762,6 +860,7 @@ net.onLeave = id => {
   // the vote goes on without them: the others may already agree
   settle();
   if (ev && !ev.done) { const go = agreed(ev.votes, atTable()); if (go !== null) settleEvent(go); else shareMap(); }
+  if (loot && !loot.done) { if (lootAgreed(loot, atTable())) shareLoot(); else shareMap(); }
 };
 
 net.onLost = () => { if (mode === 'client') reconnect(net.code); };
@@ -774,6 +873,7 @@ net.onMsg = (from, m) => {
     else if (m.t === 'vote' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) vote(h, m.id); }
     else if (m.t === 'evote' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) evVote(h, m.opt); }
     else if (m.t === 'camp' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) campPick(h, m.pick); }
+    else if (m.t === 'loot' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) lootPick(h, m.opt); }
     else if (m.t === 'act' && started && ownerOf(m.a.h) === from) game.perform(m.a);
     return;
   }
@@ -792,9 +892,13 @@ net.onMsg = (from, m) => {
     ({ run, choosing, votes, voters } = m.m);
     ev = m.m.ev ?? null;
     camp = m.m.camp ?? null;
+    loot = m.m.loot ?? null;
     campAsked = undefined;
     showEvent();
     showCamp();
+    // the boss's trophies take the room's result screen's place
+    if (loot) hideEnd();
+    showLoot();
     // the party agreed on a fight and walks in; at the camp its window stands in for the map until this player leaves
     // it; otherwise the map shows the vote as it stands
     if (went || !$('campScreen').hidden) { if (went) hideEnd(); showMap(false); }
@@ -812,7 +916,7 @@ net.onMsg = (from, m) => {
     // the party walked into the blacksmith's: the shop takes the map's place
     if (!shop && hud.atForge) showMap(false);
   } else if (m.t === 'screen') screen(m.title, m.text, m.win, m.lose);
-  else if (m.t === 'lobbyBack') { started = false; ev = null; showEvent(); camp = null; showCamp(); wait(''); hideEnd(); showMap(false); lobbyView(); show('lobby'); }
+  else if (m.t === 'lobbyBack') { started = false; ev = null; showEvent(); camp = null; showCamp(); loot = null; showLoot(); wait(''); hideEnd(); showMap(false); lobbyView(); show('lobby'); }
 };
 
 /** Host: send the game state to everyone, often while things move, and whenever something changed. */
@@ -833,7 +937,7 @@ function keepSeat(now: number) {
   if (mode !== 'host') return;
   saveSeat({ code: net.code, key: myKey, host: true });
   saveHost({
-    code: net.code, players, started, run, choosing, votes, ev, camp, ending, screen: lastScreen,
+    code: net.code, players, started, run, choosing, votes, ev, camp, loot, ending, screen: lastScreen,
     snap: started && game.S ? snapshot(game) : null,
   });
 }
@@ -854,6 +958,7 @@ async function reopen(code: string) {
     votes = s.votes ?? {};
     ev = s.ev ?? null;
     camp = s.camp ?? null;
+    loot = s.loot ?? null;
     applySnapshot(game, s.snap);
     setOnline('host');
     game.pickActiveParty();
@@ -890,6 +995,7 @@ async function reopen(code: string) {
   setTimeout(seatAway, 15_000);
   if (s.ending) showEnd(s.ending);
   else if (camp) showCamp();
+  else if (loot) { showEvent(); showLoot(); if (choosing) showMap(true); }
   else if (choosing) showMap(true);
   else if (ev) showEvent();
   else if (game.cleared() || game.S.phase === 'over' || !game.alive().length) game.onRoomEnd(game.alive().length > 0);
@@ -1034,4 +1140,4 @@ $('waitLeave').addEventListener('click', () => { leaveOnline(); hideEnd(); showM
 requestAnimationFrame(frame);
 
 // handle for automated checks
-Object.assign(window, { __dd: { game, cam, hud, scene, ctx, net, sound, choose, get view() { return view; }, get run() { return run; }, get mode() { return mode; }, get ev() { return ev; }, get camp() { return camp; } } });
+Object.assign(window, { __dd: { game, cam, hud, scene, ctx, net, sound, choose, get view() { return view; }, get run() { return run; }, get mode() { return mode; }, get ev() { return ev; }, get camp() { return camp; }, get loot() { return loot; } } });

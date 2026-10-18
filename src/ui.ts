@@ -8,7 +8,8 @@ import type { Game, HeroState } from './game';
 import type { Mob } from './room';
 import { BASE_TH, drawHeroFigure, drawMiniature, drawMobFigure } from './draw/figures';
 import { lg } from './draw/util';
-import { art, fillIcons, icon } from './icons';
+import { art, artIcon, fillIcons, icon } from './icons';
+import { artDef } from './artifacts';
 import { hl } from './hl';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -454,9 +455,9 @@ export class Hud {
     $('fStatus').innerHTML = statusHtml(st);
 
     // the discs of this turn as a little stack: the ones still in hand in the hero's colour, the thrown ones dark
-    const out = S.phase === 'throw' && g.ended(h) ? h.discs : h.discs - h.hand;
-    $('fDiscs').innerHTML = Array.from({ length: h.discs }, (_, k) => `<i class="${k < h.discs - out ? 'on' : ''}"></i>`).join('');
-    $('fDiscs').title = `Диски: ${h.hand} из ${h.discs} за ход`;
+    const per = g.handOf(h), out = S.phase === 'throw' && g.ended(h) ? per : per - h.hand;
+    $('fDiscs').innerHTML = Array.from({ length: per }, (_, k) => `<i class="${k < per - out ? 'on' : ''}"></i>`).join('');
+    $('fDiscs').title = `Диски: ${h.hand} из ${per} за ход`;
 
     // health and the shield on top of it: the bar holds both, squeezing when they add up to more than the most health
     const inc = g.incoming(h), dead = h.hp > 0 && inc >= h.hp, tot = Math.max(h.max, h.hp + h.shield);
@@ -479,7 +480,8 @@ export class Hud {
     wrap.title = [h.shield > 0 ? `Щит ${h.shield}: снимается первым.` : '', inc ? `Враги в этот ход снимут ${inc} HP, если их не остановить.` : ''].filter(Boolean).join(' ');
 
     // the sparks bar beside the ability button: three cells, one per spark; full, they light up and the button pulses
-    const sp = Math.min(AB_COST, h.sparks), full = sp >= AB_COST;
+    // «Энергетик» makes the ability cheaper: the button lights up as soon as there are enough
+    const sp = Math.min(AB_COST, h.sparks), cost = g.abCost(h), full = sp >= cost;
     $('fSpk').querySelectorAll('i').forEach((c, k) => c.classList.toggle('on', k < sp));
     $('fSpk').classList.toggle('full', full);
     $('abName').textContent = h.def.ab;
@@ -491,7 +493,7 @@ export class Hud {
     ab.classList.toggle('full', full);
     ab.classList.toggle('on', h.boost);
     ab.style.setProperty('--ab', h.def.abCol);
-    ab.title = `${h.def.ab}: ${h.def.abTxt} ${h.def.abMore} Стоит ${AB_COST} искры, включается до броска.` + (h.boost ? ' Включено до конца хода.' : '');
+    ab.title = `${h.def.ab}: ${h.def.abTxt} ${h.def.abMore} Стоит ${cost} искры, включается до броска.` + (h.boost ? ' Включено до конца хода.' : '');
   }
 
   /** My hero's card from the portrait: how hard the disc hits, its upgrades and the ability in full. */
@@ -506,7 +508,11 @@ export class Hud {
     $('ups').innerHTML = `<h3 style="color:${h.def.col}">${h.def.name}</h3>`
       + `<p class="hc-hit" title="Сильнее всего диск бьёт на полной натяжке; прямо в лоб урон удваивается">удар до ${hit}, в лоб ×${CRIT}</p>`
       + upRows(g, h) + '<small class="ups-note">Прокачка у кузнеца на карте</small>'
-      + `<p class="hc-ab"><b>${h.def.ab}.</b> ${h.def.abTxt} ${h.def.abMore}</p>`;
+      + `<p class="hc-ab"><b>${h.def.ab}.</b> ${h.def.abTxt} ${h.def.abMore}</p>`
+      + (h.arts?.length ? `<div class="hc-arts"><small class="ups-note">Трофеи боссов</small>${h.arts.map(k => {
+        const a = artDef(k);
+        return `<div class="hc-art" title="${a.gag}">${artIcon(k, 'hc-art-ico')}<b>${a.name}</b><small>${a.txt}</small></div>`;
+      }).join('')}</div>` : '');
   }
 
   // ------------------------------------------------------------ the turn button

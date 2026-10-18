@@ -5,6 +5,7 @@ import { AB_COST, HEROES } from './data';
 import type { Bank, Cue, Disc, Float, Food, Game, HeroState, Phase, Spark, State } from './game';
 import type { Mob, RoomSpec } from './room';
 import type { CampState } from './camp';
+import type { LootState } from './artifacts';
 import type { EventState } from './events';
 import type { Run, Votes } from './run';
 
@@ -82,6 +83,8 @@ export interface MapState {
   ev?: EventState | null;
   /** The camp the party sits at: what each hero has done by the fire. */
   camp?: CampState | null;
+  /** The floor boss's trophies the party shares out, and once shared who got what. */
+  loot?: LootState | null;
 }
 
 const sameSpec = (a: RoomSpec, b: RoomSpec) => a.seed === b.seed && a.depth === b.depth && a.floor === b.floor && a.type === b.type && (a.heroes ?? 3) === (b.heroes ?? 3);
