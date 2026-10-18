@@ -416,7 +416,7 @@ export class Hud {
     if (this.card >= 0) { this.card = -1; hl.mob = -1; hl.changed(); }
   }
 
-  /** A boss gets a wide bar under the top strip: its health, its fire and how soon it hits everyone. */
+  /** A boss gets a wide bar under the top strip: its name, health and fire. What it does next lives only in the enemy list. */
   private boss() {
     const g = this.g, m = g.liveMobs().find(o => MOBS[o.k].boss), bar = $('bossBar');
     bar.hidden = !m || g.S.phase === 'over';
@@ -428,8 +428,8 @@ export class Hud {
       img.onload = () => { const c = cv.getContext('2d')!; c.clearRect(0, 0, 64, 64); c.drawImage(img, 0, 0, 64, 64); };
       img.src = mobFace(m.k);
     }
-    const sp = g.specialIn(m), hpPct = (Math.max(0, m.hp) / m.max) * 100, burn = (Math.min(m.burn, Math.max(0, m.hp)) / m.max) * 100;
-    bar.querySelector('b')!.textContent = m.name + (sp ? ` · ${sp.name} ${sp.turns ? 'через ' + turns(sp.turns) : 'в этот ход'}` : '');
+    const hpPct = (Math.max(0, m.hp) / m.max) * 100, burn = (Math.min(m.burn, Math.max(0, m.hp)) / m.max) * 100;
+    bar.querySelector('b')!.textContent = m.name;
     (bar.querySelector('.bb-hp i') as HTMLElement).style.width = hpPct + '%';
     const em = bar.querySelector('.bb-hp em') as HTMLElement;
     em.style.left = hpPct - burn + '%';
