@@ -1,7 +1,7 @@
 // Draws one frame of a room: walls, floor, obstacles, resources, discs and miniatures.
 // Everything is drawn in iso space through the camera, so zoom and rotation are free.
 
-import { WALL_WORDS, FAN_R, GAS_R, GAS_TURNS, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, mobSize, type NodeKind } from '../data';
+import { WALL_WORDS, FAN_R, GAS_R, GAS_TURNS, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, heroFig, mobSize, type NodeKind } from '../data';
 import { KX, KY, type Camera, type Vec } from '../camera';
 import { ART, FOOD_FLY, ZAP_T, type Bomb, type Disc, type Food, type Game, type Gas, type HeroState, type Spark, type Zap } from '../game';
 import { cellAt, floorAt, hazKey, inPit, isFloor, pitAt, type Block, type Decal, type Edge, type Mob, type Pit, type ResNode } from '../room';
@@ -1430,18 +1430,18 @@ export class SceneRenderer {
     const target = g.liveMobs()[0] ?? S.nodes.filter(n => n.left > 0).sort((a, b) => b.r - a.r)[0] ?? { x: S.Wx / 2, y: S.Wy / 2 };
     if (lifted) { ell(c, sx, sy0, HERO_BASE * 1.27, HERO_BASE * 0.64); c.fillStyle = 'rgba(0,0,0,.35)'; c.fill(); }
     drawMiniature(c, {
-      key: h.def.key, x: sx, y: sy, baseR: HERO_BASE, baseCol: h.def.col, fig: HERO_FIG,
+      key: h.def.key, x: sx, y: sy, baseR: HERO_BASE, baseCol: h.def.col, fig: heroFig(h.def),
       faceRight: this.faceRight(p.x, p.y, target.x, target.y), flash: h.flash > 0, hop: at ? 0 : g.figureAt(h)!.lift,
       alpha: dead ? 0.45 : carried ? 0.3 : lifted ? 0.85 : 1,
       hp: dead || carried ? undefined : { now: h.hp, max: h.max },
       pose: lifted ? undefined : this.pose(h.knock, p.x, p.y, HERO_BASE),
       light: S.biome.light,
-      placeholder: (cc, x, y, fl) => drawHeroFigure(cc, h.i, x, y, 0.8, fl, this.t),
+      placeholder: (cc, x, y, fl) => drawHeroFigure(cc, h.i, x, y, (0.8 * heroFig(h.def)) / HERO_FIG, fl, this.t),
     });
     if (dead || carried) return;
     // with friends on the field a small gold arrow just over the head says which figure is yours
     if (g.hero === h && g.party.length > 1 && S.phase !== 'over') {
-      const yy = sy - BASE_TH - HERO_FIG - 4 - (reduce ? 0 : Math.sin(this.t * 6) * 1.2);
+      const yy = sy - BASE_TH - heroFig(h.def) - 4 - (reduce ? 0 : Math.sin(this.t * 6) * 1.2);
       pth(c, [[sx - 3, yy - 3], [sx + 3, yy - 3], [sx, yy + 1]]);
       fs(c, '#ffd34d', 0.8);
     }
