@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, isRanged, mobSize } from '../src/data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, isRanged, mobSize } from '../src/data';
 import { FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { CAVE, MOB_CAP, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
@@ -350,6 +350,32 @@ describe('hero health', () => {
     for (const h of [bastion, ricochet, ash]) expect([h.hp, h.max]).toEqual([h.def.hp, h.def.hp]);
     expect(bastion.max).toBeGreaterThan(ash.max);
     expect(ash.max).toBeGreaterThan(ricochet.max);
+  });
+
+  const beat = (type: 'boss' | 'fight', hp: (h: HeroState) => number) => {
+    const g = new Game();
+    g.party = newParty([0, 1, 2]);
+    g.loadRoom({ seed: 7, depth: type === 'boss' ? LAYERS : 3, floor: 0, type });
+    placeAll(g); g.startFight();
+    for (const h of g.party) h.hp = hp(h);
+    let won: boolean | null = null;
+    g.onRoomEnd = w => { won = w; };
+    for (const m of g.S.mobs) m.hp = 0;
+    g.update(1 / 60);
+    expect(won).toBe(true);
+    return g.party;
+  };
+
+  it('gives every hero back half their most health when the floor boss falls; the fallen get up with half', () => {
+    const [bastion, ricochet, ash] = beat('boss', h => (h.i === 0 ? 4 : h.i === 1 ? -3 : h.max - 2));
+    expect(bastion.hp).toBe(4 + Math.ceil(bastion.max * BOSS_HEAL));
+    expect(ricochet.hp).toBe(Math.ceil(ricochet.max * BOSS_HEAL));
+    // never above the top
+    expect(ash.hp).toBe(ash.max);
+  });
+
+  it('heals nobody after a plain fight', () => {
+    expect(beat('fight', h => (h.i === 1 ? 0 : 5)).map(h => h.hp)).toEqual([5, 0, 5]);
   });
 });
 
