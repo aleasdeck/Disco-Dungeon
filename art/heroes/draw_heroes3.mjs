@@ -3,8 +3,9 @@
 //   the kid Шкет, the bum Перегар and the ice genius Отморозок to public/assets/heroes/<key>.png (feet at the bottom edge,
 //   640 tall; the game adds the sticker edge and the plastic plate), their disc tops to public/assets/env/disc_<key>.webp,
 //   their ability glyphs (cream, inked) to public/assets/ui/ab_<key>.webp, the kid's firecracker to public/assets/env/petard.webp,
-//   the gas and slow status icons to public/assets/ui/ico_gas|ico_slow.webp, and a contact sheet to art/heroes/contact_heroes3.png.
-// Needs Playwright's Chromium (the npm package `playwright`). `node draw_heroes3.mjs kid` redraws one figure only.
+//   the gas, slow and firecracker status icons to public/assets/ui/ico_gas|ico_slow|ico_petard.webp, and a contact sheet to
+//   art/heroes/contact_heroes3.png. Needs Playwright's Chromium (the npm package `playwright`). `node draw_heroes3.mjs kid`
+//   redraws one figure only, `node draw_heroes3.mjs ico_petard` one sticker.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 const need = createRequire(import.meta.url);
@@ -392,8 +393,16 @@ const PETARD = `<path d="M30 34 Q30 22 36 16 Q42 10 42 7" fill="none" stroke="${
   ${L('M20 64 l4 0 M28 64 l4 0 M36 64 l4 0', 2, '#b88a1f')}
   ${E(30, 36, 16, 5, '#efe3c6', 3)}`;
 
-/** Status stickers, 256 across: the gas a hero's cloud chokes enemies with, and the snail of an enemy slowed by frost. */
+/**
+ * Status stickers, 256 across: the gas a hero's cloud chokes enemies with, the snail of an enemy slowed by frost, and the
+ * crackling firecracker an enemy runs to.
+ */
 const STICKERS = {
+  ico_petard: () => `<g transform="rotate(-14 128 140) translate(56 22) scale(2.4)">${PETARD}</g>
+    ${F('M164 6 l9 20 l21 -6 l-14 16 l14 16 l-21 -5 l-9 20 l-5 -21 l-21 4 l15 -15 l-14 -17 l21 6z', '#ffd34d', 6)}
+    ${dot(166, 36, 9, '#fff3b0')}
+    ${L('M206 92 Q222 112 208 134 M226 76 Q252 112 228 150', 9)}
+    ${L('M52 104 Q36 124 50 146 M32 88 Q6 124 30 162', 9)}`,
   ico_gas: () => `${cloud(128, 140, 2, '#a9d65a').replace(/<circle /g, `<circle stroke="${O}" stroke-width="7" `)}${cloud(128, 140, 2, '#a9d65a')}
     ${dot(150, 120, 34, '#c4e67e')}
     <path d="M60 168 Q100 196 150 186 Q190 178 214 150 Q206 196 160 210 Q100 222 60 168Z" fill="#7fae2e"/>
@@ -498,6 +507,8 @@ for (const [k, f] of Object.entries(FIGURES)) {
 /** writes a picture under public/assets and hands back its path there */
 const save = (file, url) => (writeFileSync(`${root}public/assets/${file}`, Buffer.from(url.split(',')[1], 'base64')), file);
 const small = [];
+// one sticker by its name redraws only that picture
+for (const [k, f] of Object.entries(STICKERS)) if (only.includes(k)) save(`ui/${k}.webp`, await pg.evaluate(a => window.cut(...a), [f(), 0, 256]));
 if (!only.length) {
   for (const [k, d] of Object.entries(DISCS)) small.push(save(`env/disc_${k}.webp`, await pg.evaluate(a => window.frame(...a), [disc(d), '0 0 160 160', 160, 160, 'image/webp', 0])));
   for (const [k, f] of Object.entries(GLYPHS)) small.push(save(`ui/ab_${k}.webp`, await pg.evaluate(a => window.cut(...a), [f(), 7, 256])));
@@ -505,7 +516,9 @@ if (!only.length) {
   small.push(save('env/petard.webp', await pg.evaluate(a => window.frame(...a), [PETARD, '0 0 60 100', 120, 200, 'image/webp', 0])));
 }
 const pics = [...Object.values(out), ...small.map(f => 'data:image/webp;base64,' + readFileSync(`${root}public/assets/${f}`).toString('base64'))];
-const sheet = await pg.evaluate(([s, bg]) => window.sheet(s, bg), [pics, '#3b322d']);
-writeFileSync(`${root}art/heroes/contact_heroes3.png`, Buffer.from(sheet.split(',')[1], 'base64'));
+if (pics.length) {
+  const sheet = await pg.evaluate(([s, bg]) => window.sheet(s, bg), [pics, '#3b322d']);
+  writeFileSync(`${root}art/heroes/contact_heroes3.png`, Buffer.from(sheet.split(',')[1], 'base64'));
+}
 await b.close();
 console.log('drew', Object.keys(out).join(', '));

@@ -61,14 +61,22 @@ export const GAS_PCT = 0.05;
 export const GAS_WEAK = 0.3;
 export const GAS_MAX = 6;
 /**
- * The kid's firecrackers: his disc drops one at each of its first PETARD_PER_DISC bounces, laid like the cook's dishes. One
- * goes off as soon as an enemy is within a cell of it, PETARD_DMG to every enemy that near; they lie there till then.
+ * The kid's «Отвлекуха»: his disc drops a firecracker at each of its first PETARD_PER_DISC bounces off anything but an enemy,
+ * laid like the cook's dishes. It crackles where it lies: of the enemies within PETARD_HEAR cells of it that mean to go for
+ * a hero, the PETARD_LURE nearest go for the noise instead and strike nobody on that move. In the enemies' turn it goes off
+ * as soon as an enemy is within a cell of it, PETARD_DMG through armour to every enemy that near; it lies there till then.
  */
 export const PETARD_PER_DISC = 2;
-export const PETARD_DMG = 4;
+export const PETARD_DMG = 2;
+export const PETARD_HEAR = 3;
+export const PETARD_LURE = 2;
 export const PETARD_MAX = 6;
-/** The ice genius's «Заморозка»: an enemy his disc hits once walks at most FROST_STEPS cells on its next move, hit twice it skips the move. */
+/**
+ * The ice genius's «Заморозка»: an enemy his disc hits once walks at most FROST_STEPS cells on its next move, hit twice it
+ * skips the move. Either way, till the frost wears off it takes FROST_VULN more from the heroes' discs and tricks, rounded up.
+ */
 export const FROST_STEPS = 1;
+export const FROST_VULN = 0.5;
 /** Online, at most this many players sit at one table: rooms are built for one to three heroes. */
 export const MAX_PLAYERS = 3;
 /** Ore for each level of a disc stat; a party can't buy everything in one run, so it has to choose. */
@@ -358,9 +366,9 @@ export const HEROES: HeroDef[] = [
     abMore: `Молния бьёт сквозь броню и перескакивает на ближайшего врага в ${ZAP_REACH / 16} клетках, которого ещё не била. Если диск добил врага, молния начинает с соседа.`,
   },
   {
-    key: 'kid', name: 'Шкет', acc: 'Шкета', dat: 'Шкету', col: '#d0528b', dk: '#6b2347', skin: '#f0c09a', role: 'Урон', hp: 18, r: 4, m: 1.7, e: 0.9, fr: 0.85, pw: 1.25,
-    ab: 'Петарды', abTxt: `До конца хода его диск на первых ${PETARD_PER_DISC} отскоках роняет петарду. Подойдёт враг, бахнет на ${PETARD_DMG}.`, abCol: '#ffb347',
-    abMore: 'Петарда ложится в клетку, как еда Поварёшки, и взрывается, как только враг окажется в клетке от неё: бьёт всех врагов рядом. Лежит, пока не рванёт.',
+    key: 'kid', name: 'Шкет', acc: 'Шкета', dat: 'Шкету', col: '#d0528b', dk: '#6b2347', skin: '#f0c09a', role: 'Поддержка', hp: 20, r: 4, m: 1.7, e: 0.9, fr: 0.85, pw: 1,
+    ab: 'Отвлекуха', abTxt: `До конца хода его диск на первых ${PETARD_PER_DISC} отскоках не от врагов роняет петарду. На треск бегут ${PETARD_LURE} ближайших врага.`, abCol: '#ffb347',
+    abMore: `Петарда ложится в клетку, как еда Поварёшки, и трещит, пока лежит. Из врагов в ${PETARD_HEAR} клетках от неё ${PETARD_LURE} ближайших идут к ней, а не к героям, и в этот ход никого не бьют. Кто зайдёт в клетку рядом с ней, тот её подорвёт: по ${PETARD_DMG} сквозь броню всем врагам рядом. Призыв, лечение и удар по всем враги делают как обычно.`,
   },
   {
     key: 'bum', name: 'Перегар', acc: 'Перегара', dat: 'Перегару', col: '#7b6a4e', dk: '#3b3224', skin: '#d9b08c', role: 'Зона', hp: 24, r: 5, m: 2.2, e: 0.7, fr: 1.05, pw: 1,
@@ -369,13 +377,13 @@ export const HEROES: HeroDef[] = [
   },
   {
     key: 'genius', name: 'Отморозок', acc: 'Отморозка', dat: 'Отморозку', col: '#3a9cb8', dk: '#1b4d5c', skin: '#cfe0e4', role: 'Зона', hp: 22, r: 5, m: 2, e: 0.85, fr: 0.9, pw: 1,
-    ab: 'Заморозка', abTxt: 'До конца хода его диск морозит: после одного попадания враг еле ползёт, после двух пропускает ход.', abCol: '#bdf2ff',
-    abMore: `Замедленный враг в свой ход проходит не больше ${FROST_STEPS === 1 ? 'клетки' : FROST_STEPS + ' клеток'}, но бьёт и стреляет, как обычно. Замороженный стоит и ничего не делает: ни удара, ни выстрела, ни призыва. Мороз держится до конца ближайшего хода врагов.`,
+    ab: 'Заморозка', abTxt: `До конца хода его диск морозит: после одного попадания враг еле ползёт, после двух пропускает ход. Урон по нему +${Math.round(FROST_VULN * 100)}%.`, abCol: '#bdf2ff',
+    abMore: `Замедленный враг в свой ход проходит не больше ${FROST_STEPS === 1 ? 'клетки' : FROST_STEPS + ' клеток'}, но бьёт и стреляет, как обычно. Замороженный стоит и ничего не делает: ни удара, ни выстрела, ни призыва. Пока мороз держится, а это до конца ближайшего хода врагов, диски и умения героев бьют врага на ${Math.round(FROST_VULN * 100)}% сильнее.`,
   },
 ];
 
 /** The roles in the order the pick screens list them, a row each. */
-export const ROLES = ['Танк', 'Урон', 'Зона'];
+export const ROLES = ['Танк', 'Урон', 'Зона', 'Поддержка'];
 
 /** Hero indexes grouped by role, a list per role in ROLES order, each in HEROES order. */
 export const heroesByRole = () => ROLES.map(r => HEROES.flatMap((h, i) => (h.role === r ? [i] : [])));
