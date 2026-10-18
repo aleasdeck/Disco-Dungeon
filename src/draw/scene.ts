@@ -1196,7 +1196,7 @@ export class SceneRenderer {
     if (im) {
       this.standee(im, sx, sy + 1, BOMB_W * 1.5);
       const H = (BOMB_W * 1.5 * im.height) / im.width;
-      tipX = sx + BOMB_W * 1.5 * 0.2; tipY = sy + 1 - H * 0.93;
+      tipX = sx + BOMB_W * 1.5 * 0.25; tipY = sy + 1 - H * 0.95;
     } else {
       c.lineJoin = 'round';
       rr(c, sx - BOMB_W / 2, sy - BOMB_W * 1.7, BOMB_W, BOMB_W * 1.7, 1.2); fs(c, '#d23a3a', 1);
