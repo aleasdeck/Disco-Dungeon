@@ -423,6 +423,9 @@ export const NODE_SETS: Partial<Record<RoomType, NodeKind[]>> = {
   treasure: ['ore', 'ore', 'herb', 'herb'],
 };
 
+/** Chance of a second spark crystal in a fight: a crystal is one ability, so a fight pays for one at least and usually for two. */
+export const SPK_TWO = 0.75;
+
 /**
  * The ore cave holds no enemies: one big vein in the middle of the room, the two small veins and two mushroom patches
  * of NODE_SETS off to the sides, and only `turns` minus the heroes: three turns for a lone hero, one for three heroes,
@@ -447,11 +450,12 @@ export const firstFloorExtra = (f: number, t: number) =>
 /**
  * Rooms are made for a party of three. A smaller party meets fewer enemies (summons included), with less HP and softer hits,
  * and its ore veins hold fewer charges, so mining costs it as many turns as it costs three heroes and each hero earns
- * about as much ore. Tuned with the bot so one, two and three heroes get about as far through a run: a lone hero has
- * one throw a turn and nobody to stand in for it, so it gets the biggest cut.
+ * about as much ore. Spark crystals hold as much for any party: one ability for every hero. Tuned with the bot so one,
+ * two and three heroes get about as far through a run: a lone hero has one throw a turn and nobody to stand in for it,
+ * so it gets the biggest cut.
  */
 export const PARTY_SCALE: Record<number, { mobs: number; hp: number; dmg: number; ch: Partial<Record<NodeKind, number>> }> = {
-  1: { mobs: 0.4, hp: 0.5, dmg: 0.6, ch: { ore: 1, spk: 2 } },
+  1: { mobs: 0.4, hp: 0.5, dmg: 0.6, ch: { ore: 1 } },
   2: { mobs: 0.7, hp: 0.8, dmg: 0.8, ch: { ore: 2 } },
   3: { mobs: 1, hp: 1, dmg: 1, ch: {} },
 };
@@ -666,7 +670,9 @@ export function generate(spec: RoomSpec): Layout {
   if (cave && big) nodes.push(big);
   // in the ore cave the small veins and the mushrooms stand apart, from the big vein and from each other
   const apart = (x: number, y: number) => !cave || nodes.every(n => Math.hypot(x - n.x, y - n.y) > (n.s ? 3 : 2.5) * TILE);
-  const kinds = NODE_SETS[type] ?? NODE_SETS.fight!;
+  const set = NODE_SETS[type] ?? NODE_SETS.fight!;
+  // most fights get a second crystal; its own stream, so the roll doesn't reshuffle the room
+  const kinds = set.includes('spk') && makeRng(spec.seed * 31 + spec.depth + 4513).next() < SPK_TWO ? [...set, 'spk' as const] : set;
   for (const k of kinds) {
     const side = (x: number, y: number) => flank(x, y) && apart(x, y);
     const q = placeCell(1, NODES[k].r, side) ?? placeCell(1, NODES[k].r, apart) ?? placeCell(1, NODES[k].r, mid) ?? placeCell(1, NODES[k].r, any) ?? placeCell(1, NODES[k].r, any, true);

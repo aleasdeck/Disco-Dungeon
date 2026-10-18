@@ -251,9 +251,13 @@ export const mobSize = (k: MobKind) => MOBS[k].size ?? 1;
 
 export type NodeKind = 'ore' | 'spk' | 'herb';
 
+/**
+ * Charges a resource holds: ore and mushrooms lose one per hit, the spark crystal one per spark it gives. One hit on
+ * a crystal fills the sparks, so for any party a crystal is one ability for every hero.
+ */
 export const NODES: Record<NodeKind, { name: string; r: number; ch: number }> = {
   ore: { name: 'Рудная жила', r: 7, ch: 3 },
-  spk: { name: 'Кристалл искр', r: 6, ch: 3 },
+  spk: { name: 'Кристалл искр', r: 6, ch: AB_COST },
   herb: { name: 'Грибы', r: 6, ch: 2 },
 };
 
