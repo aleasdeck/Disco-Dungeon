@@ -118,7 +118,7 @@ function upRows(g: Game, h: HeroState) {
 }
 
 /** The smithy's scene in the blacksmith's window. */
-const FORGE_TXT = `Орк-кузнец в фартуке с сердечками лупит по раскалённому диску, над горном сохнут его труселя. Отряду он молча отсыпает ${FORGE_ORE} руды на чай, остальное за плату.`;
+const FORGE_TXT = `Гном-кузнец закаляет раскалённый диск прямо в унитазе: шипит, парит, пахнет сталью и чем-то ещё. На радостях он отсыпает отряду ${FORGE_ORE} руды, остальное за плату.`;
 
 /**
  * The blacksmith's slab for each of a hero's upgrades: what it is, its level, where the stat goes with the next level,
@@ -129,7 +129,7 @@ function forgeRows(g: Game, h: HeroState) {
     const short = cost > g.bank.ore;
     return `<button class="ev-opt fg-up" data-k="${k}" title="${txt}"${cost && !short ? '' : ' disabled'}>`
       + `<i data-art="${UP_ART[k]}" aria-hidden="true"></i><span class="fg-name"><b>${name}</b>${pips(n, lv)}</span>`
-      + `<span class="fg-fx">${cost ? `${now}<i>→</i>${next}` : `${now}, больше некуда`}</span><small class="fg-txt">${txt}</small>`
+      + `<span class="fg-fx">${cost ? `${now}<i>→</i>${next}` : `${now}, больше некуда`}</span>`
       + (cost ? `<span class="fg-cost${short ? ' short' : ''}">${cost}${icon('ore')}</span>` : '') + '</button>';
   };
   return `<div class="fg-me"><img src="${faceUrl(h)}" alt=""><b>${h.def.name}</b><span>${h.hp > 0 ? `${h.hp}/${h.max} HP` : 'пал'}</span></div>`
@@ -198,7 +198,6 @@ export class Hud {
       if (b.dataset.k === 'n') g.buyDisc(h);
       else g.upgrade(b.dataset.k as StatKey, h);
     });
-    $('forgeScreen').dataset.v = new URLSearchParams(location.search).get('fg') ?? 'a'; // TEMP: layout variants for the pick
 
     // the enemy queue: hover shows a mob's card and rings its figure; a tap pins the card until the next tap elsewhere
     const q = $('queue'), at = (e: Event) => (e.target as HTMLElement).closest<HTMLElement>('li[data-m]');
