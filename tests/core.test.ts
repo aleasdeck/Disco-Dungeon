@@ -75,14 +75,16 @@ describe('ore cave', () => {
   const cave = (seed: number, heroes: number) => generate({ seed, depth: LAYERS + 2, floor: 1, type: 'treasure', heroes });
   const sum = (n: number[]) => n.reduce((a, b) => a + b, 0);
 
-  it('holds no enemies, one big vein on 2 × 2 cells and two small ones, the same for any party', () => {
+  it('holds no enemies, one big vein on 2 × 2 cells, two small ones and two mushroom patches, the same for any party', () => {
     for (let seed = 1; seed < 40; seed++) for (const heroes of [1, 2, 3]) {
-      const L = cave(seed, heroes), [big, ...small] = L.nodes;
+      const L = cave(seed, heroes), [big, ...rest] = L.nodes;
+      const small = rest.filter(n => n.k === 'ore'), herbs = rest.filter(n => n.k === 'herb');
       expect(L.mobs).toHaveLength(0);
-      expect(L.nodes.every(n => n.k === 'ore')).toBe(true);
-      expect(big).toMatchObject({ s: 2, r: CAVE.big.r, ch: CAVE.big.ch, left: CAVE.big.ch });
+      expect(big).toMatchObject({ k: 'ore', s: 2, r: CAVE.big.r, ch: CAVE.big.ch, left: CAVE.big.ch });
       expect(small).toHaveLength(2);
       for (const n of small) { expect(n).toMatchObject({ ch: CAVE.small, left: CAVE.small }); expect(n.s).toBeUndefined(); }
+      expect(herbs).toHaveLength(2);
+      expect(rest).toHaveLength(4);
     }
     expect(sum(cave(7, 1).nodes.map(n => n.ch))).toBe(sum(cave(7, 3).nodes.map(n => n.ch)));
   });
@@ -119,10 +121,15 @@ describe('ore cave', () => {
     }
   });
 
-  it('ends at once when every vein is spent, and counts the ore mined', () => {
+  it('stays open while mushrooms are left, ends at once when everything is spent, and counts the ore mined', () => {
     const { g, won } = enter([0]);
     const [big] = g.S.nodes;
-    // the last charges: one vein a hit away, the rest spent
+    // the veins spent, a mushroom patch left: a throw may still go for health
+    for (const n of g.S.nodes) n.left = n.k === 'herb' ? 1 : 0;
+    g.update(1 / 60);
+    expect(g.cleared()).toBe(false);
+    expect(g.S.phase).toBe('throw');
+    // the last charge: the big vein a hit away, the rest spent
     for (const n of g.S.nodes) n.left = n === big ? 1 : 0;
     const h = g.hero, p = g.spot(h)!;
     g.throwDisc(h, big.x - p.x, big.y - p.y);
