@@ -55,6 +55,8 @@ const phantomArt = (img: HTMLImageElement) => {
 
 /** The cook's dishes, by `Food.k`: their pictures are food_<name> in the manifest, else drawn by code. */
 const DISHES = ['cutlet', 'sausage', 'pie', 'drumstick'];
+/** How wide a dish stands, in iso units: it fills most of the cell it lies in. */
+const FOOD_W = 17;
 
 /** Cartoon look: silhouette and detail ink widths, in iso units. */
 const OL = 2.1, DL = 1.1;
@@ -1145,16 +1147,21 @@ export class SceneRenderer {
   private drawFood(f: Food) {
     const { c, P } = this, u = Math.min(1, f.t / FOOD_FLY), e = u * (2 - u);
     const x = f.fx + (f.x - f.fx) * e, y = f.fy + (f.y - f.fy) * e, h = Math.sin(Math.PI * u) * 14;
-    ell(c, ...P(x, y), 4.6 * (0.6 + 0.4 * u), 2.2 * (0.6 + 0.4 * u)); c.fillStyle = 'rgba(15,8,4,.35)'; c.fill();
+    ell(c, ...P(x, y), FOOD_W * 0.46 * (0.6 + 0.4 * u), FOOD_W * 0.22 * (0.6 + 0.4 * u)); c.fillStyle = 'rgba(15,8,4,.35)'; c.fill();
     const [sx, sy] = P(x, y, h), im = env('food_' + DISHES[f.k % DISHES.length]);
-    if (im) { this.standee(im, sx, sy + 1.5, 10); return; }
+    if (im) { this.standee(im, sx, sy + 2, FOOD_W); return; }
+    // the drawn dishes are sized for a dish 10 wide
+    c.save();
+    c.translate(sx, sy);
+    c.scale(FOOD_W / 10, FOOD_W / 10);
     c.lineJoin = 'round';
     switch (f.k % DISHES.length) {
-      case 0: ell(c, sx, sy - 1, 5.5, 2.6); fs(c, '#f4efe4', 1); ell(c, sx, sy - 2, 3.6, 2); fs(c, '#8a4f2a', 1); break;
-      case 1: rr(c, sx - 4.5, sy - 4, 9, 3.4, 1.7); fs(c, '#e59a9a', 1); break;
-      case 2: c.beginPath(); c.ellipse(sx, sy - 1.5, 4.8, 3, 0, Math.PI, 0); c.closePath(); fs(c, '#d9a13d', 1); break;
-      default: ell(c, sx + 1, sy - 2.5, 3.4, 2.6); fs(c, '#b8692e', 1); rr(c, sx - 4.5, sy - 2, 3.5, 1.4, 0.6); fs(c, '#f1e7d0', 0.8);
+      case 0: ell(c, 0, -1, 5.5, 2.6); fs(c, '#f4efe4', 1); ell(c, 0, -2, 3.6, 2); fs(c, '#8a4f2a', 1); break;
+      case 1: rr(c, -4.5, -4, 9, 3.4, 1.7); fs(c, '#e59a9a', 1); break;
+      case 2: c.beginPath(); c.ellipse(0, -1.5, 4.8, 3, 0, Math.PI, 0); c.closePath(); fs(c, '#d9a13d', 1); break;
+      default: ell(c, 1, -2.5, 3.4, 2.6); fs(c, '#b8692e', 1); rr(c, -4.5, -2, 3.5, 1.4, 0.6); fs(c, '#f1e7d0', 0.8);
     }
+    c.restore();
   }
 
   private drawDisc(d: Disc) {

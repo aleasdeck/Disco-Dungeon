@@ -75,14 +75,16 @@ export interface Disc {
 }
 
 /**
- * A dish the cook's disc dropped: it flies from where the disc bounced (fx, fy) to (x, y) for FOOD_FLY seconds, then lies
- * there to be picked up. `k` picks the dish, `by` is the disc that dropped it (it can't pick it up itself), `t` its age.
+ * A dish the cook's disc dropped: it flies from where the disc bounced (fx, fy) to (x, y), the middle of a cell, for
+ * FOOD_FLY seconds, then lies there to be picked up. `k` picks the dish, `by` is the disc that dropped it (it can't pick it up itself), `t` its age.
  */
 export interface Food { x: number; y: number; fx: number; fy: number; k: number; by?: number; t: number }
 /** Seconds a dropped dish takes to land. */
 export const FOOD_FLY = 0.35;
-/** How close a disc's edge must pass a dish to pick it up. */
-const FOOD_R = 3;
+/** How close a disc's edge must pass the middle of a dish to pick it up: the dish fills most of its cell. */
+const FOOD_R = 6;
+/** How many cells from where a dish was flung it may end up, when the cells nearer are taken. */
+const FOOD_SPREAD = 2;
 
 /**
  * A stroke of Electra's lightning from one enemy to the next, for the eye only: every screen strikes its own as the discs
@@ -678,22 +680,26 @@ export class Game {
 
   /**
    * The cook's disc bounced off something; (nx, ny) points from it toward the disc. While the disc has dishes left it drops
-   * one, which flies back out into the room a cell or so and lands on open floor, clear of everything standing there.
+   * one, which flies back out into the room about a cell and lands in the middle of a cell of open floor: one dish to a
+   * cell, so a bounce next to a dish already lying there puts the new one on the nearest free cell beside it. No dish
+   * lands under an enemy, a resource, a block, in a hole, on spikes or lava, or on a rune or a hero's cell.
    */
   private dropFood(d: Disc, nx: number, ny: number) {
     const S = this.S, L = Math.hypot(nx, ny);
     if ((d.food ?? 0) >= FOOD_PER_DISC || S.food.length >= FOOD_MAX || !L) return;
     nx /= L; ny /= L;
-    const side = (this.fx() - 0.5) * 12;
-    for (const out of [16, 11, 22]) {
-      const x = d.x + nx * out - ny * side, y = d.y + ny * out + nx * side;
-      if (!isFloor(S, Math.floor(x / TILE), Math.floor(y / TILE)) || pitAt(S.pits, x, y) || this.inBlock(x, y, 4)) continue;
-      if (S.mobs.some(m => m.hp > 0 && Math.hypot(m.x - x, m.y - y) < m.r + 3) || S.nodes.some(n => n.left > 0 && Math.hypot(n.x - x, n.y - y) < n.r + 3)) continue;
-      if (S.food.some(f => Math.hypot(f.x - x, f.y - y) < 7)) continue;
-      S.food.push({ x, y, fx: d.x, fy: d.y, k: Math.floor(this.fx() * 4), by: d.id, t: 0 });
-      d.food = (d.food ?? 0) + 1;
-      return;
+    const side = (this.fx() - 0.5) * 12, x = d.x + nx * 16 - ny * side, y = d.y + ny * 16 + nx * side;
+    const taken = this.occupied(null, true), stands = this.standCells(), fi = Math.floor(x / TILE), fj = Math.floor(y / TILE);
+    let best: { x: number; y: number } | null = null, bd = Infinity;
+    for (let j = fj - FOOD_SPREAD; j <= fj + FOOD_SPREAD; j++) for (let i = fi - FOOD_SPREAD; i <= fi + FOOD_SPREAD; i++) {
+      if (!this.cellFree(i, j, taken) || S.haz.has(hazKey(i, j)) || stands.has(hazKey(i, j))) continue;
+      const c = cellCentre(i, j), dd = Math.hypot(c.x - x, c.y - y);
+      if (dd >= bd || S.food.some(f => f.x === c.x && f.y === c.y)) continue;
+      best = c; bd = dd;
     }
+    if (!best) return;
+    S.food.push({ ...best, fx: d.x, fy: d.y, k: Math.floor(this.fx() * 4), by: d.id, t: 0 });
+    d.food = (d.food ?? 0) + 1;
   }
 
   /** Dishes on the floor this disc rolls over: the hero who threw it eats, if hurt, any but the dishes this disc dropped. */
