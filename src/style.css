@@ -640,6 +640,46 @@ i.ico { display: inline-block; font-style: normal; }
 .card dd { margin: 0; color: #f0e5d0; }
 .col-art-ico { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 10px; border: 1.5px solid var(--ink); background: #1d1611; }
 .col-art-ico > .ico, .col-art-ico > .art { width: 56px; height: 56px; border: 0; background: none; border-radius: 0; }
+
+/* ---------- statistics: three big numbers, the favourite hero, every hero's runs, the totals and the records */
+.stats-panel { width: min(720px, 100%); }
+.stats-body h3 { margin: 16px 0 8px; font: 600 18px Oswald, sans-serif; }
+.st-empty { margin: 14px 0 4px; color: var(--muted); font-size: 17px; }
+.st-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.st-tile, .st-fav { background: rgba(0, 0, 0, 0.22); border: 1.5px solid var(--ink); border-radius: 12px; min-width: 0; }
+.st-tile { display: grid; justify-items: center; align-content: start; gap: 2px; padding: 10px 6px; text-align: center; }
+.st-tile b { font: 700 clamp(21px, 6vw, 34px)/1.05 Oswald, sans-serif; color: var(--gold); white-space: nowrap; }
+.st-tile span { font: 600 15px Oswald, sans-serif; }
+.st-tile small { color: var(--muted); font-size: 14px; line-height: 1.1; }
+.st-fav { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; align-items: center; margin-top: 10px; padding: 10px; }
+.st-fav canvas { width: 84px; height: 84px; border-radius: 10px; border: 1.5px solid var(--ink); background: var(--c); }
+.st-fav small { display: block; color: var(--muted); font-size: 15px; }
+.st-fav b { display: block; font: 700 26px/1.1 Oswald, sans-serif; }
+.st-fav span { display: block; font-size: 16px; color: #d6cfbd; }
+/* the rows share their columns, so every bar starts and ends in the same place */
+.st-heroes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 30px auto minmax(30px, 1fr) auto; gap: 6px 10px; }
+.st-heroes li { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; }
+.st-heroes img { width: 30px; height: 30px; border-radius: 7px; border: 1.5px solid var(--ink); background: var(--c); }
+.st-heroes b { font: 600 15px Oswald, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-bar { height: 12px; background: #241a14; border: 1.5px solid var(--ink); border-radius: 6px; overflow: hidden; }
+.st-bar i { display: block; height: 100%; background: var(--c); }
+.st-heroes em { font-style: normal; color: var(--muted); font-size: 15px; white-space: nowrap; }
+.st-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0 24px; }
+.st-cols dl { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 12px; margin: 0; font-size: 16px; }
+.st-cols dt { color: var(--muted); }
+.st-cols dd { margin: 0; text-align: right; font: 500 15px Oswald, sans-serif; }
+.st-since { margin: 16px 0 0; color: var(--muted); font-size: 14px; }
+/* a phone: smaller big numbers, and each hero's numbers under its name and bar */
+@media (max-width: 520px) {
+  .st-tiles { gap: 6px; }
+  .st-tile { padding: 8px 4px; }
+  .st-tile b { font-size: clamp(17px, 5vw, 26px); }
+  .st-tile small { font-size: 13px; }
+  .st-heroes { grid-template-columns: 30px auto minmax(0, 1fr); }
+  .st-heroes li { grid-row: span 2; grid-template-rows: auto auto; }
+  .st-heroes img { grid-row: span 2; }
+  .st-heroes em { grid-column: 2 / -1; font-size: 14px; line-height: 1.1; }
+}
 .end-panel p { color: var(--muted); margin: 10px 0 16px; }
 .help-panel ul { text-align: left; padding-left: 18px; margin: 12px 0 16px; color: var(--muted); }
 .help-panel li { margin: 6px 0; }

@@ -5,7 +5,7 @@ import { Game, newBank, newParty } from './game';
 import { Net, type Player } from './net';
 import { applySnapshot, snapshot, type MapState } from './sync';
 import { saveSettings, settings } from './settings';
-import { bindSettings, lobbyStatus, renderCollection, renderHeroSelect, renderLobby, resetLobby, show, startable } from './menu';
+import { bindSettings, lobbyStatus, renderCollection, renderHeroSelect, renderLobby, renderStats, resetLobby, show, startable } from './menu';
 import { Input } from './input';
 import { Hud, faceUrl } from './ui';
 import { hl } from './hl';
@@ -21,6 +21,7 @@ import { campDo, campLeave, type CampPick, type CampState } from './camp';
 import { CampView } from './campview';
 import { lootAgreed, newLoot, settleLoot, type LootState } from './artifacts';
 import { LootView, type LootVotes } from './lootview';
+import { beginRun, endRun, playTime, saveStats, syncRun } from './stats';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -171,6 +172,8 @@ function seatAway() {
   game.setAway(players.filter(p => p.hero !== null && p.id !== 'host' && !net.has(p.id)).map(p => p.hero!).sort());
 }
 const myHero = () => players.find(p => p.id === net.id)?.hero ?? null;
+/** This screen's own hero: online the player's, alone the one hero of the campaign. */
+const meHero = () => (game.online ? game.party.find(h => h.i === myHero()) ?? null : game.party[0] ?? null);
 /** The players as the clients see them: without anyone's rejoin key. */
 const pub = () => players.map(({ key: _key, ...p }) => p);
 
@@ -204,8 +207,11 @@ function setOnline(m: Mode) {
 }
 
 function startRun(picks?: number[]) {
+  flushStats();
   run = newRun();
-  game.party = newParty(picks);
+  game.party = newParty(picks, run.seed);
+  const me = meHero();
+  if (me) beginRun(run, me.def.key, mode === 'host');
   game.bank = newBank();
   game.pickActiveParty();
   hud.buildAllies();
@@ -527,12 +533,13 @@ game.onChange = () => { hud.refresh(); dirty = true; stale = true; };
 game.onSound = (ev, p) => sound.play(ev, p);
 // online every party head says whose hero it is
 hud.nameOf = i => (game.online ? players.find(p => p.hero === i)?.name ?? null : null);
-hud.me = () => (game.online ? game.party.find(h => h.i === myHero()) ?? null : game.party[0] ?? null);
+hud.me = meHero;
 hl.changed = () => { dirty = true; };
 game.onRoomEnd = win => {
   const S = game.S, boss = S.spec.type === 'boss';
   const last = boss && run.floor === FLOORS - 1;
   setTimeout(() => {
+    if (!win || last) endRun(run, meHero(), win);
     if (!win) return showEnd({ title: game.party.length > 1 ? 'Отряд пал' : 'Герой пал', text: `Забег окончен на этаже ${run.floor + 1}, сложность ${S.spec.depth}.`, kind: 'again' });
     if (last) {
       const left = game.alive().map(h => h.def.name).join(', ');
@@ -621,6 +628,8 @@ $('heroBack').addEventListener('click', openMenu);
 $('heroGo').addEventListener('click', () => startCampaign(settings.hero));
 $('mOnline').addEventListener('click', () => { $<HTMLInputElement>('lobbyName').value = settings.name; resetLobby(); show('lobby'); });
 $('mCollection').addEventListener('click', () => { renderCollection('heroes'); show('collection'); });
+$('mStats').addEventListener('click', () => { flushStats(); renderStats(); show('statsScreen'); });
+$('statsBack').addEventListener('click', openMenu);
 /** The settings open from the main menu or from the pause menu in a game, and «Назад» goes back where they came from. */
 let settingsFrom: 'menu' | 'pause' = 'menu';
 function openSettings(from: typeof settingsFrom) {
@@ -649,6 +658,7 @@ $('pMenu').addEventListener('click', () => {
 // ------------------------------------------------------------ online
 
 function leaveOnline() {
+  flushStats();
   reconnecting++;
   // a client thrown out of the blacksmith's would keep the shop on screen over the menu
   if (game.forge) { game.forge = 0; hud.refresh(); }
@@ -890,6 +900,8 @@ net.onMsg = (from, m) => {
   } else if (m.t === 'map') {
     const went = choosing && !m.m.choosing;
     ({ run, choosing, votes, voters } = m.m);
+    const mine = myHero();
+    if (started && mine !== null) beginRun(run, HEROES[mine].key, true);
     ev = m.m.ev ?? null;
     camp = m.m.camp ?? null;
     loot = m.m.loot ?? null;
@@ -915,7 +927,11 @@ net.onMsg = (from, m) => {
     if (camp) { showCamp(); if (!$('mapScreen').hidden) showMap(true); }
     // the party walked into the blacksmith's: the shop takes the map's place
     if (!shop && hud.atForge) showMap(false);
-  } else if (m.t === 'screen') screen(m.title, m.text, m.win, m.lose);
+  } else if (m.t === 'screen') {
+    // the host's word that the run is over: the last boss fell, or the whole party did
+    if (started && (m.win || m.lose)) endRun(run, meHero(), !!m.win);
+    screen(m.title, m.text, m.win, m.lose);
+  }
   else if (m.t === 'lobbyBack') { started = false; ev = null; showEvent(); camp = null; showCamp(); loot = null; showLoot(); wait(''); hideEnd(); showMap(false); lobbyView(); show('lobby'); }
 };
 
@@ -961,6 +977,8 @@ async function reopen(code: string) {
     loot = s.loot ?? null;
     applySnapshot(game, s.snap);
     setOnline('host');
+    const mine = myHero();
+    if (mine !== null) beginRun(run, HEROES[mine].key, true);
     game.pickActiveParty();
     hud.buildAllies();
     hud.refresh();
@@ -1002,15 +1020,39 @@ async function reopen(code: string) {
 }
 
 /** The main menu and its screens; the settings count among them when opened from the main menu, not from a game. */
-const MENU_SCREENS = ['menu', 'heroSelect', 'lobby', 'collection'];
+const MENU_SCREENS = ['menu', 'heroSelect', 'lobby', 'collection', 'statsScreen'];
+const inMenu = () => MENU_SCREENS.some(id => !$(id).hidden) || (settingsFrom === 'menu' && !$('settingsScreen').hidden);
 
 /** What plays now: the funk in the main menu, a floor's fight tune in a fight, the lounge everywhere else. */
 function track(): Track | null {
   if (!booted) return null;
-  if (MENU_SCREENS.some(id => !$(id).hidden) || (settingsFrom === 'menu' && !$('settingsScreen').hidden)) return 'menu';
+  if (inMenu()) return 'menu';
   const S = game.S;
   if (mode !== 'menu' && !choosing && COMBAT_ROOMS.includes(S.spec.type) && S.phase !== 'over') return `fight${Math.min(2, S.spec.floor)}`;
   return 'calm';
+}
+
+// ------------------------------------------------------------ statistics
+
+/** A player who hasn't touched the game for this long has walked away: the run's time stops until they are back. */
+const AWAY_MS = 5 * 60 * 1000;
+let touchedAt = performance.now(), statsAt = 0;
+for (const ev of ['pointerdown', 'keydown', 'wheel'] as const) window.addEventListener(ev, () => { touchedAt = performance.now(); }, { capture: true, passive: true });
+
+/** Put what the run has come to so far into the statistics and write them down. */
+function flushStats() {
+  syncRun(run, meHero(), choosing);
+  saveStats();
+}
+
+/** The run's time goes on while it is on screen and the player is at it; its numbers are written down every couple of seconds. */
+function countStats(now: number, raw: number) {
+  if (mode !== 'solo' && !(started && (mode === 'host' || mode === 'client'))) return;
+  if (!document.hidden && now - touchedAt < AWAY_MS && !inMenu()) playTime(run, Math.min(raw, 1));
+  // a client's discs still rolling may run ahead of the host's count for a moment: the numbers wait until they stop
+  if (now - statsAt < 2000 || game.moving()) return;
+  statsAt = now;
+  flushStats();
 }
 
 function applyQuality() {
@@ -1043,6 +1085,7 @@ function frame(now: number) {
   sound.muffle(t?.startsWith('fight') === true && game.S.phase === 'enemy');
   shareState(now);
   keepSeat(now);
+  countStats(now, raw);
   const camKey = `${cam.panX},${cam.panY},${cam.zoom},${cam.rot}`;
   const changed = stale || camKey !== drawnCam || game.S !== drawnRoom || busy();
   const covered = document.querySelector('.overlay:not([hidden])') !== null;
@@ -1074,7 +1117,9 @@ game.loadRoom({ seed: Math.floor(Math.random() * 1e6), depth: 1, floor: 0, type:
 controls.fit();
 window.addEventListener('resize', resize);
 // closing the tab tells the others right away instead of after the heartbeat timeout
-window.addEventListener('pagehide', () => { if (net.active) net.close(); });
+window.addEventListener('pagehide', () => { flushStats(); if (net.active) net.close(); });
+// a phone may kill a page in the background without a pagehide
+document.addEventListener('visibilitychange', () => { if (document.hidden) flushStats(); });
 
 // ------------------------------------------------------------ start
 
