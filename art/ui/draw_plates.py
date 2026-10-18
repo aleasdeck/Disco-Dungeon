@@ -22,8 +22,9 @@ SS = 4
 
 DARK = (58, 44, 34)
 MUSTARD = (190, 152, 66)
-# a light kraft, so the choices stand out of the dark board (Vladislav: dark slabs melted into it)
-PALE = (214, 180, 132)
+# white paper, so the choices stand out of the dark board (Vladislav: dark slabs melted into it; of kraft, paper and
+# mustard he picked paper)
+PALE = (240, 229, 204)
 
 
 def lighter(col, n):
