@@ -2,7 +2,7 @@
 // the enemy queue with what each will do, map / journal / menu), my hero's corner (portrait with its statuses, discs,
 // health with the shield on it, the sparks bar running into the ability button) and one big button for the turn.
 
-import { AB_COST, CRIT, E_MAX, ENEMY_BASE, FORGE_ORE, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, fullHit, isRanged, type MobKind, type StatKey } from './data';
+import { AB_COST, CRIT, E_MAX, ENEMY_BASE, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, fullHit, isRanged, type MobKind, type StatKey } from './data';
 import { eventArt, sprites, uiArt } from './assets';
 import type { Game, HeroState } from './game';
 import type { Mob } from './room';
@@ -116,7 +116,8 @@ function upRows(g: Game, h: HeroState) {
 }
 
 /** The smithy's scene in the blacksmith's window. */
-const FORGE_TXT = `Гном-кузнец закаляет раскалённый диск прямо в унитазе: шипит, парит, пахнет сталью и чем-то ещё. На радостях он отсыпает отряду ${FORGE_ORE} руды, остальное за плату.`;
+const forgeTxt = (ore: number) => 'Гном-кузнец закаляет раскалённый диск прямо в унитазе: шипит, парит, пахнет сталью и чем-то ещё. '
+  + (ore ? `На радостях он отсыпает отряду ${ore} руды, остальное за плату.` : 'Руды он сегодня не дарит: самому мало, так что всё за плату.');
 
 /**
  * The blacksmith's slab for each of a hero's upgrades: what it is, its level, where the stat goes with the next level,
@@ -612,7 +613,7 @@ export class Hud {
     if (pic && img.getAttribute('src') !== pic.src) img.src = pic.src;
     img.hidden = !pic;
     $('forgeArt').classList.toggle('stub', !eventArt.has('forge'));
-    $('forgeText').textContent = FORGE_TXT;
+    $('forgeText').textContent = forgeTxt(g.gift);
     $('forgeOre').textContent = String(g.bank.ore);
     const h = this.me(), box = $('forgeMine'), html = h ? forgeRows(g, h) : '';
     if (html !== this.forgeHtml) {

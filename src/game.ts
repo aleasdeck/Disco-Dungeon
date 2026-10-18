@@ -249,6 +249,8 @@ export class Game {
    * levels for sale; the depth tells one visit from the next when two blacksmiths come in a row.
    */
   forge = 0;
+  /** Ore the blacksmith handed the party at this visit, for the scene in his window. */
+  gift = 0;
   /** Host: ore the party has mined in this room, for the room's result. */
   mined = 0;
   private acc = 0;

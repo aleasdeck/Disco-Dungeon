@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, FAN_ANGLE, FAN_M, FOOD_HEAL, FOOD_PER_DISC, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, isRanged, mobSize } from '../src/data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, CRIT, E_MAX, FAN_ANGLE, FAN_M, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODE_E, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, isRanged, mobSize } from '../src/data';
 import { FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { CAVE, MOB_CAP, PARTY_SCALE, SPK_TWO, caveTurns, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
@@ -195,6 +195,22 @@ describe('difficulty along a floor', () => {
     }
   });
 
+  it('fills every boss room with columns, holes and hazards, and never cuts the boss off from a rune', () => {
+    const g = new Game();
+    let middle = 0;
+    for (let f = 0; f < FLOORS; f++) for (let seed = 1; seed < 60; seed++) {
+      g.loadRoom({ seed, depth: f * LAYERS + LAYERS, floor: f, type: 'boss', heroes: 1 + (seed % 3) });
+      const L = g.S, area = L.floor.reduce((a, b) => a + b, 0), boss = L.mobs.find(m => MOBS[m.k].boss)!;
+      expect(L.blocks.length).toBeGreaterThanOrEqual(3);
+      expect(L.pits.length).toBeGreaterThan(0);
+      if ([...L.haz].some(k => { const [i, j] = k.split(',').map(Number); return Math.abs((i + 0.5) / L.gw + (j + 0.5) / L.gh - 1) < 0.2; })) middle++;
+      expect((L.mobs.length + L.blocks.length + L.pits.length + L.haz.size + L.nodes.length) / area).toBeLessThan(0.2);
+      for (const p of L.pads) expect(g.route(boss, p, false)).not.toBeNull();
+    }
+    // hazards lie across the middle of the room too, not only along its walls
+    expect(middle).toBeGreaterThan(FLOORS * 59 * 0.6);
+  });
+
   it('hits harder on later floors and in the last rooms before the boss', () => {
     expect(room(0, 0, 3).dmgAdd).toBe(0);
     expect(room(0, LAYERS - 2, 3).dmgAdd).toBe(1);
@@ -239,10 +255,10 @@ describe('holes in the floor', () => {
         expect(seen.size).toBe(p.cells.length);
       }
     }
-    // the first rows get only small ones, the boss fights on whole floor
+    // the first rows get only small ones, the boss small enough for it to walk round
     for (let seed = 1; seed < 40; seed++) {
       expect(generate({ seed, depth: 3, floor: 0, type: 'fight' }).pits.every(p => p.cells.length <= 2)).toBe(true);
-      expect(generate({ seed, depth: LAYERS, floor: 0, type: 'boss' }).pits).toHaveLength(0);
+      expect(generate({ seed, depth: LAYERS, floor: 0, type: 'boss' }).pits.every(p => p.cells.length <= 4)).toBe(true);
     }
   });
 
@@ -770,6 +786,19 @@ describe('placement and discs', () => {
     expect(a.pad).toBe(1);
   });
 
+  it('hands the party 0 to 3 ore at the blacksmith\'s, the same on every screen, and each amount turns up', () => {
+    expect(FORGE_ORE).toBe(3);
+    expect(forgeOre(5150)).toBe(forgeOre(5150));
+    const got = new Set<number>();
+    for (let s = 0; s < 200; s++) {
+      const n = forgeOre(s * 131);
+      expect(n).toBeGreaterThanOrEqual(0);
+      expect(n).toBeLessThanOrEqual(FORGE_ORE);
+      got.add(n);
+    }
+    expect([...got].sort()).toEqual([0, 1, 2, 3]);
+  });
+
   it('sells disc upgrades only at the blacksmith\'s, between rooms', () => {
     const g = fresh(), h = g.hero;
     g.bank.ore = 100;
@@ -1114,9 +1143,10 @@ describe('online play', () => {
   it('opens the blacksmith\'s on every screen, and a client buys through the host', () => {
     const { host, cli, sent } = pair();
     host.forge = 4;
+    host.gift = 2;
     host.bank.ore = 20;
     applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
-    expect(cli.forge).toBe(4);
+    expect([cli.forge, cli.gift]).toEqual([4, 2]);
     cli.buyDisc(cli.heroOf(2));
     expect(sent).toEqual([{ k: 'disc', h: 2 }]);
     host.perform(sent[0]);

@@ -1,5 +1,7 @@
 // Static game data: biomes, heroes, mobs, resource nodes, room types.
 
+import { makeRng } from './rng';
+
 export const INK = '#1a1210';
 export const ENEMY_BASE = '#b8323f';
 export const TILE = 16;
@@ -363,8 +365,10 @@ export const UPS: Upgrade[] = [
 /** Damage of a full-strength throw that hits square on before the disc slows down (no precise-hit bonus). */
 export const fullHit = (m: number, pw: number) => Math.ceil((m * 270 * pw) / 120);
 
-/** Ore the blacksmith hands the party on top of selling disc upgrades. */
-export const FORGE_ORE = 5;
+/** Most ore the blacksmith hands the party on a visit, on top of selling disc upgrades; the least is none. */
+export const FORGE_ORE = 3;
+/** Ore the blacksmith hands the party at this visit, 0 to FORGE_ORE: the same on every screen and after a reload. */
+export const forgeOre = (seed: number) => makeRng(seed * 11 + 3).int(0, FORGE_ORE);
 
 export type RoomType = 'fight' | 'elite' | 'treasure' | 'camp' | 'forge' | 'event' | 'boss';
 
@@ -373,7 +377,7 @@ export const ROOM_TYPES: Record<RoomType, { name: string; col: string; min: numb
   elite: { name: 'Элитный бой', col: '#7a1d33', min: 3, txt: 'Сильный враг этажа и свита. Две рудные жилы вместо одной.' },
   treasure: { name: 'Рудная пещера', col: '#d39612', min: 1, txt: 'Врагов нет: одна большая рудная жила, две малые и грибы. Ходов 4 минус число героев, втроём один.' },
   camp: { name: 'Костёр', col: '#e8642c', min: 0.5, txt: 'У огня каждый делает одно: отдыхает, перевязывает товарища или копает руду.' },
-  forge: { name: 'Кузнец', col: '#5d6488', min: 1, txt: `Прокачка дисков за руду, только здесь. И ещё ${FORGE_ORE} руды в подарок.` },
+  forge: { name: 'Кузнец', col: '#5d6488', min: 1, txt: `Прокачка дисков за руду, только здесь. И ещё 0–${FORGE_ORE} руды в подарок, как повезёт.` },
   event: { name: 'Событие', col: '#6b4fa8', min: 0.75, txt: 'Странная встреча и выбор: награда, риск или беда.' },
   boss: { name: 'Босс этажа', col: '#2a1a3a', min: 3.5, txt: 'Свой босс на каждом этаже, со свитой.' },
 };
