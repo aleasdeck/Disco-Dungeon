@@ -711,6 +711,16 @@ describe('map events', () => {
     expect(h.discs).toBe(HAND_MAX);
   });
 
+  it('«Влюблённый сундук» can give a trophy, shared out in its own window afterwards', () => {
+    const hand = eventDef('mimic').choices.find(c => c.win.fx.some(f => f.k === 'art'))!;
+    expect(hand.odds).toBe(0.5);
+    const party = newParty([0, 1]), bank = { ore: 3 }, before = JSON.stringify(party);
+    applyFx(hand.win.fx, party, bank, 1);
+    expect(JSON.stringify(party)).toBe(before);
+    expect(bank.ore).toBe(3);
+    expect(fxParts(hand.win.fx, true)[0]).toEqual({ t: 'Трофей: один из трёх на выбор', good: true });
+  });
+
   it('leaves its shield and its curse for the next fight only', () => {
     const g = new Game();
     g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });

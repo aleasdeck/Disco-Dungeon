@@ -346,6 +346,7 @@ evView.onLeave = () => {
   if (ev) evShut = ev.seed;
   showEvent();
   showMap(true);
+  showLoot();
 };
 
 /** Host: a player points at one of the event's choices. */
@@ -366,11 +367,15 @@ function settleEvent(opt: number) {
   game.bank.ore -= c.pay ?? 0;
   applyFx(out.fx, game.party, game.bank, ev.seed);
   ev.done = { opt, won };
-  choosing = true;
+  // a trophy: the party shares out three before the map opens again, once the outcome is read
+  const l = out.fx.some(f => f.k === 'art') ? newLoot(ev.seed * 7 + 3, run.floor, game.party) : null;
+  if (l?.offer.length) loot = { ...l, from: ev.key };
+  choosing = !loot;
   votes = {};
   hud.buildAllies();
   game.onChange();
   showEvent();
+  showLoot();
   shareMap();
 }
 
@@ -389,9 +394,12 @@ function eventVotes(): EventVotes | undefined {
   return { faces, mine: me !== null ? cast[me] ?? null : null, note };
 }
 
-/** Show the trophies' window while the party stands over the boss's hoard, until this player has read who got what and closed it. */
+/**
+ * Show the trophies' window while the party stands over the boss's hoard, until this player has read who got what and
+ * closed it. An event's trophies wait until this player has read the event's outcome.
+ */
 function showLoot() {
-  const open = !!loot && !(loot.done && lootShut === loot.seed);
+  const open = !!loot && !(loot.done && lootShut === loot.seed) && !(loot.from && ev && evShut !== ev.seed);
   $('lootScreen').hidden = !open;
   if (!open) return;
   const mine = game.online ? myHero() : game.party[0]?.i ?? null, me = game.party.find(h => h.i === mine) ?? null;
@@ -449,7 +457,7 @@ function lootVotes(): LootVotes | undefined {
   const idle = table.filter(h => picks[h] === undefined).map(h => (h === me ? 'ты' : nameOf(h)));
   const clash = Object.values(faces).some(f => f.length > 1);
   const note = clash ? 'Двое тянут один трофей. Договоритесь, кому что.'
-    : idle.length === table.length ? (table.length < loot.offer.length ? 'Каждый берёт свой трофей, лишний останется боссу.' : 'Каждый берёт свой трофей, один на двоих не взять.')
+    : idle.length === table.length ? (table.length < loot.offer.length ? 'Каждый берёт свой трофей, лишний останется лежать.' : 'Каждый берёт свой трофей, один на двоих не взять.')
     : `Ещё не выбрали: ${idle.join(', ')}.`;
   return { faces, mine: me !== null ? picks[me] ?? null : null, note };
 }
@@ -987,7 +995,7 @@ async function reopen(code: string) {
   setTimeout(seatAway, 15_000);
   if (s.ending) showEnd(s.ending);
   else if (camp) showCamp();
-  else if (loot) { showLoot(); if (choosing) showMap(true); }
+  else if (loot) { showEvent(); showLoot(); if (choosing) showMap(true); }
   else if (choosing) showMap(true);
   else if (ev) showEvent();
   else if (game.cleared() || game.S.phase === 'over' || !game.alive().length) game.onRoomEnd(game.alive().length > 0);

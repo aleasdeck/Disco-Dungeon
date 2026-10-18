@@ -1,10 +1,11 @@
 // The window of the floor boss's trophies, in the event window's dress: the boss's hoard taped on the left, the floor
-// cleared and the scene on the right, and a slab for each trophy under it. Alone a tap takes one; online each player points
-// at the one for their own hero, and once nobody shares a pick the trophies are handed out. Then the same window tells who
-// got what.
+// cleared and the scene on the right, and a slab for each trophy under it (an event's trophies come under the event's
+// picture and name). Alone a tap takes one; online each player points at the one for their own hero, and once nobody
+// shares a pick the trophies are handed out. Then the same window tells who got what.
 
 import { eventArt, uiArt } from './assets';
 import { artDef, type LootState } from './artifacts';
+import { eventDef } from './events';
 import type { HeroState } from './game';
 import { artIcon } from './icons';
 import { faceUrl } from './ui';
@@ -20,6 +21,11 @@ const SCENES = [
 
 /** Picture of the hoard by the floor (events in the manifest), until painted the boss room's sticker. */
 const ART = ['loot_king', 'loot_lich', 'loot_forge'];
+
+/** Trophies an event gave: what the party finds, by the event's key. */
+const FOUND: Record<string, string> = {
+  mimic: 'На бархатном дне сундука лежат подарки от прошлых ухажёров, все с бантиками и записками. Сундук краснеет и разрешает взять.',
+};
 
 /** Online: the faces of the players on the trophies they point at, and a line on how the share-out stands. */
 export interface LootVotes {
@@ -42,11 +48,12 @@ export class LootView {
 
   /** `me` is this screen's hero; online `nameOf` gives the players' names and `votes` the picks as they stand. */
   render(loot: LootState, me: HeroState | null, party: HeroState[], votes?: LootVotes, nameOf?: (h: HeroState) => string) {
-    const key = ART[loot.floor] ?? ART[0], pic = eventArt.get(key) ?? uiArt.get('room_boss'), img = $('lootImg') as HTMLImageElement;
+    // an event's trophies come with the event's own picture and name
+    const key = loot.from ?? ART[loot.floor] ?? ART[0], pic = eventArt.get(key) ?? uiArt.get(loot.from ? 'room_event' : 'room_boss'), img = $('lootImg') as HTMLImageElement;
     if (pic && img.getAttribute('src') !== pic.src) img.src = pic.src;
     img.hidden = !pic;
     $('lootArt').classList.toggle('stub', !eventArt.has(key));
-    $('lootTitle').textContent = `Этаж ${loot.floor + 1} пройден`;
+    $('lootTitle').textContent = loot.from ? eventDef(loot.from).title : `Этаж ${loot.floor + 1} пройден`;
     const solo = party.length === 1, done = loot.done;
     // the boss gave every hero back half their health as it fell (Game.bossHeal)
     const healed = solo ? `${party[0].def.name} ${party[0].def.fem ? 'восстановила' : 'восстановил'} половину здоровья.` : 'Герои восстановили половину здоровья.';
@@ -58,7 +65,7 @@ export class LootView {
       const order = me ? [me, ...party.filter(h => h !== me)] : party;
       $('lootOpts').innerHTML = order.filter(h => done[h.i]).map(h => this.got(h, done[h.i], h === me || solo ? '' : nameOf?.(h) ?? h.def.name)).join('');
     } else {
-      $('lootText').textContent = `${SCENES[loot.floor] ?? SCENES[0]} ${healed}`;
+      $('lootText').textContent = loot.from ? FOUND[loot.from] ?? 'Здесь нашлись трофеи.' : `${SCENES[loot.floor] ?? SCENES[0]} ${healed}`;
       $('lootOpts').innerHTML = `<p class="camp-ask">${solo ? 'Забери один трофей' : 'Каждый берёт по трофею'}</p>`
         + loot.offer.map((k, i) => this.option(k, i, votes)).join('');
     }

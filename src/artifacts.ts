@@ -1,6 +1,7 @@
-// Artifacts: the floor boss's trophies. After the boss of the first and the second floor falls, the party is offered three
-// that nobody in it has yet. A lone hero takes one; online each player takes a different one for their own hero (two
-// players leave the third behind, three share all of them), and the heroes of players who dropped out get what is left.
+// Artifacts: the floor boss's trophies. After the boss of the first and the second floor falls (and in an event that gives
+// one), the party is offered three that nobody in it has yet. A lone hero takes one; online each player takes a different
+// one for their own hero (two players leave the third behind, three share all of them), and the heroes of players who
+// dropped out get what is left.
 // An artifact works for the hero who owns it, all fight long and all run long; the rules that read it live in src/game.ts.
 
 import type { HeroState } from './game';
@@ -67,6 +68,8 @@ export interface LootState {
   picks: Record<number, number>;
   /** Once shared out: which trophy each hero took, by hero (a duo leaves one behind). */
   done?: Record<number, ArtKey>;
+  /** The event whose outcome gave them (its key); none for a floor boss's hoard. */
+  from?: string;
 }
 
 /** The trophies a boss leaves: OFFER of the artifacts nobody in the party has yet, the same on every screen. */
