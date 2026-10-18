@@ -45,6 +45,8 @@ export interface Snapshot {
   haz: string[];
   /** Depth of the blacksmith's the party is at, 0 elsewhere: everyone upgrades their own hero's discs there. */
   forge?: number;
+  /** Ore the blacksmith handed the party there, for his window's scene. */
+  gift?: number;
   /** The sounds the host made outside the physics lately (the enemies' blows, the turns starting): sent along, never saved. */
   cues?: Cue[];
 }
@@ -65,6 +67,7 @@ export function snapshot(g: Game): Snapshot {
     bank: g.bank,
     haz: [...S.haz],
     forge: g.forge,
+    gift: g.gift,
   };
 }
 
@@ -118,6 +121,7 @@ export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boo
   Object.assign(g.bank, bank);
   if (s.haz) S.haz = new Set(s.haz);
   g.forge = s.forge ?? 0;
+  g.gift = s.gift ?? 0;
   g.pickActive();
   // a client brings the host's state up to now; the host reopening its own saved game just carries on counting from it
   if (g.send) { g.synced(s.tick ?? g.tick, own); g.hearCues(s.cues ?? [], room); }
