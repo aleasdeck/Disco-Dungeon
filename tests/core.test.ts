@@ -3,7 +3,7 @@ import { Camera, FIT, KEEP, type Vec } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, FROST_STEPS, GAS_DMG, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_PER_DISC, RAGE_FROM, ROLES, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, heroesByRole, isRanged, mobSize } from '../src/data';
 import { ART, FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { CAVE, MOB_CAP, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
+import { CAVE, MOB_CAP, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
 import { FLOORS, FORGE_ROWS, LAYERS, agreed, genFloor, newRun } from '../src/run';
 import { makeRng } from '../src/rng';
 import { EVENTS, applyFx, canPick, eventDef, eventOf, fxParts, rolled } from '../src/events';
@@ -60,41 +60,53 @@ describe('room generator', () => {
 });
 
 describe('resources', () => {
-  it('puts one ore vein in a plain fight, two in an elite one and the most in the ore cave', () => {
+  it('puts one ore vein in a plain fight, two in an elite one and two to six in the ore cave', () => {
     const veins = (type: 'fight' | 'elite' | 'treasure' | 'boss', seed: number) =>
       generate({ seed, depth: type === 'boss' ? LAYERS : 5, floor: 0, type }).nodes.filter(n => n.k === 'ore').length;
     for (let seed = 1; seed < 30; seed++) {
       expect(veins('fight', seed)).toBe(1);
       expect(veins('elite', seed)).toBe(2);
       expect(veins('boss', seed)).toBe(1);
-      expect(veins('treasure', seed)).toBe(3);
+      expect(veins('treasure', seed)).toBeGreaterThanOrEqual(2);
+      expect(veins('treasure', seed)).toBeLessThanOrEqual(6);
     }
   });
 });
 
 describe('ore cave', () => {
   const cave = (seed: number, heroes: number) => generate({ seed, depth: LAYERS + 2, floor: 1, type: 'treasure', heroes });
-  const sum = (n: number[]) => n.reduce((a, b) => a + b, 0);
 
-  it('holds no enemies, one big vein on 2 × 2 cells, two small ones and two mushroom patches, the same for any party', () => {
-    for (let seed = 1; seed < 40; seed++) for (const heroes of [1, 2, 3]) {
-      const L = cave(seed, heroes), [big, ...rest] = L.nodes;
-      const small = rest.filter(n => n.k === 'ore'), herbs = rest.filter(n => n.k === 'herb');
-      expect(L.mobs).toHaveLength(0);
-      expect(big).toMatchObject({ k: 'ore', s: 2, r: CAVE.big.r, ch: CAVE.big.ch, left: CAVE.big.ch });
-      expect(small).toHaveLength(2);
-      for (const n of small) { expect(n).toMatchObject({ ch: CAVE.small, left: CAVE.small }); expect(n.s).toBeUndefined(); }
-      expect(herbs).toHaveLength(2);
-      expect(rest).toHaveLength(4);
+  it('holds no enemies and its own stock: a big vein on 2 × 2 cells or none, 2–5 small ones, 0–2 mushroom patches, the same for any party', () => {
+    const seen = { big: new Set<number>(), ore: new Set<number>(), herb: new Set<number>() };
+    for (let seed = 1; seed < 80; seed++) {
+      const stock = caveStock({ seed, depth: LAYERS + 2 });
+      for (const k of ['big', 'ore', 'herb'] as const) seen[k].add(stock[k]);
+      for (const heroes of [1, 2, 3]) {
+        const L = cave(seed, heroes), big = L.nodes.filter(n => n.s), rest = L.nodes.filter(n => !n.s);
+        const small = rest.filter(n => n.k === 'ore'), herbs = rest.filter(n => n.k === 'herb');
+        expect(L.mobs).toHaveLength(0);
+        expect(big).toHaveLength(stock.big);
+        for (const n of big) expect(n).toMatchObject({ k: 'ore', s: 2, r: CAVE.big.r, ch: CAVE.big.ch, left: CAVE.big.ch });
+        expect(small).toHaveLength(stock.ore);
+        for (const n of small) expect(n).toMatchObject({ ch: CAVE.small.ch, left: CAVE.small.ch });
+        expect(herbs).toHaveLength(stock.herb);
+        expect(rest).toHaveLength(stock.ore + stock.herb);
+        expect(L.nodes).toEqual(cave(seed, 1).nodes);
+      }
     }
-    expect(sum(cave(7, 1).nodes.map(n => n.ch))).toBe(sum(cave(7, 3).nodes.map(n => n.ch)));
+    // every count turns up
+    expect([...seen.big].sort()).toEqual([0, 1]);
+    expect([...seen.ore].sort()).toEqual([2, 3, 4, 5]);
+    expect([...seen.herb].sort()).toEqual([0, 1, 2]);
   });
 
   it('gives 4 minus the heroes turns: three alone, one for three heroes', () => {
     expect([1, 2, 3].map(heroes => caveTurns({ heroes }))).toEqual([3, 2, 1]);
   });
 
-  const enter = (picks: number[], seed = 11) => {
+  // a cave with the big vein, in a clear line from the first rune, and a mushroom patch
+  const FULL = 4;
+  const enter = (picks: number[], seed = FULL) => {
     const g = new Game();
     g.party = newParty(picks);
     g.loadRoom({ seed, depth: LAYERS + 2, floor: 1, type: 'treasure' });
@@ -123,8 +135,9 @@ describe('ore cave', () => {
   });
 
   it('stays open while mushrooms are left, ends at once when everything is spent, and counts the ore mined', () => {
+    expect(caveStock({ seed: FULL, depth: LAYERS + 2 })).toMatchObject({ big: 1, herb: 1 });
     const { g, won } = enter([0]);
-    const [big] = g.S.nodes;
+    const big = g.S.nodes.find(n => n.s)!;
     // the veins spent, a mushroom patch left: a throw may still go for health
     for (const n of g.S.nodes) n.left = n.k === 'herb' ? 1 : 0;
     g.update(1 / 60);
