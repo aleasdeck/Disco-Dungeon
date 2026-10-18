@@ -2413,8 +2413,8 @@ describe('the heroes past the first three', () => {
   });
 
   it('the bum: an enemy in his gas strikes 30% weaker and chokes at the start of each move; the cloud lasts three turns', () => {
-    // the gas takes 15% of an enemy's full health a move, rounded up, at least 1; a boss only 5%
-    expect([gasDmg('archer', 99), gasDmg('skel', 20), gasDmg('rat', 4), gasDmg('king', 200), gasDmg('lich', 117)]).toEqual([15, 3, 1, 10, 6]);
+    // the gas takes 5% of an enemy's full health a move, rounded up, at least 1, a boss's too
+    expect([gasDmg(99), gasDmg(28), gasDmg(20), gasDmg(4), gasDmg(235)]).toEqual([5, 2, 1, 1, 12]);
     const g = arena([at('bum')], [['archer', 6, 6]]), bum = g.party[0], [archer] = g.S.mobs;
     bum.hp = bum.max = 99;
     const full = archer.intent!.dmg;
@@ -2428,12 +2428,12 @@ describe('the heroes past the first three', () => {
     expect(archer.intent!.dmg).toBe(weak);
     const hp = archer.hp;
     turn(g);
-    expect(hp - archer.hp).toBe(gasDmg(archer.k, archer.max));
+    expect(hp - archer.hp).toBe(gasDmg(archer.max));
     expect(bum.max - bum.hp).toBe(weak);
     expect(g.S.gas[0].left).toBe(GAS_TURNS - 1);
     turn(g);
     turn(g);
-    expect(hp - archer.hp).toBe(GAS_TURNS * gasDmg(archer.k, archer.max));
+    expect(hp - archer.hp).toBe(GAS_TURNS * gasDmg(archer.max));
     expect(g.S.gas).toEqual([]);
     // the air clears and it shoots full again
     expect(archer.intent!.dmg).toBe(full + g.rage());
