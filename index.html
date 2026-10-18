@@ -97,14 +97,17 @@
   </section>
 
   <section id="forgeScreen" class="overlay dim" hidden>
-    <div class="panel forge-panel">
-      <div class="panel-head">
-        <h2>Кузнец</h2>
-        <span class="forge-ore" title="Руда, общая на отряд"><i class="ico ico-ore" aria-hidden="true"></i><b id="forgeOre">0</b></span>
+    <div class="panel ev-panel forge-panel" role="dialog" aria-labelledby="forgeTitle">
+      <div class="ev-pic"><div class="ev-art" id="forgeArt"><img id="forgeImg" alt="" draggable="false" /></div></div>
+      <div class="ev-body">
+        <div class="fg-head">
+          <h2 id="forgeTitle">Кузнец</h2>
+          <span class="forge-ore" title="Руда, общая на отряд"><i class="ico ico-ore" aria-hidden="true"></i><b id="forgeOre">0</b></span>
+        </div>
+        <p id="forgeText" class="ev-text"></p>
+        <div id="forgeMine" class="fg-mine"></div>
+        <button class="btn big" id="forgeDone"><i data-art="ico_map" aria-hidden="true"></i>К карте</button>
       </div>
-      <p id="forgeText" class="forge-text"></p>
-      <div id="forgeHeroes" class="forge-heroes"></div>
-      <div class="forge-foot"><span id="forgeNote" class="muted"></span><button class="btn big" id="forgeDone"><i data-art="ico_map" aria-hidden="true"></i>К карте</button></div>
     </div>
   </section>
 

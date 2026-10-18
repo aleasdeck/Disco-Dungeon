@@ -441,6 +441,7 @@ game.onChange = () => { hud.refresh(); dirty = true; stale = true; };
 game.onSound = (ev, p) => sound.play(ev, p);
 // online every party head says whose hero it is
 hud.nameOf = i => (game.online ? players.find(p => p.hero === i)?.name ?? null : null);
+hud.me = () => (game.online ? game.party.find(h => h.i === myHero()) ?? null : game.party[0] ?? null);
 hl.changed = () => { dirty = true; };
 game.onRoomEnd = win => {
   const S = game.S, boss = S.spec.type === 'boss';
