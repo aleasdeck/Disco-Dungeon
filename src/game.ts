@@ -1719,7 +1719,7 @@ export class Game {
       }
       // the gas it starts its move in chokes it, through armour too
       if (gassed && m.hp > 0) {
-        const gas = gasDmg(m.k, m.max);
+        const gas = gasDmg(m.max);
         this.hurtMob(m, gas, '#b9e34f', true);
         this.note(`${m.name} дышит газом: −${gas}`);
         if (m.hp <= 0) this.note(`${m.name} ${did(MOBS[m.k], 'задохнулся', 'задохнулась')}`);

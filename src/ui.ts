@@ -364,7 +364,7 @@ export class Hud {
   private mobStatus(m: Mob): Status[] {
     const g = this.g, out: Status[] = [];
     if (m.burn > 0) out.push({ k: 'fire', n: m.burn, t: `Горит: в начале своего хода потеряет ${Math.min(m.burn, m.hp)}` });
-    if (g.inGas(m)) out.push({ k: 'gas', t: `В газу: в начале своего хода потеряет ${Math.min(gasDmg(m.k, m.max), m.hp)} и ударит на ${Math.round(GAS_WEAK * 100)}% слабее` });
+    if (g.inGas(m)) out.push({ k: 'gas', t: `В газу: в начале своего хода потеряет ${Math.min(gasDmg(m.max), m.hp)} и ударит на ${Math.round(GAS_WEAK * 100)}% слабее` });
     if (g.frozen(m)) out.push({ k: 'chill', t: 'Заморожен: пропустит ход' });
     else if (m.frost) out.push({ k: 'slow', t: `Замедлен: в свой ход пройдёт не больше ${FROST_STEPS === 1 ? 'клетки' : FROST_STEPS + ' клеток'}` });
     if (isRanged(m.k)) out.push({ k: 'bow', t: 'Дальний бой: стреляет только в того, кого видит' });
