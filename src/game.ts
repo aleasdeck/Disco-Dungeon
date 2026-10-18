@@ -311,12 +311,12 @@ export class Game {
 
   alive = () => this.S.heroes.filter(h => h.hp > 0);
   liveMobs = () => this.S.mobs.filter(m => m.hp > 0);
-  /** The ore cave: no enemies, only veins, and a few turns to mine them. */
+  /** The ore cave: no enemies, only veins and mushrooms, and a few turns to mine or heal. */
   cave = () => this.S.spec.type === 'treasure';
   /** Turns the room gives the party, 0 for no limit: a fight lasts as long as its enemies stand. */
   turnsMax = () => (this.cave() ? caveTurns(this.S.spec) : 0);
-  /** The room is done: every enemy is down, or in the ore cave every vein is spent. */
-  cleared = () => (this.cave() ? !this.S.nodes.some(n => n.k === 'ore' && n.left > 0) : !this.liveMobs().length);
+  /** The room is done: every enemy is down, or in the ore cave nothing is left to hit, veins and mushrooms alike. */
+  cleared = () => (this.cave() ? !this.S.nodes.some(n => n.left > 0) : !this.liveMobs().length);
   stat = (h: HeroState, k: StatKey) => {
     const step = UPS.find(u => u.k === k)!.step;
     return k === 'e' ? Math.min(E_MAX, h.def.e + h.up.e * step) : h.def[k] * (1 + h.up[k] * step);
@@ -1573,7 +1573,7 @@ export class Game {
     if (this.send) { this.updateRemote(dt); return; }
     this.acc += dt;
     while (this.acc >= STEP) { this.step(STEP); this.acc -= STEP; }
-    // the last enemy down (in the ore cave, the last vein spent) ends the room at once, whatever throws are left
+    // the last enemy down (in the ore cave, the last vein or mushroom spent) ends the room at once, whatever throws are left
     if ((S.phase === 'throw' || S.phase === 'resolve' || S.phase === 'enemy') && this.cleared()) this.finish();
     // the heroes' turn ends by the players' word only, once the discs have stopped
     else if (S.phase === 'throw' && this.allDone() && !this.moving()) {
