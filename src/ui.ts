@@ -2,7 +2,7 @@
 // the enemy queue with what each will do, map / journal / menu), my hero's corner (portrait with its statuses, discs,
 // health with the shield on it, the sparks bar running into the ability button) and one big button for the turn.
 
-import { AB_COST, CRIT, E_MAX, ENEMY_BASE, FORGE_ORE, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, fullHit, type MobKind, type StatKey } from './data';
+import { AB_COST, CRIT, E_MAX, ENEMY_BASE, FORGE_ORE, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, fullHit, isRanged, type MobKind, type StatKey } from './data';
 import { eventArt, sprites, uiArt } from './assets';
 import type { Game, HeroState } from './game';
 import type { Mob } from './room';
@@ -12,6 +12,14 @@ import { art, fillIcons, icon } from './icons';
 import { hl } from './hl';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+
+/**
+ * Which way the queue marks a shooter, while the variants are being compared: a (bow on the portrait's corner),
+ * b (bow by the badge), c (sight round the badge), d (every enemy's corner: a bow or daggers).
+ */
+const RV = new URLSearchParams(location.search).get('rv') ?? 'a';
+
+const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
 
 /** "2 хода", "5 ходов". */
 const turns = (n: number) => n + ' ' + (n % 10 === 1 && n % 100 !== 11 ? 'ход' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'хода' : 'ходов');
@@ -331,30 +339,38 @@ export class Hud {
     }
   }
 
-  /** What an enemy's badge on its queue icon says; the same in words for its card. */
+  /**
+   * What an enemy's badge on its queue icon says; the same in words for its card. A shooter fires only at a hero it sees,
+   * so its words say whether it fires from where it stands, steps out to fire or is still walking to where it sees the hero.
+   */
   private intent(m: Mob): { badge: string; txt: string } {
     const g = this.g, it = m.intent;
     if (!it) return { badge: '', txt: 'Ничего не делает' };
-    const tgt = it.hero >= 0 ? g.heroOf(it.hero) : null, key = tgt?.def.key ?? '';
-    if (it.t === 'hit') return { badge: `<span class="ib hit" style="--c:${tgt!.def.col}">${it.dmg}</span>`, txt: `Ударит ${ACC[key] ?? tgt!.def.name} на ${it.dmg}` };
+    const tgt = it.hero >= 0 ? g.heroOf(it.hero) : null, key = tgt?.def.key ?? '', far = isRanged(m.k), bomb = !!MOBS[m.k].charge;
+    const acc = ACC[key] ?? tgt?.def.name, out = far && !!it.way && it.way.length > 1, bow = far && RV === 'b' ? icon('bow', 'qbow') : '';
+    const aim = far && RV === 'c' ? ' aim' : '';
+    if (it.t === 'hit') {
+      const how = !far ? `ударит ${acc}` : bomb ? `бросит бомбу в ${acc}` : `выстрелит в ${acc}`;
+      return { badge: `${bow}<span class="ib hit${aim}" style="--c:${tgt!.def.col}">${it.dmg}</span>`, txt: cap(out ? `выйдет на линию огня и ${how}` : how) + ` на ${it.dmg}` };
+    }
     if (it.t === 'move') {
-      return {
-        badge: `<span class="ib go" style="--c:${tgt!.def.col}">${it.eta ?? icon('move')}</span>`,
-        txt: `Идёт к ${DAT[key] ?? tgt!.def.name}` + (it.eta ? `, ударит через ${turns(it.eta)}` : ''),
-      };
+      const txt = !far ? `Идёт к ${DAT[key] ?? tgt!.def.name}` + (it.eta ? `, ударит через ${turns(it.eta)}` : '')
+        : `Не видит ${acc}` + (it.way ? ': идёт на линию огня' + (it.eta && !bomb ? `, выстрелит через ${turns(it.eta)}` : '') : '');
+      return { badge: `${bow}<span class="ib go${aim}" style="--c:${tgt!.def.col}">${it.eta ?? icon('move')}</span>`, txt };
     }
     if (it.t === 'slam') {
       const cols = g.alive().map(o => o.def.col), n = cols.length;
       const pie = cols.map((c, k) => `${c} ${(k / n) * 360}deg ${((k + 1) / n) * 360}deg`).join(',');
       return { badge: `<span class="ib all" style="--pie:conic-gradient(${pie})">${it.dmg}</span>`, txt: `${it.chill ? 'Метель' : 'Удар'} по всем на ${it.dmg}` + (it.chill ? ', морозит' : '') };
     }
-    const sp = { charge: ['fuse', 'Поджигает фитиль: в следующий ход бомба на двойной урон'], heal: ['heal', `Лечит союзника на ${it.dmg}`], summon: ['summon', 'Призывает подмогу на светящийся круг'], heat: ['heat', 'Раскаляет пол: отмеченные клетки станут лавой'] }[it.t];
+    const sp = { charge: ['fuse', `Поджигает фитиль${out ? ' и идёт на линию огня' : ''}: в следующий ход бомба на двойной урон`], heal: ['heal', `Лечит союзника на ${it.dmg}`], summon: ['summon', 'Призывает подмогу на светящийся круг'], heat: ['heat', 'Раскаляет пол: отмеченные клетки станут лавой'] }[it.t];
     return { badge: `<span class="ib sp">${icon(sp[0])}</span>`, txt: sp[1] };
   }
 
   private mobStatus(m: Mob): Status[] {
     const g = this.g, out: Status[] = [];
     if (m.burn > 0) out.push({ k: 'fire', n: m.burn, t: `Горит: в начале своего хода потеряет ${Math.min(m.burn, m.hp)}` });
+    if (isRanged(m.k)) out.push({ k: 'bow', t: 'Дальний бой: стреляет только в того, кого видит' });
     if (m.armor) out.push({ k: 'armor', n: m.armor, t: `Броня ${m.armor}` });
     if (!g.solid(m)) out.push({ k: 'ghost', t: 'Бесплотен в этот ход: диски пролетают насквозь' });
     if (m.intent?.t === 'charge') out.push({ k: 'fuse', t: 'Фитиль горит' });
@@ -378,6 +394,8 @@ export class Hud {
       li.classList.toggle('now', m === now);
       li.classList.toggle('done', g.acted(m));
       li.classList.toggle('boss', !!MOBS[m.k].boss);
+      li.classList.toggle('far', (RV === 'a' || RV === 'd') && isRanged(m.k));
+      li.classList.toggle('near', RV === 'd' && !isRanged(m.k));
       const qi = li.querySelector('.qi')!;
       if (qi.innerHTML !== it.badge) qi.innerHTML = it.badge;
       // a special move coming up later says how soon; this turn's shows on the badge itself
