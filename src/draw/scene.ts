@@ -38,6 +38,9 @@ const NODE_ART: Record<NodeKind, { key: string; pieces: number; w: number }> = {
 const nodePieces = (k: NodeKind, left: number, ch: number) =>
   k === 'ore' ? Math.ceil((NODE_ART.ore.pieces * left) / ch) : Math.min(NODE_ART[k].pieces, left);
 
+/** How thick a disc's ink outline is, in iso units: a hairline, as thin as the ring on its picture. */
+const DISC_LW = 0.6;
+
 /** The card sharp's phantom discs: pink where his disc is purple, inked the same, and see-through. */
 const PHANTOM = { col: '#f06ac6', dk: '#7a2463', ink: '#3a0c2c', alpha: 0.66 };
 const rgb = (hex: string) => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
@@ -1368,15 +1371,15 @@ export class SceneRenderer {
     const rx = d.r * 1.35 * s, ry = d.r * 0.68 * s, th = 3.4 * s * (ph ? FAN_R : 1), [x, y] = P(d.x, d.y, hh);
     if (!d.fall) { ell(c, x + 1, y + 1.5, rx + 0.5, ry + 0.5); c.fillStyle = `rgba(20,10,5,${ph ? 0.2 : 0.35})`; c.fill(); }
     // a fat puck: dark rim band, flat enamel top, a raised ring and the hero's emblem, all inked
-    c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, Math.PI); c.lineTo(x - rx, y - th); c.ellipse(x, y - th, rx, ry, 0, Math.PI, 0, true); c.closePath(); fs(c, dk, ph ? 1.1 : 1.5);
+    c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, Math.PI); c.lineTo(x - rx, y - th); c.ellipse(x, y - th, rx, ry, 0, Math.PI, 0, true); c.closePath(); fs(c, dk, ph ? DISC_LW * 0.75 : DISC_LW);
     const art = env(`disc_${d.hero.def.key}`), di = art && ph ? phantomArt(art) : art;
     if (di) {
       c.save(); c.translate(x, y - th); c.scale(1, ry / rx); c.rotate(d.spin); c.drawImage(di, -rx * 1.04, -rx * 1.04, rx * 2.08, rx * 2.08); c.restore();
       this.discGlow(d, x, y - th, rx, ry);
       return;
     }
-    ell(c, x, y - th, rx, ry); fs(c, col, 1.5);
-    ell(c, x, y - th, rx * 0.62, ry * 0.62); fs(c, mix(col, '#ffffff', 0.18), 0.9);
+    ell(c, x, y - th, rx, ry); fs(c, col, DISC_LW);
+    ell(c, x, y - th, rx * 0.62, ry * 0.62); fs(c, mix(col, '#ffffff', 0.18), DISC_LW * 0.8);
     c.save(); c.translate(x, y - th); c.scale(1, 0.5); c.rotate(d.spin); c.fillStyle = '#f6efe0'; c.strokeStyle = INK; c.lineWidth = 1.4;
     const look = heroLook(d.hero.def.key);
     if (look === 0) { c.beginPath(); for (const [a, b] of [[-0.12, -0.38], [0.12, -0.38], [0.12, -0.12], [0.38, -0.12], [0.38, 0.12], [0.12, 0.12], [0.12, 0.38], [-0.12, 0.38], [-0.12, 0.12], [-0.38, 0.12], [-0.38, -0.12], [-0.12, -0.12]]) c.lineTo(a * rx * 1.4, b * rx * 1.4); c.closePath(); c.stroke(); c.fill(); }
