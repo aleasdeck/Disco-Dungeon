@@ -13,12 +13,6 @@ import { hl } from './hl';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-/**
- * Which way the queue marks a shooter, while the variants are being compared: a (bow on the portrait's corner),
- * b (bow by the badge), c (sight round the badge), d (every enemy's corner: a bow or daggers).
- */
-const RV = new URLSearchParams(location.search).get('rv') ?? 'a';
-
 const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
 
 /** "2 хода", "5 ходов". */
@@ -347,16 +341,16 @@ export class Hud {
     const g = this.g, it = m.intent;
     if (!it) return { badge: '', txt: 'Ничего не делает' };
     const tgt = it.hero >= 0 ? g.heroOf(it.hero) : null, key = tgt?.def.key ?? '', far = isRanged(m.k), bomb = !!MOBS[m.k].charge;
-    const acc = ACC[key] ?? tgt?.def.name, out = far && !!it.way && it.way.length > 1, bow = far && RV === 'b' ? icon('bow', 'qbow') : '';
-    const aim = far && RV === 'c' ? ' aim' : '';
+    // a shooter's blow and its walk to where it sees the hero carry a bow by the badge
+    const acc = ACC[key] ?? tgt?.def.name, out = far && !!it.way && it.way.length > 1, bow = far ? icon('bow', 'qbow') : '';
     if (it.t === 'hit') {
       const how = !far ? `ударит ${acc}` : bomb ? `бросит бомбу в ${acc}` : `выстрелит в ${acc}`;
-      return { badge: `${bow}<span class="ib hit${aim}" style="--c:${tgt!.def.col}">${it.dmg}</span>`, txt: cap(out ? `выйдет на линию огня и ${how}` : how) + ` на ${it.dmg}` };
+      return { badge: `${bow}<span class="ib hit" style="--c:${tgt!.def.col}">${it.dmg}</span>`, txt: cap(out ? `выйдет на линию огня и ${how}` : how) + ` на ${it.dmg}` };
     }
     if (it.t === 'move') {
       const txt = !far ? `Идёт к ${DAT[key] ?? tgt!.def.name}` + (it.eta ? `, ударит через ${turns(it.eta)}` : '')
         : `Не видит ${acc}` + (it.way ? ': идёт на линию огня' + (it.eta && !bomb ? `, выстрелит через ${turns(it.eta)}` : '') : '');
-      return { badge: `${bow}<span class="ib go${aim}" style="--c:${tgt!.def.col}">${it.eta ?? icon('move')}</span>`, txt };
+      return { badge: `${bow}<span class="ib go" style="--c:${tgt!.def.col}">${it.eta ?? icon('move')}</span>`, txt };
     }
     if (it.t === 'slam') {
       const cols = g.alive().map(o => o.def.col), n = cols.length;
@@ -394,8 +388,6 @@ export class Hud {
       li.classList.toggle('now', m === now);
       li.classList.toggle('done', g.acted(m));
       li.classList.toggle('boss', !!MOBS[m.k].boss);
-      li.classList.toggle('far', (RV === 'a' || RV === 'd') && isRanged(m.k));
-      li.classList.toggle('near', RV === 'd' && !isRanged(m.k));
       const qi = li.querySelector('.qi')!;
       if (qi.innerHTML !== it.badge) qi.innerHTML = it.badge;
       // a special move coming up later says how soon; this turn's shows on the badge itself
