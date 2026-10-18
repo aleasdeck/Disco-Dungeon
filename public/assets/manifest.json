@@ -191,6 +191,7 @@
     "ogre": "events/ogre.webp",
     "goblin": "events/goblin.webp",
     "dj": "events/dj.webp",
-    "camp": "events/camp.webp"
+    "camp": "events/camp.webp",
+    "forge": "events/forge.webp"
   }
 }
