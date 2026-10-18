@@ -590,9 +590,11 @@ i.ico { display: inline-block; font-style: normal; }
 .lobby-status { min-height: 1.4em; margin: 10px 0 0; color: #ff8a7a; }
 .room-code { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 16px; }
 .room-code b { font: 700 28px Oswald, sans-serif; letter-spacing: 0.18em; color: var(--gold); }
-.pick-heroes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.pick-heroes { display: grid; grid-template-columns: 24px repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+/* each row is one role: its name runs up a tab at the row's start */
+.pick-role { grid-column: 1; display: grid; place-items: center; writing-mode: vertical-rl; transform: rotate(180deg); border: 1.5px solid var(--ink); border-radius: 8px; background: rgba(0, 0, 0, 0.28); font: 600 13px Oswald, sans-serif; letter-spacing: 0.14em; text-transform: uppercase; color: #d9c6a0; }
 .pick { position: relative; padding: 0; border: 2px solid var(--ink); border-radius: 12px; background: var(--c); overflow: hidden; cursor: pointer; color: #fff; font: 600 15px Oswald, sans-serif; }
-.pick canvas { display: block; width: 100%; aspect-ratio: 1; }
+.pick canvas { display: block; width: 100%; aspect-ratio: 6 / 5; object-fit: cover; object-position: top; }
 .pick span { display: block; padding: 4px 2px; background: rgba(0, 0, 0, 0.55); }
 .pick em { display: block; font: 13px/1.15 var(--hand); font-style: normal; color: #f0e5d0; }
 .pick.mine { outline: 3px solid var(--gold); outline-offset: 2px; }
@@ -688,8 +690,10 @@ i.ico { display: inline-block; font-style: normal; }
 @media (max-width: 820px), (max-height: 520px) {
   .panel { padding: 14px; }
   .chip { padding: 5px 9px; }
-  .pick-heroes { gap: 6px; }
-  .pick span { font-size: 13px; }
+  .pick-heroes { gap: 5px; grid-template-columns: 18px repeat(4, minmax(0, 1fr)); }
+  .pick-role { font-size: 11px; letter-spacing: 0.08em; }
+  /* four to a row on a phone: the long names (Поварёшка, Зажигалка) shrink to fit their card */
+  .pick span { font-size: clamp(10px, 2.8vw, 13px); letter-spacing: -0.01em; white-space: nowrap; }
   .pick em { display: none; }
   .up-txt { display: block; }
 }

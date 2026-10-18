@@ -144,6 +144,8 @@ export interface Mob {
   rage?: boolean;
   /** The last knock it took: the figure rocks on its stand for a moment. */
   knock?: Knock;
+  /** Hits of the ice genius's frosted disc this turn: one slows it on its next move, two make it skip the move. */
+  frost?: number;
 }
 
 export type Shape = 'rect' | 'corner' | 'funnel' | 'alcove' | 'cross';

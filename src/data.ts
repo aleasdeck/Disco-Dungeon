@@ -50,6 +50,25 @@ export const FAN_M = 0.7;
  * or stops on spikes or lava costs him no health.
  */
 export const FAN_R = 0.7;
+/**
+ * The bum's «Амбре»: the first bounce of his disc lets out a cloud of green gas GAS_R cells each way with the corners
+ * cut off (21 cells), for GAS_TURNS enemy turns. An enemy in it as its move begins loses GAS_DMG, through armour, and strikes
+ * GAS_WEAK weaker on that move. Clouds don't add up; past GAS_MAX the oldest clears.
+ */
+export const GAS_R = 2;
+export const GAS_TURNS = 3;
+export const GAS_DMG = 2;
+export const GAS_WEAK = 0.3;
+export const GAS_MAX = 6;
+/**
+ * The kid's firecrackers: his disc drops one at each of its first PETARD_PER_DISC bounces, laid like the cook's dishes. One
+ * goes off as soon as an enemy is within a cell of it, PETARD_DMG to every enemy that near; they lie there till then.
+ */
+export const PETARD_PER_DISC = 2;
+export const PETARD_DMG = 4;
+export const PETARD_MAX = 6;
+/** The ice genius's «Заморозка»: an enemy his disc hits once walks at most FROST_STEPS cells on its next move, hit twice it skips the move. */
+export const FROST_STEPS = 1;
 /** Online, at most this many players sit at one table: rooms are built for one to three heroes. */
 export const MAX_PLAYERS = 3;
 /** Ore for each level of a disc stat; a party can't buy everything in one run, so it has to choose. */
@@ -128,6 +147,9 @@ export const BOOT_GAGS = [
   'Бастион втягивает живот перед зеркалом',
   'Зажигалка чиркает. Загорелось с пятого раза',
   'Рикошет отскакивает от стен. Просто так, для разминки',
+  'Шкет поджёг петарду в почтовом ящике. Опять',
+  'Перегар ищет закуску. Нашёл воблу у себя в кармане',
+  'Отморозок замораживает пиво. Пиво против',
   'Ледяная ведьма жалуется, что ей холодно',
   'Ледяной лич размораживает пельмени',
   'Бес-кочегар подкидывает в печь чужие носки',
@@ -332,7 +354,28 @@ export const HEROES: HeroDef[] = [
     ab: 'Цепная молния', abTxt: `До конца хода каждое попадание её диска бьёт молнией: ${ZAP[0]} по врагу, потом ${ZAP.slice(1).join(' и ')} по соседям.`, abCol: '#7fe3ff',
     abMore: `Молния бьёт сквозь броню и перескакивает на ближайшего врага в ${ZAP_REACH / 16} клетках, которого ещё не била. Если диск добил врага, молния начинает с соседа.`,
   },
+  {
+    key: 'kid', name: 'Шкет', acc: 'Шкета', dat: 'Шкету', col: '#d0528b', dk: '#6b2347', skin: '#f0c09a', role: 'Урон', hp: 18, r: 4, m: 1.7, e: 0.9, fr: 0.85, pw: 1.25,
+    ab: 'Петарды', abTxt: `До конца хода его диск на первых ${PETARD_PER_DISC} отскоках роняет петарду. Подойдёт враг, бахнет на ${PETARD_DMG}.`, abCol: '#ffb347',
+    abMore: 'Петарда ложится в клетку, как еда Поварёшки, и взрывается, как только враг окажется в клетке от неё: бьёт всех врагов рядом. Лежит, пока не рванёт.',
+  },
+  {
+    key: 'bum', name: 'Перегар', acc: 'Перегара', dat: 'Перегару', col: '#7b6a4e', dk: '#3b3224', skin: '#d9b08c', role: 'Зона', hp: 24, r: 5, m: 2.2, e: 0.7, fr: 1.05, pw: 1,
+    ab: 'Амбре', abTxt: `До конца хода с первого отскока его диска встаёт облако газа на ${GAS_TURNS} хода: враги в нём теряют HP и бьют слабее.`, abCol: '#b9e34f',
+    abMore: `Облако круглое, ${GAS_R * 2 + 1} на ${GAS_R * 2 + 1} клеток без углов. Враг, который начинает в нём свой ход, теряет ${GAS_DMG} сквозь броню и бьёт на ${Math.round(GAS_WEAK * 100)}% слабее. Облака не складываются.`,
+  },
+  {
+    key: 'genius', name: 'Отморозок', acc: 'Отморозка', dat: 'Отморозку', col: '#3a9cb8', dk: '#1b4d5c', skin: '#cfe0e4', role: 'Зона', hp: 22, r: 5, m: 2, e: 0.85, fr: 0.9, pw: 1,
+    ab: 'Заморозка', abTxt: 'До конца хода его диск морозит: после одного попадания враг еле ползёт, после двух пропускает ход.', abCol: '#bdf2ff',
+    abMore: `Замедленный враг в свой ход проходит не больше ${FROST_STEPS === 1 ? 'клетки' : FROST_STEPS + ' клеток'}, но бьёт и стреляет, как обычно. Замороженный стоит и ничего не делает: ни удара, ни выстрела, ни призыва. Мороз держится до конца ближайшего хода врагов.`,
+  },
 ];
+
+/** The roles in the order the pick screens list them, a row each. */
+export const ROLES = ['Танк', 'Урон', 'Зона'];
+
+/** Hero indexes grouped by role, a list per role in ROLES order, each in HEROES order. */
+export const heroesByRole = () => ROLES.map(r => HEROES.flatMap((h, i) => (h.role === r ? [i] : [])));
 
 export const HERO_FIG = 34;
 /** Hero stand radius in world units: a cell is 16 across, so the stand sits inside its cell with a rim of floor around it. */
