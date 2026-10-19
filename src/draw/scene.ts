@@ -1283,7 +1283,7 @@ export class SceneRenderer {
   }
 
   private rockCell(ci: number, cj: number, cells: Map<string, { q: number; f: number }>, r: any, struck: boolean) {
-    const { cam } = this, I = ((globalThis as any).__protoImgs ?? {}) as Record<string, HTMLImageElement>;
+    const { P, cam } = this, I = ((globalThis as any).__protoImgs ?? {}) as Record<string, HTMLImageElement>;
     const q = cells.get(hazKey(ci, cj))?.q;
     if (q === undefined) return;
     const hh = (a: number, b: number, k = 0) => {
@@ -1365,18 +1365,32 @@ export class SceneRenderer {
       const o = E[e].n;
       return (cells.has(hazKey(ci + o[0], cj + o[1])) ? hOf(ci + o[0], cj + o[1]) : -1) / ht;
     }, ci * 7 + cj);
-    // gold: chips stuck in the outward sides and the top, fewer as the vein runs out
-    const spots: { x: number; y: number; h: number; ax: Vec; flat: boolean; s: number; k: number; w: number }[] = [];
+    // gold: chips stuck in the outward sides, scattered up and down them (none on top), fewer as the vein runs out
+    const spots: { x: number; y: number; h: number; ax: Vec; flat: boolean; s: number; k: number; w: number; clip: Pt[] }[] = [];
     for (let i = 0; i < M; i++) {
       const a = foot[i], b = foot[(i + 1) % M], ta = rim[i], tb = rim[(i + 1) % M];
       const nx = b.y - a.y, ny = -(b.x - a.x), L = Math.hypot(nx, ny);
-      if (L < 4 || a.edge >= 0 || cam.facing(nx / L, ny / L) <= 0.05) continue;
-      const u = 0.3 + 0.4 * hh(ci * 13 + i, cj, 52), v = 0.3 + 0.35 * hh(ci * 13 + i, cj, 53);
-      const fx = a.x + (b.x - a.x) * u, fy = a.y + (b.y - a.y) * u, tx = ta.x + (tb.x - ta.x) * u, ty = ta.y + (tb.y - ta.y) * u, th = ta.h + (tb.h - ta.h) * u;
-      spots.push({ x: fx + (tx - fx) * v + (nx / L) * 0.15, y: fy + (ty - fy) * v + (ny / L) * 0.15, h: th * v, ax: [(b.x - a.x) / L, (b.y - a.y) / L], flat: false, s: (r.nugW ?? 4.2) * (0.8 + 0.4 * hh(ci, cj * 13 + i, 54)), k: i + ci * 3 + cj * 5, w: hh(ci * 17 + i, cj, 55) });
+      // a chip stays inside its side, as if set in the stone
+      const clip: Pt[] = [P(a.x, a.y, 0), P(b.x, b.y, 0), P(tb.x, tb.y, tb.h), P(ta.x, ta.y, ta.h)];
+      if (L < 4.5 || a.edge >= 0 || cam.facing(nx / L, ny / L) <= 0.05) continue;
+      // a spot or more by the side's width, each in its own stretch of it and at its own height, kept off its edges
+      const n = Math.max(1, Math.round(L / 5)), m = Math.min(0.4, ((r.nugW ?? 4.2) * 0.45) / L);
+      for (let k = 0; k < n; k++) {
+        const u = m + ((1 - 2 * m) * (k + 0.1 + 0.8 * hh(ci * 13 + i, cj * 7 + k, 52))) / n, v = 0.2 + 0.6 * hh(ci * 13 + i, cj * 7 + k, 53);
+        const fx = a.x + (b.x - a.x) * u, fy = a.y + (b.y - a.y) * u, tx = ta.x + (tb.x - ta.x) * u, ty = ta.y + (tb.y - ta.y) * u, th = ta.h + (tb.h - ta.h) * u;
+        spots.push({ x: fx + (tx - fx) * v + (nx / L) * 0.15, y: fy + (ty - fy) * v + (ny / L) * 0.15, h: th * v, ax: [(b.x - a.x) / L, (b.y - a.y) / L], flat: false,
+          s: (r.nugW ?? 4.2) * (0.65 + 0.6 * hh(ci * 5 + k, cj * 13 + i, 54)), k: i * 3 + k + ci * 3 + cj * 5, w: hh(ci * 17 + i, cj * 3 + k, 55), clip });
+      }
     }
-    const keep = Math.ceil((r.nugs ?? 4) * q - 1e-6);
-    spots.sort((p, o) => p.w - o.w).slice(0, keep).sort((p, o) => cam.depth(p.x, p.y) - cam.depth(o.x, o.y)).forEach(s => this.rockNugget(s, r, I));
+    // the ones kept are picked by chance, but never two on top of each other
+    const keep = Math.ceil((r.nugs ?? 4) * q - 1e-6), kept: typeof spots = [];
+    for (const s of spots.sort((p, o) => p.w - o.w)) {
+      if (kept.length >= keep) break;
+      const [sx, sy] = P(s.x, s.y, s.h);
+      if (kept.some(o => { const [ox, oy] = P(o.x, o.y, o.h); return Math.hypot(sx - ox, sy - oy) < (s.s + o.s) * 0.55; })) continue;
+      kept.push(s);
+    }
+    kept.sort((p, o) => cam.depth(p.x, p.y) - cam.depth(o.x, o.y)).forEach(s => this.rockNugget(s, r, I));
     // a boulder on top while the vein is full: it goes with the first hit
     if (q > (r.stoneTill ?? 0.7) && r.stone !== false && hh(ci, cj, 69) < (r.stones ?? 0.5)) {
       const cx = x0 + 5 + 4 * hh(ci, cj, 70), cy = y0 + 5 + 4 * hh(ci, cj, 71), R = (r.stoneR ?? 6) * (0.85 + 0.3 * hh(ci, cj, 72)), N = 5;
@@ -1469,13 +1483,14 @@ export class SceneRenderer {
   }
 
   /** A gold chip stuck in the rock: its picture (or a drawn one) laid flat on a side or on the top. */
-  private rockNugget(p: { x: number; y: number; h: number; ax: Vec; flat: boolean; s: number; k: number }, r: any, I: Record<string, HTMLImageElement>) {
+  private rockNugget(p: { x: number; y: number; h: number; ax: Vec; flat: boolean; s: number; k: number; clip?: Pt[] }, r: any, I: Record<string, HTMLImageElement>) {
     const { c, P } = this, gold = ((r.gold ?? []) as string[]).map(k => I[k]).filter(Boolean);
     const [ox, oy] = P(p.x, p.y, p.h), [ex, ey] = P(p.x + p.ax[0], p.y + p.ax[1], p.h);
     let ux = ex - ox, uy = ey - oy;
     if (ux < 0) { ux = -ux; uy = -uy; }
     const im = gold[p.k % Math.max(1, gold.length)];
     c.save();
+    if (p.clip) { pth(c, p.clip); c.clip(); }
     if (im) {
       const w = p.s, h = (p.s * im.height) / im.width;
       c.transform((ux * w) / im.width, (uy * w) / im.width, 0, h / im.height, ox - (ux * w) / 2, oy - h / 2);
