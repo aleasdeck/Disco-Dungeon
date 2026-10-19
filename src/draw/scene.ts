@@ -1261,7 +1261,7 @@ export class SceneRenderer {
    * steps up), and a vein sinks and loses its gold as its charges go. Sides and top take a picture each when given.
    */
   private rockCells() {
-    const cells = new Map<string, { q: number; f: number }>();
+    const cells = new Map<string, { q: number; f: number; z: number }>();
     for (const m of this.g.S.nodes) {
       const r = (m as any).pv?.rock;
       if (!r || m.left <= 0) continue;
@@ -1269,7 +1269,7 @@ export class SceneRenderer {
       const q = Math.min(m.left, m.ch) / m.ch;
       // one height for the whole vein (the cave's big one spans 2 × 2), a little different from the vein next door
       const f = 0.9 + 0.2 * (((Math.imul(i0 * 73856093 ^ j0 * 19349663, 2654435761) >>> 0) % 1000) / 1000);
-      for (let a = 0; a < z; a++) for (let b = 0; b < z; b++) cells.set(hazKey(i0 + a, j0 + b), { q, f });
+      for (let a = 0; a < z; a++) for (let b = 0; b < z; b++) cells.set(hazKey(i0 + a, j0 + b), { q, f, z });
     }
     return cells;
   }
@@ -1282,7 +1282,7 @@ export class SceneRenderer {
     for (const [ci, cj] of own) this.rockCell(ci, cj, cells, r, n.hit > 0);
   }
 
-  private rockCell(ci: number, cj: number, cells: Map<string, { q: number; f: number }>, r: any, struck: boolean) {
+  private rockCell(ci: number, cj: number, cells: Map<string, { q: number; f: number; z: number }>, r: any, struck: boolean) {
     const { P, cam } = this, I = ((globalThis as any).__protoImgs ?? {}) as Record<string, HTMLImageElement>;
     const q = cells.get(hazKey(ci, cj))?.q;
     if (q === undefined) return;
@@ -1388,7 +1388,8 @@ export class SceneRenderer {
       }
     }
     // the ones kept are picked by chance, but never two on top of each other
-    const keep = Math.ceil((r.nugs ?? 4) * q - 1e-6), kept: typeof spots = [];
+    // a big vein shares its gold out over its cells, so it isn't four times as rich
+    const keep = Math.ceil(((r.nugs ?? 4) * q) / (cells.get(hazKey(ci, cj))?.z ?? 1) - 1e-6), kept: typeof spots = [];
     for (const s of spots.sort((p, o) => p.w - o.w)) {
       if (kept.length >= keep) break;
       const [sx, sy] = P(s.x, s.y, s.h);
