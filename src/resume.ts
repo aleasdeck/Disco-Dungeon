@@ -9,7 +9,13 @@ import type { Run, Votes } from './run';
 import type { Snapshot } from './sync';
 
 /** A room's result screen; `again` and `win` (the whole run beaten) lead back to the lobby, `map` to the map. */
-export interface Ending { title: string; text: string; kind: 'again' | 'map' | 'win' }
+export interface Ending {
+  title: string;
+  text: string;
+  kind: 'again' | 'map' | 'win';
+  /** After an elite the screen leads to the sharpening window instead of the map. */
+  next?: 'whet';
+}
 
 /** Which online room this browser is in, and the secret it rejoins its seat with. */
 export interface Seat { code: string; key: string; host: boolean; at: number }

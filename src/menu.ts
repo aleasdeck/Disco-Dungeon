@@ -4,6 +4,7 @@ import { BIOMES, HEROES, MOB_HP_MUL, KINDS, MOBS, fullHit, heroesByKind, kindOf,
 import { drawPortrait, faceUrl, mobIcon } from './ui';
 import { ARTIFACTS } from './artifacts';
 import { artIcon } from './icons';
+import { CASTS } from './room';
 import { saveSettings, settings } from './settings';
 import { favourite, stats } from './stats';
 import { FLOORS, LAYERS } from './run';
@@ -62,10 +63,11 @@ export function renderCollection(tab: 'heroes' | 'mobs' | 'arts') {
       grid.appendChild(card);
     }
   } else {
-    (Object.keys(MOBS) as MobKind[]).forEach(k => {
+    // the undertaker's coffin is a thing, not an enemy of its own
+    (Object.keys(MOBS) as MobKind[]).filter(k => !MOBS[k].prop).forEach(k => {
       const d = MOBS[k], card = document.createElement('article');
       card.className = 'card';
-      card.innerHTML = `<img src="${mobIcon(k)}" alt=""><div><h3>${d.name}</h3><p><b>${FLOOR_NAMES[d.floor]}${d.boss ? ', босс' : ''}.</b> ${d.txt}</p>`
+      card.innerHTML = `<img src="${mobIcon(k)}" alt=""><div><h3>${d.name}</h3><p><b>${FLOOR_NAMES[d.floor]}${d.boss ? ', босс' : CASTS.some(c => c.elite === k) ? ', элита' : ''}.</b> ${d.txt}</p>`
         + `<dl><dt>HP</dt><dd>${Math.round(d.hp * MOB_HP_MUL)}</dd><dt>Удар</dt><dd>${d.dmg}</dd>${d.armor ? `<dt>Броня</dt><dd>${d.armor}</dd>` : ''}</dl></div>`;
       grid.appendChild(card);
     });

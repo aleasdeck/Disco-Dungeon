@@ -101,7 +101,7 @@ export interface ResNode {
  * summon and heat carry the spots that light up on the floor a turn ahead.
  */
 export interface Intent {
-  t: 'hit' | 'move' | 'charge' | 'slam' | 'heal' | 'summon' | 'heat';
+  t: 'hit' | 'move' | 'charge' | 'slam' | 'heal' | 'summon' | 'heat' | 'scream' | 'smash' | 'rise';
   hero: number;
   dmg: number;
   chill?: boolean;
@@ -148,6 +148,9 @@ export interface Mob {
   knock?: Knock;
   /** Hits of the ice genius's frosted disc this turn: one slows it on its next move, two make it skip the move. */
   frost?: number;
+  /** A coffin: who lies in it, and the enemy turns till it gets up. */
+  hold?: MobKind;
+  rise?: number;
 }
 
 export type Shape = 'rect' | 'corner' | 'funnel' | 'alcove' | 'cross';
@@ -269,12 +272,13 @@ export interface Tier {
   mobs: Range;
 }
 
+// with 4–5 fights on every path (thread «Карта и элита») the rooms from the third row on hold 2–3 enemies, not 3–4
 export const TIERS: Tier[] = [
   { gw: [10, 11], gh: [8, 9], shapes: ['rect'], blocks: [1, 1], blockKinds: 1, pits: [0, 0], pitCells: 0, haz: [0, 0], mobs: [2, 2] },
   { gw: [11, 12], gh: [9, 9], shapes: ['rect', 'corner'], blocks: [1, 2], blockKinds: 3, pits: [0, 0], pitCells: 0, haz: [1, 1], mobs: [2, 3] },
-  { gw: [12, 13], gh: [10, 10], shapes: ['corner', 'alcove'], blocks: [1, 2], blockKinds: 4, pits: [0, 1], pitCells: 2, haz: [1, 2], mobs: [2, 3] },
-  { gw: [13, 14], gh: [10, 11], shapes: ['alcove', 'funnel', 'corner'], blocks: [2, 2], blockKinds: 4, pits: [0, 1], pitCells: 4, haz: [2, 3], mobs: [3, 3] },
-  { gw: [14, 15], gh: [11, 12], shapes: ['funnel', 'cross', 'alcove'], blocks: [2, 3], blockKinds: 5, pits: [1, 2], pitCells: 9, haz: [3, 3], mobs: [3, 4] },
+  { gw: [12, 13], gh: [10, 10], shapes: ['corner', 'alcove'], blocks: [1, 2], blockKinds: 4, pits: [0, 1], pitCells: 2, haz: [1, 2], mobs: [2, 2] },
+  { gw: [13, 14], gh: [10, 11], shapes: ['alcove', 'funnel', 'corner'], blocks: [2, 2], blockKinds: 4, pits: [0, 1], pitCells: 4, haz: [2, 3], mobs: [2, 3] },
+  { gw: [14, 15], gh: [11, 12], shapes: ['funnel', 'cross', 'alcove'], blocks: [2, 3], blockKinds: 5, pits: [1, 2], pitCells: 9, haz: [3, 3], mobs: [2, 3] },
 ];
 /** The boss fights among as many columns, holes and hazards as the last room before it; its holes stay small enough to walk round. */
 export const BOSS_TIER: Tier = { gw: [14, 15], gh: [12, 12], shapes: ['rect', 'cross'], blocks: [3, 3], blockKinds: 5, pits: [1, 2], pitCells: 4, haz: [3, 3], mobs: [3, 3] };
@@ -285,13 +289,21 @@ export const PIT_CELLS = 10;
 /** Most enemies a room starts with: past this a room is a crowd, not a fight. */
 export const MOB_CAP = 5;
 
-/** Map row (0 = entrance) to its tier; the rest rows in the middle borrow the tier of the row before. */
+/** The room's row on its floor's map (0 = entrance). */
+export const rowOf = (spec: Pick<RoomSpec, 'depth' | 'floor'>) => Math.max(0, Math.min(LAYERS - 1, spec.depth - 1 - spec.floor * LAYERS));
+
+/** Map row to its tier: the six rows of fights grow from the entrance to the last room before the boss. */
 export function tierOf(spec: RoomSpec): { tier: Tier; t: number } {
   if (spec.type === 'boss') return { tier: BOSS_TIER, t: TIERS.length };
-  const row = Math.max(0, Math.min(LAYERS - 2, spec.depth - 1 - spec.floor * LAYERS));
-  const t = [0, 1, 2, 2, 3, 4][row] ?? TIERS.length - 1;
+  const t = [0, 1, 2, 2, 3, 4][rowOf(spec)] ?? TIERS.length - 1;
   return { tier: TIERS[t], t };
 }
+
+/**
+ * Rooms of the run before this one, for the enemies' HP: the rest row before the boss doesn't count, so with a fight
+ * row more on each floor every row's enemies have the HP they had on the 7-row map.
+ */
+export const hpStep = (spec: Pick<RoomSpec, 'depth' | 'floor'>) => spec.floor * (LAYERS - 1) + Math.min(rowOf(spec), LAYERS - 2);
 
 function carve(gw: number, gh: number, R: ReturnType<typeof makeRng>, shapes: Shape[]): { shape: Shape; floor: Uint8Array } {
   const floor = new Uint8Array(gw * gh).fill(1);
@@ -400,22 +412,55 @@ export const OPEN_PADS = 4;
 /** Block clusters from plain to awkward: single, pairs, an L, a diagonal pair. */
 const BLOCK_SHAPES = [[[0, 0]], [[0, 0], [1, 0]], [[0, 0], [0, 1]], [[0, 0], [1, 0], [0, 1]], [[0, 0], [1, 1]]];
 
-/** Each floor has its own cast: who fills regular fights, who leads an elite fight, and its boss. */
-export const CASTS: { early: MobKind[]; late: MobKind[]; elite: MobKind; boss: MobKind }[] = [
-  { early: ['skel', 'skel', 'archer', 'rat'], late: ['skel', 'archer', 'rat', 'rat', 'necro'], elite: 'necro', boss: 'king' },
-  { early: ['ghoul', 'ghoul', 'ghost'], late: ['ghoul', 'ghost', 'yeti', 'witch'], elite: 'witch', boss: 'lich' },
-  { early: ['imp', 'imp', 'slime', 'bomber'], late: ['imp', 'slime', 'bomber', 'golem'], elite: 'golem', boss: 'forgelord' },
+/**
+ * Each floor has its own cast: how likely each enemy is in a regular fight on each of the six fight rows, who leads an
+ * elite fight, and its boss. Weak enemies crowd the first rooms and thin out (the prison rat is gone by the fifth row),
+ * tougher ones come in half way and the floor's heavy hitters only in the last two rows.
+ */
+export const CASTS: { rows: Partial<Record<MobKind, number[]>>; elite: MobKind; boss: MobKind }[] = [
+  {
+    rows: {
+      skel: [3, 3, 3, 3, 2, 2],
+      archer: [1, 2, 2, 2, 2, 2],
+      rat: [3, 3, 1, 1, 0, 0],
+      guard: [0, 0, 1, 2, 2, 2],
+      necro: [0, 0, 0, 0, 1, 1],
+    },
+    elite: 'headsman', boss: 'king',
+  },
+  {
+    rows: {
+      ghoul: [3, 3, 3, 2, 2, 1],
+      ghost: [1, 2, 2, 2, 2, 2],
+      yeti: [0, 0, 1, 1, 2, 2],
+      undertaker: [0, 0, 1, 1, 1, 1],
+      witch: [0, 0, 0, 0, 1, 1],
+    },
+    elite: 'banshee', boss: 'lich',
+  },
+  {
+    rows: {
+      imp: [3, 3, 3, 2, 1, 1],
+      slime: [1, 2, 2, 2, 2, 2],
+      bomber: [0, 1, 1, 1, 1, 1],
+      grinder: [0, 0, 1, 1, 2, 2],
+      golem: [0, 0, 0, 0, 1, 1],
+    },
+    elite: 'smasher', boss: 'forgelord',
+  },
 ];
 
-/** Enemies a regular fight draws from: the floor sets the cast, late rows of a floor add tougher ones. */
-function mobPool(f: number, t: number): MobKind[] {
-  const cast = CASTS[Math.min(f, CASTS.length - 1)];
-  if (t === 0) return cast.early.slice(0, 3);
-  return t < 3 ? cast.early : cast.late;
+/** The floor's cast. */
+export const castOf = (f: number) => CASTS[Math.min(f, CASTS.length - 1)];
+
+/** Enemies a fight on this row of the floor draws from, each as many times as its weight; past the fight rows (the boss's escort) the last row's. */
+export function mobPool(f: number, row: number): MobKind[] {
+  const rows = castOf(f).rows, r = Math.min(row, 5);
+  return (Object.keys(rows) as MobKind[]).flatMap(k => Array<MobKind>(rows[k]![r]).fill(k));
 }
 
-/** Enemies that set the pace of a fight: at most one of each in a room. */
-const SOLO: MobKind[] = ['golem', 'necro', 'witch', 'yeti', 'bomber'];
+/** Enemies that set the pace of a fight: at most one of each in a room, and none in the boss's escort. */
+const SOLO: MobKind[] = ['golem', 'necro', 'witch', 'yeti', 'bomber', 'undertaker', 'grinder', 'headsman', 'banshee', 'smasher'];
 
 /**
  * Resources in each kind of fight room: one of each, so the floor stays clear. Ore is scarce, so a party can't buy
@@ -491,7 +536,6 @@ export const dmgBonus = (f: number, t: number) => (f > 0 ? f + 1 : 0) + (t >= 3 
 export function generate(spec: RoomSpec): Layout {
   const R = makeRng(spec.seed * 31 + spec.depth);
   const { int: ri, pick } = R;
-  const d = spec.depth;
   const type = spec.type, f = spec.floor;
   const { tier, t } = tierOf(spec);
   const extra = firstFloorExtra(f, t);
@@ -676,14 +720,14 @@ export function generate(spec: RoomSpec): Layout {
   }
 
   const sc = partyScale(spec);
-  const hpMul = MOB_HP_MUL * (1 + HP_STEP * (d - 1)) * (f > 0 ? LATER_HP : 1) * sc.hp, dmgAdd = dmgBonus(f, t), dmgMul = sc.dmg;
+  const hpMul = MOB_HP_MUL * (1 + HP_STEP * hpStep(spec)) * (f > 0 ? LATER_HP : 1) * sc.hp, dmgAdd = dmgBonus(f, t), dmgMul = sc.dmg;
   // a share of n enemies for a smaller party; a fraction left over is one more enemy that often
   const fewer = (n: number, min: number) => {
     if (sc.mobs === 1) return n;
     const x = n * sc.mobs, k = Math.floor(x);
     return Math.max(min, k + (R.next() < x - k ? 1 : 0));
   };
-  const pool = mobPool(f, t), cast = CASTS[Math.min(f, CASTS.length - 1)];
+  const pool = mobPool(f, rowOf(spec)), cast = castOf(f);
   const solo = (k: MobKind) => SOLO.includes(k) || (t === 0 && isRanged(k));
   const draw = (n: number, has: MobKind[] = []) => {
     const out: MobKind[] = [];
@@ -693,7 +737,7 @@ export function generate(spec: RoomSpec): Layout {
       // and never more than two shooters of a kind: a room full of them can't be reached
       const full = (k: MobKind) => (solo(k) && (out.includes(k) || has.includes(k))) || (isRanged(k) && out.filter(o => o === k).length >= 2);
       for (let tr = 0; tr < 8 && full(k); tr++) k = pick(pool);
-      if (full(k)) k = cast.early[0];
+      if (full(k)) k = pool[0];
       out.push(k);
     }
     return out;

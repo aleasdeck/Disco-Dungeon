@@ -11,6 +11,8 @@ const SHAPES: Record<string, [string, string][]> = {
   log: [['M6 3h11a3 3 0 0 1 0 6h-1v10a3 3 0 0 1-3 3H5a3 3 0 0 1 0-6h1z', '#e6cf9c'], ['M9 8h5M9 11h5M9 14h4', 'none']],
   menu: [['M4 5h16v3H4zM3 11h17v3H3zM5 17h15v3H5z', '#d9c6a0']],
   chill: [['M12 2v20M3.5 7l17 10M3.5 17l17-10', 'none'], ['M12 2l-2 2M12 2l2 2M12 22l-2-2M12 22l2-2', 'none']],
+  /** A banshee's scream: an eye struck out, no aiming line this turn. */
+  daze: [['M2 12c3-5 6.5-7 10-7s7 2 10 7c-3 5-6.5 7-10 7s-7-2-10-7z', '#e8e0cc'], ['M12 8.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7z', '#7a4fb0'], ['M4 21L20 3', 'none']],
   fire: [['M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-5 3-6 0 3 1 4 2 4 0-4-1-7 1-10z', '#ff8a3d'], ['M12 13c2 2 3 3 3 5a3 3 0 0 1-6 0c0-2 2-3 3-5z', '#ffd34d']],
   armor: [['M5 4l7-2 7 2v7c0 6-4 9-7 11-3-2-7-5-7-11z', '#8f98a8'], ['M12 2v20M5 9h14', 'none']],
   ghost: [['M5 21V10a7 7 0 0 1 14 0v11l-2.5-2-2.3 2-2.2-2-2.2 2-2.3-2z', '#d9f2ff'], ['M9 10h.01M15 10h.01', 'none']],

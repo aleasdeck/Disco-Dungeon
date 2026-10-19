@@ -51,6 +51,8 @@ export interface Snapshot {
   forge?: number;
   /** Ore the blacksmith handed the party there, for his window's scene. */
   gift?: number;
+  /** The window is the sharpening after an elite (Game.whet), not a blacksmith's room. */
+  whet?: boolean;
   /** The sounds the host made outside the physics lately (the enemies' blows, the turns starting): sent along, never saved. */
   cues?: Cue[];
 }
@@ -74,6 +76,7 @@ export function snapshot(g: Game): Snapshot {
     haz: [...S.haz],
     forge: g.forge,
     gift: g.gift,
+    whet: g.whet,
   };
 }
 
@@ -132,6 +135,7 @@ export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boo
   if (s.haz) S.haz = new Set(s.haz);
   g.forge = s.forge ?? 0;
   g.gift = s.gift ?? 0;
+  g.whet = !!s.whet;
   g.pickActive();
   // a client brings the host's state up to now; the host reopening its own saved game just carries on counting from it
   if (g.send) { g.synced(s.tick ?? g.tick, own); g.hearCues(s.cues ?? [], room); }

@@ -23,7 +23,14 @@
     "slime": { "file": "mobs/slime.png", "facing": "left" },
     "bomber": { "file": "mobs/bomber.png", "facing": "left" },
     "golem": { "file": "mobs/golem.png", "facing": "left" },
-    "forgelord": { "file": "mobs/forgelord.png", "facing": "left" }
+    "forgelord": { "file": "mobs/forgelord.png", "facing": "left" },
+    "guard": { "file": "mobs/guard.png", "facing": "right" },
+    "headsman": { "file": "mobs/headsman.png", "facing": "left" },
+    "undertaker": { "file": "mobs/undertaker.png", "facing": "left" },
+    "banshee": { "file": "mobs/banshee.png", "facing": "left" },
+    "grinder": { "file": "mobs/grinder.png", "facing": "left" },
+    "smasher": { "file": "mobs/smasher.png", "facing": "right" },
+    "coffin": { "file": "mobs/coffin.png", "facing": "left" }
   },
   "env": {
     "anvil": "env/anvil.webp",

@@ -128,20 +128,27 @@ const forgeTxt = (ore: number) => 'Гном-кузнец закаляет рас
  * and the price in the party's ore. A slab the ore does not cover, or a stat at its top, is shut.
  */
 function forgeRows(g: Game, h: HeroState) {
-  const row = (k: string, name: string, txt: string, n: number, lv: number, now: string, next: string, cost: number) => {
-    const short = cost > g.bank.ore;
-    return `<button class="ev-opt fg-up" data-k="${k}" title="${txt}"${cost && !short ? '' : ' disabled'}>`
+  // a stat level an elite owes the hero costs nothing; in the sharpening window that is all there is
+  const free = g.freeUp(h);
+  const row = (k: string, name: string, txt: string, n: number, lv: number, now: string, next: string, cost: number, gratis = false) => {
+    const sold = !g.whet || gratis, short = !gratis && cost > g.bank.ore;
+    return `<button class="ev-opt fg-up" data-k="${k}" title="${txt}"${cost && sold && !short ? '' : ' disabled'}>`
       + `<i data-art="${UP_ART[k]}" aria-hidden="true"></i><span class="fg-name"><b>${name}</b>${pips(n, lv)}</span>`
       + `<span class="fg-fx">${cost ? `${now}<i>→</i>${next}` : `${now}, больше некуда`}</span>`
-      + (cost ? `<span class="fg-cost${short ? ' short' : ''}">${cost}${icon('ore')}</span>` : '') + '</button>';
+      + (!cost || !sold ? '' : gratis ? '<span class="fg-cost free">даром</span>' : `<span class="fg-cost${short ? ' short' : ''}">${cost}${icon('ore')}</span>`) + '</button>';
   };
   return `<div class="fg-me"><img src="${faceUrl(h)}" alt=""><b>${h.def.name}</b><span>${h.hp > 0 ? `${h.hp}/${h.max} HP` : 'пал'}</span></div>`
-    + row('n', 'Диски за ход', 'Больше бросков за ход. Самое сильное улучшение', HAND_MAX - HAND_START, h.discs - HAND_START, String(h.discs), String(h.discs + 1), g.discCost(h))
+    + (g.whet ? '' : row('n', 'Диски за ход', 'Больше бросков за ход. Самое сильное улучшение', HAND_MAX - HAND_START, h.discs - HAND_START, String(h.discs), String(h.discs + 1), g.discCost(h)))
     + UPS.map(u => {
       const lv = h.up[u.k], v = g.stat(h, u.k), next = u.k === 'e' ? Math.min(E_MAX, v + u.step) : v;
-      return row(u.k, u.name, u.txt, UP_COST.length, lv, u.fmt(lv * u.step, v), u.fmt((lv + 1) * u.step, next), g.upCost(h, u.k));
+      return row(u.k, u.name, u.txt, UP_COST.length, lv, u.fmt(lv * u.step, v), u.fmt((lv + 1) * u.step, next), g.upCost(h, u.k), free);
     }).join('');
 }
+
+/** The sharpening window's scene after an elite: the hero still owed a level picks it, then it is done. */
+const whetTxt = (free: boolean) => free
+  ? 'Гном-кузнец прибежал на грохот боя с элитой и бесплатно точит каждому один диск. Выбери, что подтянуть.'
+  : 'Диск заточен. Гном уже ворчит, что дальше только за руду.';
 
 /** Whose turn it is, as the HUD tells it: the heroes throw (and the discs settle), then the enemies go. */
 export type Side = 'place' | 'heroes' | 'enemies' | 'over';
@@ -392,8 +399,13 @@ export class Hud {
     const acc = tgt?.def.acc ?? '', out = far && !!it.way && it.way.length > 1, bow = far ? icon('bow', 'qbow') : '';
     if (it.t === 'hit') {
       const how = !far ? `ударит ${acc}` : bomb ? `бросит бомбу в ${acc}` : `выстрелит в ${acc}`;
-      return { badge: `${bow}<span class="ib hit" style="--c:${tgt!.def.col}">${it.dmg}</span>`, txt: cap(out ? `выйдет на линию огня и ${how}` : how) + ` на ${it.dmg}` };
+      return { badge: `${bow}<span class="ib hit" style="--c:${tgt!.def.col}">${it.dmg}</span>`, txt: (g.executes(m) ? 'Казнь: ' : '') + cap(out ? `выйдет на линию огня и ${how}` : how) + ` на ${it.dmg}` };
     }
+    if (it.t === 'rise') {
+      const who = MOBS[m.hold ?? 'skel'].name.toLowerCase();
+      return { badge: `<span class="ib go">${it.eta}</span>`, txt: (it.eta ?? 1) > 1 ? `Через ${turns(it.eta!)} встанет ${who}, если не разбить гроб` : `В этот ход встанет ${who}, если не разбить гроб` };
+    }
+    if (it.t === 'smash') return { badge: `<span class="ib hit" style="--c:#d9434f">${it.dmg}</span>`, txt: `Ударит молотом по красному квадрату на ${it.dmg}: уходи оттуда броском` };
     // drawn by the kid's firecracker: it runs to the noise and strikes nobody this turn
     if (it.bang) return { badge: `<span class="ib sp">${icon('petard')}</span>`, txt: `Бежит на треск петарды и в этот ход ${!far ? 'никого не ударит' : bomb ? 'не бросит бомбу' : 'не выстрелит'}` };
     if (it.t === 'move') {
@@ -406,8 +418,8 @@ export class Hud {
       const pie = cols.map((c, k) => `${c} ${(k / n) * 360}deg ${((k + 1) / n) * 360}deg`).join(',');
       return { badge: `<span class="ib all" style="--pie:conic-gradient(${pie})">${it.dmg}</span>`, txt: `${it.chill ? 'Метель' : 'Удар'} по всем на ${it.dmg}` + (it.chill ? ', морозит' : '') };
     }
-    const sp = { charge: ['fuse', `Поджигает фитиль${out ? ' и идёт на линию огня' : ''}: в следующий ход бомба на двойной урон`], heal: ['heal', `Лечит союзника на ${it.dmg}`], summon: ['summon', 'Призывает подмогу на светящийся круг'], heat: ['heat', 'Раскаляет пол: отмеченные клетки станут лавой'] }[it.t];
-    return { badge: `<span class="ib sp">${icon(sp[0])}</span>`, txt: sp[1] };
+    const sp = { charge: ['fuse', `Поджигает фитиль${out ? ' и идёт на линию огня' : ''}: в следующий ход бомба на двойной урон`], heal: ['heal', `Лечит союзника на ${it.dmg}`], summon: ['summon', 'Призывает подмогу на светящийся круг'], heat: ['heat', 'Раскаляет пол: отмеченные клетки станут лавой'], scream: ['daze', 'Визг: в следующий ход у всего отряда нет линии прицела'] }[it.t];
+    return sp ? { badge: `<span class="ib sp">${icon(sp[0])}</span>`, txt: sp[1] } : { badge: '', txt: '' };
   }
 
   private mobStatus(m: Mob): Status[] {
@@ -419,6 +431,9 @@ export class Hud {
     else if (m.frost) out.push({ k: 'slow', t: `Замедлен: в свой ход пройдёт не больше ${FROST_STEPS === 1 ? 'клетки' : FROST_STEPS + ' клеток'}` + brittle });
     if (isRanged(m.k)) out.push({ k: 'bow', t: 'Дальний бой: стреляет только в того, кого видит' });
     if (m.armor) out.push({ k: 'armor', n: m.armor, t: `Броня ${m.armor}` });
+    if (MOBS[m.k].shield) out.push({ k: 'shield', t: 'Дверь вместо щита: диск спереди не ранит, бей сбоку или рикошетом' });
+    const honed = g.honed(m);
+    if (honed) out.push({ k: 'hit', n: honed, t: `Наточен: точильщик рядом, бьёт на ${honed} сильнее` });
     if (!g.solid(m)) out.push({ k: 'ghost', t: 'Бесплотен в этот ход: диски пролетают насквозь' });
     if (m.intent?.t === 'charge') out.push({ k: 'fuse', t: 'Фитиль горит' });
     if (g.rage() > 0) out.push({ k: 'rage', n: g.rage(), t: `Ярость: бьёт на ${g.rage()} сильнее` });
@@ -506,6 +521,7 @@ export class Hud {
 
     const st: Status[] = [];
     if (h.chill > 0) st.push({ k: 'chill', n: h.chill, t: `Озноб: бросок слабее ещё ${turns(h.chill)}` });
+    if (h.daze > 0) st.push({ k: 'daze', n: h.daze, t: `Звон в ушах: без линии прицела ещё ${turns(h.daze)}` });
     if (h.fire > 0) st.push({ k: 'fire', n: 2, t: 'Горит: в ход врагов потеряет 2' });
     $('fStatus').innerHTML = statusHtml(st);
 
@@ -792,9 +808,11 @@ export class Hud {
     if (pic && img.getAttribute('src') !== pic.src) img.src = pic.src;
     img.hidden = !pic;
     $('forgeArt').classList.toggle('stub', !eventArt.has('forge'));
-    $('forgeText').textContent = forgeTxt(g.gift);
+    const h = this.me();
+    $('forgeTitle').textContent = g.whet ? 'Заточка' : 'Кузнец';
+    $('forgeText').textContent = g.whet ? whetTxt(!!h && g.freeUp(h)) : forgeTxt(g.gift);
     $('forgeOre').textContent = String(g.bank.ore);
-    const h = this.me(), box = $('forgeMine'), html = h ? forgeRows(g, h) : '';
+    const box = $('forgeMine'), html = h ? forgeRows(g, h) : '';
     if (html !== this.forgeHtml) {
       box.innerHTML = html;
       if (h) box.style.setProperty('--c', h.def.col);

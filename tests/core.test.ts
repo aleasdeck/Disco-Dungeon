@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, KINDS, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, CLEAN_ORE, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, KINDS, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
 import { ART, FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { CAVE, MOB_CAP, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
-import { FLOORS, FORGE_ROWS, LAYERS, agreed, genFloor, newRun } from '../src/run';
+import { CASTS, CAVE, MOB_CAP, mobPool, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
+import { ELITES, FIGHTS, FLOORS, FORGE_ROWS, LAYERS, REST_ROW, agreed, floorOk, genFloor, isFight, newRun, routes } from '../src/run';
 import { makeRng } from '../src/rng';
 import { EVENTS, applyFx, canPick, eventDef, eventOf, fxParts, rolled } from '../src/events';
 import { CAMP_HEAL, DIG_MAX, campDo, campLeave, canCamp, digOre, type CampState } from '../src/camp';
@@ -162,18 +162,19 @@ describe('difficulty along a floor', () => {
 
   it('opens every floor with a small plain room and ends it with a big tangled one', () => {
     for (let f = 0; f < FLOORS; f++) for (let seed = 1; seed < 40; seed++) {
-      const a = room(f, 0, seed), z = room(f, LAYERS - 2, seed);
+      const a = room(f, 0, seed), z = room(f, REST_ROW - 1, seed);
       expect(a.shape).toBe('rect');
       expect(a.pits).toHaveLength(0);
       expect(a.gw * a.gh).toBeLessThan(z.gw * z.gh);
-      expect(a.mobs.length).toBeLessThan(z.mobs.length);
+      // since the map has 4–5 fights a path the last rooms hold 2–3 enemies, so one may hold no more than the first
+      expect(a.mobs.length).toBeLessThanOrEqual(z.mobs.length);
       expect(a.haz.size).toBeLessThan(z.haz.size);
       expect(z.pits.length).toBeGreaterThan(0);
     }
   });
 
   it('places every enemy it asks for, in every row of every floor', () => {
-    for (let f = 0; f < FLOORS; f++) for (let row = 0; row < LAYERS - 1; row++) for (const type of ['fight', 'elite'] as const) {
+    for (let f = 0; f < FLOORS; f++) for (let row = 0; row < REST_ROW; row++) for (const type of ['fight', 'elite'] as const) {
       for (let seed = 1; seed < 60; seed++) {
         const spec = { seed, depth: f * LAYERS + row + 1, floor: f, type }, L = generate(spec);
         expect(L.mobs.length).toBeGreaterThanOrEqual(Math.min(tierOf(spec).tier.mobs[0] + f, MOB_CAP));
@@ -211,7 +212,7 @@ describe('difficulty along a floor', () => {
 
   it('keeps even the last rooms of the last floor uncluttered', () => {
     for (let seed = 1; seed < 40; seed++) {
-      const L = room(FLOORS - 1, LAYERS - 2, seed), area = L.floor.reduce((a, b) => a + b, 0);
+      const L = room(FLOORS - 1, REST_ROW - 1, seed), area = L.floor.reduce((a, b) => a + b, 0);
       const busy = L.mobs.length + L.blocks.length + L.pits.length + L.haz.size + L.nodes.length;
       // a vein, the trio's mushroom patches and up to three crystals
       expect(L.nodes.length).toBeGreaterThanOrEqual(3);
@@ -239,7 +240,7 @@ describe('difficulty along a floor', () => {
 
   it('hits harder on later floors and in the last rooms before the boss', () => {
     expect(room(0, 0, 3).dmgAdd).toBe(0);
-    expect(room(0, LAYERS - 2, 3).dmgAdd).toBe(1);
+    expect(room(0, REST_ROW - 1, 3).dmgAdd).toBe(1);
     expect(room(1, 0, 3).dmgAdd).toBe(2);
     expect(room(2, 0, 3).dmgAdd).toBe(3);
   });
@@ -606,18 +607,30 @@ describe('camera', () => {
 });
 
 describe('run map', () => {
-  it('has 7 rows, 12 to 16 rooms before the boss, rest rows in the middle and every room reachable', () => {
-    for (let seed = 10000; seed < 10040; seed++) {
+  it('has 8 rows, 4 or 5 fights on every route, a camp and a blacksmith\'s before the boss and every room reachable', () => {
+    for (let seed = 10000; seed < 10200; seed++) {
       for (let f = 0; f < FLOORS; f++) {
-        const layers = genFloor(seed, f);
+        const layers = genFloor(seed, f), by = new Map(layers.flat().map(n => [n.id, n]));
         expect(layers).toHaveLength(LAYERS);
-        const n = layers.slice(0, -1).flat().length;
-        expect(n).toBeGreaterThanOrEqual(12);
-        expect(n).toBeLessThanOrEqual(16);
-        for (const r of [3, 5]) expect(layers[r].some(m => m.type === 'camp' || m.type === 'forge')).toBe(true);
-        // discs are upgraded only at the blacksmith's, so every floor has one by its middle
-        expect(FORGE_ROWS.some(r => layers[r].some(m => m.type === 'forge'))).toBe(true);
+        expect(floorOk(layers)).toBe(true);
+        for (const r of routes(layers)) {
+          const fights = r.filter(n => isFight(n.type)).length;
+          expect(fights).toBeGreaterThanOrEqual(FIGHTS[0]);
+          expect(fights).toBeLessThanOrEqual(FIGHTS[1]);
+          expect(r.filter(n => n.type === 'elite').length).toBeLessThanOrEqual(ELITES.path);
+        }
+        expect(layers[0].every(n => n.type === 'fight')).toBe(true);
+        expect(layers[REST_ROW].map(n => n.type).sort()).toEqual(['camp', 'forge']);
+        // discs are upgraded only at the blacksmith's, so every entrance has a route through one by the middle of the floor
+        expect(layers[0].every(e => routes(layers).some(r => r[0] === e && r.some(n => n.type === 'forge' && FORGE_ROWS.includes(n.l))))).toBe(true);
         expect(layers[LAYERS - 1][0].type).toBe('boss');
+        expect(layers.flat().filter(n => n.type === 'elite').length).toBeGreaterThanOrEqual(ELITES.floor);
+        for (const n of layers.flat()) {
+          const kids = n.next.map(id => by.get(id)!);
+          // a fork is a choice between two different rooms
+          if (kids.length === 2) expect(kids[0].type).not.toBe(kids[1].type);
+          if (n.type !== 'fight') expect(kids.some(k => k.type === n.type)).toBe(false);
+        }
         for (let l = 1; l < LAYERS; l++) {
           for (const n of layers[l]) expect(layers[l - 1].some(p => p.next.includes(n.id))).toBe(true);
         }
@@ -3242,5 +3255,177 @@ describe('hit effects', () => {
     for (let k = 0; k < 90; k++) { g.update(1 / 60); landed = Math.max(landed, g.S.sparks.filter(p => p.k && p.h === 0).length); }
     expect(landed).toBeGreaterThan(0);
     expect(g.S.sparks.some(p => p.k)).toBe(false);
+  });
+});
+
+describe('enemies by map row, the new enemies and the elite\'s reward', () => {
+  it('thins the weak enemies out along a floor: the prison rat is in the first rooms, rarer half way and gone by the fifth row', () => {
+    const rats = (row: number) => mobPool(0, row).filter(k => k === 'rat').length / mobPool(0, row).length;
+    expect(rats(0)).toBeGreaterThan(rats(2));
+    expect(rats(2)).toBeGreaterThan(0);
+    expect(rats(4)).toBe(0);
+    expect(rats(5)).toBe(0);
+    for (let seed = 1; seed < 60; seed++) for (const row of [4, 5]) {
+      expect(generate({ seed, depth: row + 1, floor: 0, type: 'fight' }).mobs.some(m => m.k === 'rat')).toBe(false);
+    }
+    // the new enemies come in half way; the floor's elite leads only elite fights
+    for (let f = 0; f < FLOORS; f++) {
+      const late = new Set(mobPool(f, 5)), first = new Set(mobPool(f, 0));
+      expect([...late].some(k => !first.has(k))).toBe(true);
+      for (let row = 0; row < 6; row++) expect(mobPool(f, row)).not.toContain(CASTS[f].elite);
+    }
+    expect(CASTS.map(c => c.elite)).toEqual(['headsman', 'banshee', 'smasher']);
+  });
+
+  /** A room of the floor with these enemies standing on these cells and the party on the runes, the first hero at `at`. */
+  const room = (floor: number, mobs: [keyof typeof MOBS, number, number][], at: [number, number] = [9, 6]) => {
+    const g = new Game();
+    g.loadRoom({ seed: 7, depth: floor * LAYERS + 3, floor, type: 'fight' });
+    g.S.mobs = mobs.map(([k, i, j]) => newMob(k, cellCentre(i, j).x, cellCentre(i, j).y, 1, 0));
+    g.S.nodes = []; g.S.pits = []; g.S.haz = new Set(); g.S.blocks = [];
+    placeAll(g); g.startFight();
+    g.party[0].at = cellCentre(...at);
+    g.pickIntents();
+    return g;
+  };
+  const enemyTurn = (g: Game) => {
+    const t = g.S.turn;
+    endAll(g);
+    for (let k = 0; k < 4000 && g.S.turn === t && g.S.phase !== 'over'; k++) g.update(1 / 60);
+  };
+
+  it('the guard\'s door takes the hits from the side it faces its hero, not from the back or the flanks', () => {
+    const g = room(0, [['guard', 4, 6]]), [m] = g.S.mobs, h = g.heroOf(m.intent!.hero), p = g.spot(h)!;
+    const fx = p.x - m.x, fy = p.y - m.y, L = Math.hypot(fx, fy);
+    expect(g.shielded(m, m.x + (fx / L) * 10, m.y + (fy / L) * 10)).toBe(true);
+    expect(g.shielded(m, m.x - (fx / L) * 10, m.y - (fy / L) * 10)).toBe(false);
+    expect(g.shielded(m, m.x - (fy / L) * 10, m.y + (fx / L) * 10)).toBe(false);
+    expect(g.shielded(newMob('skel', m.x, m.y), m.x + fx / L, m.y + fy / L)).toBe(false);
+  });
+
+  it('the headsman goes after the most hurt hero and strikes twice as hard every third turn', () => {
+    const g = room(0, [['headsman', 2, 2]]);
+    const [a, b] = g.alive();
+    b.hp = 3;
+    g.pickIntents();
+    expect(g.S.mobs[0].intent!.hero).toBe(b.i);
+    a.hp = 2;
+    g.pickIntents();
+    expect(g.S.mobs[0].intent!.hero).toBe(a.i);
+    const [m] = g.S.mobs;
+    expect(g.executes(m)).toBe(false);
+    g.S.turn = 3;
+    expect(g.executes(m)).toBe(true);
+    expect(g.specialIn(m)).toEqual({ name: 'казнь', turns: 0 });
+    g.S.turn = 4;
+    g.pickIntents();
+    expect(g.specialIn(m)).toEqual({ name: 'казнь', turns: 2 });
+  });
+
+  it('the grinder hones the enemies next to it, not itself or the ones far off', () => {
+    const g = room(2, [['grinder', 4, 4], ['imp', 5, 4], ['imp', 9, 1]]), [gr, near, far] = g.S.mobs;
+    expect(g.honed(near)).toBe(2);
+    expect(g.honed(far)).toBe(0);
+    expect(g.honed(gr)).toBe(0);
+    gr.hp = 0;
+    expect(g.honed(near)).toBe(0);
+  });
+
+  it('the undertaker lays an enemy that falls near it in a coffin, which gets up two enemy turns later unless broken', () => {
+    const g = room(1, [['undertaker', 2, 2], ['ghoul', 3, 2], ['ghost', 9, 0]]), [u, ghoul] = g.S.mobs;
+    g.hurtMob(ghoul, 99);
+    const coffin = g.S.mobs[3];
+    expect(coffin).toMatchObject({ k: 'coffin', hold: 'ghoul', rise: 2, owner: 0 });
+    expect(coffin.intent).toMatchObject({ t: 'rise', eta: 2 });
+    expect(g.specialIn(coffin)).toEqual({ name: 'подъём', turns: 1 });
+    expect(g.solid(coffin)).toBe(false);
+    for (let k = 0; k < 60; k++) g.update(1 / 60);
+    expect(g.solid(coffin)).toBe(true);
+    enemyTurn(g);
+    expect(coffin).toMatchObject({ k: 'coffin', rise: 1 });
+    enemyTurn(g);
+    expect(coffin.k).toBe('ghoul');
+    expect(coffin.hp).toBe(coffin.max);
+    // an enemy falling far off isn't reached; a broken coffin stays shut
+    const len = g.S.mobs.length;
+    g.hurtMob(g.S.mobs[2], 99);
+    expect(g.S.mobs.length).toBe(len);
+    g.hurtMob(coffin, 99);
+    const box = g.S.mobs[len];
+    expect(box.k).toBe('coffin');
+    g.hurtMob(box, 99);
+    enemyTurn(g);
+    enemyTurn(g);
+    expect(box.k).toBe('coffin');
+    expect(g.S.mobs.filter(m => m.hp > 0)).toEqual([u]);
+  });
+
+  it('the banshee\'s scream takes the aiming line off every hero standing for one turn', () => {
+    const g = room(1, [['banshee', 2, 2]]);
+    g.S.turn = 2;
+    g.pickIntents();
+    expect(g.S.mobs[0].intent!.t).toBe('scream');
+    enemyTurn(g);
+    for (const h of g.alive()) { expect(h.daze).toBeGreaterThan(0); expect(h.chill).toBe(0); }
+    // the next enemy turn has no scream, and the ringing is gone by the heroes' turn after it
+    enemyTurn(g);
+    for (const h of g.alive()) expect(h.daze).toBe(0);
+  });
+
+  it('the smasher\'s hammer comes down on the square marked round a hero a turn ahead: a hero who moved off it is spared', () => {
+    for (const leave of [false, true]) {
+      const g = room(2, [['smasher', 1, 1]], [8, 6]);
+      for (const o of g.party) if (o !== g.party[0]) o.hp = 0;
+      const h = g.party[0];
+      h.hp = h.max = 99;
+      g.S.turn = 3;
+      g.pickIntents();
+      const it = g.S.mobs[0].intent!;
+      expect(it.t).toBe('smash');
+      expect(it.spots!.length).toBeGreaterThan(3);
+      expect(g.incoming(h)).toBe(it.dmg);
+      if (leave) h.at = cellCentre(3, 6);
+      enemyTurn(g);
+      expect(h.hp).toBe(leave ? 99 : 99 - it.dmg);
+    }
+  });
+
+  it('an elite owes every hero a free stat level, taken in the sharpening window where nothing is for sale', () => {
+    const g = new Game();
+    g.party = newParty([0, 1]);
+    g.bank.ore = 50;
+    g.sharpen(9);
+    expect([g.forge, g.whet]).toEqual([9, true]);
+    const [a, b] = g.party;
+    expect(g.party.map(h => h.free)).toEqual([1, 1]);
+    g.upgrade('m', a);
+    expect([a.up.m, a.free, g.bank.ore]).toEqual([1, 0, 50]);
+    g.upgrade('m', a);
+    g.buyDisc(a);
+    expect([a.up.m, a.discs, g.bank.ore]).toEqual([1, HAND_START, 50]);
+    // a level not taken waits for the next blacksmith's, where it costs nothing either
+    g.whet = false;
+    g.upgrade('pw', b);
+    expect([b.up.pw, b.free, g.bank.ore]).toEqual([1, 0, 50]);
+    g.upgrade('pw', b);
+    expect([b.up.pw, g.bank.ore]).toEqual([2, 50 - UP_COST[1]]);
+  });
+
+  it('a fight won without a scratch pays ore for every hero; a scratch or the ore cave pays nothing', () => {
+    for (const hurt of [false, true]) {
+      const g = room(0, [['skel', 2, 2]]);
+      if (hurt) g.hurtHero(g.party[0], 1);
+      const ore = g.bank.ore;
+      g.hurtMob(g.S.mobs[0], 99);
+      g.update(1 / 60);
+      expect(g.S.phase).toBe('over');
+      expect(g.bank.ore - ore).toBe(hurt ? 0 : CLEAN_ORE * g.party.length);
+    }
+    const cave = new Game();
+    cave.loadRoom({ seed: 3, depth: LAYERS + 2, floor: 1, type: 'treasure' });
+    placeAll(cave); cave.startFight();
+    for (const n of cave.S.nodes) n.left = 0;
+    cave.update(1 / 60);
+    expect(cave.clean).toBe(0);
   });
 });

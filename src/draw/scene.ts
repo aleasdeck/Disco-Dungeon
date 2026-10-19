@@ -3,7 +3,7 @@
 
 import { WALL_WORDS, FAN_R, GAS_R, GAS_TURNS, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, heroFig, mobSize, type NodeKind } from '../data';
 import { KX, KY, type Camera, type Vec } from '../camera';
-import { ART, FOOD_FLY, ZAP_T, type Bomb, type Disc, type Food, type Game, type Gas, type HeroState, type Spark, type Zap } from '../game';
+import { ART, FOOD_FLY, SHIELD_COS, ZAP_T, type Bomb, type Disc, type Food, type Game, type Gas, type HeroState, type Spark, type Zap } from '../game';
 import { cellAt, floorAt, hazKey, inPit, isFloor, pitAt, type Block, type Decal, type Edge, type Mob, type Pit, type ResNode } from '../room';
 import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure, heroLook } from './figures';
 import { circ, ell, fs, mix, pth, rr, type Ctx, type Pt } from './util';
@@ -1025,10 +1025,11 @@ export class SceneRenderer {
           ell(c, x, y, r * 0.8, r * 0.4);
           c.setLineDash([2, 2]); c.stroke(); c.setLineDash([]);
         } else {
-          const x0 = p.x - 7, y0 = p.y - 7, x1 = p.x + 7, y1 = p.y + 7;
+          // lava to come is orange; the smasher's hammer square red
+          const x0 = p.x - 7, y0 = p.y - 7, x1 = p.x + 7, y1 = p.y + 7, hammer = it.t === 'smash', a = hammer ? 0.5 + 0.5 * pulse : pulse;
           pth(c, [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)]);
-          c.fillStyle = `rgba(255,120,40,${0.35 * pulse})`; c.fill();
-          c.strokeStyle = `rgba(255,170,70,${pulse})`; c.lineWidth = 1; c.stroke();
+          c.fillStyle = hammer ? `rgba(255,30,20,${0.45 * a})` : `rgba(255,120,40,${0.35 * a})`; c.fill();
+          c.strokeStyle = hammer ? `rgba(255,70,50,${a})` : `rgba(255,170,70,${a})`; c.lineWidth = hammer ? 2 : 1; c.stroke();
         }
       }
     }
@@ -1557,6 +1558,7 @@ export class SceneRenderer {
       placeholder: (cc, fx, fy, fl) => drawMobFigure(cc, m.k, fx, fy, fl),
     });
     if (m.hp <= 0) return;
+    if (MOBS[m.k].shield) this.drawDoor(m, tgt);
     if (m.frost) this.drawFrost(m, x, y - m.hop);
     const top = y - m.hop - BASE_TH - MOB_TOP[m.k];
     if (m.burn > 0) {
@@ -1568,6 +1570,20 @@ export class SceneRenderer {
         c.fillStyle = `rgba(255,140,60,${1 - ph})`; c.fill();
       }
     }
+  }
+
+  /** The guard's door on its stand: a thick arc on the side it faces its hero, where a disc does no damage. */
+  private drawDoor(m: Mob, to: { x: number; y: number }) {
+    const { c, P } = this;
+    const a = Math.atan2(to.y - m.y, to.x - m.x), half = Math.acos(SHIELD_COS), R = m.r + 3, pts: [number, number][] = [];
+    for (let k = 0; k <= 8; k++) {
+      const b = a - half + (2 * half * k) / 8;
+      pts.push(P(m.x + Math.cos(b) * R, m.y + Math.sin(b) * R));
+    }
+    c.beginPath(); pts.forEach(([x, y], k) => (k ? c.lineTo(x, y - m.hop) : c.moveTo(x, y - m.hop)));
+    c.lineCap = 'round';
+    c.strokeStyle = INK; c.lineWidth = 5; c.stroke();
+    c.strokeStyle = '#8a6a4a'; c.lineWidth = 2.6; c.stroke();
   }
 
   /**
@@ -1744,8 +1760,8 @@ export class SceneRenderer {
     const h = aim.hero, len = Math.hypot(aim.dx, aim.dy);
     if (!g.spot(h) || len < 4) return;
     const xray = has(h, 'xray'), pr = g.predict(h, aim.dx, aim.dy, xray ? ART.xrayBounces : 0);
-    // «Стробоскоп», an event's curse: the fight goes without the line
-    if (pr.path.length < 2 || g.S.spec.strobe) return;
+    // «Стробоскоп», an event's curse: the fight goes without the line; a banshee's scream takes it off the screamed-at hero for a turn
+    if (pr.path.length < 2 || g.S.spec.strobe || h.daze > 0) return;
     const pts = xray ? pr.path : [pr.path[0], pr.path[pr.path.length - 1]];
     // thick enough to read on a phone at any zoom; in floor units, so it flattens with the floor where it runs across the view
     const lw = Math.max(2.6, 5 / this.cam.zoom), col = h.def.col, run = reduce ? 0 : this.t * 20;
