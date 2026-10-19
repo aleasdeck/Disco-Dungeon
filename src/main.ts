@@ -1056,16 +1056,18 @@ function countStats(now: number, raw: number) {
 }
 
 /**
- * The HUD's pulses (a hatched blow about to land, the full gem, the lit turn button…) beat with the room's redraws:
- * each is 0 to 1 and back over its period in seconds, as --p09, --p14 and --p16 on the HUD's pieces (see style.css).
- * A CSS animation of their own would have the phone redraw the whole screen 60 or 120 times a second while the room
- * stands still at 20; with the motion turned off in the system they stand still.
+ * The HUD's pulses (a hatched blow about to land, the full gem, the lit turn button…) beat with the room's redraws,
+ * at most 20 times a second: each is 0 to 1 and back over its period in seconds, as --p09, --p14 and --p16 on the
+ * pieces that pulse (see style.css). A CSS animation of their own would have the phone redraw the whole screen 60 or
+ * 120 times a second while the room stands still at 20; with the motion turned off in the system they stand still.
  */
 const PULSES: [string, number][] = [['--p09', 0.9], ['--p14', 1.4], ['--p16', 1.6]];
-const pulsed = [$('hudTop'), $('frame'), $('turnBtn')];
+const pulsed = ['allies', 'fHpWrap', 'fSpk', 'abBtn', 'turnBtn'].map(id => $(id));
 const stillMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let pulsedAt = -Infinity;
 function pulse(t: number) {
-  if (stillMotion) return;
+  if (stillMotion || Math.abs(t - pulsedAt) < IDLE_GAP / 1000) return;
+  pulsedAt = t;
   for (const [k, per] of PULSES) {
     const v = (0.5 - 0.5 * Math.cos((2 * Math.PI * t) / per)).toFixed(2);
     for (const el of pulsed) el.style.setProperty(k, v);

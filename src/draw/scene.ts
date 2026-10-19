@@ -417,7 +417,7 @@ export class SceneRenderer {
     c.lineCap = 'round';
 
     this.pickDecor();
-    this.drawUnder(c, sx, sy);
+    this.drawUnder(c, view, sx !== 0 || sy !== 0);
     this.drawGround();
 
     const items: [number, () => void][] = [];
@@ -460,14 +460,14 @@ export class SceneRenderer {
   private rooms = new WeakMap<object, number>();
   private roomsMet = 0;
 
-  /** Everything the lips and the floor are drawn from; null when they can't be kept (a shaking room, code-drawn bubbling lava). */
-  private underKey(sx: number, sy: number): string | null {
+  /** Everything the lips and the floor are drawn from, the table's shake aside; null when they can't be kept (code-drawn lava bubbles). */
+  private underKey(dpr: number): string | null {
     const S = this.g.S, cam = this.cam, c = this.c;
-    if (sx || sy || (S.biome.haz === 'lava' && S.haz.size && !this.lavaTex())) return null;
+    if (S.biome.haz === 'lava' && S.haz.size && !this.lavaTex()) return null;
     if (!this.rooms.has(S)) this.rooms.set(S, ++this.roomsMet);
-    const m = c.getTransform(), decals = S.decals;
+    const decals = S.decals;
     return [
-      c.canvas.width, c.canvas.height, m.a, m.b, m.c, m.d, m.e, m.f, cam.rot, cam.cx, cam.cy, this.rooms.get(S), envArt.size, S.pits.length,
+      c.canvas.width, c.canvas.height, dpr, cam.zoom, cam.panX, cam.panY, cam.rot, cam.cx, cam.cy, this.rooms.get(S), envArt.size, S.pits.length,
       [...S.haz].join(' '), S.ice.join(''),
       S.blocks.map(b => `${b.x0},${b.y0},${b.x1},${b.y1},${b.ice ? 1 : 0}`).join(' '),
       [...this.decor].map(([d, k]) => decals.indexOf(d) + k).join(' '),
@@ -476,10 +476,11 @@ export class SceneRenderer {
     ].join('|');
   }
 
-  private drawUnder(c: Ctx, sx: number, sy: number) {
-    const key = this.underKey(sx, sy);
+  private drawUnder(c: Ctx, view: { dpr: number }, shaking: boolean) {
+    const { dpr } = view, cam = this.cam, key = this.underKey(dpr);
     const u = (this.under ??= { cv: document.createElement('canvas'), key: '', seen: '', fill: '', stroke: '', lw: 1 });
-    if (key === null || key !== u.seen) {
+    // a shaking table is drawn straight for its moment, and the kept floor is there again once it stops
+    if (key === null || shaking || key !== u.seen) {
       u.seen = key ?? '';
       this.drawLips();
       this.drawFloor();
@@ -490,7 +491,7 @@ export class SceneRenderer {
         const f = cv.getContext('2d')!;
         f.setTransform(1, 0, 0, 1, 0, 0);
         f.clearRect(0, 0, cv.width, cv.height);
-        f.setTransform(c.getTransform());
+        f.setTransform(dpr * cam.zoom, 0, 0, dpr * cam.zoom, dpr * cam.panX, dpr * cam.panY);
         f.lineJoin = c.lineJoin;
         f.lineCap = c.lineCap;
         this.c = f;
