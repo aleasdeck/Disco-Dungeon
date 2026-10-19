@@ -1373,13 +1373,15 @@ export class SceneRenderer {
       // a chip stays inside its side, as if set in the stone
       const clip: Pt[] = [P(a.x, a.y, 0), P(b.x, b.y, 0), P(tb.x, tb.y, tb.h), P(ta.x, ta.y, ta.h)];
       if (L < 4.5 || a.edge >= 0 || cam.facing(nx / L, ny / L) <= 0.05) continue;
-      // a spot or more by the side's width, each in its own stretch of it and at its own height, kept off its edges
-      const n = Math.max(1, Math.round(L / 5)), m = Math.min(0.4, ((r.nugW ?? 4.2) * 0.45) / L);
-      for (let k = 0; k < n; k++) {
-        const u = m + ((1 - 2 * m) * (k + 0.1 + 0.8 * hh(ci * 13 + i, cj * 7 + k, 52))) / n, v = 0.2 + 0.6 * hh(ci * 13 + i, cj * 7 + k, 53);
+      // spots in a grid over the side, a low and a high row by its width, each shaken inside its own box and kept off the
+      // side's edges, so the chips kept land above one another as well as side by side
+      const n = Math.max(1, Math.round(L / 4)), m = Math.min(0.4, ((r.nugW ?? 4.2) * 0.42) / L);
+      for (let k = 0; k < 2 * n; k++) {
+        const col = k % n, row = Math.floor(k / n);
+        const u = m + ((1 - 2 * m) * (col + 0.15 + 0.7 * hh(ci * 13 + i, cj * 7 + k, 52))) / n, v = 0.16 + 0.34 * row + 0.32 * hh(ci * 13 + i, cj * 7 + k, 53);
         const fx = a.x + (b.x - a.x) * u, fy = a.y + (b.y - a.y) * u, tx = ta.x + (tb.x - ta.x) * u, ty = ta.y + (tb.y - ta.y) * u, th = ta.h + (tb.h - ta.h) * u;
         spots.push({ x: fx + (tx - fx) * v + (nx / L) * 0.15, y: fy + (ty - fy) * v + (ny / L) * 0.15, h: th * v, ax: [(b.x - a.x) / L, (b.y - a.y) / L], flat: false,
-          s: (r.nugW ?? 4.2) * (0.65 + 0.6 * hh(ci * 5 + k, cj * 13 + i, 54)), k: i * 3 + k + ci * 3 + cj * 5, w: hh(ci * 17 + i, cj * 3 + k, 55), clip });
+          s: (r.nugW ?? 4.2) * (hh(ci * 5 + k, cj * 13 + i, 56) < 0.25 ? 1.05 + 0.2 * hh(ci * 5 + k, cj * 13 + i, 54) : 0.5 + 0.35 * hh(ci * 5 + k, cj * 13 + i, 54)), k: i * 3 + k + ci * 3 + cj * 5, w: hh(ci * 17 + i, cj * 3 + k, 55), clip });
       }
     }
     // the ones kept are picked by chance, but never two on top of each other
@@ -1387,7 +1389,7 @@ export class SceneRenderer {
     for (const s of spots.sort((p, o) => p.w - o.w)) {
       if (kept.length >= keep) break;
       const [sx, sy] = P(s.x, s.y, s.h);
-      if (kept.some(o => { const [ox, oy] = P(o.x, o.y, o.h); return Math.hypot(sx - ox, sy - oy) < (s.s + o.s) * 0.55; })) continue;
+      if (kept.some(o => { const [ox, oy] = P(o.x, o.y, o.h); return Math.hypot(sx - ox, sy - oy) < (s.s + o.s) * 0.45; })) continue;
       kept.push(s);
     }
     kept.sort((p, o) => cam.depth(p.x, p.y) - cam.depth(o.x, o.y)).forEach(s => this.rockNugget(s, r, I));
