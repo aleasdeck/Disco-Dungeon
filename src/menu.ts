@@ -179,16 +179,14 @@ export function renderHeroSelect(picked: number, onPick: (hero: number) => void)
 // ------------------------------------------------------------ settings
 
 export function bindSettings(onChange: () => void) {
-  const name = $<HTMLInputElement>('setName'), aim = $<HTMLInputElement>('setAim');
+  const name = $<HTMLInputElement>('setName');
   const vols = [[$<HTMLInputElement>('setMusic'), 'music'], [$<HTMLInputElement>('setSfx'), 'sfx']] as const;
   const sync = () => {
     name.value = settings.name;
-    aim.checked = settings.aimLine;
     for (const [el, k] of vols) el.value = String(Math.round(settings[k] * 100));
     document.querySelectorAll<HTMLInputElement>('input[name=quality]').forEach(r => { r.checked = r.value === settings.quality; });
   };
   name.addEventListener('input', () => { settings.name = name.value.trim(); saveSettings(); });
-  aim.addEventListener('change', () => { settings.aimLine = aim.checked; saveSettings(); });
   for (const [el, k] of vols) {
     el.addEventListener('input', () => { settings[k] = Number(el.value) / 100; sound.volumes(); });
     el.addEventListener('change', () => { saveSettings(); if (k === 'sfx') sound.play('ore'); });
