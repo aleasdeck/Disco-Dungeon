@@ -989,7 +989,7 @@ net.onMsg = (from, m) => {
 /** Host: send the game state to everyone, often while things move, and whenever something changed. */
 function shareState(now: number) {
   if (mode !== 'host' || !started || !game.S) return;
-  const busy = game.moving() || game.S.phase === 'resolve' || game.S.phase === 'enemy';
+  const busy = game.moving() || game.hopping() || game.S.phase === 'resolve' || game.S.phase === 'enemy';
   if (!(dirty || busy) || now - lastSnap < 50) return;
   net.broadcast({ t: 'snap', s: { ...snapshot(game), cues: game.recentCues() } });
   dirty = false;
@@ -1180,7 +1180,7 @@ function busy() {
   const S = game.S;
   return S.phase === 'resolve' || S.phase === 'enemy' || S.shake > 0 || S.sparks.length > 0 || S.floats.length > 0 || game.moving()
     || S.mobs.some(m => m.flash > 0 || m.born > 0 || m.knock || (m.dead > 0 && m.dead <= 1))
-    || S.heroes.some(h => h.flash > 0 || h.knock) || S.nodes.some(n => n.hit > 0);
+    || S.heroes.some(h => h.flash > 0 || h.knock || h.from) || S.nodes.some(n => n.hit > 0);
 }
 
 applyQuality();
