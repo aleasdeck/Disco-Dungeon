@@ -105,11 +105,11 @@ let moving = false, movedAt = -1;
 
 /**
  * The room is redrawn only as often as it needs, since redrawing every frame regardless is what heats phones:
- * about 60 times a second while something moves (a 120 Hz screen draws every other frame), 30 while the room
- * stands still and only torches and runes flicker (slow enough to look the same), and behind a full-screen
- * menu only when something changes. Milliseconds between drawn frames:
+ * about 60 times a second while something moves (a 120 Hz screen draws every other frame), 20 while the room
+ * stands still and only torches, runes and the HUD's pulses flicker (slow enough to look the same), and behind a
+ * full-screen menu only when something changes. Milliseconds between drawn frames:
  */
-const BUSY_GAP = 9.5, IDLE_GAP = 29;
+const BUSY_GAP = 9.5, IDLE_GAP = 45;
 /** `cleared`: the canvas was resized and is blank, draw right away; `stale`: the game changed, draw soon. */
 let cleared = true, stale = true, drawnAt = -Infinity, drawnCam = '', drawnRoom: unknown = null;
 /** A full-screen menu or map is up: the HUD's pulses under it stand still (see `.covered` in style.css). */
@@ -1055,6 +1055,23 @@ function countStats(now: number, raw: number) {
   flushStats();
 }
 
+/**
+ * The HUD's pulses (a hatched blow about to land, the full gem, the lit turn button…) beat with the room's redraws:
+ * each is 0 to 1 and back over its period in seconds, as --p09, --p14 and --p16 on the HUD's pieces (see style.css).
+ * A CSS animation of their own would have the phone redraw the whole screen 60 or 120 times a second while the room
+ * stands still at 20; with the motion turned off in the system they stand still.
+ */
+const PULSES: [string, number][] = [['--p09', 0.9], ['--p14', 1.4], ['--p16', 1.6]];
+const pulsed = [$('hudTop'), $('frame'), $('turnBtn')];
+const stillMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function pulse(t: number) {
+  if (stillMotion) return;
+  for (const [k, per] of PULSES) {
+    const v = (0.5 - 0.5 * Math.cos((2 * Math.PI * t) / per)).toFixed(2);
+    for (const el of pulsed) el.style.setProperty(k, v);
+  }
+}
+
 function applyQuality() {
   dprCap = settings.quality === 'low' ? 1 : 2;
 }
@@ -1093,6 +1110,7 @@ function frame(now: number) {
   const gap = covered ? (changed ? IDLE_GAP : Infinity) : changed ? BUSY_GAP : IDLE_GAP;
   if (cleared || now - drawnAt >= gap) {
     scene.draw(ctx, cam, game, T, view, input.aim, input.carry);
+    pulse(T);
     cleared = stale = false;
     drawnAt = now;
     drawnCam = camKey;

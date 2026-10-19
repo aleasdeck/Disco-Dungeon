@@ -131,7 +131,7 @@ i.ico { display: inline-block; font-style: normal; }
 .head .a-hp { position: absolute; left: 3px; right: 3px; bottom: 0; height: 6px; background: #241a14; clip-path: var(--cut-bar); }
 .head .a-hp i { position: absolute; inset: 0 auto 0 0; background: var(--hp); }
 .head .a-hp s { position: absolute; top: 0; bottom: 0; background: #8fc6ea; }
-.head .a-hp em { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(-45deg, #ffd34d 0 2px, #8a1f2a 2px 4px); animation: risk 0.9s ease-in-out infinite; }
+.head .a-hp em { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(-45deg, #ffd34d 0 2px, #8a1f2a 2px 4px); opacity: calc(1 - 0.55 * var(--p09, 0)); }
 .head .tick { position: absolute; right: -6px; top: -5px; width: 20px; height: 20px; display: none; }
 .head.done .tick { display: block; }
 .head.dead { filter: var(--outline) grayscale(1) brightness(0.55); }
@@ -140,7 +140,7 @@ i.ico { display: inline-block; font-style: normal; }
 .head .off { position: absolute; left: -6px; top: -5px; width: 20px; height: 20px; display: none; }
 .head.away canvas { filter: grayscale(1) brightness(0.6); }
 .head.away .off { display: block; }
-.head.lethal { animation: lethal-f 0.9s ease-in-out infinite; }
+.head.lethal { filter: var(--outline) drop-shadow(0 0 6px rgba(255, 77, 106, var(--p09, 0))); }
 .head:disabled { cursor: default; }
 .ore-chip { display: flex; align-items: center; gap: 6px; padding: 3px 14px 3px 8px; background: #2c2119; clip-path: var(--cut-slab); font: 700 20px/1 Oswald, sans-serif; color: #f3e6c8; }
 .ore-chip .ico { width: 28px; height: 28px; }
@@ -306,16 +306,14 @@ i.ico { display: inline-block; font-style: normal; }
 .hpbar.shielded .track { box-shadow: inset 0 0 0 3px #7fb6dc; }
 .track i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(#ef6b75, #c13340 55%, #8d1e2a); transition: width 0.25s; }
 .track s { position: absolute; top: 0; bottom: 0; background: linear-gradient(#c5e6fb, #8fc6ea 55%, #5a9cc8); transition: width 0.25s, left 0.25s; }
-.track s.risk { background: repeating-linear-gradient(-45deg, #ffd34d 0 3px, #5a9cc8 3px 6px); animation: risk 0.9s ease-in-out infinite; }
-.track em { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(-45deg, #ffd34d 0 3px, #8a1f2a 3px 6px); animation: risk 0.9s ease-in-out infinite; }
-.hpbar.lethal { animation: lethal-f 0.9s ease-in-out infinite; }
+.track s.risk { background: repeating-linear-gradient(-45deg, #ffd34d 0 3px, #5a9cc8 3px 6px); opacity: calc(1 - 0.55 * var(--p09, 0)); }
+.track em { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(-45deg, #ffd34d 0 3px, #8a1f2a 3px 6px); opacity: calc(1 - 0.55 * var(--p09, 0)); }
+.corner .hpbar.lethal { filter: var(--outline) drop-shadow(0 0 6px rgba(255, 77, 106, var(--p09, 0))); }
 /* the number sits in the bar's tall left part, before the waist */
 .hp-num {
   position: absolute; inset: 28% 45% 28% 12%; display: grid; place-items: center;
   font: 700 calc(64 * var(--u))/1 Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #000, 0 0 3px #000;
 }
-@keyframes risk { 50% { opacity: 0.45; } }
-@keyframes lethal-f { 50% { filter: var(--outline) drop-shadow(0 0 6px #ff4d6a); } }
 
 /* the sparks: two pieces of one crystal under the health, the gem being the third, on the whole block so each keeps its
    own box; full, they shine like the lit turn button */
@@ -324,8 +322,7 @@ i.ico { display: inline-block; font-style: normal; }
 .spk i:nth-child(1) { --bx: 79; --by: 174.55; --bw: 203; --bh: 106.45; }
 .spk i:nth-child(2) { --bx: 249; --by: 152; --bw: 205; --bh: 129; }
 .spk i.on { background: linear-gradient(#a98bf0, #6b4cc0); }
-.spk.full i { background: linear-gradient(#e2d4ff, #a07ef0); animation: shine 1.4s ease-in-out infinite; }
-@keyframes shine { 50% { filter: brightness(1.25); } }
+.spk.full i { background: linear-gradient(#e2d4ff, #a07ef0); filter: brightness(calc(1 + 0.25 * var(--p14, 0))); }
 
 .ability {
   --bx: 421; --by: -14; --bw: 306; --bh: 295; padding: 0 0 0 20%;
@@ -343,8 +340,7 @@ i.ico { display: inline-block; font-style: normal; }
 .ability:disabled::after { filter: saturate(0.45) brightness(0.7); }
 .ability.full::after { background: linear-gradient(160deg, #c7b0ff, #8f6fe0 55%, #5a3aa8); }
 .ability.full { filter: var(--outline) drop-shadow(0 0 12px #c9a8ff); }
-.ability.full:not(.on) { animation: ab-full 1.4s ease-in-out infinite; }
-@keyframes ab-full { 50% { filter: var(--outline) drop-shadow(0 0 26px #e2d4ff) brightness(1.18); } }
+.ability.full:not(.on) { filter: var(--outline) drop-shadow(0 0 calc(12px + 14px * var(--p14, 0)) #d5bcff) brightness(calc(1 + 0.18 * var(--p14, 0))); }
 .ability.on { filter: var(--outline) drop-shadow(0 0 12px var(--ab)); }
 .ability.on::before { background: var(--ab); }
 .ability:not(:disabled):active { transform: translateY(2px); }
@@ -388,16 +384,15 @@ i.ico { display: inline-block; font-style: normal; }
 .turn-btn b { position: relative; font: 700 calc(46 * var(--u))/1 Oswald, sans-serif; text-transform: uppercase; letter-spacing: 0.03em; color: var(--tc); white-space: nowrap; }
 .turn-btn.long b { font-size: calc(38 * var(--u)); }
 .turn-btn small { position: relative; font: 600 max(9px, calc(22 * var(--u)))/1 Oswald, sans-serif; color: var(--tc); opacity: 0.8; }
-.turn-btn.lit { --p1: var(--gold-1); --p2: var(--gold-2); --p3: var(--gold-3); filter: var(--outline) drop-shadow(0 5px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 16px rgba(255, 200, 80, 0.75)); animation: lit 1.6s ease-in-out infinite; }
+.turn-btn.lit { --p1: var(--gold-1); --p2: var(--gold-2); --p3: var(--gold-3); filter: var(--outline) drop-shadow(0 5px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 calc(16px + 10px * var(--p16, 0)) rgba(255, 205, 85, calc(0.75 + 0.2 * var(--p16, 0)))); transition: none; }
 .turn-btn.confirm { --p1: #ffb86b; --p2: #e07a2e; --p3: #9a4112; }
 .turn-btn.wait { --p1: #8a7a5c; --p2: #6b5b40; --p3: #46392a; --tc: #f3e6c8; }
-.turn-btn.wait b { animation: wait 1.4s ease-in-out infinite; }
+.turn-btn.wait b { opacity: calc(1 - 0.4 * var(--p14, 0)); }
 .turn-btn.enemy { --p1: #e2525e; --p2: #b8323f; --p3: #6e1520; --tc: #fff; cursor: default; }
 .turn-btn:not(:disabled):active { transform: translateY(3px); }
 .turn-btn:disabled:not(.enemy):not(.wait) { cursor: default; }
-@keyframes lit { 50% { filter: var(--outline) drop-shadow(0 5px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 26px rgba(255, 210, 90, 0.95)); } }
-@keyframes wait { 50% { opacity: 0.6; } }
-@media (prefers-reduced-motion: reduce) { .turn-btn.lit, .turn-btn.wait b, .spk.full i, .ability.full { animation: none !important; } }
+/* the pulses above (--p09, --p14, --p16: 0 to 1 and back) are set by main.ts each time it draws the room, so they beat
+   with it: an animation of their own would have the phone redraw the screen every frame while the room stands still */
 
 /* ---------- a phone on its side: the same corners, smaller */
 @media (max-height: 520px) and (orientation: landscape) {
@@ -564,8 +559,9 @@ i.ico { display: inline-block; font-style: normal; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .panel-btns { display: flex; gap: 8px; }
 .end-panel, .help-panel { width: min(460px, 100%); text-align: center; }
-/* the HUD's pulses stand still under a full-screen menu or map: every step of one is a frame for the phone to make,
-   and under a blurred backdrop the whole screen is blurred again for it */
+/* anything moving on the HUD stands still under a full-screen menu or map: every step of it is a frame for the phone to
+   make, and under a blurred backdrop the whole screen is blurred again for it (its pulses stop there by themselves: they
+   beat with the room's redraws) */
 .covered :is(.hud-top, .corner, .turn-btn, .boss-bar), .covered :is(.hud-top, .corner, .turn-btn, .boss-bar) * { animation-play-state: paused !important; }
 /* full screens over the live room: no backdrop blur, which would be recomputed every frame */
 .overlay.solid { background: rgba(14, 10, 7, 0.86); backdrop-filter: none; }
@@ -816,14 +812,15 @@ i.ico { display: inline-block; font-style: normal; }
 .art-turn .turn-btn b, .art-turn .turn-btn small { transform: rotate(-7deg); }
 .art-turn .turn-btn.idle .tb-plate { filter: saturate(0.45) brightness(0.7); }
 .art-turn .turn-btn.idle b { color: #1c120a; }
-.art-turn .turn-btn.lit { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 0 16px rgba(255, 200, 80, 0.8)); animation: lit-art 1.6s ease-in-out infinite; }
+.art-turn .turn-btn.lit { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 0 calc(16px + 12px * var(--p16, 0)) rgba(255, 205, 85, calc(0.8 + 0.2 * var(--p16, 0)))); }
 .art-turn .turn-btn.confirm .tb-plate { filter: hue-rotate(-16deg) saturate(1.5); }
 .art-turn .turn-btn.wait .tb-plate { filter: grayscale(0.75) brightness(0.62); }
 .art-turn .turn-btn.enemy .tb-plate { filter: hue-rotate(-45deg) saturate(1.9) brightness(0.9); }
-@keyframes lit-art { 50% { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 0 28px rgba(255, 210, 90, 1)); } }
-@media (prefers-reduced-motion: reduce) { .art-turn .turn-btn.lit { animation: none; } }
 /* a phone held upright keeps the glow still */
-@media (orientation: portrait) and (max-width: 700px) { .art-turn .turn-btn.lit { animation: none; } }
+@media (orientation: portrait) and (max-width: 700px) {
+  .turn-btn.lit { filter: var(--outline) drop-shadow(0 5px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 16px rgba(255, 200, 80, 0.75)); transition: filter 0.2s; }
+  .art-turn .turn-btn.lit { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 0 16px rgba(255, 200, 80, 0.8)); }
+}
 
 .art-btn_tile .top-btns { filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
 .art-btn_tile .ibtn { clip-path: none; background: var(--ui-btn_tile) center / 100% 100% no-repeat; padding: 5px; }
@@ -836,8 +833,7 @@ i.ico { display: inline-block; font-style: normal; }
 .art-gem .ability::before, .art-gem .ability::after { display: none; }
 .art-gem .ability:disabled { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) saturate(0.4) brightness(0.65); }
 .art-gem .ability.full { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 0 12px #c9a8ff); }
-.art-gem .ability.full:not(.on) { animation-name: ab-full-art; }
-@keyframes ab-full-art { 50% { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 0 26px #e2d4ff) brightness(1.22); } }
+.art-gem .ability.full:not(.on) { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 0 calc(12px + 14px * var(--p14, 0)) #d5bcff) brightness(calc(1 + 0.22 * var(--p14, 0))); }
 .art-gem .ability.on { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 0 14px var(--ab)); }
 .art-gem .ability b { padding: 2px 5px; background: rgba(18, 12, 9, 0.6); }
 /* the ability's own picture fills the gem's middle face instead of its name */
@@ -897,6 +893,7 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
    plain percentages of it; each fill shows the same picture at the bar's full size (cqw/cqh of the track), shifted by where
    the fill starts (--x, set with it) */
 .art-hp_empty.art-hp_full .corner .hpbar { background: var(--ui-hp_empty) center / 100% 100% no-repeat; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)); }
+.art-hp_empty.art-hp_full .corner .hpbar.lethal { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 0 6px rgba(255, 77, 106, var(--p09, 0))); }
 .art-hp_empty.art-hp_full .corner .hpbar .track { inset: 0 2.729% 0 2.620%; clip-path: none; background: none; container-type: size; }
 .art-hp_empty.art-hp_full .corner .hpbar.shielded .track { box-shadow: none; }
 .art-hp_empty.art-hp_full .corner .track > * { background: var(--ui-hp_full) calc(-2.768cqw - var(--x, 0) * 1cqw) 0 / 105.65cqw 100cqh no-repeat; }
@@ -908,7 +905,7 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .art-spk_2_off .spk i:nth-child(2) { background-image: var(--ui-spk_2_off); }
 .art-spk_1_on .spk i.on:nth-child(1) { background-image: var(--ui-spk_1_on); }
 .art-spk_2_on .spk i.on:nth-child(2) { background-image: var(--ui-spk_2_on); }
-.art-spk_1_on .spk.full i { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 0 6px #c9a8ff); }
+.art-spk_1_on .spk.full i { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 0 6px #c9a8ff) brightness(calc(1 + 0.25 * var(--p14, 0))); }
 
 /* the menus stand on a painted disco dungeon instead of the dimmed room */
 .art-menu_bg .overlay.solid { background: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_bg) center / cover no-repeat; }
