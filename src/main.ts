@@ -332,6 +332,8 @@ function campPick(hero: number, pick: CampPick) {
 function showEvent() {
   const open = !!ev && !(ev.done && evShut === ev.seed);
   $('eventScreen').hidden = !open;
+  // the top strip stays in sight over the window: the heroes' health and the ore while the party makes up its mind
+  hud.setEvent(open ? run.floor : null);
   if (open) evView.render(ev!, game.bank, game.party.length === 1, eventVotes());
 }
 
