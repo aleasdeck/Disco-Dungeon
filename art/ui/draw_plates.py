@@ -2,9 +2,9 @@
 rim, rubbed edges and a torn corner): the windows' boards (panel, panel_tall), the big mustard button (btn_main), the dark
 button (btn_dark), the square tile of the top strip's buttons (btn_tile), the light slab under each choice in the event,
 camp, trophy and blacksmith windows (opt), a plate of its own shape for each button of the main menu and the pause
-(mb_*), and the board behind the hero's portrait in the corner (pf_board, with its print apart as pf_ink, which
-style.css colours in the hero's colour). Each old one keeps the size of the picture it replaces, so style.css cuts and
-stretches it as before. Run from the repo root:
+(mb_*), the board of the trophies' sockets beside the health (tray), and the board behind the hero's portrait in the
+corner (pf_board, with its print apart as pf_ink, which style.css colours in the hero's colour). Each old one keeps the
+size of the picture it replaces, so style.css cuts and stretches it as before. Run from the repo root:
 
     python3 art/ui/draw_plates.py [folder]
 
@@ -109,3 +109,8 @@ W, H = 420, 512
 plate('pf', (W, H), [(4 + x * (W - 8), 4 + y * (H - 8)) for x, y in ((0.09, 0.03), (0.88, 0), (1, 0.16), (0.96, 0.92),
                                                                          (0.78, 1), (0.04, 0.96), (0, 0.18))],
       (128, 128, 128), 80, tear=0.6, parts=True)
+
+# the board of the trophies' sockets in the fight corner, left of the health and the sparks (Vladislav: brighter, and
+# cardboard); 88 x 267 of the corner's units at 3 pixels a unit, its side by the health straight
+W, H = 264, 801
+plate('tray', (W, H), [(10, 16), (W - 3, 4), (W - 3, H - 3), (3, H - 12)], (176, 110, 56), 90, tear=0.45)
