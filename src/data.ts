@@ -386,10 +386,10 @@ export const HEROES: HeroDef[] = [
   },
 ];
 
-/** The kinds of heroes by disc size, the biggest first, a row each on the pick screens: the row's tab, the word on a hero's card, a heroine's own. */
+/** The kinds of heroes by disc size, the biggest first, a row each on the pick screens: the row's tab, the word for one hero, a heroine's own. */
 export const KINDS = [
   { r: 6, row: 'Толстяки', one: 'Толстяк', fem: 'Толстуха' },
-  { r: 5, row: 'Нормисы', one: 'Нормис', fem: 'Нормиска' },
+  { r: 5, row: 'Чуваки', one: 'Чувак', fem: 'Чувиха' },
   { r: 4, row: 'Дрищи', one: 'Дрищ', fem: 'Дрищ' },
 ];
 
