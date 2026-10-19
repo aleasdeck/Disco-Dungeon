@@ -8,7 +8,6 @@ import { cellAt, floorAt, hazKey, inPit, isFloor, pitAt, type Block, type Decal,
 import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure, heroLook } from './figures';
 import { circ, ell, fs, mix, pth, rr, type Ctx, type Pt } from './util';
 import { GRAFFITI_FONTS, envArt } from '../assets';
-import { settings } from '../settings';
 import { knockPose, topplePose, type Knock, type Pose } from '../fx';
 import { hl } from '../hl';
 import { has } from '../artifacts';
@@ -140,6 +139,7 @@ export class SceneRenderer {
   private g!: Game;
   private t = 0;
   private carry: Carry | null = null;
+  private aim: Aim | null = null;
   private bgCss = '';
   private glow: { key: string; img: HTMLCanvasElement } | null = null;
 
@@ -399,6 +399,7 @@ export class SceneRenderer {
 
   draw(c: Ctx, cam: Camera, g: Game, t: number, view: { w: number; h: number; dpr: number }, aim: Aim | null, carry: Carry | null = null) {
     this.carry = carry?.moved ? carry : null;
+    this.aim = aim;
     this.c = c; this.cam = cam; this.g = g; this.t = t;
     const S = g.S, { w, h, dpr } = view;
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -419,6 +420,7 @@ export class SceneRenderer {
     this.pickDecor();
     this.drawUnder(c, view, sx !== 0 || sy !== 0);
     this.drawGround();
+    this.drawAimLine(aim);
 
     const items: [number, () => void][] = [];
     for (const d of S.discs) if (!d.gone) items.push([cam.depth(d.x, d.y), () => this.drawDisc(d)]);
@@ -441,7 +443,7 @@ export class SceneRenderer {
     this.drawOmens();
     this.drawPuffs();
     if (S.spec.smoke && S.phase !== 'over') this.drawSmoke(view);
-    this.drawAim(aim);
+    this.drawAimPull(aim);
     this.drawFx();
 
   }
@@ -1512,7 +1514,7 @@ export class SceneRenderer {
     drawMiniature(c, {
       key: h.def.key, x: sx, y: sy, baseR: HERO_BASE, baseCol: h.def.col, fig: heroFig(h.def),
       faceRight: this.faceRight(p.x, p.y, target.x, target.y), flash: h.flash > 0, hop: at ? 0 : g.figureAt(h)!.lift,
-      alpha: dead ? 0.45 : carried ? 0.3 : lifted ? 0.85 : 1,
+      alpha: dead ? 0.45 : carried ? 0.3 : lifted ? 0.85 : this.aimFade(h),
       hp: dead || carried ? undefined : { now: h.hp, max: h.max },
       pose: lifted ? undefined : this.pose(h.knock, p.x, p.y, HERO_BASE),
       light: S.biome.light,
@@ -1731,37 +1733,118 @@ export class SceneRenderer {
 
   // ------------------------------------------------------------ aim & effects
 
-  private drawAim(aim: Aim | null) {
+  /**
+   * The aim line, painted on the floor: one stretch up to the first wall, block or mob; ricochets are left for the player
+   * to judge, unless the hero wears «Рентген-очки»: then the line runs on through three bounces, with a ring at each.
+   * It goes down before the figures, so they stand on it, and it lies flat with the floor's own foreshortening.
+   */
+  private drawAimLine(aim: Aim | null) {
+    if (!aim) return;
+    const { c, g } = this;
+    const h = aim.hero, len = Math.hypot(aim.dx, aim.dy);
+    if (!g.spot(h) || len < 4) return;
+    const xray = has(h, 'xray'), pr = g.predict(h, aim.dx, aim.dy, xray ? ART.xrayBounces : 0);
+    // «Стробоскоп», an event's curse: the fight goes without the line
+    if (pr.path.length < 2 || g.S.spec.strobe) return;
+    const pts = xray ? pr.path : [pr.path[0], pr.path[pr.path.length - 1]];
+    // thick enough to read on a phone at any zoom: in floor units, so across the view it is half as thick as along it
+    const lw = Math.max(2.6, 5 / this.cam.zoom), col = h.def.col, run = reduce ? 0 : this.t * 20;
+    const v = (globalThis as { __aimVar?: string }).__aimVar ?? 'A';
+    c.save();
+    this.onFloor();
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+    const line = () => { c.beginPath(); pts.forEach(([x, y], k) => (k ? c.lineTo(x, y) : c.moveTo(x, y))); };
+    if (v === 'A') {
+      line();
+      c.strokeStyle = 'rgba(20,10,5,.55)';
+      c.lineWidth = lw + 2;
+      c.stroke();
+      c.setLineDash([lw * 2.2, lw * 1.4]);
+      c.lineDashOffset = -run;
+      c.strokeStyle = col;
+      c.lineWidth = lw;
+      c.stroke();
+      c.setLineDash([]);
+    } else if (v === 'B') {
+      // chevrons painted along the way, running toward where the disc goes
+      line();
+      c.strokeStyle = 'rgba(20,10,5,.35)';
+      c.lineWidth = lw * 0.5;
+      c.stroke();
+      const gap = lw * 3.2, s = lw * 1.1;
+      let walked = 0;
+      for (let k = 1; k < pts.length; k++) {
+        const [ax, ay] = pts[k - 1], [bx, by] = pts[k], L = Math.hypot(bx - ax, by - ay);
+        if (L < 1e-3) continue;
+        const ux = (bx - ax) / L, uy = (by - ay) / L;
+        for (let u = ((((run - walked) % gap) + gap) % gap); u < L; u += gap) {
+          const x = ax + ux * u, y = ay + uy * u;
+          c.beginPath();
+          c.moveTo(x - ux * s - uy * s, y - uy * s + ux * s);
+          c.lineTo(x, y);
+          c.lineTo(x - ux * s + uy * s, y - uy * s - ux * s);
+          c.strokeStyle = 'rgba(20,10,5,.6)';
+          c.lineWidth = lw * 0.75 + 1.6;
+          c.stroke();
+          c.strokeStyle = col;
+          c.lineWidth = lw * 0.75;
+          c.stroke();
+        }
+        walked += L;
+      }
+    } else {
+      // the disc's own track: a band as wide as the disc, dashed down the middle, and its print where it stops
+      const r = g.discR(h);
+      line();
+      c.strokeStyle = col + '40';
+      c.lineWidth = r * 2;
+      c.stroke();
+      c.setLineDash([lw * 1.6, lw * 1.6]);
+      c.lineDashOffset = -run;
+      c.strokeStyle = col;
+      c.lineWidth = lw * 0.6;
+      c.stroke();
+      c.setLineDash([]);
+      const [ex, ey] = pts[pts.length - 1];
+      circ(c, ex, ey, r);
+      c.fillStyle = col + '55';
+      c.fill();
+      c.strokeStyle = col;
+      c.lineWidth = lw * 0.5;
+      c.stroke();
+    }
+    if (xray) for (const [bx, by] of pr.bounces) { circ(c, bx, by, lw * 1.3); fs(c, col, 1); }
+    c.restore();
+  }
+
+  /**
+   * The aim line lies on the floor, so a hero throwing up the screen would hide it behind its whole figure: the steeper
+   * the line climbs from its feet, the more the figure fades while aiming, and the line shows through.
+   */
+  private aimFade(h: HeroState) {
+    const a = this.aim, len = a ? Math.hypot(a.dx, a.dy) : 0;
+    if (!a || a.hero !== h || len < 4 || this.g.S.spec.strobe || (globalThis as { __aimFade?: boolean }).__aimFade === false) return 1;
+    // how steeply the line climbs the screen from the hero's feet: straight up it runs behind the whole figure
+    const o = this.P(0, 0), e = this.P(a.dx, a.dy), up = (o[1] - e[1]) / Math.hypot(e[0] - o[0], e[1] - o[1]);
+    const k = Math.min(1, Math.max(0, (up - 0.45) / 0.45));
+    return 1 - 0.5 * k * k * (3 - 2 * k);
+  }
+
+  /** How hard the hero pulls, in five pips at its feet: these stay over the figure, they are its readout, not paint. */
+  private drawAimPull(aim: Aim | null) {
     if (!aim) return;
     const { c, P, g } = this;
     const h = aim.hero, p = g.spot(h), len = Math.hypot(aim.dx, aim.dy);
     if (!p || len < 4) return;
-    // one straight line up to the first wall, block or mob; ricochets are left for the player to judge, unless the hero
-    // wears «Рентген-очки»: then the line runs on through three bounces, with a ring at each
-    const xray = has(h, 'xray'), pr = g.predict(h, aim.dx, aim.dy, xray ? ART.xrayBounces : 0);
-    // «Стробоскоп», an event's curse: the fight goes without the line, as with it turned off in the settings
-    if (pr.path.length < 2 || !settings.aimLine || g.S.spec.strobe) return;
-    // thick enough to read on a phone at any zoom: at least ~4 screen pixels
-    const lw = Math.max(2.4, 4 / this.cam.zoom);
-    const pts = (xray ? pr.path : [pr.path[0], pr.path[pr.path.length - 1]]).map(q => P(...q, 2));
-    c.save();
-    c.lineCap = 'round';
-    c.lineJoin = 'round';
-    c.beginPath();
-    pts.forEach(([x, y], k) => (k ? c.lineTo(x, y) : c.moveTo(x, y)));
-    c.strokeStyle = INK;
-    c.lineWidth = lw + 2.2;
-    c.stroke();
-    c.setLineDash([lw * 2.2, lw * 1.4]);
-    c.lineDashOffset = reduce ? 0 : -this.t * 20;
-    c.strokeStyle = h.def.col;
-    c.lineWidth = lw;
-    c.stroke();
-    c.setLineDash([]);
-    if (xray) for (const q of pr.bounces) { const [bx, by] = P(...q, 2); circ(c, bx, by, lw * 1.3); fs(c, h.def.col, 1.4); }
-    c.restore();
     const [px, py] = P(p.x, p.y), pw = Math.round((len / 60) * 5);
     for (let k = 0; k < 5; k++) { rr(c, px - 11 + k * 4.6, py + 7, 3.6, 2.6, 1); fs(c, k < pw ? h.def.col : '#2a1f18', 0.6); }
+  }
+
+  /** From here on the canvas draws in world units on the floor: what is drawn lies flat on it, foreshortened as it is. */
+  private onFloor() {
+    const { c, P } = this, o = P(0, 0), ex = P(1, 0), ey = P(0, 1);
+    c.transform(ex[0] - o[0], ex[1] - o[1], ey[0] - o[0], ey[1] - o[1], o[0], o[1]);
   }
 
   /** A chip of stone, gold, crystal, mushroom or ice, tumbling, with its shadow on the floor; it fades at the end of its life. */
