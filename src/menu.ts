@@ -164,8 +164,9 @@ export function renderHeroSelect(picked: number, onPick: (hero: number) => void)
     const cv = document.createElement('canvas');
     drawPortrait(cv, { i, def });
     b.append(cv);
+    // only the name: the row's tab already says what kind the hero is
     const label = document.createElement('span');
-    label.innerHTML = `${def.name}<em>${kindOf(def)}</em>`;
+    label.textContent = def.name;
     b.append(label);
     b.addEventListener('click', () => onPick(i));
     return b;
