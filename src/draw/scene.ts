@@ -1261,13 +1261,15 @@ export class SceneRenderer {
    * steps up), and a vein sinks and loses its gold as its charges go. Sides and top take a picture each when given.
    */
   private rockCells() {
-    const cells = new Map<string, number>();
+    const cells = new Map<string, { q: number; f: number }>();
     for (const m of this.g.S.nodes) {
       const r = (m as any).pv?.rock;
       if (!r || m.left <= 0) continue;
       const z = m.s ?? 1, i0 = Math.round((m.x - 8 * z) / TILE), j0 = Math.round((m.y - 8 * z) / TILE);
       const q = Math.min(m.left, m.ch) / m.ch;
-      for (let a = 0; a < z; a++) for (let b = 0; b < z; b++) cells.set(hazKey(i0 + a, j0 + b), q);
+      // one height for the whole vein (the cave's big one spans 2 × 2), a little different from the vein next door
+      const f = 0.9 + 0.2 * (((Math.imul(i0 * 73856093 ^ j0 * 19349663, 2654435761) >>> 0) % 1000) / 1000);
+      for (let a = 0; a < z; a++) for (let b = 0; b < z; b++) cells.set(hazKey(i0 + a, j0 + b), { q, f });
     }
     return cells;
   }
@@ -1280,9 +1282,9 @@ export class SceneRenderer {
     for (const [ci, cj] of own) this.rockCell(ci, cj, cells, r, n.hit > 0);
   }
 
-  private rockCell(ci: number, cj: number, cells: Map<string, number>, r: any, struck: boolean) {
+  private rockCell(ci: number, cj: number, cells: Map<string, { q: number; f: number }>, r: any, struck: boolean) {
     const { cam } = this, I = ((globalThis as any).__protoImgs ?? {}) as Record<string, HTMLImageElement>;
-    const q = cells.get(hazKey(ci, cj));
+    const q = cells.get(hazKey(ci, cj))?.q;
     if (q === undefined) return;
     const hh = (a: number, b: number, k = 0) => {
       let t = (a * 374761393 + b * 668265263 + k * 1442695041) | 0;
@@ -1290,10 +1292,10 @@ export class SceneRenderer {
       t = Math.imul(t ^ (t >>> 16), 668265263);
       return ((t ^ (t >>> 15)) >>> 0) / 4294967296;
     };
-    const low = r.low ?? 0.45, H0 = r.H ?? 11, hv = r.hv ?? 0.35;
+    const low = r.low ?? 0.45, H0 = r.H ?? 11, hv = r.hv ?? 0.2;
     const hOf = (a: number, b: number) => {
-      const qq = cells.get(hazKey(a, b));
-      return qq === undefined ? -1 : H0 * (low + (1 - low) * qq) * (0.9 + 0.2 * hh(a, b, 31));
+      const v = cells.get(hazKey(a, b));
+      return v === undefined ? -1 : H0 * (low + (1 - low) * v.q) * v.f;
     };
     // a struck vein jolts down a little
     const ht = hOf(ci, cj) - (struck ? 0.6 : 0);
@@ -1342,9 +1344,9 @@ export class SceneRenderer {
       return pts;
     };
     const foot = outline(), M = foot.length;
-    // the top rim: each outer side leans in by its own amount (the sides on a shared edge stand straight), each point a
-    // little up or down
-    const lean = foot.map((p, i) => (p.edge >= 0 ? 0 : (r.taper ?? 1.8) * (0.6 + 0.8 * hh(p.id[0] + foot[(i + 1) % M].id[0], p.id[1] + foot[(i + 1) % M].id[1], 94))));
+    // the top rim: the outer sides lean in, by a little more or less from cell to cell (the sides on a shared edge stand
+    // straight), each point a little up or down
+    const tp = (r.taper ?? 1.8) * (0.8 + 0.4 * hh(ci, cj, 94)), lean = foot.map(p => (p.edge >= 0 ? 0 : tp));
     const cxm = x0 + 8 + 3 * (hh(ci, cj, 90) - 0.5), cym = y0 + 8 + 3 * (hh(ci, cj, 91) - 0.5);
     const rim = foot.map((p, i) => {
       const pv = foot[(i + M - 1) % M], nx = foot[(i + 1) % M], o1 = lean[(i + M - 1) % M], o2 = lean[i];
@@ -1377,15 +1379,15 @@ export class SceneRenderer {
     spots.sort((p, o) => p.w - o.w).slice(0, keep).sort((p, o) => cam.depth(p.x, p.y) - cam.depth(o.x, o.y)).forEach(s => this.rockNugget(s, r, I));
     // a boulder on top while the vein is full: it goes with the first hit
     if (q > (r.stoneTill ?? 0.7) && r.stone !== false && hh(ci, cj, 69) < (r.stones ?? 0.5)) {
-      const cx = x0 + 5 + 6 * hh(ci, cj, 70), cy = y0 + 5 + 6 * hh(ci, cj, 71), R = (r.stoneR ?? 5) * (0.85 + 0.3 * hh(ci, cj, 72)), N = 6;
-      const sh = ht + (peak.h - ht) * 0.5, H2 = (r.stoneH ?? 2.2) * (0.8 + 0.4 * hh(ci, cj, 75));
+      const cx = x0 + 5 + 4 * hh(ci, cj, 70), cy = y0 + 5 + 4 * hh(ci, cj, 71), R = (r.stoneR ?? 6) * (0.85 + 0.3 * hh(ci, cj, 72)), N = 5;
+      const sh = ht + (peak.h - ht) * 0.5, H2 = (r.stoneH ?? 3) * (0.8 + 0.4 * hh(ci, cj, 75));
       const ft: { x: number; y: number; h: number }[] = [], rm: { x: number; y: number; h: number }[] = [];
       for (let k = 0; k < N; k++) {
         const an = (k / N) * Math.PI * 2 + hh(ci, cj, 73) * 2 + (hh(ci * 7 + k, cj, 76) - 0.5) * 0.7, rr = R * (0.6 + 0.65 * hh(ci * 7 + k, cj, 74));
         ft.push({ x: cx + Math.cos(an) * rr, y: cy + Math.sin(an) * rr, h: sh - 0.4 });
-        rm.push({ x: cx + Math.cos(an) * rr * 0.72 + 0.6, y: cy + Math.sin(an) * rr * 0.72 - 0.4, h: sh + H2 * (0.8 + 0.4 * hh(ci * 7 + k, cj, 77)) });
+        rm.push({ x: cx + Math.cos(an) * rr * 0.8 + 0.5, y: cy + Math.sin(an) * rr * 0.8 - 0.3, h: sh + H2 * (0.8 + 0.4 * hh(ci * 7 + k, cj, 77)) });
       }
-      this.rockPrism(ft, rm, { x: cx + 1, y: cy - 0.8, h: sh + H2 * 1.35 }, ft.map(() => -1), r, I, () => -1, ci * 11 + cj * 3 + 1);
+      this.rockPrism(ft, rm, { x: cx + 1.2, y: cy - 0.6, h: sh + H2 * 1.2 }, ft.map(() => -1), r, I, () => -1, ci * 11 + cj * 3 + 1);
     }
   }
 
@@ -1408,7 +1410,7 @@ export class SceneRenderer {
       let lo = 0;
       if (edges[i] >= 0) {
         lo = across(edges[i]);
-        if (lo >= 0.97) { vis[i] = false; continue; }
+        if (lo >= 0.995) { vis[i] = false; continue; }
       }
       faces.push({ i, d: cam.depth((a.x + b.x) / 2, (a.y + b.y) / 2), nx: nx / l, ny: ny / l, lo: Math.max(0, lo) });
     }
@@ -1419,7 +1421,8 @@ export class SceneRenderer {
       const face: Pt[] = [mix(a, ta, f.lo), mix(b, tb, f.lo), P(tb.x, tb.y, tb.h), P(ta.x, ta.y, ta.h)];
       const lit = 0.5 + 0.5 * cam.sideways(f.nx, f.ny);
       if (side) {
-        const L = Math.hypot(b.x - a.x, b.y - a.y), dx = (b.x - a.x) / L, dy = (b.y - a.y) / L, u0 = 40 * hs(seed, i, 47), H = Math.max(ta.h, tb.h);
+        // the side leans in, so its rim runs above the upright plane the strip is laid in: start the strip a little higher
+        const L = Math.hypot(b.x - a.x, b.y - a.y), dx = (b.x - a.x) / L, dy = (b.y - a.y) / L, u0 = 40 * hs(seed, i, 47), H = Math.max(ta.h, tb.h) + 4;
         const at = (u: number, h: number) => P(a.x + dx * (u - u0), a.y + dy * (u - u0), h + a.h);
         this.wallTex(side, face, at, u0, u0 + L, H, (r.dark ?? 0.04) + (r.shade ?? 0.3) * lit, r.texH ?? 22);
       } else {
@@ -1427,9 +1430,9 @@ export class SceneRenderer {
       }
       // a crease where two sides meet: ink only where the rock turns away, a darker line between two faces we see
       const prevVis = vis[(i + N - 1) % N], nextVis = vis[j];
-      c.lineWidth = prevVis ? 0.5 : BL; c.strokeStyle = prevVis ? 'rgba(20,12,8,.55)' : INK;
+      c.lineWidth = prevVis ? 0.4 : BL; c.strokeStyle = prevVis ? `rgba(20,12,8,${r.crease ?? 0.3})` : INK;
       c.beginPath(); c.moveTo(...face[0]); c.lineTo(...face[3]); c.stroke();
-      c.lineWidth = nextVis ? 0.5 : BL; c.strokeStyle = nextVis ? 'rgba(20,12,8,.55)' : INK;
+      c.lineWidth = nextVis ? 0.4 : BL; c.strokeStyle = nextVis ? `rgba(20,12,8,${r.crease ?? 0.3})` : INK;
       c.beginPath(); c.moveTo(...face[1]); c.lineTo(...face[2]); c.stroke();
       if (f.lo === 0) { c.lineWidth = BL; c.strokeStyle = INK; c.beginPath(); c.moveTo(...face[0]); c.lineTo(...face[1]); c.stroke(); }
     }
@@ -1460,7 +1463,7 @@ export class SceneRenderer {
     // the rim, inked round the rock's outside and where it steps down to a lower cell
     c.strokeStyle = INK; c.lineWidth = r.rimLw ?? 1;
     for (let i = 0; i < N; i++) {
-      if (edges[i] >= 0 && across(edges[i]) >= 0.97) continue;
+      if (edges[i] >= 0 && across(edges[i]) >= 0.9) continue;
       c.beginPath(); c.moveTo(...R[i]); c.lineTo(...R[(i + 1) % N]); c.stroke();
     }
   }
