@@ -87,8 +87,11 @@ export const FROST_VULN = 0.5;
 export const frostVuln = (frost = 0) => (frost >= 2 ? FROST_VULN : frost > 0 ? FROST_SLOW_VULN : 0);
 /** Online, at most this many players sit at one table: rooms are built for one to three heroes. */
 export const MAX_PLAYERS = 3;
-/** Ore for each level of a disc stat; a party can't buy everything in one run, so it has to choose. */
-export const UP_COST = [3, 4, 6];
+/**
+ * Ore for each level of a disc stat; a party can't buy everything in one run, so it has to choose. Up from 3, 4, 6 since an
+ * elite gives a level for free (thread «Карта и элита»); an extra disc still costs more than any level.
+ */
+export const UP_COST = [4, 6, 7];
 
 /** Enemy turn from which every enemy hits one harder each turn ("ярость"): long fights get deadly. Bosses start later. */
 export const RAGE_FROM = 5;
