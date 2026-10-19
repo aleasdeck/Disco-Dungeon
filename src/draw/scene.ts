@@ -1255,9 +1255,10 @@ export class SceneRenderer {
   }
 
   /**
-   * PROTOTYPE (not for merge): an ore vein built in code, no picture. A chunk of rock over its cells, a height field of
-   * 4 × 4 facets per cell whose rim drops to the floor; ore in the cell next door grows into the same rock (the shared rim
-   * stays up), and a vein sinks and loses its gold as its charges go.
+   * PROTOTYPE (not for merge): an ore vein built in code over its cells, as a chunk of rock: per cell a squat prism with
+   * a slanted, chamfered outline and a flat top, a smaller stone sitting on it while the vein is full, gold stuck in its
+   * sides and top. Ore in the cell next door grows into the same rock (no wall, no chamfer between them, the higher one
+   * steps up), and a vein sinks and loses its gold as its charges go. Sides and top take a picture each when given.
    */
   private rockCells() {
     const cells = new Map<string, number>();
@@ -1272,127 +1273,218 @@ export class SceneRenderer {
   }
 
   private drawRock(n: ResNode, r: any) {
-    const { c, P, cam } = this, cells = this.rockCells(), N = 4, D = TILE / N, H0 = r.H ?? 12;
+    const cells = this.rockCells(), z = n.s ?? 1, i0 = Math.round((n.x - 8 * z) / TILE), j0 = Math.round((n.y - 8 * z) / TILE);
+    const own: [number, number][] = [];
+    for (let a = 0; a < z; a++) for (let b = 0; b < z; b++) own.push([i0 + a, j0 + b]);
+    own.sort((p, o) => this.cam.depth((p[0] + 0.5) * TILE, (p[1] + 0.5) * TILE) - this.cam.depth((o[0] + 0.5) * TILE, (o[1] + 0.5) * TILE));
+    for (const [ci, cj] of own) this.rockCell(ci, cj, cells, r, n.hit > 0);
+  }
+
+  private rockCell(ci: number, cj: number, cells: Map<string, number>, r: any, struck: boolean) {
+    const { cam } = this, I = ((globalThis as any).__protoImgs ?? {}) as Record<string, HTMLImageElement>;
+    const q = cells.get(hazKey(ci, cj));
+    if (q === undefined) return;
     const hh = (a: number, b: number, k = 0) => {
       let t = (a * 374761393 + b * 668265263 + k * 1442695041) | 0;
       t = Math.imul(t ^ (t >>> 13), 1274126177);
       t = Math.imul(t ^ (t >>> 16), 668265263);
       return ((t ^ (t >>> 15)) >>> 0) / 4294967296;
     };
-    const sink = (q: number) => (r.low ?? 0.4) + (1 - (r.low ?? 0.4)) * q;
-    // a lattice point: where it stands and how high, the same for every cell that shares it
-    const pt = (gx: number, gy: number): [number, number, number, boolean, number] => {
-      const ix = gx / N, iy = gy / N, onX = gx % N === 0, onY = gy % N === 0;
-      const xs = onX ? [ix - 1, ix] : [Math.floor(ix)], ys = onY ? [iy - 1, iy] : [Math.floor(iy)];
-      let ore = 0, cx = 0, cy = 0, all = true, low = 1;
-      for (const a of xs) for (const b of ys) {
-        const q = cells.get(hazKey(a, b));
-        if (q === undefined) { all = false; continue; }
-        ore++; cx += (a + 0.5) * TILE; cy += (b + 0.5) * TILE; low = Math.min(low, sink(q));
-      }
-      let x = gx * D, y = gy * D;
-      if (all) {
-        x += (hh(gx, gy, 1) - 0.5) * (r.jit ?? 1.6); y += (hh(gx, gy, 2) - 0.5) * (r.jit ?? 1.6);
-        const edgeish = gx % N === 1 || gx % N === N - 1 || gy % N === 1 || gy % N === N - 1;
-        return [x, y, H0 * low * ((edgeish ? 0.64 : 0.8) + (edgeish ? 0.32 : 0.26) * hh(gx, gy, 3)), false, hh(gx, gy, 5)];
-      }
-      // on the rock's outline: drawn in toward the ore, most at an outer corner, so the chunk is not a box
-      const pull = ore === 1 && xs.length * ys.length === 4 ? 2.6 + 1.2 * hh(gx, gy, 4) : ore === 1 ? 0.6 + 1.6 * hh(gx, gy, 4) : 0.2 + 0.8 * hh(gx, gy, 4);
-      if (ore) {
-        // in toward the ore, and a little along the outline so its foot is not a ruler line
-        const dx = cx / ore - x, dy = cy / ore - y, l = Math.hypot(dx, dy) || 1, along = (hh(gx, gy, 6) - 0.5) * (ore === 1 && xs.length * ys.length === 4 ? 0 : 2.2);
-        x += (dx / l) * pull - (dy / l) * along; y += (dy / l) * pull + (dx / l) * along;
-      }
-      return [x, y, 0, true, hh(gx, gy, 5)];
+    const low = r.low ?? 0.45, H0 = r.H ?? 11, hv = r.hv ?? 0.35;
+    const hOf = (a: number, b: number) => {
+      const qq = cells.get(hazKey(a, b));
+      return qq === undefined ? -1 : H0 * (low + (1 - low) * qq) * (0.9 + 0.2 * hh(a, b, 31));
     };
-    const TONES = r.tones ?? ['#3f3129', '#5a463a', '#76604e', '#927a63', '#b39a7e'];
-    const tone = (a: readonly unknown[], b: readonly unknown[], d: readonly unknown[]) => {
-      const A = a as number[], B = b as number[], C2 = d as number[];
-      const u = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], v = [C2[0] - A[0], C2[1] - A[1], C2[2] - A[2]];
-      let nx = u[1] * v[2] - u[2] * v[1], ny = u[2] * v[0] - u[0] * v[2], nz = u[0] * v[1] - u[1] * v[0];
-      if (nz < 0) { nx = -nx; ny = -ny; nz = -nz; }
-      const l = Math.hypot(nx, ny, nz) || 1;
-      nx /= l; ny /= l; nz /= l;
-      const k = 0.75 * nz - 0.4 * cam.sideways(nx, ny) + 0.2 * (cam.facing(nx, ny) / Math.SQRT2);
-      return TONES[Math.max(0, Math.min(TONES.length - 1, Math.floor((k + 0.35) / 0.25)))];
-    };
-    const z = n.s ?? 1, i0 = Math.round((n.x - 8 * z) / TILE), j0 = Math.round((n.y - 8 * z) / TILE);
-    const quads: { d: number; pts: [number, number, number, boolean, number][]; gx: number; gy: number; q: number }[] = [];
-    for (let a = 0; a < z; a++) for (let b = 0; b < z; b++) {
-      const ci = i0 + a, cj = j0 + b, q = cells.get(hazKey(ci, cj));
-      if (q === undefined) continue;
-      for (let u = 0; u < N; u++) for (let v = 0; v < N; v++) {
-        const gx = ci * N + u, gy = cj * N + v;
-        const pts = [pt(gx, gy), pt(gx + 1, gy), pt(gx + 1, gy + 1), pt(gx, gy + 1)];
-        quads.push({ d: cam.depth((gx + 0.5) * D, (gy + 0.5) * D), pts, gx, gy, q });
-      }
-    }
-    quads.sort((p, o) => p.d - o.d);
-    c.lineJoin = 'round';
-    c.lineCap = 'round';
-    for (const { pts, gx, gy, q } of quads) {
-      const S = pts.map(([x, y, h]) => P(x, y, h));
-      // two triangles, split along the diagonal that keeps the facet convex
-      for (const [i, j, k] of [[0, 1, 2], [0, 2, 3]]) {
-        const col = tone(pts[i], pts[j], pts[k]);
-        pth(c, [S[i], S[j], S[k]]);
-        c.fillStyle = col; c.fill();
-        c.strokeStyle = col; c.lineWidth = 0.35; c.stroke();
-      }
-      const side = pts.some(p => p[3]);
-      if (side) {
-        // gold showing through the cliff, fewer as the vein runs out
-        // (not on a face turned away, where only its glint would peek over the rim)
-        const fx = (pts[1][1] - pts[0][1]) * (pts[3][2] - pts[0][2]) - (pts[1][2] - pts[0][2]) * (pts[3][1] - pts[0][1]);
-        const fy = (pts[1][2] - pts[0][2]) * (pts[3][0] - pts[0][0]) - (pts[1][0] - pts[0][0]) * (pts[3][2] - pts[0][2]);
-        if (cam.facing(fx, fy) > 0 && hh(gx, gy, 7) < (r.nug ?? 0.42) * (0.3 + 0.7 * q)) {
-          const at = (s: number, t: number) => {
-            const x = (1 - s) * (1 - t) * pts[0][0] + s * (1 - t) * pts[1][0] + s * t * pts[2][0] + (1 - s) * t * pts[3][0];
-            const y = (1 - s) * (1 - t) * pts[0][1] + s * (1 - t) * pts[1][1] + s * t * pts[2][1] + (1 - s) * t * pts[3][1];
-            const h = (1 - s) * (1 - t) * pts[0][2] + s * (1 - t) * pts[1][2] + s * t * pts[2][2] + (1 - s) * t * pts[3][2];
-            return P(x, y, h);
-          };
-          const ox = 0.5 + (hh(gx, gy, 8) - 0.5) * 0.3, oy = 0.5 + (hh(gx, gy, 9) - 0.5) * 0.3, rr0 = 0.2 + 0.12 * hh(gx, gy, 10);
-          const blob: Pt[] = [];
-          for (let k = 0; k < 6; k++) { const an = (k / 6) * Math.PI * 2 + hh(gx, gy, 11); const rr1 = rr0 * (0.7 + 0.5 * hh(gx + k, gy, 12)); blob.push(at(ox + Math.cos(an) * rr1, oy + Math.sin(an) * rr1)); }
-          pth(c, blob); c.fillStyle = '#f2b83c'; c.fill(); c.strokeStyle = INK; c.lineWidth = 0.55; c.stroke();
-          const [hx, hy] = at(ox - rr0 * 0.3, oy - rr0 * 0.3); circ(c, hx, hy, 0.55); c.fillStyle = '#fff3c4'; c.fill();
+    // a struck vein jolts down a little
+    const ht = hOf(ci, cj) - (struck ? 0.6 : 0);
+    const x0 = ci * TILE, y0 = cj * TILE;
+    // edges top, right, bottom, left (clockwise on the floor), each with its outward normal and the cell across it
+    const E = [[0, -1], [1, 0], [0, 1], [-1, 0]].map(o => ({ n: o, out: !cells.has(hazKey(ci + o[0], cj + o[1])) }));
+    const K: Vec[] = [[0, 0], [1, 0], [1, 1], [0, 1]];
+    const ins = r.ins ?? 0.7, jit = r.jit ?? 1.4, ov = 0.25;
+    // the outline's points, each with a key on the grid, so a point two cells share comes out the same in both
+    type V = { x: number; y: number; id: [number, number, number]; edge: number };
+    const outline = (): V[] => {
+      const pts: V[] = [];
+      for (let k = 0; k < 4; k++) {
+        const kIn = (k + 3) % 4, eIn = E[kIn], eOut = E[k], gx = ci + K[k][0], gy = cj + K[k][1], X = x0 + K[k][0] * TILE, Y = y0 + K[k][1] * TILE;
+        const dIn = ins + jit * hh(gx, gy, 40 + (kIn % 2)), dOut = ins + jit * hh(gx, gy, 40 + (k % 2));
+        if (eIn.out && eOut.out) {
+          // an outer corner: cut off, by a different amount on each side
+          const ch = (r.cham ?? 3) * (0.7 + 0.6 * hh(gx, gy, 43)), ch2 = (r.cham ?? 3) * (0.7 + 0.6 * hh(gx, gy, 44));
+          const dirIn: Vec = [K[k][0] - K[kIn][0], K[k][1] - K[kIn][1]], dirOut: Vec = [K[(k + 1) % 4][0] - K[k][0], K[(k + 1) % 4][1] - K[k][1]];
+          pts.push({ x: X - dirIn[0] * ch - eIn.n[0] * dIn, y: Y - dirIn[1] * ch - eIn.n[1] * dIn, id: [gx, gy, 81], edge: kIn });
+          pts.push({ x: X + dirOut[0] * ch2 - eOut.n[0] * dOut, y: Y + dirOut[1] * ch2 - eOut.n[1] * dOut, id: [gx, gy, 82], edge: -1 });
+        } else {
+          let px = X, py = Y;
+          if (eIn.out) { px -= eIn.n[0] * dIn; py -= eIn.n[1] * dIn; } else { px += eIn.n[0] * ov; py += eIn.n[1] * ov; }
+          if (eOut.out) { px -= eOut.n[0] * dOut; py -= eOut.n[1] * dOut; } else { px += eOut.n[0] * ov; py += eOut.n[1] * ov; }
+          pts.push({ x: px, y: py, id: [gx, gy, 80], edge: kIn });
         }
-        // ink: the foot along the floor, the cracks up the cliff, and the rim where the cliff meets the top
-        c.strokeStyle = INK;
+        if (eOut.out) {
+          // a bulge or a dent along an outer edge, not quite halfway
+          const gx2 = 2 * ci + K[k][0] + K[(k + 1) % 4][0], gy2 = 2 * cj + K[k][1] + K[(k + 1) % 4][1];
+          const d = ins + (r.bulge ?? 1.6) * (hh(gx2, gy2, 45) - 0.6), al = (hh(gx2, gy2, 46) - 0.5) * 5;
+          const dir: Vec = [K[(k + 1) % 4][0] - K[k][0], K[(k + 1) % 4][1] - K[k][1]];
+          const mx = x0 + (K[k][0] + K[(k + 1) % 4][0]) * 8, my = y0 + (K[k][1] + K[(k + 1) % 4][1]) * 8;
+          pts.push({ x: mx - eOut.n[0] * d + dir[0] * al, y: my - eOut.n[1] * d + dir[1] * al, id: [gx2 + 9999, gy2, 83], edge: k });
+        }
+      }
+      // each point's `edge` names the cell edge its side to the next point runs along (-1: a chamfer); fix it up from the points
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i], b = pts[(i + 1) % pts.length];
+        a.edge = -1;
         for (let e = 0; e < 4; e++) {
-          const p0 = pts[e], p1 = pts[(e + 1) % 4];
-          // a crack up the cliff only from some points of the foot
-          if (p0[3] !== p1[3] && (p0[3] ? p0 : p1)[4] > (r.cracks ?? 0.45)) continue;
-          const w = p0[3] && p1[3] ? BL : p0[3] !== p1[3] ? 0.55 : 0.9;
-          c.lineWidth = w; c.beginPath(); c.moveTo(...S[e]); c.lineTo(...S[(e + 1) % 4]); c.stroke();
+          const on = (p: V) => (e % 2 === 0 ? Math.abs(p.y - (y0 + (e === 2 ? TILE : 0))) : Math.abs(p.x - (x0 + (e === 1 ? TILE : 0)))) < ov + 1e-6;
+          if (!E[e].out && on(a) && on(b)) a.edge = e;
         }
       }
+      return pts;
+    };
+    const foot = outline(), M = foot.length;
+    // the top rim: each outer side leans in by its own amount (the sides on a shared edge stand straight), each point a
+    // little up or down
+    const lean = foot.map((p, i) => (p.edge >= 0 ? 0 : (r.taper ?? 1.8) * (0.6 + 0.8 * hh(p.id[0] + foot[(i + 1) % M].id[0], p.id[1] + foot[(i + 1) % M].id[1], 94))));
+    const cxm = x0 + 8 + 3 * (hh(ci, cj, 90) - 0.5), cym = y0 + 8 + 3 * (hh(ci, cj, 91) - 0.5);
+    const rim = foot.map((p, i) => {
+      const pv = foot[(i + M - 1) % M], nx = foot[(i + 1) % M], o1 = lean[(i + M - 1) % M], o2 = lean[i];
+      // inward normals of the side coming in and the side going out; the rim point lies o1 in from one and o2 from the other
+      const d1x = p.x - pv.x, d1y = p.y - pv.y, l1 = Math.hypot(d1x, d1y) || 1, d2x = nx.x - p.x, d2y = nx.y - p.y, l2 = Math.hypot(d2x, d2y) || 1;
+      const n1x = -d1y / l1, n1y = d1x / l1, n2x = -d2y / l2, n2y = d2x / l2, det = n1x * n2y - n1y * n2x;
+      let ax = n1x * o1, ay = n1y * o1;
+      if (Math.abs(det) > 0.05) { ax = (o1 * n2y - o2 * n1y) / det; ay = (n1x * o2 - n2x * o1) / det; }
+      const al = Math.hypot(ax, ay), cap = 2.2 * (r.taper ?? 1.8);
+      if (al > cap) { ax *= cap / al; ay *= cap / al; }
+      const f = 1 + hv * (hh(p.id[0], p.id[1], p.id[2] + 100) - 0.5);
+      return { x: p.x + ax, y: p.y + ay, h: ht * f };
+    });
+    const peak = { x: cxm + 2 * (hh(ci, cj, 92) - 0.5), y: cym + 2 * (hh(ci, cj, 93) - 0.5), h: ht * (1 + (r.peak ?? 0.14)) };
+    this.rockPrism(foot.map(p => ({ x: p.x, y: p.y, h: 0 })), rim, peak, foot.map(p => p.edge), r, I, (e: number) => {
+      const o = E[e].n;
+      return (cells.has(hazKey(ci + o[0], cj + o[1])) ? hOf(ci + o[0], cj + o[1]) : -1) / ht;
+    }, ci * 7 + cj);
+    // gold: chips stuck in the outward sides and the top, fewer as the vein runs out
+    const spots: { x: number; y: number; h: number; ax: Vec; flat: boolean; s: number; k: number; w: number }[] = [];
+    for (let i = 0; i < M; i++) {
+      const a = foot[i], b = foot[(i + 1) % M], ta = rim[i], tb = rim[(i + 1) % M];
+      const nx = b.y - a.y, ny = -(b.x - a.x), L = Math.hypot(nx, ny);
+      if (L < 4 || a.edge >= 0 || cam.facing(nx / L, ny / L) <= 0.05) continue;
+      const u = 0.3 + 0.4 * hh(ci * 13 + i, cj, 52), v = 0.3 + 0.35 * hh(ci * 13 + i, cj, 53);
+      const fx = a.x + (b.x - a.x) * u, fy = a.y + (b.y - a.y) * u, tx = ta.x + (tb.x - ta.x) * u, ty = ta.y + (tb.y - ta.y) * u, th = ta.h + (tb.h - ta.h) * u;
+      spots.push({ x: fx + (tx - fx) * v + (nx / L) * 0.15, y: fy + (ty - fy) * v + (ny / L) * 0.15, h: th * v, ax: [(b.x - a.x) / L, (b.y - a.y) / L], flat: false, s: (r.nugW ?? 4.2) * (0.8 + 0.4 * hh(ci, cj * 13 + i, 54)), k: i + ci * 3 + cj * 5, w: hh(ci * 17 + i, cj, 55) });
     }
-    // gold teeth on top, a few per cell; every hit knocks some off
-    const spikes: { d: number; draw: () => void }[] = [];
-    for (let a = 0; a < z; a++) for (let b = 0; b < z; b++) {
-      const ci = i0 + a, cj = j0 + b, q = cells.get(hazKey(ci, cj));
-      if (q === undefined) continue;
-      const max = r.teeth ?? 3, k = Math.ceil(max * q - 1e-6);
-      const spots = [[1, 1], [2, 2], [3, 1], [1, 3], [3, 3], [2, 1]].sort((p, o) => hh(ci * 9 + p[0], cj * 9 + p[1], 13) - hh(ci * 9 + o[0], cj * 9 + o[1], 13)).slice(0, k);
-      spots.forEach(([u, v], idx) => {
-        const [x, y, h] = pt(ci * N + u, cj * N + v), big = idx === 0 ? 1.25 : 0.85 + 0.3 * hh(ci, cj, 20 + idx);
-        spikes.push({ d: cam.depth(x, y), draw: () => this.goldTooth(x, y, h, big * (r.tooth ?? 1), hh(ci + u, cj + v, 21) - 0.5) });
-      });
+    const keep = Math.ceil((r.nugs ?? 4) * q - 1e-6);
+    spots.sort((p, o) => p.w - o.w).slice(0, keep).sort((p, o) => cam.depth(p.x, p.y) - cam.depth(o.x, o.y)).forEach(s => this.rockNugget(s, r, I));
+    // a boulder on top while the vein is full: it goes with the first hit
+    if (q > (r.stoneTill ?? 0.7) && r.stone !== false && hh(ci, cj, 69) < (r.stones ?? 0.5)) {
+      const cx = x0 + 5 + 6 * hh(ci, cj, 70), cy = y0 + 5 + 6 * hh(ci, cj, 71), R = (r.stoneR ?? 5) * (0.85 + 0.3 * hh(ci, cj, 72)), N = 6;
+      const sh = ht + (peak.h - ht) * 0.5, H2 = (r.stoneH ?? 2.2) * (0.8 + 0.4 * hh(ci, cj, 75));
+      const ft: { x: number; y: number; h: number }[] = [], rm: { x: number; y: number; h: number }[] = [];
+      for (let k = 0; k < N; k++) {
+        const an = (k / N) * Math.PI * 2 + hh(ci, cj, 73) * 2 + (hh(ci * 7 + k, cj, 76) - 0.5) * 0.7, rr = R * (0.6 + 0.65 * hh(ci * 7 + k, cj, 74));
+        ft.push({ x: cx + Math.cos(an) * rr, y: cy + Math.sin(an) * rr, h: sh - 0.4 });
+        rm.push({ x: cx + Math.cos(an) * rr * 0.72 + 0.6, y: cy + Math.sin(an) * rr * 0.72 - 0.4, h: sh + H2 * (0.8 + 0.4 * hh(ci * 7 + k, cj, 77)) });
+      }
+      this.rockPrism(ft, rm, { x: cx + 1, y: cy - 0.8, h: sh + H2 * 1.35 }, ft.map(() => -1), r, I, () => -1, ci * 11 + cj * 3 + 1);
     }
-    spikes.sort((p, o) => p.d - o.d).forEach(s2 => s2.draw());
   }
 
-  /** One gold crystal standing on the rock: a lit and a shaded face, inked, with a glint. */
-  private goldTooth(x: number, y: number, h: number, s: number, lean: number) {
-    const c = this.c, [bx, by] = this.P(x, y, h - 0.6), L = 7 * s, w = 1.7 * s;
-    const tx = bx + lean * L * 0.6, ty = by - L, sx = bx + lean * L * 0.45, sy = by - L * 0.72;
-    pth(c, [[bx - w, by], [sx - w, sy], [tx, ty], [tx, sy + 0.4], [bx, by + 0.8]]); c.fillStyle = '#ffd864'; c.fill();
-    pth(c, [[bx, by + 0.8], [tx, sy + 0.4], [tx, ty], [sx + w, sy], [bx + w, by]]); c.fillStyle = '#d9962a'; c.fill();
-    pth(c, [[bx - w, by], [sx - w, sy], [tx, ty], [sx + w, sy], [bx + w, by], [bx, by + 0.8]]); c.strokeStyle = INK; c.lineWidth = 0.8; c.stroke();
-    c.lineWidth = 0.45; c.beginPath(); c.moveTo(bx, by + 0.8); c.lineTo(tx, sy + 0.4); c.lineTo(tx, ty); c.stroke();
-    c.strokeStyle = 'rgba(255,255,255,.85)'; c.lineWidth = 0.6; c.beginPath(); c.moveTo(bx - w * 0.45, by - 1); c.lineTo(sx - w * 0.45, sy + 0.8); c.stroke();
+  /**
+   * One chunk of the rock: sides from its foot up to its rim, and a top of a few facets meeting at a peak. A side along a
+   * shared cell edge (`edges[i]` ≥ 0) shows only where the cell across stands lower (`across` gives its height over ours).
+   */
+  private rockPrism(ft: { x: number; y: number; h: number }[], rm: { x: number; y: number; h: number }[], pk: { x: number; y: number; h: number },
+    edges: number[], r: any, I: Record<string, HTMLImageElement>, across: (e: number) => number, seed: number) {
+    const { c, P, cam } = this, N = ft.length, side = I[r.side], top = I[r.top];
+    const TONES = r.tones ?? ['#4a3a30', '#5e4a3c', '#76604e', '#8f7860', '#a8916f', '#bba582'];
+    const hs = (a: number, b: number, k: number) => { let t = (a * 374761393 + b * 668265263 + k * 1442695041) | 0; t = Math.imul(t ^ (t >>> 13), 1274126177); return ((t ^ (t >>> 16)) >>> 0) / 4294967296; };
+    c.lineJoin = 'round';
+    c.lineCap = 'round';
+    const vis: boolean[] = [], faces: { i: number; d: number; nx: number; ny: number; lo: number }[] = [];
+    for (let i = 0; i < N; i++) {
+      const a = ft[i], b = ft[(i + 1) % N], nx = b.y - a.y, ny = -(b.x - a.x), l = Math.hypot(nx, ny);
+      vis[i] = l > 1e-6 && cam.facing(nx / l, ny / l) > 1e-6;
+      if (!vis[i]) continue;
+      let lo = 0;
+      if (edges[i] >= 0) {
+        lo = across(edges[i]);
+        if (lo >= 0.97) { vis[i] = false; continue; }
+      }
+      faces.push({ i, d: cam.depth((a.x + b.x) / 2, (a.y + b.y) / 2), nx: nx / l, ny: ny / l, lo: Math.max(0, lo) });
+    }
+    faces.sort((p, o) => p.d - o.d);
+    for (const f of faces) {
+      const i = f.i, j = (i + 1) % N, a = ft[i], b = ft[j], ta = rm[i], tb = rm[j];
+      const mix = (p: typeof a, t2: typeof a, s: number): Pt => P(p.x + (t2.x - p.x) * s, p.y + (t2.y - p.y) * s, p.h + (t2.h - p.h) * s);
+      const face: Pt[] = [mix(a, ta, f.lo), mix(b, tb, f.lo), P(tb.x, tb.y, tb.h), P(ta.x, ta.y, ta.h)];
+      const lit = 0.5 + 0.5 * cam.sideways(f.nx, f.ny);
+      if (side) {
+        const L = Math.hypot(b.x - a.x, b.y - a.y), dx = (b.x - a.x) / L, dy = (b.y - a.y) / L, u0 = 40 * hs(seed, i, 47), H = Math.max(ta.h, tb.h);
+        const at = (u: number, h: number) => P(a.x + dx * (u - u0), a.y + dy * (u - u0), h + a.h);
+        this.wallTex(side, face, at, u0, u0 + L, H, (r.dark ?? 0.04) + (r.shade ?? 0.3) * lit, r.texH ?? 22);
+      } else {
+        pth(c, face); c.fillStyle = TONES[Math.min(2, Math.floor((1 - lit) * 3))]; c.fill();
+      }
+      // a crease where two sides meet: ink only where the rock turns away, a darker line between two faces we see
+      const prevVis = vis[(i + N - 1) % N], nextVis = vis[j];
+      c.lineWidth = prevVis ? 0.5 : BL; c.strokeStyle = prevVis ? 'rgba(20,12,8,.55)' : INK;
+      c.beginPath(); c.moveTo(...face[0]); c.lineTo(...face[3]); c.stroke();
+      c.lineWidth = nextVis ? 0.5 : BL; c.strokeStyle = nextVis ? 'rgba(20,12,8,.55)' : INK;
+      c.beginPath(); c.moveTo(...face[1]); c.lineTo(...face[2]); c.stroke();
+      if (f.lo === 0) { c.lineWidth = BL; c.strokeStyle = INK; c.beginPath(); c.moveTo(...face[0]); c.lineTo(...face[1]); c.stroke(); }
+    }
+    // the top: facets from the rim up to the peak, lit by how they lean
+    const PK = P(pk.x, pk.y, pk.h), R = rm.map(p => P(p.x, p.y, p.h));
+    for (let i = 0; i < N; i++) {
+      const a = rm[i], b = rm[(i + 1) % N];
+      const ux = a.x - pk.x, uy = a.y - pk.y, uz = a.h - pk.h, vx = b.x - pk.x, vy = b.y - pk.y, vz = b.h - pk.h;
+      let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      if (nz < 0) { nx = -nx; ny = -ny; nz = -nz; }
+      const l = Math.hypot(nx, ny, nz) || 1;
+      const k = (nz / l) * 0.6 + 0.4 * (0.5 + 0.5 * cam.sideways(nx / l, ny / l)) * -1 + 0.4 + 0.25 * (cam.facing(nx / l, ny / l) / Math.SQRT2);
+      const tri: Pt[] = [PK, R[i], R[(i + 1) % N]];
+      if (top) {
+        c.save(); pth(c, tri); c.clip();
+        const S2 = r.topSpan ?? 2 * TILE, X0 = Math.floor(pk.x / S2) * S2, Y0 = Math.floor(pk.y / S2) * S2;
+        this.imgOnRect(top, X0, Y0, X0 + S2, Y0 + S2, 0, (a.h + b.h + pk.h) / 3);
+        pth(c, tri); c.fillStyle = `rgba(${k > 0.62 ? '255,240,215' : '25,14,8'},${Math.min(0.4, Math.abs(k - 0.62) * (r.topShade ?? 0.9))})`; c.fill();
+        c.restore();
+      } else {
+        const col = TONES[Math.max(2, Math.min(TONES.length - 1, Math.round(2 + k * 4)))];
+        pth(c, tri); c.fillStyle = col; c.fill(); c.strokeStyle = col; c.lineWidth = 0.3; c.stroke();
+      }
+    }
+    // creases up to the peak: faint
+    c.strokeStyle = 'rgba(20,12,8,.4)'; c.lineWidth = 0.45;
+    for (let i = 0; i < N; i++) { if (hs(seed, i, 48) < 0.5) continue; c.beginPath(); c.moveTo(...R[i]); c.lineTo(...PK); c.stroke(); }
+    // the rim, inked round the rock's outside and where it steps down to a lower cell
+    c.strokeStyle = INK; c.lineWidth = r.rimLw ?? 1;
+    for (let i = 0; i < N; i++) {
+      if (edges[i] >= 0 && across(edges[i]) >= 0.97) continue;
+      c.beginPath(); c.moveTo(...R[i]); c.lineTo(...R[(i + 1) % N]); c.stroke();
+    }
+  }
+
+  /** A gold chip stuck in the rock: its picture (or a drawn one) laid flat on a side or on the top. */
+  private rockNugget(p: { x: number; y: number; h: number; ax: Vec; flat: boolean; s: number; k: number }, r: any, I: Record<string, HTMLImageElement>) {
+    const { c, P } = this, gold = ((r.gold ?? []) as string[]).map(k => I[k]).filter(Boolean);
+    const [ox, oy] = P(p.x, p.y, p.h), [ex, ey] = P(p.x + p.ax[0], p.y + p.ax[1], p.h);
+    let ux = ex - ox, uy = ey - oy;
+    if (ux < 0) { ux = -ux; uy = -uy; }
+    const im = gold[p.k % Math.max(1, gold.length)];
+    c.save();
+    if (im) {
+      const w = p.s, h = (p.s * im.height) / im.width;
+      c.transform((ux * w) / im.width, (uy * w) / im.width, 0, h / im.height, ox - (ux * w) / 2, oy - h / 2);
+      c.drawImage(im, 0, 0);
+    } else {
+      c.transform(ux, uy, 0, 1, ox, oy);
+      const rr = p.s / 2, blob: Pt[] = [];
+      for (let k = 0; k < 7; k++) { const an = (k / 7) * Math.PI * 2; blob.push([Math.cos(an) * rr * (0.75 + 0.4 * ((k * 37 + p.k * 11) % 7) / 7), Math.sin(an) * rr * 0.8 * (0.75 + 0.4 * ((k * 53 + p.k * 5) % 7) / 7)]); }
+      pth(c, blob); c.fillStyle = '#f2b83c'; c.fill(); c.strokeStyle = INK; c.lineWidth = 0.5; c.stroke();
+      circ(c, -rr * 0.3, -rr * 0.25, rr * 0.22); c.fillStyle = '#fff3c4'; c.fill();
+    }
+    c.restore();
   }
 
   /** PROTOTYPE (not for merge): a resource as a grid-aligned block with a prop standing on it, for the art page shots. */
