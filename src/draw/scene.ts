@@ -1254,9 +1254,68 @@ export class SceneRenderer {
     }
   }
 
+  /** PROTOTYPE (not for merge): a resource as a grid-aligned block with a prop standing on it, for the art page shots. */
+  private drawProto(n: ResNode, v: any) {
+    const { c, P, cam } = this, I = ((globalThis as any).__protoImgs ?? {}) as Record<string, HTMLImageElement>;
+    const im = (k?: string) => (!k ? undefined : k === '@wall' ? env(`wall_${this.bk}`) : k === '@cap' ? env(`cap_${this.bk}`) : I[k]);
+    const w = v.w ?? 14, H = v.H ?? 0, x0 = n.x - w / 2, y0 = n.y - w / 2, x1 = n.x + w / 2, y1 = n.y + w / 2;
+    const side = im(v.side), cap = im(v.cap);
+    // the footprint: a square, or for a meadow a wobbly rounded one
+    const ring = (h: number): Pt[] => {
+      if (!v.round) return [P(x0, y0, h), P(x1, y0, h), P(x1, y1, h), P(x0, y1, h)];
+      const out: Pt[] = [], r = v.round, N = 48;
+      for (let k = 0; k < N; k++) {
+        const a = (k / N) * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+        // superellipse, so it stays square-ish and fills the cell
+        const e = 2 / (v.sq ?? 5), rx = Math.sign(ca) * Math.abs(ca) ** e, ry = Math.sign(sa) * Math.abs(sa) ** e;
+        const wob = 1 + (v.wob ?? 0.05) * Math.sin(a * 7 + n.x) * Math.cos(a * 3);
+        out.push(P(n.x + (w / 2) * rx * wob * r, n.y + (w / 2) * ry * wob * r, h));
+      }
+      return out;
+    };
+    if (v.shadow !== false) { ell(c, ...P(n.x + 2, n.y + 2), w * 0.75, w * 0.36); c.fillStyle = 'rgba(15,8,4,.3)'; c.fill(); }
+    if (H > 0) {
+      const faces: { a: Vec; b: Vec; n: Vec }[] = [
+        { a: [x1, y0], b: [x1, y1], n: [1, 0] },
+        { a: [x0, y1], b: [x1, y1], n: [0, 1] },
+        { a: [x0, y0], b: [x0, y1], n: [-1, 0] },
+        { a: [x0, y0], b: [x1, y0], n: [0, -1] },
+      ];
+      for (const f of faces) {
+        if (cam.facing(f.n[0], f.n[1]) <= 1e-6) continue;
+        const face: Pt[] = [P(...f.a), P(...f.b), P(...f.b, H), P(...f.a, H)];
+        const alongX = f.a[1] === f.b[1], u0 = alongX ? f.a[0] : f.a[1], u1 = alongX ? f.b[0] : f.b[1];
+        const at = (u: number, h: number) => (alongX ? P(u, f.a[1], h) : P(f.a[0], u, h));
+        if (side) this.wallTex(side, face, at, u0, u1, H, (v.dark ?? 0.06) + 0.2 * (0.5 + 0.5 * cam.sideways(f.n[0], f.n[1])), v.texH ?? WALL_H);
+        else { pth(c, face); c.fillStyle = v.col ?? '#6a635a'; c.fill(); }
+        c.beginPath();
+        c.moveTo(...P(...f.a)); c.lineTo(...P(...f.b));
+        c.moveTo(...P(...f.a)); c.lineTo(...P(...f.a, H));
+        c.moveTo(...P(...f.b)); c.lineTo(...P(...f.b, H));
+        c.strokeStyle = INK; c.lineWidth = BL; c.lineCap = 'round'; c.stroke();
+      }
+    }
+    const top = ring(H);
+    if (cap) {
+      c.save(); pth(c, top); c.clip();
+      const m = v.round ? 1.15 : 1;
+      this.imgOnRect(cap, n.x - (w / 2) * m, n.y - (w / 2) * m, n.x + (w / 2) * m, n.y + (w / 2) * m, 0, H);
+      c.restore();
+    } else if (v.capCol) { pth(c, top); c.fillStyle = v.capCol; c.fill(); }
+    if (cap || v.capCol) { pth(c, top); c.strokeStyle = INK; c.lineWidth = v.capLw ?? BL; c.stroke(); }
+    // the prop on top: fat pieces first, as many as the charges allow
+    for (const pr of v.props ?? []) {
+      const pi = I[pr.img];
+      if (!pi) continue;
+      const [sx, sy] = P(n.x + (pr.dx ?? 0), n.y + (pr.dy ?? 0), H + (pr.dh ?? 0));
+      this.standee(pi, sx, sy + (pr.lift ?? 0), pr.w ?? 12, n.hit > 0);
+    }
+  }
+
   private drawNode(n: ResNode) {
     // a spent node is drawn with the floor
     if (n.left <= 0) return;
+    if ((n as any).pv) return this.drawProto(n, (n as any).pv);
     const { c, P } = this, z = n.s ?? 1;
     ell(c, ...P(n.x + 1.5 * z, n.y + 1.5 * z), 11 * z, 5.5 * z); c.fillStyle = 'rgba(15,8,4,.35)'; c.fill();
     // a struck resource jolts: squashed and shaken for a moment
