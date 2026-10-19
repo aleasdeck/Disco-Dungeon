@@ -435,7 +435,7 @@ function drawMobFigure2(c: Ctx, k: MobKind, x: number, y: number, W: string | nu
 
 /** Head-room above the feet for HP bars and intent badges. */
 export const MOB_TOP: Record<MobKind, number> = {
-  skel: 33, archer: 27, rat: 21, necro: 40, king: 52,
-  ghoul: 30, ghost: 33, yeti: 38, witch: 43, lich: 56,
-  imp: 27, slime: 30, bomber: 27, golem: 37, forgelord: 56,
+  skel: 33, archer: 27, rat: 21, necro: 40, king: 52, guard: 35, headsman: 42,
+  ghoul: 30, ghost: 33, yeti: 38, witch: 43, lich: 56, undertaker: 38, banshee: 38, coffin: 32,
+  imp: 27, slime: 30, bomber: 27, golem: 37, forgelord: 56, grinder: 32, smasher: 44,
 };

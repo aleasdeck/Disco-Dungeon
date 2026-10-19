@@ -184,6 +184,12 @@ export const BOOT_GAGS = [
   'Грибы в комнатах съедобные. Почти все',
   'Выкинули кубики, достали диски',
   'Убеждаем скелетов, что диско не умерло',
+  'Вертухай снял дверь с петель. Свою, от камеры',
+  'Палач точит топор. В розовых тапочках',
+  'Гробовщик снимает с гостей мерку. На всякий случай',
+  'Банши распевается. Соседи стучат по трубам',
+  'Точильщик заточил всё. Даже лясы',
+  'Молотобоец разминается. Наковальня потеет',
 ];
 
 export const BIOMES: Biome[] = [
@@ -193,17 +199,19 @@ export const BIOMES: Biome[] = [
 ];
 
 export type MobKind =
-  | 'skel' | 'archer' | 'rat' | 'necro' | 'king'
-  | 'ghoul' | 'ghost' | 'yeti' | 'witch' | 'lich'
-  | 'imp' | 'slime' | 'bomber' | 'golem' | 'forgelord';
+  | 'skel' | 'archer' | 'rat' | 'necro' | 'king' | 'guard' | 'headsman'
+  | 'ghoul' | 'ghost' | 'yeti' | 'witch' | 'lich' | 'undertaker' | 'banshee' | 'coffin'
+  | 'imp' | 'slime' | 'bomber' | 'golem' | 'forgelord' | 'grinder' | 'smasher';
 
 /**
  * Something a mob does instead of its usual attack on turns where `turn % every === at`.
  * summon: raises `n` mobs of `kind` on circles marked a turn ahead; heal: mends the most hurt ally by `amt`;
- * slam: hits every hero at once (`chill` also chills them); heat: turns tiles in front of the heroes' runes into lava.
+ * slam: hits every hero at once (`chill` also chills them); heat: turns tiles in front of the heroes' runes into lava;
+ * execute: its strike that turn deals double; scream: chills every hero, no damage; smash: a 3 × 3 square of cells round
+ * the hero it goes after, marked a turn ahead, hits whoever stands in it then.
  */
 export interface MobAct {
-  k: 'summon' | 'heal' | 'slam' | 'heat';
+  k: 'summon' | 'heal' | 'slam' | 'heat' | 'execute' | 'scream' | 'smash';
   every: number;
   at: number;
   n?: number;
@@ -243,6 +251,16 @@ export interface MobDef {
   rage?: boolean;
   /** Spends odd turns lighting a bomb and throws it for double damage on even turns. */
   charge?: boolean;
+  /** Holds a door for a shield: a disc that hits it from the front (the side it faces its hero) does no damage. */
+  shield?: boolean;
+  /** Goes after the hero with the least health, not the nearest one. */
+  hunts?: boolean;
+  /** Hones the enemies near it: they hit this much harder while it stands. */
+  hone?: number;
+  /** Lays an enemy that falls near it in a coffin, which gets up as that enemy again unless broken; at most this many coffins at once. */
+  coffins?: number;
+  /** A thing, not a creature (the undertaker's coffin): it neither walks nor strikes, and the bestiary leaves it out. */
+  prop?: boolean;
   txt: string;
   /** The name in the accusative, for the enemy-turn journal: «подлечила Скелета». */
   acc: string;
@@ -262,6 +280,12 @@ export const MOBS: Record<MobKind, MobDef> = {
     acts: [{ k: 'summon', every: 2, at: 0, n: 1, kind: 'skel', cap: 3 }],
     txt: 'Каждый второй ход поднимает скелета из светящегося круга. Круг видно заранее: убей некроманта, пока не поздно.',
   },
+  guard: { name: 'Вертухай', floor: 0, hp: 11, r: 8, speed: 28, reach: 30, dmg: 4, fig: 33, shield: true, txt: 'Держит тюремную дверь как щит. Диск, прилетевший в дверь спереди, отскакивает без урона: бей сбоку, со спины или рикошетом от стены.', acc: 'Вертухая' },
+  headsman: {
+    name: 'Палач', acc: 'Палача', floor: 0, hp: 24, r: 9, speed: 24, reach: 34, dmg: 5, armor: 1, fig: 40, hunts: true,
+    acts: [{ k: 'execute', every: 3, at: 0 }],
+    txt: 'Элита казематов, броня 1. Идёт к самому раненому герою, а каждый третий ход «Казнь»: бьёт вдвое.',
+  },
   king: {
     size: 2, name: 'Король-в-короне', acc: 'Короля-в-короне', floor: 0, boss: true, hp: 60, r: 15, speed: 10, reach: 40, dmg: 9, armor: 3, fig: 50,
     acts: [{ k: 'slam', every: 3, at: 0 }],
@@ -280,10 +304,23 @@ export const MOBS: Record<MobKind, MobDef> = {
     acts: [{ k: 'summon', every: 3, at: 2, n: 2, kind: 'ghoul', cap: 4 }, { k: 'slam', every: 3, at: 0, chill: true }],
     txt: 'Босс склепа. Призывает упырей из ледяных кругов, а следом насылает метель на весь отряд.',
   },
+  undertaker: { name: 'Гробовщик', floor: 1, hp: 11, r: 7, speed: 22, reach: 30, dmg: 3, fig: 36, coffins: 2, txt: 'Павшего рядом врага кладёт в гроб: через два хода тот встаёт снова, если гроб не разбить.', acc: 'Гробовщика' },
+  banshee: {
+    name: 'Банши', acc: 'Банши', fem: true, floor: 1, hp: 20, r: 8, speed: 26, reach: 999, dmg: 3, fig: 36,
+    acts: [{ k: 'scream', every: 2, at: 0 }],
+    txt: 'Элита склепа. Стреляет в того, кого видит, а каждый второй ход «Визг»: на следующий ход все броски отряда слабее.',
+  },
+  coffin: { name: 'Гроб', floor: 1, hp: 7, r: 7, speed: 0, reach: 0, dmg: 0, fig: 30, prop: true, txt: 'Гробовщик уложил сюда павшего. Через два хода тот встанет, если не разбить гроб.', acc: 'Гроб' },
   imp: { name: 'Бес-кочегар', floor: 2, hp: 7, r: 6, speed: 52, reach: 28, dmg: 3, fig: 24, fire: true, txt: 'Шустрый, поджигает: герой горит и в следующий ход теряет ещё 2.', acc: 'Беса-кочегара' },
   slime: { name: 'Лавовый слизень', floor: 2, hp: 14, r: 9, speed: 20, reach: 30, dmg: 5, fig: 24, lava: true, txt: 'Толстый и медленный. Где лопнет, там остаётся лужа лавы.', acc: 'Лавового слизня' },
   bomber: { name: 'Гном-подрывник', floor: 2, hp: 8, r: 7, speed: 16, reach: 999, dmg: 4, fig: 28, charge: true, txt: 'Ход поджигает фитиль, следующий кидает бомбу на двойной урон в того, кого видит.', acc: 'Гнома-подрывника' },
   golem: { name: 'Голем', floor: 2, hp: 26, r: 9, speed: 14, reach: 34, dmg: 7, armor: 3, fig: 38, txt: 'Броня 3: удары слабее не проходят.', acc: 'Голема' },
+  grinder: { name: 'Точильщик', floor: 2, hp: 8, r: 7, speed: 26, reach: 28, dmg: 2, fig: 30, hone: 2, txt: 'Сам хилый, но точит соседей: враги в двух клетках от него бьют на 2 сильнее.', acc: 'Точильщика' },
+  smasher: {
+    name: 'Молотобоец', acc: 'Молотобойца', floor: 2, hp: 28, r: 9, speed: 18, reach: 34, dmg: 6, armor: 2, fig: 42,
+    acts: [{ k: 'smash', every: 3, at: 0 }],
+    txt: 'Элита кузни, броня 2. Каждый третий ход бьёт молотом по квадрату 3 × 3 вокруг героя: клетки краснеют за ход до удара, уходи оттуда броском.',
+  },
   forgelord: {
     size: 2, name: 'Владыка кузни', acc: 'Владыку кузни', floor: 2, boss: true, hp: 70, r: 15, speed: 12, reach: 44, dmg: 9, armor: 4, fig: 54, rage: true,
     acts: [{ k: 'heat', every: 3, at: 0, n: 2 }],

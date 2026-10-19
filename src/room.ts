@@ -101,7 +101,7 @@ export interface ResNode {
  * summon and heat carry the spots that light up on the floor a turn ahead.
  */
 export interface Intent {
-  t: 'hit' | 'move' | 'charge' | 'slam' | 'heal' | 'summon' | 'heat';
+  t: 'hit' | 'move' | 'charge' | 'slam' | 'heal' | 'summon' | 'heat' | 'scream' | 'smash' | 'rise';
   hero: number;
   dmg: number;
   chill?: boolean;
@@ -148,6 +148,9 @@ export interface Mob {
   knock?: Knock;
   /** Hits of the ice genius's frosted disc this turn: one slows it on its next move, two make it skip the move. */
   frost?: number;
+  /** A coffin: who lies in it, and the enemy turns till it gets up. */
+  hold?: MobKind;
+  rise?: number;
 }
 
 export type Shape = 'rect' | 'corner' | 'funnel' | 'alcove' | 'cross';
@@ -408,22 +411,55 @@ export const OPEN_PADS = 4;
 /** Block clusters from plain to awkward: single, pairs, an L, a diagonal pair. */
 const BLOCK_SHAPES = [[[0, 0]], [[0, 0], [1, 0]], [[0, 0], [0, 1]], [[0, 0], [1, 0], [0, 1]], [[0, 0], [1, 1]]];
 
-/** Each floor has its own cast: who fills regular fights, who leads an elite fight, and its boss. */
-export const CASTS: { early: MobKind[]; late: MobKind[]; elite: MobKind; boss: MobKind }[] = [
-  { early: ['skel', 'skel', 'archer', 'rat'], late: ['skel', 'archer', 'rat', 'rat', 'necro'], elite: 'necro', boss: 'king' },
-  { early: ['ghoul', 'ghoul', 'ghost'], late: ['ghoul', 'ghost', 'yeti', 'witch'], elite: 'witch', boss: 'lich' },
-  { early: ['imp', 'imp', 'slime', 'bomber'], late: ['imp', 'slime', 'bomber', 'golem'], elite: 'golem', boss: 'forgelord' },
+/**
+ * Each floor has its own cast: how likely each enemy is in a regular fight on each of the six fight rows, who leads an
+ * elite fight, and its boss. Weak enemies crowd the first rooms and thin out (the prison rat is gone by the fifth row),
+ * tougher ones come in half way and the floor's heavy hitters only in the last two rows.
+ */
+export const CASTS: { rows: Partial<Record<MobKind, number[]>>; elite: MobKind; boss: MobKind }[] = [
+  {
+    rows: {
+      skel: [3, 3, 3, 3, 2, 2],
+      archer: [1, 2, 2, 2, 2, 2],
+      rat: [3, 3, 1, 1, 0, 0],
+      guard: [0, 0, 1, 2, 2, 2],
+      necro: [0, 0, 0, 0, 1, 1],
+    },
+    elite: 'headsman', boss: 'king',
+  },
+  {
+    rows: {
+      ghoul: [3, 3, 3, 2, 2, 1],
+      ghost: [1, 2, 2, 2, 2, 2],
+      yeti: [0, 0, 1, 1, 2, 2],
+      undertaker: [0, 0, 1, 1, 1, 1],
+      witch: [0, 0, 0, 0, 1, 1],
+    },
+    elite: 'banshee', boss: 'lich',
+  },
+  {
+    rows: {
+      imp: [3, 3, 3, 2, 1, 1],
+      slime: [1, 2, 2, 2, 2, 2],
+      bomber: [0, 1, 1, 1, 1, 1],
+      grinder: [0, 0, 1, 1, 2, 2],
+      golem: [0, 0, 0, 0, 1, 1],
+    },
+    elite: 'smasher', boss: 'forgelord',
+  },
 ];
 
-/** Enemies a regular fight draws from: the floor sets the cast, late rows of a floor add tougher ones. */
-function mobPool(f: number, t: number): MobKind[] {
-  const cast = CASTS[Math.min(f, CASTS.length - 1)];
-  if (t === 0) return cast.early.slice(0, 3);
-  return t < 3 ? cast.early : cast.late;
+/** The floor's cast. */
+export const castOf = (f: number) => CASTS[Math.min(f, CASTS.length - 1)];
+
+/** Enemies a fight on this row of the floor draws from, each as many times as its weight; past the fight rows (the boss's escort) the last row's. */
+export function mobPool(f: number, row: number): MobKind[] {
+  const rows = castOf(f).rows, r = Math.min(row, 5);
+  return (Object.keys(rows) as MobKind[]).flatMap(k => Array<MobKind>(rows[k]![r]).fill(k));
 }
 
-/** Enemies that set the pace of a fight: at most one of each in a room. */
-const SOLO: MobKind[] = ['golem', 'necro', 'witch', 'yeti', 'bomber'];
+/** Enemies that set the pace of a fight: at most one of each in a room, and none in the boss's escort. */
+const SOLO: MobKind[] = ['golem', 'necro', 'witch', 'yeti', 'bomber', 'undertaker', 'grinder', 'headsman', 'banshee', 'smasher'];
 
 /**
  * Resources in each kind of fight room: one of each, so the floor stays clear. Ore is scarce, so a party can't buy
@@ -690,7 +726,7 @@ export function generate(spec: RoomSpec): Layout {
     const x = n * sc.mobs, k = Math.floor(x);
     return Math.max(min, k + (R.next() < x - k ? 1 : 0));
   };
-  const pool = mobPool(f, t), cast = CASTS[Math.min(f, CASTS.length - 1)];
+  const pool = mobPool(f, rowOf(spec)), cast = castOf(f);
   const solo = (k: MobKind) => SOLO.includes(k) || (t === 0 && isRanged(k));
   const draw = (n: number, has: MobKind[] = []) => {
     const out: MobKind[] = [];
@@ -700,7 +736,7 @@ export function generate(spec: RoomSpec): Layout {
       // and never more than two shooters of a kind: a room full of them can't be reached
       const full = (k: MobKind) => (solo(k) && (out.includes(k) || has.includes(k))) || (isRanged(k) && out.filter(o => o === k).length >= 2);
       for (let tr = 0; tr < 8 && full(k); tr++) k = pick(pool);
-      if (full(k)) k = cast.early[0];
+      if (full(k)) k = pool[0];
       out.push(k);
     }
     return out;

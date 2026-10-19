@@ -243,8 +243,19 @@ export type Cue = [n: number, ev: Sfx, p: number, h?: number];
 const LOG_MAX = 40;
 
 /** What the HUD calls a mob's special move. */
-const SPECIAL = { summon: 'призыв', heal: 'лечение', heat: 'жар', charge: 'фитиль' };
+const SPECIAL = { summon: 'призыв', heal: 'лечение', heat: 'жар', charge: 'фитиль', execute: 'казнь', scream: 'визг', smash: 'удар молотом', rise: 'подъём' };
 const specialName = (k: keyof typeof SPECIAL | 'slam', chill?: boolean) => (k === 'slam' ? (chill ? 'метель' : 'удар по всем') : SPECIAL[k]);
+
+/** The coffin a beaten enemy is laid in gets up as that enemy after this many enemy turns, unless broken. */
+export const COFFIN_TURNS = 2;
+/** The undertaker reaches enemies that fall this close to it (in world units: five cells). */
+export const COFFIN_REACH = 5 * TILE;
+/** The grinder hones enemies this close to it (two cells). */
+export const HONE_REACH = 2 * TILE + 4;
+/** The door shield covers this much on each side of the way its holder faces (cosine of the half angle: ±60°). */
+export const SHIELD_COS = 0.5;
+/** The hammer's blow on its square hits this much harder than a plain strike. */
+export const SMASH_MUL = 1.5;
 
 /** A past-tense verb agreeing with whoever did it: «ударил», «ударила». */
 const did = (o: { fem?: boolean }, he: string, she = he + 'а') => (o.fem ? she : he);
@@ -637,7 +648,8 @@ export class Game {
 
   /** A ghost is bodiless on even turns: discs pass through it. */
   solid(m: Mob) {
-    return m.hp > 0 && !(MOBS[m.k].ghost && this.S.turn % 2 === 0);
+    // a coffin still settling on the floor lets the disc that felled its enemy roll on
+    return m.hp > 0 && !(m.born > 0) && !(MOBS[m.k].ghost && this.S.turn % 2 === 0);
   }
 
   /**
@@ -1077,7 +1089,7 @@ export class Game {
     let n = h.fire > 0 && S.phase !== 'enemy' ? 2 : 0;
     for (const m of this.liveMobs()) {
       const it = m.intent;
-      if (it && !this.acted(m) && !this.frozen(m) && ((it.t === 'hit' && it.hero === h.i) || it.t === 'slam')) n += it.dmg;
+      if (it && !this.acted(m) && !this.frozen(m) && ((it.t === 'hit' && it.hero === h.i) || it.t === 'slam' || (it.t === 'smash' && this.underHammer(h, it.spots!)))) n += it.dmg;
     }
     return Math.max(0, n - h.shield);
   }
@@ -1096,9 +1108,14 @@ export class Game {
    */
   specialIn(m: Mob): { name: string; turns: number } | null {
     const S = this.S, d = MOBS[m.k], it = m.intent;
-    if (m.hp <= 0 || S.phase === 'over' || (!d.acts && !d.charge)) return null;
+    if (m.hp <= 0 || S.phase === 'over') return null;
+    // a coffin's only move is to get up
+    if (m.k === 'coffin') return { name: SPECIAL.rise, turns: Math.max(0, (m.rise ?? COFFIN_TURNS) - 1) };
+    if (!d.acts && !d.charge) return null;
     // the move picked for this turn, unless it is made already or has come to nothing (the one to heal has fallen)
     if (it && it.t !== 'hit' && it.t !== 'move' && !this.acted(m) && !this.idle(m) && !this.frozen(m)) return { name: specialName(it.t, it.chill), turns: 0 };
+    // the headsman's execution is a strike of its own: this turn's counts while it is still to land
+    if (it && this.executes(m) && !this.acted(m) && !this.frozen(m)) return { name: SPECIAL.execute, turns: 0 };
     for (let k = 1; k <= 6; k++) {
       const t = S.turn + k, a = d.acts?.find(o => t % o.every === o.at && this.able(m, o));
       if (a) return { name: specialName(a.k, a.chill), turns: k };
@@ -1127,28 +1144,98 @@ export class Game {
     const taken: { x: number; y: number }[] = [];
     this.liveMobs().forEach((m, i) => {
       const d = MOBS[m.k];
+      if (m.k === 'coffin') { m.intent = this.rising(m); return; }
       for (const a of d.acts ?? []) {
         if (S.turn % a.every !== a.at) continue;
         const it = this.special(m, a, hs, taken);
         if (it) { if (it.t === 'slam') it.dmg = this.slamDmg(m, it.chill); m.intent = it; return; }
       }
       if (isRanged(m.k)) { m.intent = this.shoot(m, hs, S.turn + i); return; }
-      let best = hs[0], way: Pt[] | null = null, bd = Infinity;
-      for (const h of hs) {
-        const w = this.route(m, this.spot(h)!);
-        if (w && w.length < bd) { bd = w.length; best = h; way = w; }
-      }
-      m.intent = this.chase(m, best, way);
+      m.intent = this.goAfter(m, hs);
     });
     this.listen();
   }
 
   /**
-   * What a walker or a shooter deals this turn: a bomber after lighting its fuse twice as much, plus the rage of a long fight,
-   * and less from the gas.
+   * A walker picks the hero it goes after: the nearest by its route, or (the headsman) the one with the least health it can
+   * reach, the nearer of two as hurt.
+   */
+  private goAfter(m: Mob, hs: HeroState[]): Intent {
+    let best = hs[0], way: Pt[] | null = null, bd = Infinity;
+    const hunts = MOBS[m.k].hunts;
+    for (const h of hs) {
+      const w = this.route(m, this.spot(h)!);
+      const sc = !w ? Infinity : hunts ? h.hp * 1000 + w.length : w.length;
+      if (sc < bd) { bd = sc; best = h; way = w; }
+    }
+    return this.chase(m, best, way);
+  }
+
+  /** A coffin waits to get up: the enemy turns it still has, counting this one. */
+  private rising(m: Mob): Intent {
+    return { t: 'rise', hero: -1, dmg: 0, eta: m.rise ?? COFFIN_TURNS };
+  }
+
+  /** The headsman's execution is due this turn: its strike lands twice as hard. */
+  executes(m: Mob) {
+    return !!MOBS[m.k].acts?.some(a => a.k === 'execute' && this.S.turn % a.every === a.at);
+  }
+
+  /** A grinder other than this enemy stands close enough to hone its blade: what that adds to its blows. */
+  honed(m: Mob) {
+    let n = 0;
+    for (const o of this.liveMobs()) {
+      const hone = MOBS[o.k].hone;
+      if (hone && o !== m && Math.hypot(o.x - m.x, o.y - m.y) <= HONE_REACH) n = Math.max(n, Math.round(hone * this.S.dmgMul));
+    }
+    return n;
+  }
+
+  /**
+   * What a walker or a shooter deals this turn: a bomber after lighting its fuse twice as much, the headsman's execution
+   * twice as much, a grinder's edge and the rage of a long fight on top, and less from the gas.
    */
   private blow(m: Mob) {
-    return this.cut(m, (MOBS[m.k].charge ? m.dmg * 2 : m.dmg) + this.rage());
+    const d = MOBS[m.k], twice = d.charge || this.executes(m);
+    return this.cut(m, (twice ? m.dmg * 2 : m.dmg) + this.honed(m) + this.rage());
+  }
+
+  /** What the hammer's blow on its square deals: half again a plain strike, rage on top, less from the gas. */
+  private smashDmg(m: Mob) {
+    return this.cut(m, Math.ceil(m.dmg * SMASH_MUL) + this.honed(m) + this.rage());
+  }
+
+  /** The door its holder faces its hero with covers the point (x, y): a disc hitting there does no damage. */
+  shielded(m: Mob, x: number, y: number) {
+    if (!MOBS[m.k].shield) return false;
+    const it = m.intent, h = it && it.hero >= 0 ? this.heroOf(it.hero) : null, p = (h && this.spot(h)) ?? { x: this.S.Wx, y: this.S.Wy };
+    const fx = p.x - m.x, fy = p.y - m.y, dx = x - m.x, dy = y - m.y, L = Math.hypot(fx, fy) * Math.hypot(dx, dy);
+    return L > 0 && (fx * dx + fy * dy) / L > SHIELD_COS;
+  }
+
+  /** The hero standing in a square the hammer is coming down on. */
+  private underHammer(h: HeroState, spots: Pt[]) {
+    const p = this.spot(h);
+    return !!p && spots.some(c => Math.abs(c.x - p.x) <= TILE / 2 && Math.abs(c.y - p.y) <= TILE / 2);
+  }
+
+  /** A beaten enemy near an undertaker with room for one more coffin is laid in one: it gets up as itself unless broken. */
+  private bury(dead: Mob) {
+    const S = this.S, d = MOBS[dead.k];
+    if (d.prop || d.boss || mobSize(dead.k) > 1) return;
+    const u = this.liveMobs().find(o => {
+      const max = MOBS[o.k].coffins;
+      if (!max || o === dead || Math.hypot(o.x - dead.x, o.y - dead.y) > COFFIN_REACH) return false;
+      const mi = S.mobs.indexOf(o);
+      return S.mobs.filter(c => c.k === 'coffin' && c.hp > 0 && c.owner === mi).length < max;
+    });
+    if (!u) return;
+    const c = newMob('coffin', dead.x, dead.y, S.hpMul, S.dmgAdd, S.dmgMul);
+    c.owner = S.mobs.indexOf(u); c.born = 1; c.hold = dead.k; c.rise = COFFIN_TURNS;
+    c.intent = this.rising(c);
+    S.mobs.push(c);
+    this.float(u.x, u.y - 12, 'в гроб!', '#b7a07a');
+    this.note(`${u.name} ${did(MOBS[u.k], 'уложил')} ${d.acc.toLowerCase()} в гроб`);
   }
 
   /** What a blow on the whole party deals, a blizzard less: the rage of a long fight on top, less from the gas. */
@@ -1245,6 +1332,16 @@ export class Game {
   private special(m: Mob, a: MobAct, hs: HeroState[], taken: { x: number; y: number }[]): Intent | null {
     const S = this.S;
     if (a.k === 'slam') return { t: 'slam', hero: -1, dmg: 0, chill: a.chill };
+    // the execution is the strike itself, twice as hard (blow)
+    if (a.k === 'execute') return null;
+    if (a.k === 'scream') return { t: 'scream', hero: -1, dmg: 0 };
+    if (a.k === 'smash') {
+      // the square round the hero it would go after: it stays where it is marked, so a throw that lands outside dodges it
+      const p = this.spot(this.heroOf(this.goAfter(m, hs).hero)) ?? this.spot(hs[0])!;
+      const [ci, cj] = cellAt(p.x, p.y), spots: Pt[] = [];
+      for (let j = cj - 1; j <= cj + 1; j++) for (let i = ci - 1; i <= ci + 1; i++) if (isFloor(S, i, j)) spots.push(cellCentre(i, j));
+      return { t: 'smash', hero: -1, dmg: this.smashDmg(m), spots };
+    }
     if (a.k === 'heal') {
       const hurt = this.liveMobs().filter(o => o !== m && o.hp < o.max).sort((p, q) => p.hp / p.max - q.hp / q.max)[0];
       // enemies of a smaller party have less HP, so they mend for less too
@@ -1410,6 +1507,7 @@ export class Game {
       m.dead = 0.001; this.burst(m.x, m.y, '#ffd34d', 22); this.float(m.x, m.y - 6, 'повержен', '#ffd34d');
       if (m.burn > 0) this.spreadFire(m);
       if (by) this.killed(m, by);
+      this.bury(m);
       if (d.lava) {
         const S = this.S, i = Math.floor(m.x / TILE), j = Math.floor(m.y / TILE);
         if (isFloor(S, i, j) && this.stands().every(p => Math.hypot(p.x - (i * TILE + 8), p.y - (j * TILE + 8)) > 20)) { S.haz.add(hazKey(i, j)); this.float(m.x, m.y + 4, 'лава!', '#ff7a3d'); }
@@ -1691,7 +1789,9 @@ export class Game {
         t.rico = Math.max(t.rico, d.bounces);
         // the ability goes first: fire on an enemy this very hit kills leaps on to the next one
         if (d.ab) this.abilityHit(d, m);
-        this.hurtMob(m, dmg, '#fff', has(h, 'opener'), Math.min(1, vn / 250), h);
+        // the guard's door takes a disc from the front: it bounces off and wounds nobody
+        if (this.shielded(m, d.x, d.y)) { this.float(m.x, m.y - 14, 'дверь!', '#c7cbe0'); this.sfx('armor'); }
+        else this.hurtMob(m, dmg, '#fff', has(h, 'opener'), Math.min(1, vn / 250), h);
         if (d.ab && h.def.key === 'electra') this.zap(m, h);
         if (d.ab && h.def.key === 'genius') this.freeze(m);
         this.burst(d.x, d.y, d.hero.def.col, 8);
@@ -2064,7 +2164,40 @@ export class Game {
       this.note(`${m.name} ${did(d, 'заморожен')} и пропускает ход`);
       return;
     }
-    if (it.t === 'slam') {
+    if (it.t === 'rise') {
+      m.rise = (m.rise ?? COFFIN_TURNS) - 1;
+      if (m.rise > 0) {
+        this.float(m.x, m.y - 10, 'скрип…', '#b7a07a');
+        this.note(`В гробу ворочается ${MOBS[m.hold!].name.toLowerCase()}`);
+        m.intent = this.rising(m);
+        return;
+      }
+      // the lid flies off: the enemy in it stands up whole, in the coffin's place in the order
+      const o = newMob(m.hold!, m.x, m.y, S.hpMul, S.dmgAdd, S.dmgMul);
+      Object.assign(m, o, { owner: m.owner, born: 1, intent: null, hold: undefined, rise: undefined });
+      this.burst(m.x, m.y, '#b7a07a', 16);
+      this.sfx('ability');
+      this.float(m.x, m.y - 12, 'встал из гроба!', '#c9a8ff');
+      this.note(`${m.name} ${did(MOBS[m.k], 'встал', 'встала')} из гроба`);
+    } else if (it.t === 'scream') {
+      m.flash = 0.12; S.shake = 0.2;
+      this.sfx('slam');
+      this.float(m.x, m.y - 10, 'ВИЗГ', '#bfe6ff');
+      this.note(`${m.name} ${did(d, 'завизжал')}: броски отряда слабее`);
+      for (const h of this.alive()) this.chillHero(h);
+    } else if (it.t === 'smash') {
+      m.flash = 0.12; S.shake = 0.35;
+      this.sfx('slam');
+      this.float(m.x, m.y - 10, 'МОЛОТ!', '#ff7a3d');
+      const hit = this.alive().filter(h => this.underHammer(h, it.spots!));
+      for (const p of it.spots!) this.burst(p.x, p.y, '#ff7a3d', 4);
+      if (!hit.length) this.note(`${m.name} ${did(d, 'ударил')} молотом мимо`);
+      for (const h of hit) {
+        const blk = this.hurtHero(h, it.dmg, '', m);
+        this.noteBlow(`${m.name} ${did(d, 'ударил')} молотом ${h.def.acc} на ${it.dmg}`, h, blk);
+      }
+      this.tremor(m.x, m.y, 1, m);
+    } else if (it.t === 'slam') {
       m.flash = 0.12; S.shake = 0.3;
       this.sfx('slam');
       this.float(m.x, m.y - 10, it.chill ? 'МЕТЕЛЬ' : 'УДАР ОБ ПОЛ', it.chill ? '#bfe6ff' : '#ffd34d');
