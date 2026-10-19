@@ -411,11 +411,13 @@ export class SceneRenderer {
     if (S.shake > 0 && !reduce) { sx = (Math.random() - 0.5) * 6; sy = (Math.random() - 0.5) * 4; }
     const z = cam.zoom;
     c.setTransform(dpr * z, 0, 0, dpr * z, dpr * (cam.panX + sx), dpr * (cam.panY + sy));
+    // round ends on every stroke: everything that sets the line cap sets it round, so this is how a frame looked anyway
+    // once anything had been drawn, and the kept floor starts from the same brush
     c.lineJoin = 'round';
+    c.lineCap = 'round';
 
     this.pickDecor();
-    this.drawLips();
-    this.drawFloor();
+    this.drawUnder(c, view, sx !== 0 || sy !== 0);
     this.drawGround();
 
     const items: [number, () => void][] = [];
@@ -445,6 +447,67 @@ export class SceneRenderer {
   }
 
   // ------------------------------------------------------------ room shell
+
+  /**
+   * The lips and the floor as last drawn, kept while nothing on them changes: they lie under everything else and take
+   * about a third of a frame, so with the camera still they go on in one stamp. `key` is what the kept picture shows,
+   * `seen` what the frame before asked for: a moving camera asks for a new floor every frame, so it is drawn straight
+   * on the screen then and kept only once the camera holds still. `fill`, `stroke` and `lw` are the brush the floor
+   * leaves behind, handed on to the rest of the frame as if it had been drawn there.
+   */
+  private under: { cv: HTMLCanvasElement; key: string; seen: string; fill: string | CanvasGradient | CanvasPattern; stroke: string | CanvasGradient | CanvasPattern; lw: number } | null = null;
+  /** A number per room met, so a new room never takes the last one's floor. */
+  private rooms = new WeakMap<object, number>();
+  private roomsMet = 0;
+
+  /** Everything the lips and the floor are drawn from, the table's shake aside; null when they can't be kept (code-drawn lava bubbles). */
+  private underKey(dpr: number): string | null {
+    const S = this.g.S, cam = this.cam, c = this.c;
+    if (S.biome.haz === 'lava' && S.haz.size && !this.lavaTex()) return null;
+    if (!this.rooms.has(S)) this.rooms.set(S, ++this.roomsMet);
+    const decals = S.decals;
+    return [
+      c.canvas.width, c.canvas.height, dpr, cam.zoom, cam.panX, cam.panY, cam.rot, cam.cx, cam.cy, this.rooms.get(S), envArt.size, S.pits.length,
+      [...S.haz].join(' '), S.ice.join(''),
+      S.blocks.map(b => `${b.x0},${b.y0},${b.x1},${b.y1},${b.ice ? 1 : 0}`).join(' '),
+      [...this.decor].map(([d, k]) => decals.indexOf(d) + k).join(' '),
+      S.nodes.map(n => `${n.k},${n.x},${n.y},${n.s ?? 1},${n.left > 0 ? 1 : 0}`).join(' '),
+      S.mobs.map(o => (o.hp > 0 ? `${o.k},${o.tx},${o.ty}` : '')).join(' '),
+    ].join('|');
+  }
+
+  private drawUnder(c: Ctx, view: { dpr: number }, shaking: boolean) {
+    const { dpr } = view, cam = this.cam, key = this.underKey(dpr);
+    const u = (this.under ??= { cv: document.createElement('canvas'), key: '', seen: '', fill: '', stroke: '', lw: 1 });
+    // a shaking table is drawn straight for its moment, and the kept floor is there again once it stops
+    if (key === null || shaking || key !== u.seen) {
+      u.seen = key ?? '';
+      this.drawLips();
+      this.drawFloor();
+    } else {
+      if (key !== u.key) {
+        const cv = u.cv;
+        if (cv.width !== c.canvas.width || cv.height !== c.canvas.height) { cv.width = c.canvas.width; cv.height = c.canvas.height; }
+        const f = cv.getContext('2d')!;
+        f.setTransform(1, 0, 0, 1, 0, 0);
+        f.clearRect(0, 0, cv.width, cv.height);
+        f.setTransform(dpr * cam.zoom, 0, 0, dpr * cam.zoom, dpr * cam.panX, dpr * cam.panY);
+        f.lineJoin = c.lineJoin;
+        f.lineCap = c.lineCap;
+        this.c = f;
+        try { this.drawLips(); this.drawFloor(); } finally { this.c = c; }
+        Object.assign(u, { key, fill: f.fillStyle, stroke: f.strokeStyle, lw: f.lineWidth });
+      }
+      c.save();
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.drawImage(u.cv, 0, 0);
+      c.restore();
+      c.fillStyle = u.fill;
+      c.strokeStyle = u.stroke;
+      c.lineWidth = u.lw;
+    }
+    this.drawOver();
+  }
 
   /** Base colour of a vertical face whose outward normal is n; faces turned left catch the light. */
   private shade(n: Vec, cols: [string, string]) {
@@ -702,7 +765,7 @@ export class SceneRenderer {
       c.lineWidth = 0.75;
       c.stroke();
     }
-    // ice patches: whole tiles glazed over, joints hidden under the ice, a glint that drifts across
+    // ice patches: whole tiles glazed over, joints hidden under the ice (the glint drifting across them is drawn live, in drawOver)
     const iced = cells.filter(([i, j]) => S.ice[j * S.gw + i]);
     if (iced.length) {
       c.beginPath();
@@ -713,16 +776,6 @@ export class SceneRenderer {
       for (const [i, j] of iced) if ((i * 5 + j * 3) % 4 === 0) quad(i * TILE + 2, j * TILE + 2, (i + 1) * TILE - 2, (j + 1) * TILE - 2);
       c.fillStyle = '#cde8f0';
       c.fill();
-      c.strokeStyle = 'rgba(255,255,255,.75)';
-      c.lineWidth = 0.8;
-      c.beginPath();
-      for (const [i, j] of iced) {
-        const ph = reduce ? 0.5 : (t * 0.15 + (i + j) * 0.09) % 1;
-        if ((i * 3 + j * 7) % 3) continue;
-        const u = 3 + ph * 8;
-        c.moveTo(...P(i * TILE + u, j * TILE + 4)); c.lineTo(...P(i * TILE + u + 4, j * TILE + 8));
-      }
-      c.stroke();
     }
     // touching lava cells are one pool: one picture running across them, inked only along the pool's edge
     const lava = B.haz === 'lava', lv = lava ? this.lavaTex() : null;
@@ -836,6 +889,30 @@ export class SceneRenderer {
         const [sx, sy] = P(wx, wy);
         c.beginPath(); c.moveTo(sx, sy); c.lineTo(sx + 5, sy - 1.5); c.stroke();
       }
+    }
+  }
+
+  /**
+   * What moves on the floor, drawn every frame over the kept floor: the glint drifting across ice and, while heroes are
+   * being placed, the pulsing throw runes.
+   */
+  private drawOver() {
+    const { c, P, g } = this;
+    const S = g.S, t = this.t;
+    const iced: [number, number][] = [];
+    for (let i = 0; i < S.gw; i++) for (let j = 0; j < S.gh; j++) {
+      if (isFloor(S, i, j) && !S.haz.has(hazKey(i, j)) && S.ice[j * S.gw + i] && !((i * 3 + j * 7) % 3)) iced.push([i, j]);
+    }
+    if (iced.length) {
+      c.strokeStyle = 'rgba(255,255,255,.75)';
+      c.lineWidth = 0.8;
+      c.beginPath();
+      for (const [i, j] of iced) {
+        const ph = reduce ? 0.5 : (t * 0.15 + (i + j) * 0.09) % 1;
+        const u = 3 + ph * 8;
+        c.moveTo(...P(i * TILE + u, j * TILE + 4)); c.lineTo(...P(i * TILE + u + 4, j * TILE + 8));
+      }
+      c.stroke();
     }
     // throw runes: only while heroes are being placed, the fight itself hides them
     if (S.phase !== 'place') return;
