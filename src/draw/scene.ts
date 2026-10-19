@@ -1254,6 +1254,147 @@ export class SceneRenderer {
     }
   }
 
+  /**
+   * PROTOTYPE (not for merge): an ore vein built in code, no picture. A chunk of rock over its cells, a height field of
+   * 4 × 4 facets per cell whose rim drops to the floor; ore in the cell next door grows into the same rock (the shared rim
+   * stays up), and a vein sinks and loses its gold as its charges go.
+   */
+  private rockCells() {
+    const cells = new Map<string, number>();
+    for (const m of this.g.S.nodes) {
+      const r = (m as any).pv?.rock;
+      if (!r || m.left <= 0) continue;
+      const z = m.s ?? 1, i0 = Math.round((m.x - 8 * z) / TILE), j0 = Math.round((m.y - 8 * z) / TILE);
+      const q = Math.min(m.left, m.ch) / m.ch;
+      for (let a = 0; a < z; a++) for (let b = 0; b < z; b++) cells.set(hazKey(i0 + a, j0 + b), q);
+    }
+    return cells;
+  }
+
+  private drawRock(n: ResNode, r: any) {
+    const { c, P, cam } = this, cells = this.rockCells(), N = 4, D = TILE / N, H0 = r.H ?? 12;
+    const hh = (a: number, b: number, k = 0) => {
+      let t = (a * 374761393 + b * 668265263 + k * 1442695041) | 0;
+      t = Math.imul(t ^ (t >>> 13), 1274126177);
+      t = Math.imul(t ^ (t >>> 16), 668265263);
+      return ((t ^ (t >>> 15)) >>> 0) / 4294967296;
+    };
+    const sink = (q: number) => (r.low ?? 0.4) + (1 - (r.low ?? 0.4)) * q;
+    // a lattice point: where it stands and how high, the same for every cell that shares it
+    const pt = (gx: number, gy: number): [number, number, number, boolean, number] => {
+      const ix = gx / N, iy = gy / N, onX = gx % N === 0, onY = gy % N === 0;
+      const xs = onX ? [ix - 1, ix] : [Math.floor(ix)], ys = onY ? [iy - 1, iy] : [Math.floor(iy)];
+      let ore = 0, cx = 0, cy = 0, all = true, low = 1;
+      for (const a of xs) for (const b of ys) {
+        const q = cells.get(hazKey(a, b));
+        if (q === undefined) { all = false; continue; }
+        ore++; cx += (a + 0.5) * TILE; cy += (b + 0.5) * TILE; low = Math.min(low, sink(q));
+      }
+      let x = gx * D, y = gy * D;
+      if (all) {
+        x += (hh(gx, gy, 1) - 0.5) * (r.jit ?? 1.6); y += (hh(gx, gy, 2) - 0.5) * (r.jit ?? 1.6);
+        const edgeish = gx % N === 1 || gx % N === N - 1 || gy % N === 1 || gy % N === N - 1;
+        return [x, y, H0 * low * ((edgeish ? 0.64 : 0.8) + (edgeish ? 0.32 : 0.26) * hh(gx, gy, 3)), false, hh(gx, gy, 5)];
+      }
+      // on the rock's outline: drawn in toward the ore, most at an outer corner, so the chunk is not a box
+      const pull = ore === 1 && xs.length * ys.length === 4 ? 2.6 + 1.2 * hh(gx, gy, 4) : ore === 1 ? 0.6 + 1.6 * hh(gx, gy, 4) : 0.2 + 0.8 * hh(gx, gy, 4);
+      if (ore) {
+        // in toward the ore, and a little along the outline so its foot is not a ruler line
+        const dx = cx / ore - x, dy = cy / ore - y, l = Math.hypot(dx, dy) || 1, along = (hh(gx, gy, 6) - 0.5) * (ore === 1 && xs.length * ys.length === 4 ? 0 : 2.2);
+        x += (dx / l) * pull - (dy / l) * along; y += (dy / l) * pull + (dx / l) * along;
+      }
+      return [x, y, 0, true, hh(gx, gy, 5)];
+    };
+    const TONES = r.tones ?? ['#3f3129', '#5a463a', '#76604e', '#927a63', '#b39a7e'];
+    const tone = (a: readonly unknown[], b: readonly unknown[], d: readonly unknown[]) => {
+      const A = a as number[], B = b as number[], C2 = d as number[];
+      const u = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], v = [C2[0] - A[0], C2[1] - A[1], C2[2] - A[2]];
+      let nx = u[1] * v[2] - u[2] * v[1], ny = u[2] * v[0] - u[0] * v[2], nz = u[0] * v[1] - u[1] * v[0];
+      if (nz < 0) { nx = -nx; ny = -ny; nz = -nz; }
+      const l = Math.hypot(nx, ny, nz) || 1;
+      nx /= l; ny /= l; nz /= l;
+      const k = 0.75 * nz - 0.4 * cam.sideways(nx, ny) + 0.2 * (cam.facing(nx, ny) / Math.SQRT2);
+      return TONES[Math.max(0, Math.min(TONES.length - 1, Math.floor((k + 0.35) / 0.25)))];
+    };
+    const z = n.s ?? 1, i0 = Math.round((n.x - 8 * z) / TILE), j0 = Math.round((n.y - 8 * z) / TILE);
+    const quads: { d: number; pts: [number, number, number, boolean, number][]; gx: number; gy: number; q: number }[] = [];
+    for (let a = 0; a < z; a++) for (let b = 0; b < z; b++) {
+      const ci = i0 + a, cj = j0 + b, q = cells.get(hazKey(ci, cj));
+      if (q === undefined) continue;
+      for (let u = 0; u < N; u++) for (let v = 0; v < N; v++) {
+        const gx = ci * N + u, gy = cj * N + v;
+        const pts = [pt(gx, gy), pt(gx + 1, gy), pt(gx + 1, gy + 1), pt(gx, gy + 1)];
+        quads.push({ d: cam.depth((gx + 0.5) * D, (gy + 0.5) * D), pts, gx, gy, q });
+      }
+    }
+    quads.sort((p, o) => p.d - o.d);
+    c.lineJoin = 'round';
+    c.lineCap = 'round';
+    for (const { pts, gx, gy, q } of quads) {
+      const S = pts.map(([x, y, h]) => P(x, y, h));
+      // two triangles, split along the diagonal that keeps the facet convex
+      for (const [i, j, k] of [[0, 1, 2], [0, 2, 3]]) {
+        const col = tone(pts[i], pts[j], pts[k]);
+        pth(c, [S[i], S[j], S[k]]);
+        c.fillStyle = col; c.fill();
+        c.strokeStyle = col; c.lineWidth = 0.35; c.stroke();
+      }
+      const side = pts.some(p => p[3]);
+      if (side) {
+        // gold showing through the cliff, fewer as the vein runs out
+        // (not on a face turned away, where only its glint would peek over the rim)
+        const fx = (pts[1][1] - pts[0][1]) * (pts[3][2] - pts[0][2]) - (pts[1][2] - pts[0][2]) * (pts[3][1] - pts[0][1]);
+        const fy = (pts[1][2] - pts[0][2]) * (pts[3][0] - pts[0][0]) - (pts[1][0] - pts[0][0]) * (pts[3][2] - pts[0][2]);
+        if (cam.facing(fx, fy) > 0 && hh(gx, gy, 7) < (r.nug ?? 0.42) * (0.3 + 0.7 * q)) {
+          const at = (s: number, t: number) => {
+            const x = (1 - s) * (1 - t) * pts[0][0] + s * (1 - t) * pts[1][0] + s * t * pts[2][0] + (1 - s) * t * pts[3][0];
+            const y = (1 - s) * (1 - t) * pts[0][1] + s * (1 - t) * pts[1][1] + s * t * pts[2][1] + (1 - s) * t * pts[3][1];
+            const h = (1 - s) * (1 - t) * pts[0][2] + s * (1 - t) * pts[1][2] + s * t * pts[2][2] + (1 - s) * t * pts[3][2];
+            return P(x, y, h);
+          };
+          const ox = 0.5 + (hh(gx, gy, 8) - 0.5) * 0.3, oy = 0.5 + (hh(gx, gy, 9) - 0.5) * 0.3, rr0 = 0.2 + 0.12 * hh(gx, gy, 10);
+          const blob: Pt[] = [];
+          for (let k = 0; k < 6; k++) { const an = (k / 6) * Math.PI * 2 + hh(gx, gy, 11); const rr1 = rr0 * (0.7 + 0.5 * hh(gx + k, gy, 12)); blob.push(at(ox + Math.cos(an) * rr1, oy + Math.sin(an) * rr1)); }
+          pth(c, blob); c.fillStyle = '#f2b83c'; c.fill(); c.strokeStyle = INK; c.lineWidth = 0.55; c.stroke();
+          const [hx, hy] = at(ox - rr0 * 0.3, oy - rr0 * 0.3); circ(c, hx, hy, 0.55); c.fillStyle = '#fff3c4'; c.fill();
+        }
+        // ink: the foot along the floor, the cracks up the cliff, and the rim where the cliff meets the top
+        c.strokeStyle = INK;
+        for (let e = 0; e < 4; e++) {
+          const p0 = pts[e], p1 = pts[(e + 1) % 4];
+          // a crack up the cliff only from some points of the foot
+          if (p0[3] !== p1[3] && (p0[3] ? p0 : p1)[4] > (r.cracks ?? 0.45)) continue;
+          const w = p0[3] && p1[3] ? BL : p0[3] !== p1[3] ? 0.55 : 0.9;
+          c.lineWidth = w; c.beginPath(); c.moveTo(...S[e]); c.lineTo(...S[(e + 1) % 4]); c.stroke();
+        }
+      }
+    }
+    // gold teeth on top, a few per cell; every hit knocks some off
+    const spikes: { d: number; draw: () => void }[] = [];
+    for (let a = 0; a < z; a++) for (let b = 0; b < z; b++) {
+      const ci = i0 + a, cj = j0 + b, q = cells.get(hazKey(ci, cj));
+      if (q === undefined) continue;
+      const max = r.teeth ?? 3, k = Math.ceil(max * q - 1e-6);
+      const spots = [[1, 1], [2, 2], [3, 1], [1, 3], [3, 3], [2, 1]].sort((p, o) => hh(ci * 9 + p[0], cj * 9 + p[1], 13) - hh(ci * 9 + o[0], cj * 9 + o[1], 13)).slice(0, k);
+      spots.forEach(([u, v], idx) => {
+        const [x, y, h] = pt(ci * N + u, cj * N + v), big = idx === 0 ? 1.25 : 0.85 + 0.3 * hh(ci, cj, 20 + idx);
+        spikes.push({ d: cam.depth(x, y), draw: () => this.goldTooth(x, y, h, big * (r.tooth ?? 1), hh(ci + u, cj + v, 21) - 0.5) });
+      });
+    }
+    spikes.sort((p, o) => p.d - o.d).forEach(s2 => s2.draw());
+  }
+
+  /** One gold crystal standing on the rock: a lit and a shaded face, inked, with a glint. */
+  private goldTooth(x: number, y: number, h: number, s: number, lean: number) {
+    const c = this.c, [bx, by] = this.P(x, y, h - 0.6), L = 7 * s, w = 1.7 * s;
+    const tx = bx + lean * L * 0.6, ty = by - L, sx = bx + lean * L * 0.45, sy = by - L * 0.72;
+    pth(c, [[bx - w, by], [sx - w, sy], [tx, ty], [tx, sy + 0.4], [bx, by + 0.8]]); c.fillStyle = '#ffd864'; c.fill();
+    pth(c, [[bx, by + 0.8], [tx, sy + 0.4], [tx, ty], [sx + w, sy], [bx + w, by]]); c.fillStyle = '#d9962a'; c.fill();
+    pth(c, [[bx - w, by], [sx - w, sy], [tx, ty], [sx + w, sy], [bx + w, by], [bx, by + 0.8]]); c.strokeStyle = INK; c.lineWidth = 0.8; c.stroke();
+    c.lineWidth = 0.45; c.beginPath(); c.moveTo(bx, by + 0.8); c.lineTo(tx, sy + 0.4); c.lineTo(tx, ty); c.stroke();
+    c.strokeStyle = 'rgba(255,255,255,.85)'; c.lineWidth = 0.6; c.beginPath(); c.moveTo(bx - w * 0.45, by - 1); c.lineTo(sx - w * 0.45, sy + 0.8); c.stroke();
+  }
+
   /** PROTOTYPE (not for merge): a resource as a grid-aligned block with a prop standing on it, for the art page shots. */
   private drawProto(n: ResNode, v: any) {
     const { c, P, cam } = this, I = ((globalThis as any).__protoImgs ?? {}) as Record<string, HTMLImageElement>;
@@ -1332,6 +1473,7 @@ export class SceneRenderer {
   private drawNode(n: ResNode) {
     // a spent node is drawn with the floor
     if (n.left <= 0) return;
+    if ((n as any).pv?.rock) return this.drawRock(n, (n as any).pv.rock);
     if ((n as any).pv) return this.drawProto(n, (n as any).pv);
     const { c, P } = this, z = n.s ?? 1;
     ell(c, ...P(n.x + 1.5 * z, n.y + 1.5 * z), 11 * z, 5.5 * z); c.fillStyle = 'rgba(15,8,4,.35)'; c.fill();
