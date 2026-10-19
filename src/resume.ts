@@ -41,9 +41,11 @@ export interface HostSave {
   snap: Snapshot | null;
 }
 
-const SEAT = 'discodungeon.seat', SAVE = 'discodungeon.hostSave';
+const SEAT = 'discodungeon.seat', SAVE = 'discodungeon.hostSave', KEYS = 'discodungeon.keys';
 /** A seat older than this is a finished game, not a crash. */
 const FRESH = 30 * 60 * 1000;
+/** How long this browser keeps its key to a room it left, so typing that room's code again gives the same hero back. */
+const KEEP = 12 * 60 * 60 * 1000;
 
 export const newKey = () => Math.random().toString(36).slice(2, 12);
 
@@ -75,6 +77,19 @@ export const saveSeat = (s: Omit<Seat, 'at'>) => write(SEAT, { ...s, at: Date.no
 export function clearSeat() {
   write(SEAT, null);
   write(SAVE, null);
+}
+
+/** The key this browser joined `code` with lately, even after it left the room or gave up on getting back. */
+export function keyFor(code: string): string | null {
+  const k = read<Record<string, { key: string; at: number }>>(KEYS)?.[code];
+  return k && Date.now() - k.at < KEEP ? k.key : null;
+}
+
+export function keepKey(code: string, key: string) {
+  const all = read<Record<string, { key: string; at: number }>>(KEYS) ?? {}, now = Date.now();
+  for (const c in all) if (now - all[c].at >= KEEP) delete all[c];
+  all[code] = { key, at: now };
+  write(KEYS, all);
 }
 
 export const loadHost = () => read<HostSave>(SAVE);

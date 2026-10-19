@@ -13,7 +13,7 @@ import { MapView, type MapParty, type MapVotes } from './mapview';
 import { SceneRenderer } from './draw/scene';
 import { loadAll } from './assets';
 import { sound, type Track } from './sound';
-import { clearSeat, loadHost, loadSeat, newKey, saveHost, saveSeat, type Ending, type HostSave } from './resume';
+import { clearSeat, keepKey, keyFor, loadHost, loadSeat, newKey, saveHost, saveSeat, type Ending, type HostSave } from './resume';
 import { FLOORS, LAYERS, agreed, depthOf, newRun, nodeById, reachable, type Run, type Votes } from './run';
 import { applyFx, canPick, eventDef, eventOf, rolled, type EventState } from './events';
 import { EventView, type EventVotes } from './eventview';
@@ -736,6 +736,9 @@ function backToLobby() {
 $('lobbyBack').addEventListener('click', () => { leaveOnline(); resetLobby(); openMenu(); });
 $('lobbyName').addEventListener('input', () => { settings.name = $<HTMLInputElement>('lobbyName').value.trim(); saveSettings(); });
 $('lobbyHost').addEventListener('click', async () => {
+  // a room of one's own: a seat still being tried after a reload is given up
+  reconnecting++;
+  if (mode === 'client') setOnline('menu');
   lobbyStatus('Создаю комнату…');
   try {
     await net.hostRoom();
@@ -771,21 +774,29 @@ $('lobbyReadyBtn').addEventListener('click', () => {
   net.send({ t: 'ready', on: !players.find(p => p.id === net.id)?.ready });
 });
 
-/** Join a room; `key` takes back a seat this browser had before a crash or reload. */
-async function join(code: string, key = newKey()) {
+/**
+ * Join a room. A browser that was in it lately comes back with its old key and gets its hero back; `seat` is the key a
+ * reload or crash left behind, and then the room is tried for a while, as the network may take a moment to come back.
+ */
+async function join(code: string, seat?: string) {
   if (code.length < 4) { lobbyStatus('Введи код комнаты.'); return; }
-  lobbyStatus(key === myKey ? 'Возвращаюсь в игру…' : 'Подключаюсь…');
+  code = code.toUpperCase();
+  const old = seat ?? keyFor(code), my = ++reconnecting;
+  myKey = old ?? newKey();
+  lobbyStatus(old ? 'Возвращаюсь в игру…' : 'Подключаюсь…');
   try {
     await net.joinRoom(code);
   } catch (e) {
+    if (my !== reconnecting) return;
+    // one failed try right after a reload doesn't give the seat up
+    if (seat) { mode = 'client'; reconnect(code); return; }
     lobbyStatus((e as Error).message);
-    if (key === myKey) clearSeat();
     return;
   }
   lobbyStatus('');
   mode = 'client';
-  myKey = key;
-  saveSeat({ code: net.code, key, host: false });
+  saveSeat({ code: net.code, key: myKey, host: false });
+  keepKey(net.code, myKey);
   greet();
 }
 
@@ -810,6 +821,7 @@ async function reconnect(code: string) {
     try {
       await net.joinRoom(code);
       if (my !== reconnecting) { net.close(); return; }
+      keepKey(code, myKey);
       greet();
       if (!started) lobbyStatus('');
       return;
@@ -835,13 +847,17 @@ function lost(text: string) {
 // a player is listed once they say hello; one who never does is let go
 net.onJoin = id => setTimeout(() => { if (!players.some(p => p.id === id)) net.kick(id); }, 10_000);
 
-/** Host: someone said hello. Their key either gives them their old seat back or they take a free one. */
+/**
+ * Host: someone said hello. Their key either gives them their old seat back or they take a free one. Mid-game a player
+ * whose browser lost its key (or who came back on another device) takes a hero whose player is away, by name if one fits.
+ */
 function welcome(id: string, name: string, key: string) {
   name = name.slice(0, 16) || 'Игрок';
-  const back = key ? players.find(p => p.key === key && p.id !== 'host') : undefined;
+  const away = started ? players.filter(p => p.id !== 'host' && p.hero !== null && !net.has(p.id)) : [];
+  const back = (key ? players.find(p => p.key === key && p.id !== 'host') : undefined) ?? away.find(p => p.name === name) ?? away[0];
   if (back) {
     const old = back.id;
-    Object.assign(back, { id, name });
+    Object.assign(back, { id, name, key });
     // in the lobby a player who comes back says «Готов» anew
     if (!started) back.ready = false;
     if (old !== id) net.kick(old);
