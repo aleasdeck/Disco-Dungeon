@@ -1273,7 +1273,7 @@ export class SceneRenderer {
       }
       return out;
     };
-    if (v.shadow !== false) { ell(c, ...P(n.x + 2, n.y + 2), w * 0.75, w * 0.36); c.fillStyle = 'rgba(15,8,4,.3)'; c.fill(); }
+    if (v.shadow) { ell(c, ...P(n.x + 2, n.y + 2), w * 0.75, w * 0.36); c.fillStyle = 'rgba(15,8,4,.3)'; c.fill(); }
     if (H > 0) {
       const faces: { a: Vec; b: Vec; n: Vec }[] = [
         { a: [x1, y0], b: [x1, y1], n: [1, 0] },
@@ -1303,12 +1303,29 @@ export class SceneRenderer {
       c.restore();
     } else if (v.capCol) { pth(c, top); c.fillStyle = v.capCol; c.fill(); }
     if (cap || v.capCol) { pth(c, top); c.strokeStyle = INK; c.lineWidth = v.capLw ?? BL; c.stroke(); }
-    // the prop on top: fat pieces first, as many as the charges allow
+    // the prop on top; with clip it is cut off along the top's front edges, so its foot sits down in the block
+    if (v.clip) {
+      const q = [P(x0, y0, H), P(x1, y0, H), P(x1, y1, H), P(x0, y1, H)];
+      const L = q.reduce((a, b) => (b[0] < a[0] ? b : a)), R = q.reduce((a, b) => (b[0] > a[0] ? b : a));
+      const below = (p: Pt) => p[1] > L[1] + ((R[1] - L[1]) * (p[0] - L[0])) / (R[0] - L[0] || 1) + 1e-6;
+      const front = q.filter(p => p !== L && p !== R && below(p)).sort((a, b) => a[0] - b[0]);
+      c.save();
+      pth(c, [L, ...front, R, [R[0], R[1] - 500], [L[0], L[1] - 500]]);
+      c.clip();
+    }
     for (const pr of v.props ?? []) {
       const pi = I[pr.img];
-      if (!pi) continue;
+      if (!pi || pr.side) continue;
       const [sx, sy] = P(n.x + (pr.dx ?? 0), n.y + (pr.dy ?? 0), H + (pr.dh ?? 0));
       this.standee(pi, sx, sy + (pr.lift ?? 0), pr.w ?? 12, n.hit > 0);
+    }
+    if (v.clip) c.restore();
+    // nuggets poking out of the sides: a prop at a point on a face, at height h
+    for (const pr of v.props ?? []) {
+      const pi = I[pr.img];
+      if (!pi || !pr.side) continue;
+      const [sx, sy] = P(n.x + (pr.dx ?? 0), n.y + (pr.dy ?? 0), pr.dh ?? 0);
+      this.standee(pi, sx, sy + (pr.lift ?? 0), pr.w ?? 6, n.hit > 0);
     }
   }
 
