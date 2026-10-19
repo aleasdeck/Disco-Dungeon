@@ -207,7 +207,7 @@ export type MobKind =
  * Something a mob does instead of its usual attack on turns where `turn % every === at`.
  * summon: raises `n` mobs of `kind` on circles marked a turn ahead; heal: mends the most hurt ally by `amt`;
  * slam: hits every hero at once (`chill` also chills them); heat: turns tiles in front of the heroes' runes into lava;
- * execute: its strike that turn deals double; scream: chills every hero, no damage; smash: a 3 × 3 square of cells round
+ * execute: its strike that turn deals double; scream: every hero throws its next turn without the aiming line, no damage; smash: a 3 × 3 square of cells round
  * the hero it goes after, marked a turn ahead, hits whoever stands in it then.
  */
 export interface MobAct {
@@ -308,7 +308,7 @@ export const MOBS: Record<MobKind, MobDef> = {
   banshee: {
     name: 'Банши', acc: 'Банши', fem: true, floor: 1, hp: 20, r: 8, speed: 26, reach: 999, dmg: 3, fig: 36,
     acts: [{ k: 'scream', every: 2, at: 0 }],
-    txt: 'Элита склепа. Стреляет в того, кого видит, а каждый второй ход «Визг»: на следующий ход все броски отряда слабее.',
+    txt: 'Элита склепа. Стреляет в того, кого видит, а каждый второй ход «Визг»: в ушах звенит, и в следующий ход у всего отряда нет линии прицела.',
   },
   coffin: { name: 'Гроб', floor: 1, hp: 7, r: 7, speed: 0, reach: 0, dmg: 0, fig: 30, prop: true, txt: 'Гробовщик уложил сюда павшего. Через два хода тот встанет, если не разбить гроб.', acc: 'Гроб' },
   imp: { name: 'Бес-кочегар', floor: 2, hp: 7, r: 6, speed: 52, reach: 28, dmg: 3, fig: 24, fire: true, txt: 'Шустрый, поджигает: герой горит и в следующий ход теряет ещё 2.', acc: 'Беса-кочегара' },

@@ -3359,13 +3359,16 @@ describe('enemies by map row, the new enemies and the elite\'s reward', () => {
     expect(g.S.mobs.filter(m => m.hp > 0)).toEqual([u]);
   });
 
-  it('the banshee\'s scream chills every hero standing', () => {
+  it('the banshee\'s scream takes the aiming line off every hero standing for one turn', () => {
     const g = room(1, [['banshee', 2, 2]]);
     g.S.turn = 2;
     g.pickIntents();
     expect(g.S.mobs[0].intent!.t).toBe('scream');
     enemyTurn(g);
-    for (const h of g.alive()) expect(h.chill).toBeGreaterThan(0);
+    for (const h of g.alive()) { expect(h.daze).toBeGreaterThan(0); expect(h.chill).toBe(0); }
+    // the next enemy turn has no scream, and the ringing is gone by the heroes' turn after it
+    enemyTurn(g);
+    for (const h of g.alive()) expect(h.daze).toBe(0);
   });
 
   it('the smasher\'s hammer comes down on the square marked round a hero a turn ahead: a hero who moved off it is spared', () => {

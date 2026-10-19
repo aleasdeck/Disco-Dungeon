@@ -418,7 +418,7 @@ export class Hud {
       const pie = cols.map((c, k) => `${c} ${(k / n) * 360}deg ${((k + 1) / n) * 360}deg`).join(',');
       return { badge: `<span class="ib all" style="--pie:conic-gradient(${pie})">${it.dmg}</span>`, txt: `${it.chill ? 'Метель' : 'Удар'} по всем на ${it.dmg}` + (it.chill ? ', морозит' : '') };
     }
-    const sp = { charge: ['fuse', `Поджигает фитиль${out ? ' и идёт на линию огня' : ''}: в следующий ход бомба на двойной урон`], heal: ['heal', `Лечит союзника на ${it.dmg}`], summon: ['summon', 'Призывает подмогу на светящийся круг'], heat: ['heat', 'Раскаляет пол: отмеченные клетки станут лавой'], scream: ['chill', 'Визг: на следующий ход все броски отряда слабее'] }[it.t];
+    const sp = { charge: ['fuse', `Поджигает фитиль${out ? ' и идёт на линию огня' : ''}: в следующий ход бомба на двойной урон`], heal: ['heal', `Лечит союзника на ${it.dmg}`], summon: ['summon', 'Призывает подмогу на светящийся круг'], heat: ['heat', 'Раскаляет пол: отмеченные клетки станут лавой'], scream: ['daze', 'Визг: в следующий ход у всего отряда нет линии прицела'] }[it.t];
     return sp ? { badge: `<span class="ib sp">${icon(sp[0])}</span>`, txt: sp[1] } : { badge: '', txt: '' };
   }
 
@@ -521,6 +521,7 @@ export class Hud {
 
     const st: Status[] = [];
     if (h.chill > 0) st.push({ k: 'chill', n: h.chill, t: `Озноб: бросок слабее ещё ${turns(h.chill)}` });
+    if (h.daze > 0) st.push({ k: 'daze', n: h.daze, t: `Звон в ушах: без линии прицела ещё ${turns(h.daze)}` });
     if (h.fire > 0) st.push({ k: 'fire', n: 2, t: 'Горит: в ход врагов потеряет 2' });
     $('fStatus').innerHTML = statusHtml(st);
 

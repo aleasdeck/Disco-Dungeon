@@ -31,6 +31,8 @@ export interface HeroState {
   flash: number;
   /** Turns left with weaker throws, from a chilling hit. */
   chill: number;
+  /** Turns left without the aiming line, from a banshee's scream (`dazeHero`). */
+  daze: number;
   /** Burning: takes 2 damage at the start of the next enemy turn. */
   fire: number;
   /** The ability is on for the rest of this turn: the discs thrown now shield, set on fire or keep their speed. */
@@ -309,7 +311,7 @@ export function newParty(picks: number[] = [0, 1, 2], run = 0): HeroState[] {
 function heroStart(hp: number) {
   return {
     hp, max: hp, shield: 0, up: { m: 0, pw: 0, e: 0 }, discs: HAND_START,
-    pad: null as number | null, at: null as Pt | null, from: null as Pt | null, leap: 0, hand: HAND_START, thrown: false, flash: 0, chill: 0, fire: 0, boost: false, sparks: 0, arts: [] as string[],
+    pad: null as number | null, at: null as Pt | null, from: null as Pt | null, leap: 0, hand: HAND_START, thrown: false, flash: 0, chill: 0, daze: 0, fire: 0, boost: false, sparks: 0, arts: [] as string[],
   };
 }
 
@@ -394,7 +396,7 @@ export class Game {
       if (h.hp > 0 && full > boon && h.sparks < AB_COST) this.pop(h, 'battery');
       if (h.hp > 0 && cup) this.pop(h, 'cup');
       Object.assign(h, {
-        pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? this.handOf(h) : 0, thrown: false, shield: h.hp > 0 ? shield + cup : 0, flash: 0, chill: 0, fire: 0,
+        pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? this.handOf(h) : 0, thrown: false, shield: h.hp > 0 ? shield + cup : 0, flash: 0, chill: 0, daze: 0, fire: 0,
         boost: false, sparks: Math.min(AB_COST, Math.max(h.sparks, full)), boomed: 0, lucky: false,
       });
     }
@@ -2183,8 +2185,8 @@ export class Game {
       m.flash = 0.12; S.shake = 0.2;
       this.sfx('slam');
       this.float(m.x, m.y - 10, 'ВИЗГ', '#bfe6ff');
-      this.note(`${m.name} ${did(d, 'завизжал')}: броски отряда слабее`);
-      for (const h of this.alive()) this.chillHero(h);
+      this.note(`${m.name} ${did(d, 'завизжал')}: у отряда звенит в ушах, линии прицела нет`);
+      for (const h of this.alive()) this.dazeHero(h);
     } else if (it.t === 'smash') {
       m.flash = 0.12; S.shake = 0.35;
       this.sfx('slam');
@@ -2280,6 +2282,14 @@ export class Game {
     if (p) this.float(p.x, p.y - 8, 'озноб', '#bfe6ff');
   }
 
+  /** A scream rings in the hero's ears through its next turn: it throws without the aiming line, as under «Стробоскоп». */
+  private dazeHero(h: HeroState) {
+    if (h.hp <= 0) return;
+    h.daze = 2;
+    const p = this.spot(h);
+    if (p) this.float(p.x, p.y - 8, 'звон в ушах', '#e8d6ff');
+  }
+
   private nextTurn() {
     const S = this.S;
     // the ore cave also ends once its turns are up
@@ -2293,7 +2303,7 @@ export class Game {
     for (const b of S.bombs) if (--b.left <= 0) { this.float(b.x, b.y - 10, 'пшик', '#c9c2b4'); this.burst(b.x, b.y, '#9a948a', 8); }
     S.bombs = S.bombs.filter(b => b.left > 0);
     for (const h of S.heroes) if (h.hp > 0 && has(h, 'cup')) this.pop(h, 'cup');
-    for (const h of S.heroes) { h.shield = h.hp > 0 && has(h, 'cup') ? ART.cup : 0; h.thrown = false; h.boost = false; h.hand = h.hp > 0 ? this.handOf(h) : 0; if (h.chill > 0) h.chill--; }
+    for (const h of S.heroes) { h.shield = h.hp > 0 && has(h, 'cup') ? ART.cup : 0; h.thrown = false; h.boost = false; h.hand = h.hp > 0 ? this.handOf(h) : 0; if (h.chill > 0) h.chill--; if (h.daze > 0) h.daze--; }
     S.phase = 'throw';
     this.sfx('yourTurn');
     this.pickActive();

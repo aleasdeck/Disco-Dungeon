@@ -1755,8 +1755,9 @@ export class SceneRenderer {
     // one straight line up to the first wall, block or mob; ricochets are left for the player to judge, unless the hero
     // wears «Рентген-очки»: then the line runs on through three bounces, with a ring at each
     const xray = has(h, 'xray'), pr = g.predict(h, aim.dx, aim.dy, xray ? ART.xrayBounces : 0);
-    // «Стробоскоп», an event's curse: the fight goes without the line, as with it turned off in the settings
-    if (pr.path.length < 2 || !settings.aimLine || g.S.spec.strobe) return;
+    // «Стробоскоп», an event's curse: the fight goes without the line, as with it turned off in the settings;
+    // a banshee's scream takes it off the screamed-at hero for a turn
+    if (pr.path.length < 2 || !settings.aimLine || g.S.spec.strobe || h.daze > 0) return;
     // thick enough to read on a phone at any zoom: at least ~4 screen pixels
     const lw = Math.max(2.4, 4 / this.cam.zoom);
     const pts = (xray ? pr.path : [pr.path[0], pr.path[pr.path.length - 1]]).map(q => P(...q, 2));
