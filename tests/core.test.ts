@@ -166,7 +166,8 @@ describe('difficulty along a floor', () => {
       expect(a.shape).toBe('rect');
       expect(a.pits).toHaveLength(0);
       expect(a.gw * a.gh).toBeLessThan(z.gw * z.gh);
-      expect(a.mobs.length).toBeLessThan(z.mobs.length);
+      // since the map has 4–5 fights a path the last rooms hold 2–3 enemies, so one may hold no more than the first
+      expect(a.mobs.length).toBeLessThanOrEqual(z.mobs.length);
       expect(a.haz.size).toBeLessThan(z.haz.size);
       expect(z.pits.length).toBeGreaterThan(0);
     }

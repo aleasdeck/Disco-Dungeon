@@ -272,12 +272,13 @@ export interface Tier {
   mobs: Range;
 }
 
+// with 4–5 fights on every path (thread «Карта и элита») the rooms from the third row on hold 2–3 enemies, not 3–4
 export const TIERS: Tier[] = [
   { gw: [10, 11], gh: [8, 9], shapes: ['rect'], blocks: [1, 1], blockKinds: 1, pits: [0, 0], pitCells: 0, haz: [0, 0], mobs: [2, 2] },
   { gw: [11, 12], gh: [9, 9], shapes: ['rect', 'corner'], blocks: [1, 2], blockKinds: 3, pits: [0, 0], pitCells: 0, haz: [1, 1], mobs: [2, 3] },
-  { gw: [12, 13], gh: [10, 10], shapes: ['corner', 'alcove'], blocks: [1, 2], blockKinds: 4, pits: [0, 1], pitCells: 2, haz: [1, 2], mobs: [2, 3] },
-  { gw: [13, 14], gh: [10, 11], shapes: ['alcove', 'funnel', 'corner'], blocks: [2, 2], blockKinds: 4, pits: [0, 1], pitCells: 4, haz: [2, 3], mobs: [3, 3] },
-  { gw: [14, 15], gh: [11, 12], shapes: ['funnel', 'cross', 'alcove'], blocks: [2, 3], blockKinds: 5, pits: [1, 2], pitCells: 9, haz: [3, 3], mobs: [3, 4] },
+  { gw: [12, 13], gh: [10, 10], shapes: ['corner', 'alcove'], blocks: [1, 2], blockKinds: 4, pits: [0, 1], pitCells: 2, haz: [1, 2], mobs: [2, 2] },
+  { gw: [13, 14], gh: [10, 11], shapes: ['alcove', 'funnel', 'corner'], blocks: [2, 2], blockKinds: 4, pits: [0, 1], pitCells: 4, haz: [2, 3], mobs: [2, 3] },
+  { gw: [14, 15], gh: [11, 12], shapes: ['funnel', 'cross', 'alcove'], blocks: [2, 3], blockKinds: 5, pits: [1, 2], pitCells: 9, haz: [3, 3], mobs: [2, 3] },
 ];
 /** The boss fights among as many columns, holes and hazards as the last room before it; its holes stay small enough to walk round. */
 export const BOSS_TIER: Tier = { gw: [14, 15], gh: [12, 12], shapes: ['rect', 'cross'], blocks: [3, 3], blockKinds: 5, pits: [1, 2], pitCells: 4, haz: [3, 3], mobs: [3, 3] };

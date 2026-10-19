@@ -254,8 +254,8 @@ export const COFFIN_TURNS = 2;
 export const COFFIN_REACH = 5 * TILE;
 /** The grinder hones enemies this close to it (two cells). */
 export const HONE_REACH = 2 * TILE + 4;
-/** The door shield covers this much on each side of the way its holder faces (cosine of the half angle: ±60°). */
-export const SHIELD_COS = 0.5;
+/** The door shield covers this much on each side of the way its holder faces (cosine of the half angle: ±45°). */
+export const SHIELD_COS = 0.7;
 /** The hammer's blow on its square hits this much harder than a plain strike. */
 export const SMASH_MUL = 1.5;
 
