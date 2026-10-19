@@ -1,0 +1,3 @@
+Straight top-down view of a rough flat natural rock surface filling the whole frame edge to edge, a few big angular stone facets with bevelled edges, a few dark cracks and small chips, thick black outlines, flat cel shading, 90s adult TV cartoon background art, simple shapes, low detail, flat cool slate grey stone in two flat tones, no perspective, no shadow, no text
+
+NEGATIVE: perspective, isometric, side view, 3d render, realistic, photo, gradients, hatching, noise, grain, painterly, bricks, masonry, mortar, tiles, grid, gold, veins, crystals, objects, characters, people, text, letters, watermark, border, frame, vignette, rounded square, background

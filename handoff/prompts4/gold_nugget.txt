@@ -1,0 +1,5 @@
+2D cartoon game icon, one chunky shiny gold nugget with a lumpy rounded shape, bright yellow gold with an orange shade and two small white glints, seen from the front.
+90s adult TV cartoon, flat cel shading, thick black outlines, simple shapes, low detail, bold silhouette.
+Single object, centered, plain white background, no shadow, no text
+
+NEGATIVE: realistic, photorealistic, 3d render, highly detailed, gradients, hatching, painterly, coin, coins, bar, ingot, crystal, gem, diamond, text, letters, watermark, cast shadow, floor, rock, stone
