@@ -1002,7 +1002,17 @@ describe('placement and discs', () => {
     g.bank.ore = 100;
     for (let k = 0; k < 9 && g.discCost(h); k++) g.buyDisc();
     expect(h.discs).toBe(HAND_MAX);
-    expect(g.bank.ore).toBe(100 - HAND_COST[0] - HAND_COST[1]);
+    expect(g.bank.ore).toBe(100 - HAND_COST.reduce((a, c) => a + c, 0));
+  });
+
+  it('sells two discs a turn at most, a third only comes with «Третья рука»', () => {
+    const g = fresh(), h = g.hero;
+    g.forge = 1;
+    g.bank.ore = 100;
+    for (let k = 0; k < 9 && g.discCost(h); k++) g.buyDisc();
+    expect([h.discs, g.handOf(h)]).toEqual([2, 2]);
+    h.arts = ['hand'];
+    expect(g.handOf(h)).toBe(3);
   });
 
   it('prices an extra disc above any single stat level', () => {

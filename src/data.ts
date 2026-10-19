@@ -7,12 +7,13 @@ export const ENEMY_BASE = '#b8323f';
 export const TILE = 16;
 export const WALL_H = 34;
 /**
- * Discs each hero throws per turn at the start of a run, the most they can upgrade to, and what each extra disc costs in ore.
- * A second disc doubles a hero's throws, so it costs far more than a level of any stat.
+ * Discs each hero throws per turn at the start of a run, the most the blacksmith sells, and what each extra disc costs in ore.
+ * A second disc doubles a hero's throws, so it costs far more than a level of any stat. A third comes only with the trophy
+ * «Третья рука».
  */
 export const HAND_START = 1;
-export const HAND_MAX = 3;
-export const HAND_COST = [8, 16];
+export const HAND_MAX = 2;
+export const HAND_COST = [12];
 export const AB_COST = 3;
 /**
  * An ability works through the hero's discs: it is switched on for the rest of the turn and every disc thrown after it carries it.

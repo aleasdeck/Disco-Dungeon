@@ -273,7 +273,7 @@ export function fxParts(fx: Fx[], solo: boolean): { t: string; good: boolean }[]
     if (f.k === 'rage') return { t: `Враги следующего боя бьют на ${f.n} сильнее`, good: false };
     if (f.k === 'smoke') return { t: 'Дым-машина: следующий бой в дыму', good: false };
     if (f.k === 'strobe') return { t: 'Стробоскоп: следующий бой без прицела', good: false };
-    if (f.k === 'disc') return { t: `+1 диск за ход${each}`, good: true };
+    if (f.k === 'disc') return { t: `Второй диск за ход${each}`, good: true };
     if (f.k === 'art') return { t: solo ? 'Трофей: один из трёх на выбор' : 'Трофей каждому: три на выбор', good: true };
     const u = f.stat && UPS.find(o => o.k === f.stat);
     return { t: u ? `+1 уровень «${u.name}»${each}` : `+1 уровень случайного улучшения${each}`, good: true };
