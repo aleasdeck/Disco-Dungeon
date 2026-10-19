@@ -4,7 +4,7 @@
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, CRIT_COS, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, ZAP, ZAP_REACH, frostVuln, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
 import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { mulberry32 } from './rng';
-import { has } from './artifacts';
+import { has, type ArtKey } from './artifacts';
 import type { Sfx } from './audio/sfx';
 import { caveTurns, cellAt, cellCentre, generate, hazKey, isFloor, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
 
@@ -45,6 +45,8 @@ export interface HeroState {
   boomed?: number;
   /** «Счастливый носок»: it has already saved the hero from a deadly blow in this room. */
   lucky?: boolean;
+  /** How many times each of its trophies has gone off this run: the snapshots carry the counts, and the trophy's token by the portrait flashes on every screen. */
+  pops?: Record<string, number>;
   /** What the hero has done this run, for the player's statistics; saves from before them have none. */
   tally?: Tally;
 }
@@ -114,6 +116,8 @@ export interface Disc {
   beams?: number;
   /** «Бумеранг»: a miss that went back into the hand; it is off the table and nobody walks over to it. */
   back?: boolean;
+  /** «Надувные труселя»: the disc has floated over a hole already (the trophy's token flashes once a throw). */
+  floated?: boolean;
   /**
    * One of the two side discs of the card sharp's fan, a phantom: smaller and weaker, its miss goes unremarked, and a hole
    * or a hazard it ends up in doesn't hurt him.
@@ -363,6 +367,8 @@ export class Game {
     for (const h of this.party) {
       // «Батарейка» fills the sparks at the start of every fight, «Ракушка» shields from the first blow on
       const full = has(h, 'battery') ? AB_COST : boon, cup = has(h, 'cup') ? ART.cup : 0;
+      if (h.hp > 0 && full > boon && h.sparks < AB_COST) this.pop(h, 'battery');
+      if (h.hp > 0 && cup) this.pop(h, 'cup');
       Object.assign(h, {
         pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? this.handOf(h) : 0, thrown: false, shield: h.hp > 0 ? shield + cup : 0, flash: 0, chill: 0, fire: 0,
         boost: false, sparks: Math.min(AB_COST, Math.max(h.sparks, full)), boomed: 0, lucky: false,
@@ -715,6 +721,7 @@ export class Game {
     this.sfx('ability', 0.7, h.i);
     if (this.send) { this.send({ k: 'ability', h: h.i }); return; }
     h.sparks -= this.abCost(h);
+    if (has(h, 'energy')) this.pop(h, 'energy');
     h.boost = true;
     tallyOf(h).abs++;
     const p = this.spot(h);
@@ -1266,6 +1273,12 @@ export class Game {
     this.S.floats.push({ x, y, txt, col, t: 0 });
   }
 
+  /** A trophy has just done its thing: its token by the portrait flashes (the host counts, the snapshots bring the count over). */
+  private pop(h: HeroState, k: ArtKey) {
+    if (this.send) return;
+    (h.pops ??= {})[k] = (h.pops[k] ?? 0) + 1;
+  }
+
   burst(x: number, y: number, col: string, n = 8) {
     for (let i = 0; i < n; i++) {
       const a = this.fx() * Math.PI * 2, s = 20 + this.fx() * 60;
@@ -1384,8 +1397,9 @@ export class Game {
       const hl = Math.min(ART.fangs, h.max - h.hp);
       h.hp += hl;
       if (p) this.float(p.x, p.y - 4, `+${hl} HP`, '#7be39a');
+      this.pop(h, 'fangs');
     }
-    if (has(h, 'piggy')) { this.bank.ore++; this.mined++; tallyOf(h).ore++; this.float(m.x, m.y + 8, '+1 руда', '#ffb070'); }
+    if (has(h, 'piggy')) { this.bank.ore++; this.mined++; tallyOf(h).ore++; this.float(m.x, m.y + 8, '+1 руда', '#ffb070'); this.pop(h, 'piggy'); }
   }
 
   /** A burning enemy falls: what is left of its fire leaps onto the nearest enemy still standing. */
@@ -1426,7 +1440,7 @@ export class Game {
     const dmg = n - blk, had = h.hp;
     h.hp -= dmg;
     // «Счастливый носок»: once a room a deadly blow leaves the hero standing on 1
-    if (h.hp <= 0 && dmg > 0 && has(h, 'sock') && !h.lucky) { h.hp = 1; h.lucky = true; this.float(p.x, p.y - 14, 'носок спас!', '#ffe27a'); }
+    if (h.hp <= 0 && dmg > 0 && has(h, 'sock') && !h.lucky) { h.hp = 1; h.lucky = true; this.float(p.x, p.y - 14, 'носок спас!', '#ffe27a'); this.pop(h, 'sock'); }
     const t = tallyOf(h);
     t.hurt += Math.min(dmg, had);
     if (h.hp <= 0) t.falls++;
@@ -1508,6 +1522,7 @@ export class Game {
     }
     if (!to) return;
     d.beams = (d.beams ?? 0) + 1;
+    this.pop(d.hero, 'mirrorball');
     this.bolt(d.x, d.y, 3, to.x, to.y, 14, 0.7, true);
     this.hurtMob(to, ART.beamDmg, '#ffe27a', true, 0.4, d.hero);
   }
@@ -1535,6 +1550,7 @@ export class Game {
     d.vx = d.vy = 0;
     h.hand++;
     h.boomed = this.S.turn;
+    this.pop(h, 'boomerang');
     this.float(d.x, d.y, 'вернулся!', '#ffe27a');
     this.burst(d.x, d.y, h.def.col, 8);
     return true;
@@ -1561,7 +1577,9 @@ export class Game {
       if (d.x > S.Wx - d.r) { d.x = S.Wx - d.r; d.vx = -d.vx * this.keep(d); this.bounced(d, v0, -1, 0); }
       if (d.y > S.Wy - d.r) { d.y = S.Wy - d.r; d.vy = -d.vy * this.keep(d); this.bounced(d, v0, 0, -1); }
       // «Надувные труселя»: the disc floats over the holes and never drops in
-      if (!has(d.hero, 'undies') && pitAt(S.pits, d.x, d.y)) {
+      const pit = pitAt(S.pits, d.x, d.y);
+      if (pit && !d.floated && !d.fan && has(d.hero, 'undies')) { d.floated = true; this.pop(d.hero, 'undies'); }
+      if (!has(d.hero, 'undies') && pit) {
         d.fall = 0.001; d.vx = d.vy = 0;
         this.sfx('pit');
         // a phantom just melts away down there
@@ -1599,6 +1617,7 @@ export class Game {
         // «Золотая челюсть» bites the whole vein out at once, takes as much of the crystal as everyone has room for,
         // and eats as many mushrooms as it takes to heal up (one at the least)
         const all = has(h, 'denture');
+        if (all) this.pop(h, 'denture');
         if (n.k === 'ore') { const k = all ? n.left : 1, got = q * k; n.left -= k; this.bank.ore += got; this.mined += got; tallyOf(h).ore += got; this.float(n.x, n.y, `+${got} руда`, '#ffb070'); }
         // sparks go to every hero still standing, whoever threw the disc, each up to what one ability costs; the crystal
         // loses only what was taken, so sparks nobody had room for stay in it for later
@@ -1624,16 +1643,20 @@ export class Game {
         if (!this.solid(m)) continue;
         const h = d.hero, v = Math.hypot(d.vx, d.vy), vn = this.bounceStatic(d, m, d.rico > 0 ? 1 : has(h, 'insoles') ? ART.insolesE : MOB_E);
         if (vn <= 5) continue;
+        if (d.rico <= 0 && has(h, 'insoles')) this.pop(h, 'insoles');
         if (d.rico > 0) d.rico--;
         let dmg = Math.ceil((d.m * vn) / 120);
         // straight from the rune into the enemy, square on: a precise throw hits much harder («Бильярдный мел»: off the walls too)
         const crit = (d.bounces === 0 || has(h, 'chalk')) && d.hits === 0 && vn >= v * CRIT_COS;
         d.hits++;
         if (crit) dmg = Math.ceil(dmg * (has(h, 'glasseye') ? ART.critBig : CRIT));
+        if (crit && has(h, 'glasseye')) this.pop(h, 'glasseye');
+        if (crit && d.bounces > 0 && has(h, 'chalk')) this.pop(h, 'chalk');
         if (h.def.key === 'ricochet') dmg += Math.min(d.bounces, 4);
         // «Скрипучая пружина»: every bounce on the way adds a point, Ricochet's own on top
-        if (has(h, 'spring')) dmg += Math.min(d.bounces, ART.springMax);
+        if (has(h, 'spring') && d.bounces > 0) { dmg += Math.min(d.bounces, ART.springMax); this.pop(h, 'spring'); }
         if (d.charged) { dmg *= this.ring(h); d.charged = false; }
+        if (has(h, 'opener') && m.armor && dmg < m.armor && m.hp > 0) this.pop(h, 'opener');
         const t = tallyOf(h);
         if (crit && m.hp > 0) { this.float(m.x, m.y - 24, 'ТОЧНО!', '#ffe27a'); this.sfx('crit'); t.crits++; }
         t.rico = Math.max(t.rico, d.bounces);
@@ -1668,6 +1691,7 @@ export class Game {
       // own discs ring off each other too, and its discs deal triple
       if (-rv > 40 && (a.hero !== b.hero || has(a.hero, 'bells'))) {
         a.charged = b.charged = true;
+        for (const o of new Set([a.hero, b.hero])) if (has(o, 'bells')) this.pop(o, 'bells');
         const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, ka = this.ring(a.hero), kb = this.ring(b.hero);
         this.float(mx, my, ka === kb ? `ЗВОН ×${ka}` : `ЗВОН ×${Math.min(ka, kb)}/×${Math.max(ka, kb)}`, '#b893ff');
         this.burst(mx, my, '#b893ff', 10);
@@ -1710,9 +1734,12 @@ export class Game {
       if (d.fan) continue;
       if (!d.hits) this.float(d.x, d.y, 'мимо', '#c7cbe0');
       // «Надувные труселя»: spikes and lava under the disc don't hurt
-      if (S.haz.has(hazKey(Math.floor(d.x / 16), Math.floor(d.y / 16))) && !has(d.hero, 'undies')) {
-        this.float(d.x, d.y, S.biome.haz === 'lava' ? 'лава!' : 'шипы!', '#ff4d6a');
-        this.hurtHero(d.hero, S.biome.hazDmg);
+      if (S.haz.has(hazKey(Math.floor(d.x / 16), Math.floor(d.y / 16)))) {
+        if (has(d.hero, 'undies')) this.pop(d.hero, 'undies');
+        else {
+          this.float(d.x, d.y, S.biome.haz === 'lava' ? 'лава!' : 'шипы!', '#ff4d6a');
+          this.hurtHero(d.hero, S.biome.hazDmg);
+        }
       }
     }
     this.regroup();
@@ -2067,6 +2094,7 @@ export class Game {
         // «Ёж в штанах» pricks whoever strikes up close
         if (!isRanged(m.k) && has(h, 'hedgehog')) {
           this.float(m.x, m.y - 12, 'ёж!', '#c9a86a');
+          this.pop(h, 'hedgehog');
           this.hurtMob(m, ART.hedgehog, '#c9a86a', true, 0.5);
           this.note(`Ёж уколол ${d.acc} на ${ART.hedgehog}` + (m.hp <= 0 ? `, ${did(d, 'пал')}` : ''));
         }
@@ -2102,6 +2130,7 @@ export class Game {
     S.gas = S.gas.filter(g => --g.left > 0);
     for (const b of S.bombs) if (--b.left <= 0) { this.float(b.x, b.y - 10, 'пшик', '#c9c2b4'); this.burst(b.x, b.y, '#9a948a', 8); }
     S.bombs = S.bombs.filter(b => b.left > 0);
+    for (const h of S.heroes) if (h.hp > 0 && has(h, 'cup')) this.pop(h, 'cup');
     for (const h of S.heroes) { h.shield = h.hp > 0 && has(h, 'cup') ? ART.cup : 0; h.thrown = false; h.boost = false; h.hand = h.hp > 0 ? this.handOf(h) : 0; if (h.chill > 0) h.chill--; }
     S.phase = 'throw';
     this.sfx('yourTurn');

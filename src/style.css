@@ -1172,3 +1172,55 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
   -webkit-mask: var(--ui-pf_ink) center / 100% 100% no-repeat; mask: var(--ui-pf_ink) center / 100% 100% no-repeat;
 }
 .art-pf_board.art-pf_ink .portrait canvas { inset: 0; width: 100%; height: 100%; }
+
+/* ---------- the bosses' trophies (Vladislav's pick, 2026-10-19): a strip of board over the portrait with three die-cut
+   sockets, like the insert of a board game box; a trophy lies in its socket as a kraft token with its sticker, an empty
+   one shows a «?». A token that has done its one go for the fight or the turn turns grey; one that goes off jumps once.
+   A tap (a hover with the mouse) shows what it does. Nowhere else: the allies' trophies are on their cards, from the faces */
+:root { --tr-s: 42px; --tr-g: 6px; --tr-px: 6px; --tr-pt: 10px; --tr-pb: 6px; --tr-up: 6px; }
+@media (max-height: 520px) and (orientation: landscape) { :root { --tr-s: 24px; --tr-g: 3px; --tr-px: 3px; --tr-pt: 6px; --tr-pb: 3px; --tr-up: 4px; } }
+@media (orientation: portrait) and (max-width: 700px) { :root { --tr-s: 28px; --tr-g: 3px; --tr-px: 2px; --tr-pt: 6px; --tr-pb: 3px; --tr-up: 4px; } }
+:root { --tr-h: calc(var(--tr-s) + var(--tr-pt) + var(--tr-pb) + var(--tr-up)); }
+.trophies {
+  left: 0; bottom: calc(var(--pf-h) + var(--tr-up)); display: flex; gap: var(--tr-g);
+  padding: var(--tr-pt) var(--tr-px) var(--tr-pb); isolation: isolate; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.4));
+}
+.trophies::before {
+  content: ''; position: absolute; inset: 0; z-index: -1;
+  background: #3a2b20 var(--grain) 0 0 / 160px; background-blend-mode: overlay; clip-path: polygon(0 14%, 30% 0, 100% 8%, 98% 100%, 2% 96%);
+}
+.sock {
+  position: relative; flex: none; width: var(--tr-s); height: var(--tr-s); padding: 0; border: 0; border-radius: 50%; cursor: pointer;
+  background: #120c09; box-shadow: inset 0 3px 4px rgba(0, 0, 0, 0.9), 0 1px 0 rgba(255, 230, 190, 0.18);
+}
+.sock.empty::after { content: ''; position: absolute; inset: 12%; border-radius: 50%; border: 1.5px dashed rgba(201, 168, 119, 0.45); }
+.sock.empty b { position: absolute; inset: 0; display: grid; place-items: center; font: 700 calc(var(--tr-s) * 0.38)/1 Oswald, sans-serif; color: rgba(201, 168, 119, 0.5); }
+.tok {
+  position: absolute; inset: 0; display: grid; place-items: center; border-radius: 50%;
+  background: #c9a877 var(--grain) 0 0 / 120px; background-blend-mode: overlay;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.5), inset 0 0 0 1.5px rgba(70, 45, 20, 0.35), inset 0 -3px 0 rgba(70, 45, 20, 0.18);
+}
+.tok .art, .tok .ico { width: 80%; height: 80%; object-fit: contain; filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.3)); }
+.sock.spent .tok { background-color: #6f604c; }
+.sock.spent .tok .art { filter: grayscale(1) brightness(0.62) contrast(0.9); opacity: 0.8; }
+.sock.sel { box-shadow: 0 0 0 3px var(--gold-1), inset 0 3px 4px rgba(0, 0, 0, 0.9); }
+.sock:focus-visible { outline: 3px solid var(--gold-1); outline-offset: 2px; }
+.corner.dead .trophies { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.4)) grayscale(1) brightness(0.6); }
+/* the hero's card from the portrait opens over the sockets */
+.corner .hero-card { bottom: calc(var(--pf-h) + var(--tr-h) + 8px); }
+
+.art-tip { width: 270px; }
+.art-tip .mc-head .tok { position: relative; flex: none; width: 44px; height: 44px; }
+.art-tip .mc-head b { color: var(--gold); }
+.art-tip p { margin: 6px 0 0; font-size: 18px; line-height: 1.1; color: var(--text); }
+.art-tip small { display: block; margin-top: 5px; font-size: 15px; line-height: 1.1; color: var(--muted); }
+.art-tip .at-state { display: inline-block; margin-top: 7px; padding: 2px 8px; font: 600 11px/1.4 Oswald, sans-serif; color: #2a1a0d; background: #c9a877; }
+/* a little tail down to the token it speaks of */
+.art-tip::after { content: ''; position: absolute; left: var(--ax, 30px); bottom: -9px; width: 16px; height: 10px; background: #2a201a; clip-path: polygon(0 0, 100% 0, 50% 100%); }
+@media (orientation: portrait) and (max-width: 700px) { .art-tip { width: min(260px, calc(100vw - 16px)); } }
+@media (max-height: 520px) and (orientation: landscape) {
+  .art-tip { width: 250px; padding-top: 8px; padding-bottom: 8px; }
+  .art-tip .mc-head .tok { width: 32px; height: 32px; }
+  .art-tip p { margin-top: 4px; font-size: 15px; }
+  .art-tip small { margin-top: 3px; font-size: 13px; }
+}

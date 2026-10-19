@@ -9,7 +9,7 @@ import type { Mob } from './room';
 import { BASE_TH, drawHeroFigure, drawMiniature, drawMobFigure } from './draw/figures';
 import { lg } from './draw/util';
 import { art, artIcon, fillIcons, icon } from './icons';
-import { artDef } from './artifacts';
+import { SOCKETS, artDef } from './artifacts';
 import { hl } from './hl';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -169,8 +169,13 @@ export class Hud {
   private pinned = false;
   /** The map room whose window is up (an event, the camp): the strip stays in sight over it and speaks of that room, not the room behind. */
   private at: { floor: number; type: RoomType } | null = null;
-  /** The hero (by index) whose card a tap on the strip's face opened over that window. */
+  /** The hero (by index) whose card a tap on its face on the strip opened. */
   private peek = -1;
+  /** The trophy socket whose hint is up, by its place, and whether a tap pinned it (a hover hint goes with the pointer). */
+  private tip = -1;
+  private tipPinned = false;
+  /** How many times each hero's trophies had gone off when last looked at (Game.pop): a count that grows flashes the token. */
+  private popSeen = new Map<number, Record<string, number>>();
   /** Online: the name of the player whose hero this is. */
   nameOf: (i: number) => string | null = () => null;
   /** This screen's own hero: the one the blacksmith's window sells upgrades for (online not the ones the host stands in for). */
@@ -220,9 +225,21 @@ export class Hud {
       const i = Number(li.dataset.m);
       if (this.pinned && this.card === i) { this.pinned = false; this.closeCard(); } else { this.pinned = true; this.openCard(i); }
     });
+    // the trophies over the portrait: hover shows a hint with the mouse, a tap pins it until the next tap elsewhere
+    const arts = $('fArts'), sock = (e: Event) => (e.target as HTMLElement).closest<HTMLElement>('.sock');
+    arts.addEventListener('pointerover', e => { const b = sock(e); if (b && e.pointerType === 'mouse' && !this.tipPinned) this.openTip(Number(b.dataset.k)); });
+    arts.addEventListener('pointerleave', () => { if (!this.tipPinned) this.closeTip(); });
+    arts.addEventListener('click', e => {
+      const b = sock(e);
+      if (!b) return;
+      e.stopPropagation();
+      const k = Number(b.dataset.k);
+      if (this.tipPinned && this.tip === k) { this.tipPinned = false; this.closeTip(); } else { this.tipPinned = true; this.toggleCard(false); this.openTip(k); }
+    });
     document.addEventListener('click', e => {
       const t = e.target as HTMLElement;
       if (this.pinned && !t.closest('#mobCard')) { this.pinned = false; this.closeCard(); }
+      if (this.tipPinned && !t.closest('#artTip')) { this.tipPinned = false; this.closeTip(); }
       if (!t.closest('#logPanel')) this.toggleLog(false);
       if (!t.closest('#ups')) this.toggleCard(false);
       if (!t.closest('#heroPeek')) this.closeHero();
@@ -238,6 +255,8 @@ export class Hud {
     this.at = at;
     document.documentElement.classList.toggle('at-window', !!at);
     if (!at) this.closeHero();
+    this.tipPinned = false;
+    this.closeTip();
     if (this.g.S) this.refresh();
   }
 
@@ -264,13 +283,13 @@ export class Hud {
       b.setAttribute('aria-label', h.def.name);
       b.innerHTML = `<canvas></canvas><b class="who"></b><span class="a-hp"><i></i><s></s><em></em></span><span class="tick">${icon('check')}</span><span class="off">${icon('plug')}</span>`;
       drawPortrait(b.querySelector('canvas')!, h);
-      // over an event or the camp a face opens its hero's card; in a fight it picks the hero to throw with
+      // a face opens its hero's card, with the trophies on it (Vladislav: the allies' trophies are seen there); only in a
+      // fight a face of another hero this screen plays (the host's for players who left) picks it to throw with instead
       b.addEventListener('click', e => {
-        if (!this.at) { this.g.select(h.i); return; }
+        if (!this.at && h !== this.g.hero && this.g.canControl(h)) { this.g.select(h.i); return; }
         e.stopPropagation();
         if (this.peek === h.i) this.closeHero(); else this.openHero(h.i);
       });
-      b.disabled = !this.at && !this.g.canControl(h);
       box.appendChild(b);
     }
     this.lastPortrait = '';
@@ -318,6 +337,7 @@ export class Hud {
     this.queue();
     this.boss();
     this.corner();
+    this.trophies();
     this.turnButton();
     this.log();
     if (this.card >= 0) this.openCard(this.card);
@@ -334,7 +354,6 @@ export class Hud {
     for (const o of g.party) {
       const t = $<HTMLButtonElement>('ally' + o.i);
       if (!t) continue;
-      t.disabled = !ev && !g.canControl(o);
       t.classList.toggle('me', o === g.hero);
       t.classList.toggle('dead', o.hp <= 0);
       // online: the player's name on their hero, greyed with a pulled plug while they are disconnected
@@ -560,15 +579,17 @@ export class Hud {
       }).join('')}</div>` : '');
   }
 
-  /** Any hero's card from its face on the strip over an event or the camp: the face, the health in numbers, then the same card. */
+  /** Any hero's card from its face on the strip: the face, the health in numbers, then the same card as from the portrait. */
   private openHero(i: number) {
     const h = this.g.party.find(o => o.i === i), head = $('ally' + i), card = $('heroPeek');
     if (!h || !head) { this.closeHero(); return; }
     const hp = Math.max(0, h.hp), tot = Math.max(h.max, h.hp + h.shield), hpPct = (hp / tot) * 100;
-    card.innerHTML = `<div class="mc-head"><img src="${faceUrl(h)}" alt="" style="--c:${h.def.col}"><div><b style="color:${h.def.col}">${h.def.name}</b>`
+    const html = `<div class="mc-head"><img src="${faceUrl(h)}" alt="" style="--c:${h.def.col}"><div><b style="color:${h.def.col}">${h.def.name}</b>`
       + `<span class="mc-hp"><i style="width:${hpPct}%"></i>${h.shield ? `<s style="left:${hpPct}%;width:${(h.shield / tot) * 100}%"></s>` : ''}`
       + `<u>${h.hp > 0 ? `${hp}/${h.max}` : 'пал'}${h.shield ? ` +${h.shield} щит` : ''}</u></span></div></div>`
       + this.cardBody(h);
+    // in a fight the strip refreshes with every move: the card is rebuilt only when it changes, so it keeps its scroll
+    if (card.dataset.html !== html) { card.innerHTML = html; card.dataset.html = html; }
     card.hidden = false;
     // under the face, kept on the screen; a short screen scrolls the card
     const r = head.getBoundingClientRect(), w = card.offsetWidth;
@@ -584,6 +605,89 @@ export class Hud {
     $('heroPeek').hidden = true;
     $('ally' + this.peek)?.setAttribute('aria-expanded', 'false');
     this.peek = -1;
+  }
+
+  // ------------------------------------------------------------ my hero's trophies
+
+  /**
+   * The sockets over the portrait: a token in each for a trophy my hero has, a «?» in the empty ones (a hero gets three
+   * at the most: the bosses of the first two floors and the chest in love). A token that has had its go for the fight
+   * («Носок») or the turn («Бумеранг») is grey; one whose count of goings-off has grown since the last look jumps once.
+   */
+  private trophies() {
+    const h = this.g.hero, box = $('fArts'), arts = h.arts ?? [], n = Math.max(SOCKETS, arts.length);
+    const key = `${h.i}:${arts.join(',')}`;
+    if (box.dataset.k !== key) {
+      box.dataset.k = key;
+      box.innerHTML = Array.from({ length: n }, (_, k) => arts[k]
+        ? `<button class="sock" type="button" data-k="${k}" aria-label="${artDef(arts[k]).name}"><i class="tok">${artIcon(arts[k])}</i></button>`
+        : `<button class="sock empty" type="button" data-k="${k}" aria-label="Пустое место под трофей"><b aria-hidden="true">?</b></button>`).join('');
+      if (this.tip >= n) this.closeTip();
+    }
+    const socks = box.querySelectorAll<HTMLElement>('.sock');
+    socks.forEach((b, k) => {
+      b.classList.toggle('spent', !!arts[k] && this.spent(h, arts[k]) !== '');
+      b.classList.toggle('sel', k === this.tip);
+    });
+    // every hero's counts are kept, so taking over another hero (online) doesn't flash what went off before
+    for (const o of this.g.party) {
+      const now = o.pops ?? {}, seen = this.popSeen.get(o.i);
+      if (seen && o === h) arts.forEach((k, j) => { if ((now[k] ?? 0) > (seen[k] ?? 0)) this.jump(socks[j]); });
+      this.popSeen.set(o.i, { ...now });
+    }
+    if (this.tip >= 0) this.openTip(this.tip);
+  }
+
+  /** What a trophy that works once a fight or a turn says once it has had its go, '' while it is ready. */
+  private spent(h: HeroState, k: string) {
+    if (k === 'sock' && h.lucky) return 'Сработал в этом бою';
+    if (k === 'boomerang' && h.boomed === this.g.S.turn) return 'Уже вернулся в этом ходу';
+    return '';
+  }
+
+  /** A trophy has gone off: its token jumps out of the socket and glows, once (no endless animation: phones heat up). */
+  private jump(b: HTMLElement | undefined) {
+    const t = b?.querySelector<HTMLElement>('.tok');
+    if (!t) return;
+    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    t.animate(still
+      ? [{ boxShadow: '0 0 0 3px #ffd34d, 0 0 18px 4px rgba(255, 211, 77, 0.7)' }, { boxShadow: '0 2px 0 rgba(0, 0, 0, 0.5)' }]
+      : [
+        { transform: 'none' },
+        { transform: 'translateY(-34%) scale(1.25)', boxShadow: '0 0 0 3px #ffd34d, 0 0 22px 6px rgba(255, 211, 77, 0.75), 0 6px 0 rgba(0, 0, 0, 0.4)', offset: 0.3 },
+        { transform: 'none', boxShadow: '0 2px 0 rgba(0, 0, 0, 0.5)' },
+      ], { duration: 900, easing: 'ease-out' });
+  }
+
+  /** The hint over the sockets: the trophy's name, what it does, its joke and whether it has had its go; or what fills an empty one. */
+  private openTip(k: number) {
+    const h = this.g.hero, key = h.arts?.[k], tip = $('artTip'), box = $('fArts'), b = box.querySelectorAll<HTMLElement>('.sock')[k];
+    if (!b) { this.closeTip(); return; }
+    let html: string;
+    if (key) {
+      const a = artDef(key), st = this.spent(h, key);
+      html = `<div class="mc-head"><i class="tok">${artIcon(key)}</i><b>${a.name}</b></div><p>${a.txt}</p><small>${a.gag}</small>`
+        + (st ? `<span class="at-state">${st}</span>` : '');
+    } else html = '<div class="mc-head"><b>Пустое место</b></div><p>Трофеи дают боссы первого и второго этажа, а иногда «Влюблённый сундук».</p>';
+    if (tip.dataset.html !== html) { tip.innerHTML = html; tip.dataset.html = html; }
+    tip.hidden = false;
+    // over the strip of sockets, kept on the screen, its tail at the token
+    const r = box.getBoundingClientRect(), br = b.getBoundingClientRect(), w = tip.offsetWidth;
+    const left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left));
+    tip.style.left = left + 'px';
+    tip.style.top = Math.max(8, r.top - tip.offsetHeight - 12) + 'px';
+    tip.style.setProperty('--ax', br.left + br.width / 2 - left - 8 + 'px');
+    if (this.tip !== k) {
+      box.querySelectorAll('.sock').forEach((o, j) => o.classList.toggle('sel', j === k));
+      this.tip = k;
+    }
+  }
+
+  private closeTip() {
+    $('artTip').hidden = true;
+    if (this.tip < 0) return;
+    $('fArts').querySelectorAll('.sock').forEach(o => o.classList.remove('sel'));
+    this.tip = -1;
   }
 
   // ------------------------------------------------------------ the turn button
