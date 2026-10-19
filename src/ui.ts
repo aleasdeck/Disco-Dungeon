@@ -2,7 +2,7 @@
 // the enemy queue with what each will do, map / journal / menu), my hero's corner (portrait with its statuses, a column of
 // discs, health with the shield on it, the sparks under it and the ability gem) and one big button for the turn.
 
-import { AB_COST, CRIT, E_MAX, ENEMY_BASE, FROST_STEPS, GAS_WEAK, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, frostVuln, fullHit, gasDmg, isRanged, type MobKind, type StatKey } from './data';
+import { AB_COST, CRIT, E_MAX, ENEMY_BASE, FROST_STEPS, GAS_WEAK, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, frostVuln, fullHit, gasDmg, isRanged, type MobKind, type RoomType, type StatKey } from './data';
 import { envArt, eventArt, sprites, uiArt } from './assets';
 import type { Game, HeroState } from './game';
 import type { Mob } from './room';
@@ -167,9 +167,9 @@ export class Hud {
   /** The enemy whose card is open, and whether a tap pinned it (a hover card goes when the pointer leaves). */
   private card = -1;
   private pinned = false;
-  /** The floor whose event's window is up: the strip stays in sight over it and speaks of the event, not the room behind. */
-  private evFloor: number | null = null;
-  /** The hero (by index) whose card a tap on the strip's face opened over the event's window. */
+  /** The map room whose window is up (an event, the camp): the strip stays in sight over it and speaks of that room, not the room behind. */
+  private at: { floor: number; type: RoomType } | null = null;
+  /** The hero (by index) whose card a tap on the strip's face opened over that window. */
   private peek = -1;
   /** Online: the name of the player whose hero this is. */
   nameOf: (i: number) => string | null = () => null;
@@ -230,14 +230,14 @@ export class Hud {
   }
 
   /**
-   * The event's window opens on a floor (or closes, with null): over it the strip keeps the party's faces with their
-   * health and the ore, names the event instead of the room behind, and a tap on a face opens that hero's card.
+   * A map room's window opens (an event, the camp) or closes, with null: over it the strip keeps the party's faces with
+   * their health and the ore, names that room instead of the room behind, and a tap on a face opens that hero's card.
    */
-  setEvent(floor: number | null) {
-    if (this.evFloor === floor) return;
-    this.evFloor = floor;
-    document.documentElement.classList.toggle('at-event', floor !== null);
-    if (floor === null) this.closeHero();
+  setWindow(at: { floor: number; type: RoomType } | null) {
+    if (at?.floor === this.at?.floor && at?.type === this.at?.type) return;
+    this.at = at;
+    document.documentElement.classList.toggle('at-window', !!at);
+    if (!at) this.closeHero();
     if (this.g.S) this.refresh();
   }
 
@@ -264,13 +264,13 @@ export class Hud {
       b.setAttribute('aria-label', h.def.name);
       b.innerHTML = `<canvas></canvas><b class="who"></b><span class="a-hp"><i></i><s></s><em></em></span><span class="tick">${icon('check')}</span><span class="off">${icon('plug')}</span>`;
       drawPortrait(b.querySelector('canvas')!, h);
-      // over an event a face opens its hero's card; in a fight it picks the hero to throw with
+      // over an event or the camp a face opens its hero's card; in a fight it picks the hero to throw with
       b.addEventListener('click', e => {
-        if (this.evFloor === null) { this.g.select(h.i); return; }
+        if (!this.at) { this.g.select(h.i); return; }
         e.stopPropagation();
         if (this.peek === h.i) this.closeHero(); else this.openHero(h.i);
       });
-      b.disabled = this.evFloor === null && !this.g.canControl(h);
+      b.disabled = !this.at && !this.g.canControl(h);
       box.appendChild(b);
     }
     this.lastPortrait = '';
@@ -281,7 +281,7 @@ export class Hud {
     const g = this.g, S = g.S;
     fillIcons();
     // the floor is laid out after the room's name (style.css): where the strip is narrow the floor gives way, never the room
-    $('locName').innerHTML = `<span class="fl">Этаж ${(this.evFloor ?? S.spec.floor) + 1} · </span><span>${ROOM_TYPES[this.evFloor !== null ? 'event' : S.spec.type].name}</span>`;
+    $('locName').innerHTML = `<span class="fl">Этаж ${(this.at?.floor ?? S.spec.floor) + 1} · </span><span>${ROOM_TYPES[this.at?.type ?? S.spec.type].name}</span>`;
     // the ore cave counts its turns down: «Ход 2 из 3»
     const max = g.turnsMax(), last = max > 0 && S.turn >= max;
     $('hTurn').textContent = S.phase === 'place' ? 'Расстановка' : max ? `Ход ${S.turn} из ${max}` : `Ход ${S.turn}`;
@@ -329,8 +329,8 @@ export class Hud {
   // ------------------------------------------------------------ top strip
 
   private heads() {
-    // over an event the room behind has nothing to say: no blows coming, nobody ready or done
-    const g = this.g, S = g.S, ev = this.evFloor !== null;
+    // over an event or the camp the room behind has nothing to say: no blows coming, nobody ready or done
+    const g = this.g, S = g.S, ev = !!this.at;
     for (const o of g.party) {
       const t = $<HTMLButtonElement>('ally' + o.i);
       if (!t) continue;
@@ -560,7 +560,7 @@ export class Hud {
       }).join('')}</div>` : '');
   }
 
-  /** Any hero's card from its face on the strip over an event: the face, the health in numbers, then the same card. */
+  /** Any hero's card from its face on the strip over an event or the camp: the face, the health in numbers, then the same card. */
   private openHero(i: number) {
     const h = this.g.party.find(o => o.i === i), head = $('ally' + i), card = $('heroPeek');
     if (!h || !head) { this.closeHero(); return; }

@@ -290,10 +290,17 @@ function choose(id: string) {
   shareMap();
 }
 
+/** The top strip stays in sight over the event's and the camp's windows: the heroes' health and the ore while deciding. */
+function liftStrip() {
+  const at = !$('eventScreen').hidden ? 'event' : !$('campScreen').hidden ? 'camp' : null;
+  hud.setWindow(at && { floor: run.floor, type: at });
+}
+
 /** Show the camp window while the party sits at a camp, until this player leaves it for the map. */
 function showCamp() {
   const open = !!camp && campShut !== camp.seed;
   $('campScreen').hidden = !open;
+  liftStrip();
   if (!open) return;
   const mine = game.online ? myHero() : game.party[0]?.i ?? null, me = game.party.find(h => h.i === mine) ?? null;
   campView.render(camp!, me, game.party, game.online ? h => players.find(p => p.hero === h.i)?.name ?? h.def.name : undefined, campAsked);
@@ -332,8 +339,7 @@ function campPick(hero: number, pick: CampPick) {
 function showEvent() {
   const open = !!ev && !(ev.done && evShut === ev.seed);
   $('eventScreen').hidden = !open;
-  // the top strip stays in sight over the window: the heroes' health and the ore while the party makes up its mind
-  hud.setEvent(open ? run.floor : null);
+  liftStrip();
   if (open) evView.render(ev!, game.bank, game.party.length === 1, eventVotes());
 }
 

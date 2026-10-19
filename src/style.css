@@ -979,11 +979,11 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
   .ev-text { font-size: 17px; }
   .ev-fx { font-size: 16px; }
 }
-/* the top strip stays in sight over the event (Vladislav asked): the window starts under it and lends it its dim, the
-   strip names the event and drops what belongs to the room behind; a tap on a face opens that hero's card under it */
-#eventScreen { top: var(--top-h, 0px); }
-.at-event .hud-top { background: rgba(10, 7, 5, 0.55); backdrop-filter: blur(3px); }
-.at-event :is(.where-sub, .queue, #btnMap, #btnLog) { display: none; }
+/* the top strip stays in sight over the event and the camp (Vladislav asked): the window starts under it and lends it
+   its dim, the strip names the room and drops what belongs to the room behind; a tap on a face opens that hero's card */
+#eventScreen, #campScreen { top: var(--top-h, 0px); }
+.at-window .hud-top { background: rgba(10, 7, 5, 0.55); backdrop-filter: blur(3px); }
+.at-window :is(.where-sub, .queue, #btnMap, #btnLog) { display: none; }
 .hero-card.hero-peek { position: fixed; z-index: 21; bottom: auto; overflow: auto; }
 .hero-peek .mc-head img { clip-path: var(--cut-face); background: var(--c); }
 /* the health is what the card is opened for: a bigger bar with bigger numbers than an enemy's */
@@ -991,13 +991,13 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .hero-peek .mc-hp u { font-size: 14px; line-height: 20px; }
 .mc-hp s { position: absolute; top: 0; bottom: 0; background: #8fc6ea; }
 @media (max-height: 520px) and (orientation: landscape) {
-  #eventScreen { padding-top: 6px; }
-  .at-event .ev-art { max-width: calc(100dvh - 80px - var(--top-h, 0px)); }
+  #eventScreen, #campScreen { padding-top: 6px; }
+  .at-window .ev-art { max-width: calc(100dvh - 80px - var(--top-h, 0px)); }
 }
 @media (orientation: portrait) and (max-width: 700px) {
   /* the queue is gone, so the ore comes up beside the faces and the strip keeps to one row */
-  .at-event .hud-top::after { display: none; }
-  .at-event .ore-chip { order: 1; margin-top: 0; align-self: center; }
+  .at-window .hud-top::after { display: none; }
+  .at-window .ore-chip { order: 1; margin-top: 0; align-self: center; }
 }
 
 /* ---------- camp window: the event window's dress, with a cardboard sticker on each slab of what a hero can do by the fire */
