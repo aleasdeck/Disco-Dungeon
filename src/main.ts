@@ -253,6 +253,7 @@ function choose(id: string) {
   votes = {};
   // the party walks on, so the blacksmith's shop closes, and whoever did nothing at the camp has rested by the fire
   game.forge = 0;
+  game.whet = false;
   if (camp) {
     campLeave(camp, game.party, game.bank);
     camp = null;
@@ -574,8 +575,13 @@ game.onRoomEnd = win => {
     // the boss gave every hero back half their health as it fell (Game.bossHeal)
     const solo = game.party.length === 1 && game.party[0].def;
     const healed = !boss ? '' : solo ? `${solo.name} ${solo.fem ? 'восстановила' : 'восстановил'} половину здоровья. ` : 'Герои восстановили половину здоровья. ';
-    showEnd({ title: boss ? `Этаж ${run.floor} пройден` : cave ? (game.cleared() ? 'Пещера выбрана дочиста' : 'Ходы кончились') : 'Комната зачищена',
-      text: cave ? `Добыто руды: ${game.mined}. ${rooms}` : `Ходов: ${S.turn}. ${healed}${rooms}`, kind: 'map' });
+    const clean = game.clean ? `Без царапины: +${game.clean} руды. ` : '';
+    // an elite pays a stat level for every hero, taken in the sharpening window the result screen leads to
+    const elite = S.spec.type === 'elite';
+    if (elite) game.sharpen(S.spec.depth);
+    showEnd({ title: boss ? `Этаж ${run.floor} пройден` : cave ? (game.cleared() ? 'Пещера выбрана дочиста' : 'Ходы кончились') : elite ? 'Элита повержена' : 'Комната зачищена',
+      text: cave ? `Добыто руды: ${game.mined}. ${rooms}` : `Ходов: ${S.turn}. ${healed}${clean}${elite ? 'Гном-кузнец бесплатно заточит каждому диск. ' : ''}${rooms}`,
+      kind: 'map', next: elite ? 'whet' : undefined });
     shareMap();
   }, 900);
 };
@@ -588,8 +594,10 @@ function showEnd(e: Ending) {
   $('roomEnd').classList.toggle('lose', e.kind === 'again');
   $('endTitle').textContent = e.title;
   $('endText').textContent = e.text;
-  $('endBtn').textContent = e.kind === 'map' ? 'К карте' : mode === 'host' ? 'В лобби' : 'Новый забег';
-  $('endBtn').onclick = e.kind === 'map' ? () => { hideEnd(); showMap(true); }
+  $('endBtn').textContent = e.next === 'whet' ? 'К заточке' : e.kind === 'map' ? 'К карте' : mode === 'host' ? 'В лобби' : 'Новый забег';
+  // after an elite the sharpening window is under the result screen: the map opens once the hero has taken its level
+  $('endBtn').onclick = e.next === 'whet' ? () => { hideEnd(); hud.refresh(); }
+    : e.kind === 'map' ? () => { hideEnd(); showMap(true); }
     : mode === 'host' ? backToLobby : openHeroSelect;
   // online every player reads a cleared room's result and walks to the map themselves; the end of the run waits for the host
   if (e.kind !== 'map') screen(e.title, e.text, e.kind === 'win', e.kind === 'again');
@@ -669,7 +677,7 @@ function leaveOnline() {
   flushStats();
   reconnecting++;
   // a client thrown out of the blacksmith's would keep the shop on screen over the menu
-  if (game.forge) { game.forge = 0; hud.refresh(); }
+  if (game.forge) { game.forge = 0; game.whet = false; hud.refresh(); }
   if (mode === 'host') net.broadcast({ t: 'bye' });
   if (net.active) net.close();
   clearSeat();

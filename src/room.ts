@@ -285,13 +285,21 @@ export const PIT_CELLS = 10;
 /** Most enemies a room starts with: past this a room is a crowd, not a fight. */
 export const MOB_CAP = 5;
 
-/** Map row (0 = entrance) to its tier; the rest rows in the middle borrow the tier of the row before. */
+/** The room's row on its floor's map (0 = entrance). */
+export const rowOf = (spec: Pick<RoomSpec, 'depth' | 'floor'>) => Math.max(0, Math.min(LAYERS - 1, spec.depth - 1 - spec.floor * LAYERS));
+
+/** Map row to its tier: the six rows of fights grow from the entrance to the last room before the boss. */
 export function tierOf(spec: RoomSpec): { tier: Tier; t: number } {
   if (spec.type === 'boss') return { tier: BOSS_TIER, t: TIERS.length };
-  const row = Math.max(0, Math.min(LAYERS - 2, spec.depth - 1 - spec.floor * LAYERS));
-  const t = [0, 1, 2, 2, 3, 4][row] ?? TIERS.length - 1;
+  const t = [0, 1, 2, 2, 3, 4][rowOf(spec)] ?? TIERS.length - 1;
   return { tier: TIERS[t], t };
 }
+
+/**
+ * Rooms of the run before this one, for the enemies' HP: the rest row before the boss doesn't count, so with a fight
+ * row more on each floor every row's enemies have the HP they had on the 7-row map.
+ */
+export const hpStep = (spec: Pick<RoomSpec, 'depth' | 'floor'>) => spec.floor * (LAYERS - 1) + Math.min(rowOf(spec), LAYERS - 2);
 
 function carve(gw: number, gh: number, R: ReturnType<typeof makeRng>, shapes: Shape[]): { shape: Shape; floor: Uint8Array } {
   const floor = new Uint8Array(gw * gh).fill(1);
@@ -491,7 +499,6 @@ export const dmgBonus = (f: number, t: number) => (f > 0 ? f + 1 : 0) + (t >= 3 
 export function generate(spec: RoomSpec): Layout {
   const R = makeRng(spec.seed * 31 + spec.depth);
   const { int: ri, pick } = R;
-  const d = spec.depth;
   const type = spec.type, f = spec.floor;
   const { tier, t } = tierOf(spec);
   const extra = firstFloorExtra(f, t);
@@ -676,7 +683,7 @@ export function generate(spec: RoomSpec): Layout {
   }
 
   const sc = partyScale(spec);
-  const hpMul = MOB_HP_MUL * (1 + HP_STEP * (d - 1)) * (f > 0 ? LATER_HP : 1) * sc.hp, dmgAdd = dmgBonus(f, t), dmgMul = sc.dmg;
+  const hpMul = MOB_HP_MUL * (1 + HP_STEP * hpStep(spec)) * (f > 0 ? LATER_HP : 1) * sc.hp, dmgAdd = dmgBonus(f, t), dmgMul = sc.dmg;
   // a share of n enemies for a smaller party; a fraction left over is one more enemy that often
   const fewer = (n: number, min: number) => {
     if (sc.mobs === 1) return n;

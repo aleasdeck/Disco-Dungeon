@@ -128,20 +128,27 @@ const forgeTxt = (ore: number) => 'Гном-кузнец закаляет рас
  * and the price in the party's ore. A slab the ore does not cover, or a stat at its top, is shut.
  */
 function forgeRows(g: Game, h: HeroState) {
-  const row = (k: string, name: string, txt: string, n: number, lv: number, now: string, next: string, cost: number) => {
-    const short = cost > g.bank.ore;
-    return `<button class="ev-opt fg-up" data-k="${k}" title="${txt}"${cost && !short ? '' : ' disabled'}>`
+  // a stat level an elite owes the hero costs nothing; in the sharpening window that is all there is
+  const free = g.freeUp(h);
+  const row = (k: string, name: string, txt: string, n: number, lv: number, now: string, next: string, cost: number, gratis = false) => {
+    const sold = !g.whet || gratis, short = !gratis && cost > g.bank.ore;
+    return `<button class="ev-opt fg-up" data-k="${k}" title="${txt}"${cost && sold && !short ? '' : ' disabled'}>`
       + `<i data-art="${UP_ART[k]}" aria-hidden="true"></i><span class="fg-name"><b>${name}</b>${pips(n, lv)}</span>`
       + `<span class="fg-fx">${cost ? `${now}<i>→</i>${next}` : `${now}, больше некуда`}</span>`
-      + (cost ? `<span class="fg-cost${short ? ' short' : ''}">${cost}${icon('ore')}</span>` : '') + '</button>';
+      + (!cost || !sold ? '' : gratis ? '<span class="fg-cost free">даром</span>' : `<span class="fg-cost${short ? ' short' : ''}">${cost}${icon('ore')}</span>`) + '</button>';
   };
   return `<div class="fg-me"><img src="${faceUrl(h)}" alt=""><b>${h.def.name}</b><span>${h.hp > 0 ? `${h.hp}/${h.max} HP` : 'пал'}</span></div>`
-    + row('n', 'Диски за ход', 'Больше бросков за ход. Самое сильное улучшение', HAND_MAX - HAND_START, h.discs - HAND_START, String(h.discs), String(h.discs + 1), g.discCost(h))
+    + (g.whet ? '' : row('n', 'Диски за ход', 'Больше бросков за ход. Самое сильное улучшение', HAND_MAX - HAND_START, h.discs - HAND_START, String(h.discs), String(h.discs + 1), g.discCost(h)))
     + UPS.map(u => {
       const lv = h.up[u.k], v = g.stat(h, u.k), next = u.k === 'e' ? Math.min(E_MAX, v + u.step) : v;
-      return row(u.k, u.name, u.txt, UP_COST.length, lv, u.fmt(lv * u.step, v), u.fmt((lv + 1) * u.step, next), g.upCost(h, u.k));
+      return row(u.k, u.name, u.txt, UP_COST.length, lv, u.fmt(lv * u.step, v), u.fmt((lv + 1) * u.step, next), g.upCost(h, u.k), free);
     }).join('');
 }
+
+/** The sharpening window's scene after an elite: the hero still owed a level picks it, then it is done. */
+const whetTxt = (free: boolean) => free
+  ? 'Гном-кузнец прибежал на грохот боя с элитой и бесплатно точит каждому один диск. Выбери, что подтянуть.'
+  : 'Диск заточен. Гном уже ворчит, что дальше только за руду.';
 
 /** Whose turn it is, as the HUD tells it: the heroes throw (and the discs settle), then the enemies go. */
 export type Side = 'place' | 'heroes' | 'enemies' | 'over';
@@ -792,9 +799,11 @@ export class Hud {
     if (pic && img.getAttribute('src') !== pic.src) img.src = pic.src;
     img.hidden = !pic;
     $('forgeArt').classList.toggle('stub', !eventArt.has('forge'));
-    $('forgeText').textContent = forgeTxt(g.gift);
+    const h = this.me();
+    $('forgeTitle').textContent = g.whet ? 'Заточка' : 'Кузнец';
+    $('forgeText').textContent = g.whet ? whetTxt(!!h && g.freeUp(h)) : forgeTxt(g.gift);
     $('forgeOre').textContent = String(g.bank.ore);
-    const h = this.me(), box = $('forgeMine'), html = h ? forgeRows(g, h) : '';
+    const box = $('forgeMine'), html = h ? forgeRows(g, h) : '';
     if (html !== this.forgeHtml) {
       box.innerHTML = html;
       if (h) box.style.setProperty('--c', h.def.col);

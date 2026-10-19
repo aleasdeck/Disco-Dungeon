@@ -42,6 +42,10 @@ export const FOOD_HEAL = 3;
 export const FOOD_MAX = 9;
 /** Beating a floor's boss gives every hero back this share of their most health, up to the top; a fallen hero gets up with it. */
 export const BOSS_HEAL = 0.5;
+/** An elite beaten: every hero gets this many stat levels free, picked in the blacksmith's sharpening window right after the fight. */
+export const ELITE_UPS = 1;
+/** A fight won with nobody losing any health («Без царапины»): this much ore for each hero of the party. */
+export const CLEAN_ORE = 2;
 /** The card sharp's fan: two more discs fly out at this angle on each side of the thrown one, dealing this share of its damage. */
 export const FAN_ANGLE = 0.16;
 export const FAN_M = 0.7;

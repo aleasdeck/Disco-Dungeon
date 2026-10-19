@@ -1,7 +1,7 @@
 // Combat rules: turn flow, disc physics, damage, abilities.
 // Rendering and input live elsewhere; this module only changes state.
 
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, CRIT_COS, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, ZAP, ZAP_REACH, frostVuln, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CLEAN_ORE, CRIT, CRIT_COS, E_MAX, ELITE_UPS, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, ZAP, ZAP_REACH, frostVuln, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
 import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { mulberry32 } from './rng';
 import { has, type ArtKey } from './artifacts';
@@ -49,6 +49,8 @@ export interface HeroState {
   pops?: Record<string, number>;
   /** What the hero has done this run, for the player's statistics; saves from before them have none. */
   tally?: Tally;
+  /** Stat levels an elite owes the hero: the next one costs no ore (the sharpening window right after it, or the next blacksmith's). */
+  free?: number;
 }
 
 /**
@@ -199,6 +201,8 @@ export interface State extends Layout {
   done: number[];
   /** The enemy-turn journal, oldest first: a line for each thing the enemies did, the room's last LOG_MAX of them. */
   log: { turn: number; txt: string }[];
+  /** Some hero has lost health in this room: no ore «Без царапины» for it. */
+  hurt?: boolean;
 }
 
 /** What a player can do to the shared game; online clients send these to the host instead of applying them. */
@@ -330,8 +334,15 @@ export class Game {
   forge = 0;
   /** Ore the blacksmith handed the party at this visit, for the scene in his window. */
   gift = 0;
+  /**
+   * The blacksmith's window is up after an elite instead of at a blacksmith's room: «Заточка», where every hero takes the
+   * stat level the elite gave it (HeroState.free) and nothing is for sale.
+   */
+  whet = false;
   /** Host: ore the party has mined in this room, for the room's result. */
   mined = 0;
+  /** Host: ore the room paid for nobody losing any health in it («Без царапины»), for the room's result. */
+  clean = 0;
   private acc = 0;
   /** Physics steps run so far on this page; online, every snapshot carries the host's count. */
   tick = 0;
@@ -358,7 +369,9 @@ export class Game {
     if (this.bank.strobe) spec.strobe = true;
     const L = generate(spec);
     this.forge = 0;
+    this.whet = false;
     this.mined = 0;
+    this.clean = 0;
     this.pickup.clear();
     this.walked = { key: '', n: 0 };
     this.hopped.clear();
@@ -686,7 +699,7 @@ export class Game {
 
   buyDisc(h = this.hero) {
     const c = this.discCost(h);
-    if (!this.forge || !c || this.bank.ore < c) return;
+    if (!this.forge || this.whet || !c || this.bank.ore < c) return;
     if (this.send) { this.send({ k: 'disc', h: h.i }); return; }
     this.bank.ore -= c;
     h.discs++;
@@ -699,12 +712,27 @@ export class Game {
     return UP_COST[h.up[k]] ?? 0;
   }
 
+  /** The hero's next stat level costs nothing: an elite owes it one. */
+  freeUp(h: HeroState) {
+    return (h.free ?? 0) > 0;
+  }
+
   upgrade(k: StatKey, h = this.hero) {
-    const c = this.upCost(h, k);
-    if (!this.forge || !c || this.bank.ore < c) return;
+    const c = this.upCost(h, k), free = this.freeUp(h);
+    if (!this.forge || !c || (!free && (this.whet || this.bank.ore < c))) return;
     if (this.send) { this.send({ k: 'up', h: h.i, stat: k }); return; }
-    this.bank.ore -= c;
+    if (free) h.free!--;
+    else this.bank.ore -= c;
     h.up[k]++;
+    this.onChange();
+  }
+
+  /** Open the sharpening window after an elite: every hero is owed ELITE_UPS stat levels, the fallen too. */
+  sharpen(depth: number) {
+    for (const h of this.party) h.free = (h.free ?? 0) + ELITE_UPS;
+    this.forge = depth;
+    this.gift = 0;
+    this.whet = true;
     this.onChange();
   }
 
@@ -1439,6 +1467,7 @@ export class Game {
     h.shield -= blk;
     const dmg = n - blk, had = h.hp;
     h.hp -= dmg;
+    if (dmg > 0) S.hurt = true;
     // «Счастливый носок»: once a room a deadly blow leaves the hero standing on 1
     if (h.hp <= 0 && dmg > 0 && has(h, 'sock') && !h.lucky) { h.hp = 1; h.lucky = true; this.float(p.x, p.y - 14, 'носок спас!', '#ffe27a'); this.pop(h, 'sock'); }
     const t = tallyOf(h);
@@ -2141,9 +2170,15 @@ export class Game {
   }
 
   private finish() {
-    const win = this.alive().length > 0;
-    this.S.phase = 'over';
-    if (win && this.S.spec.type === 'boss') this.bossHeal();
+    const S = this.S, win = this.alive().length > 0;
+    S.phase = 'over';
+    if (win && S.spec.type === 'boss') this.bossHeal();
+    // a fight won without a scratch pays ore for every hero; the ore cave has nobody to scratch them
+    if (win && S.spec.type !== 'treasure' && !S.hurt) {
+      this.clean = CLEAN_ORE * this.party.length;
+      this.bank.ore += this.clean;
+      this.float(S.Wx / 2, S.Wy / 2, `БЕЗ ЦАРАПИНЫ +${this.clean}`, '#ffd34d');
+    }
     this.sfx(win ? 'win' : 'lose');
     this.onChange();
     this.onRoomEnd(win);
