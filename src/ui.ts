@@ -525,8 +525,8 @@ export class Hud {
     if (h.fire > 0) st.push({ k: 'fire', n: 2, t: 'Горит: в ход врагов потеряет 2' });
     $('fStatus').innerHTML = statusHtml(st);
 
-    // the discs of this turn as a stack of chips, the first at the bottom: the ones still in hand show the hero's disc, the
-    // thrown ones (from the top down) fade
+    // the discs of this turn as chips in a row, the first on the left, only the ones the hero has: the ones still in hand
+    // show the hero's disc, the thrown ones (from the right) are dark ghosts
     const per = g.handOf(h), out = S.phase === 'throw' && g.ended(h) ? per : per - h.hand, discPic = envArt.get('disc_' + h.def.key);
     const discs = $('fDiscs');
     discs.innerHTML = Array.from({ length: per }, (_, k) => `<i class="${k < per - out ? 'on' : ''}"></i>`).join('');
@@ -626,10 +626,10 @@ export class Hud {
   // ------------------------------------------------------------ my hero's trophies
 
   /**
-   * The sockets in the block's column under the stack of discs: a token in each for a trophy my hero has, the first at
-   * the bottom, a «?» in the empty ones (a hero gets three at the most: the bosses of the first two floors and the chest
-   * in love). A token that has had its go for the fight
-   * («Носок») or the turn («Бумеранг») is grey; one whose count of goings-off has grown since the last look jumps once.
+   * The sockets in the block's column left of the health, the discs lying over it: a token in each for a trophy my hero
+   * has, the first at the bottom, a «?» in the empty ones (a hero gets three at the most: the bosses of the first two
+   * floors and the chest in love). A token that has had its go for the fight («Носок») or the turn («Бумеранг») is grey;
+   * one whose count of goings-off has grown since the last look jumps once.
    */
   private trophies() {
     const h = this.g.hero, box = $('fArts'), arts = h.arts ?? [], n = Math.max(SOCKETS, arts.length);
