@@ -110,8 +110,8 @@ function upRows(g: Game, h: HeroState) {
     `<div class="up" title="${tip}">${art(UP_ART[k], 'up-ico')}<span class="up-name">${name}</span>`
     + `${pips(n, lv)}<b>${val}</b><small class="up-txt">${txt}</small></div>`;
   const dc = g.discCost(h), discTxt = 'Больше бросков за ход. Самое сильное улучшение';
-  return row('n', 'Диски за ход', discTxt, HAND_MAX - HAND_START, h.discs - HAND_START, String(h.discs),
-    `${discTxt}. ` + (dc ? `Следующий диск у кузнеца за ${dc} руды.` : 'Больше дисков не бывает.'))
+  return row('n', 'Диски за ход', discTxt, HAND_MAX - HAND_START, h.discs - HAND_START, String(g.handOf(h)),
+    `${discTxt}. ` + (dc ? `Следующий диск у кузнеца за ${dc} руды.` : 'Больше двух кузнец не продаёт, третий диск даёт только трофей «Третья рука».'))
     + UPS.map(u => {
       const lv = h.up[u.k], cost = g.upCost(h, u.k), v = g.stat(h, u.k);
       return row(u.k, u.name, u.txt, UP_COST.length, lv, u.fmt(lv * u.step, v),
@@ -138,7 +138,7 @@ function forgeRows(g: Game, h: HeroState) {
       + (!cost || !sold ? '' : gratis ? '<span class="fg-cost free">даром</span>' : `<span class="fg-cost${short ? ' short' : ''}">${cost}${icon('ore')}</span>`) + '</button>';
   };
   return `<div class="fg-me"><img src="${faceUrl(h)}" alt=""><b>${h.def.name}</b><span>${h.hp > 0 ? `${h.hp}/${h.max} HP` : 'пал'}</span></div>`
-    + (g.whet ? '' : row('n', 'Диски за ход', 'Больше бросков за ход. Самое сильное улучшение', HAND_MAX - HAND_START, h.discs - HAND_START, String(h.discs), String(h.discs + 1), g.discCost(h)))
+    + (g.whet ? '' : row('n', 'Диски за ход', 'Больше бросков за ход. Самое сильное улучшение', HAND_MAX - HAND_START, h.discs - HAND_START, String(g.handOf(h)), String(g.handOf(h) + 1), g.discCost(h)))
     + UPS.map(u => {
       const lv = h.up[u.k], v = g.stat(h, u.k), next = u.k === 'e' ? Math.min(E_MAX, v + u.step) : v;
       return row(u.k, u.name, u.txt, UP_COST.length, lv, u.fmt(lv * u.step, v), u.fmt((lv + 1) * u.step, next), g.upCost(h, u.k), free);
