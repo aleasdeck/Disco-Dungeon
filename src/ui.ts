@@ -79,10 +79,13 @@ export function drawPortrait(cv: HTMLCanvasElement, h: Pick<HeroState, 'i' | 'de
   cv.height = size * r;
   const c = cv.getContext('2d')!;
   c.setTransform(r, 0, 0, r, 0, 0);
-  c.fillStyle = lg(c, 0, 0, 0, size, h.def.col, h.def.dk);
-  c.fillRect(0, 0, size, size);
-  c.fillStyle = 'rgba(0,0,0,.22)';
-  c.fillRect(0, 70, size, 26);
+  // on the cardboard (pf_board, its print coloured by style.css) the canvas draws the hero alone
+  if (!uiArt.has('pf_board') || !uiArt.has('pf_ink')) {
+    c.fillStyle = lg(c, 0, 0, 0, size, h.def.col, h.def.dk);
+    c.fillRect(0, 0, size, size);
+    c.fillStyle = 'rgba(0,0,0,.22)';
+    c.fillRect(0, 70, size, 26);
+  }
   const sp = sprites.get(h.def.key);
   if (sp) {
     // the upper ~60% of the figure, scaled to fill the frame
