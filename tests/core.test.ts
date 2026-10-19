@@ -2124,12 +2124,12 @@ describe('the heroes past the first three', () => {
 
   it('nine heroes to pick from, each with its own colour, disc and ability, a row of each kind; online still three seats', () => {
     expect(HEROES.map(d => d.key)).toEqual(['bastion', 'ricochet', 'ash', 'cook', 'sharp', 'electra', 'kid', 'bum', 'genius']);
-    // the pick screens lay them out a row per disc size, the biggest first: two «толстяки», four «нормисы», three «дрищи»
-    expect(KINDS.map(k => k.row)).toEqual(['Толстяки', 'Нормисы', 'Дрищи']);
+    // the pick screens lay them out a row per disc size, the biggest first: two «толстяки», four «чуваки», three «дрищи»
+    expect(KINDS.map(k => k.row)).toEqual(['Толстяки', 'Чуваки', 'Дрищи']);
     expect(heroesByKind().map(row => row.map(i => HEROES[i].key))).toEqual([['bastion', 'cook'], ['ash', 'electra', 'bum', 'genius'], ['ricochet', 'sharp', 'kid']]);
     expect(heroesByKind().flat().length).toBe(HEROES.length);
     // a heroine's card says it her way
-    expect(HEROES.map(kindOf)).toEqual(['Толстяк', 'Дрищ', 'Нормиска', 'Толстуха', 'Дрищ', 'Нормиска', 'Дрищ', 'Нормис', 'Нормис']);
+    expect(HEROES.map(kindOf)).toEqual(['Толстяк', 'Дрищ', 'Чувиха', 'Толстуха', 'Дрищ', 'Чувиха', 'Дрищ', 'Чувак', 'Чувак']);
     expect(new Set(HEROES.map(d => d.col)).size).toBe(HEROES.length);
     expect(new Set(HEROES.map(d => d.ab)).size).toBe(HEROES.length);
     expect(HEROES[at('electra')].fem && HEROES[at('cook')].fem && !HEROES[at('sharp')].fem && !HEROES[at('bum')].fem).toBe(true);
