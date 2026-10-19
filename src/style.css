@@ -274,39 +274,31 @@ i.ico { display: inline-block; font-style: normal; }
   width: calc(var(--bw) * var(--u)); height: calc(var(--bh) * var(--u)); pointer-events: auto;
 }
 
-/* the discs of this turn (Vladislav, 2026-10-19): a stack of casino chips of their own size, the first at the bottom, on
-   a scrap of cardboard behind it; it stands in the block's column on the trophies' sockets (.trophies) and may rise over
-   the block. One still in hand shows the hero's disc on top (--disc, the room's picture; his colour without it) over a
-   side in his dark colour with light marks, the thrown ones fade from the top down. Like the rest of the corner they are
-   cardboard: the board's grain (--grain) lies over both faces */
+/* the discs of this turn (Vladislav's sketch, 2026-10-19): chips lying in a row over the column of trophies and the left
+   end of the health, up to the turn button, the first on the left; only the ones the hero has (two at the most, a third
+   with «Третья рука»), none drawn for a disc he has not got. One still in hand shows the hero's disc on top (--disc, the
+   room's picture; his colour without it) over a side in his dark colour with light marks; a thrown one stays as a dark
+   ghost. Like the rest of the corner they are cardboard: the board's grain (--grain) lies over both faces */
 .bars > .discs {
-  --bx: 0; --bw: 78; --e: calc(27 * var(--u)); --t: calc(24 * var(--u)); --mk: color-mix(in srgb, var(--c, #888) 40%, #f4ead8);
-  top: auto; bottom: var(--tr-col); height: auto; display: flex; flex-direction: column-reverse; box-sizing: border-box;
-  padding: calc(var(--e) / 2 + 9 * var(--u)) calc(6 * var(--u)) calc(var(--e) / 2 + 7 * var(--u));
-  isolation: isolate; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35));
+  --bx: 0; --by: -60; --bw: 208; --bh: 52; --e: calc(36 * var(--u)); --mk: color-mix(in srgb, var(--c, #888) 40%, #f4ead8);
+  display: flex; align-items: flex-end; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45));
 }
-.discs::before {
-  content: ''; position: absolute; inset: 0; z-index: -1;
-  background: #8a6a48 var(--grain) 0 0 / 160px; background-blend-mode: overlay;
-  clip-path: polygon(0 6%, 55% 0, 100% 4%, 96% 100%, 5% 97%);
-}
-.discs i { position: relative; flex: none; height: var(--t); }
-/* the side: its foot curves round the top of the chip below and throws a thin shadow on it */
+.discs i { position: relative; flex: none; width: calc(72 * var(--u)); height: 100%; }
+.discs i + i { margin-left: calc(-4 * var(--u)); }
+/* the side: the chip's edge under its top, round at the foot */
 .discs i::before {
-  content: ''; position: absolute; inset: 0 0 calc(var(--e) / -2);
+  content: ''; position: absolute; left: 0; right: 0; top: calc(var(--e) / 2); bottom: 0;
   border-radius: 0 0 50% 50% / 0 0 calc(var(--e) / 2) calc(var(--e) / 2);
   background: var(--grain) 0 0 / calc(160 * var(--u)), linear-gradient(90deg, transparent 9%, var(--mk) 9% 17%, transparent 17% 43%, var(--mk) 43% 57%, transparent 57% 83%, var(--mk) 83% 91%, transparent 91%) color-mix(in srgb, var(--c, #888) 62%, #000);
   background-blend-mode: overlay, normal;
-  box-shadow: 0 calc(5 * var(--u)) 0 rgba(0, 0, 0, 0.45);
 }
-/* the top, the hero's disc seen from the side: only the top chip's shows whole */
+/* the top, the hero's disc */
 .discs i::after {
-  content: ''; position: absolute; left: 0; right: 0; top: calc(var(--e) / -2); height: var(--e); border-radius: 50%;
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: var(--e); border-radius: 50%;
   background: var(--grain) 0 0 / calc(160 * var(--u)), var(--disc, none) center / 100% 100% no-repeat var(--c, #888);
   background-blend-mode: overlay, normal;
 }
-/* a thrown one stays a dark ghost on the cardboard */
-.discs i:not(.on) { opacity: 0.6; filter: grayscale(1) brightness(0.35); }
+.discs i:not(.on) { opacity: 0.55; filter: grayscale(1) brightness(0.35); }
 
 .hpbar { --bx: 79; --by: -14; --bw: 458; --bh: 230; }
 .track { position: absolute; inset: 6%; background: #241a14; clip-path: var(--cut-bar); }
@@ -1183,18 +1175,16 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 }
 .art-pf_board.art-pf_ink .portrait canvas { inset: 0; width: 100%; height: 100%; }
 
-/* ---------- the bosses' trophies (Vladislav's pick, 2026-10-19; moved under the discs the same day): a strip of board in
-   the block's column with three die-cut sockets, like the insert of a board game box, the first at the bottom and the
-   stack of discs standing on it; a trophy lies in its socket as a kraft token with its sticker, an empty one shows a «?».
+/* ---------- the bosses' trophies (Vladislav's pick, 2026-10-19; after his sketches the same day): a strip of board the
+   block's height in its column, left of the health and the sparks, with three die-cut sockets like the insert of a
+   board game box, the first at the bottom, the discs lying over it; a trophy lies in its socket as a kraft token with
+   its sticker, an empty one shows a «?».
    A token that has done its one go for the fight or the turn turns grey; one that goes off jumps once. A tap (a hover
    with the mouse) shows what it does. Nowhere else: the allies' trophies are on their cards, from the faces */
-:root {
-  --tr-s: calc(66 * var(--u)); --tr-g: calc(6 * var(--u)); --tr-py: calc(8 * var(--u));
-  --tr-col: calc(3 * var(--tr-s) + 2 * var(--tr-g) + 2 * var(--tr-py));
-}
+:root { --tr-s: calc(70 * var(--u)); }
 .trophies {
-  left: calc(var(--pf-w) + var(--bgap)); bottom: 0; width: calc(78 * var(--u)); box-sizing: border-box;
-  display: flex; flex-direction: column-reverse; align-items: center; gap: var(--tr-g); padding: var(--tr-py) 0;
+  left: calc(var(--pf-w) + var(--bgap)); bottom: 0; width: calc(78 * var(--u)); height: calc(267 * var(--u));
+  display: flex; flex-direction: column-reverse; align-items: center; justify-content: space-evenly;
   isolation: isolate; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.4));
 }
 .trophies::before {
@@ -1219,8 +1209,8 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .sock.sel { box-shadow: 0 0 0 3px var(--gold-1), inset 0 3px 4px rgba(0, 0, 0, 0.9); }
 .sock:focus-visible { outline: 3px solid var(--gold-1); outline-offset: 2px; }
 .corner.dead .trophies { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.4)) grayscale(1) brightness(0.6); }
-/* the hero's card from the portrait opens over the portrait and the column, whichever stands taller (three discs high) */
-.corner .hero-card { bottom: calc(max(var(--pf-h), var(--tr-col) + 115 * var(--u)) + 8px); }
+/* the hero's card from the portrait opens over the portrait and the discs, whichever stands taller */
+.corner .hero-card { bottom: calc(max(var(--pf-h), 327 * var(--u)) + 8px); }
 
 .art-tip { width: 270px; }
 .art-tip .mc-head .tok { position: relative; flex: none; width: 44px; height: 44px; }

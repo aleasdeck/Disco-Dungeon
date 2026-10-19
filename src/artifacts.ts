@@ -54,7 +54,7 @@ export const artDef = (k: string) => ARTIFACTS.find(a => a.key === k) ?? ARTIFAC
 /** Trophies the floor boss leaves for the party to choose from. */
 export const OFFER = 3;
 
-/** The most trophies a hero takes in a run: the bosses of the first two floors and the chest in love; each has a socket under the hero's stack of discs. */
+/** The most trophies a hero takes in a run: the bosses of the first two floors and the chest in love; each has a socket beside the health in a fight. */
 export const SOCKETS = 3;
 
 /** Whether a hero owns this artifact (saves from before artifacts have none). */
