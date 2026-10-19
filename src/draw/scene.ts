@@ -1024,10 +1024,10 @@ export class SceneRenderer {
           c.setLineDash([2, 2]); c.stroke(); c.setLineDash([]);
         } else {
           // lava to come is orange; the smasher's hammer square red
-          const x0 = p.x - 7, y0 = p.y - 7, x1 = p.x + 7, y1 = p.y + 7, hammer = it.t === 'smash';
+          const x0 = p.x - 7, y0 = p.y - 7, x1 = p.x + 7, y1 = p.y + 7, hammer = it.t === 'smash', a = hammer ? 0.5 + 0.5 * pulse : pulse;
           pth(c, [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)]);
-          c.fillStyle = hammer ? `rgba(230,40,40,${0.4 * pulse})` : `rgba(255,120,40,${0.35 * pulse})`; c.fill();
-          c.strokeStyle = hammer ? `rgba(255,90,80,${pulse})` : `rgba(255,170,70,${pulse})`; c.lineWidth = 1; c.stroke();
+          c.fillStyle = hammer ? `rgba(255,30,20,${0.45 * a})` : `rgba(255,120,40,${0.35 * a})`; c.fill();
+          c.strokeStyle = hammer ? `rgba(255,70,50,${a})` : `rgba(255,170,70,${a})`; c.lineWidth = hammer ? 2 : 1; c.stroke();
         }
       }
     }
