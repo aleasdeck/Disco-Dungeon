@@ -1366,22 +1366,25 @@ export class SceneRenderer {
       return (cells.has(hazKey(ci + o[0], cj + o[1])) ? hOf(ci + o[0], cj + o[1]) : -1) / ht;
     }, ci * 7 + cj);
     // gold: chips stuck in the outward sides, scattered up and down them (none on top), fewer as the vein runs out
-    const spots: { x: number; y: number; h: number; ax: Vec; flat: boolean; s: number; k: number; w: number; clip: Pt[] }[] = [];
+    const spots: { x: number; y: number; h: number; ax: Vec; flat: boolean; s: number; k: number; w: number; clip: Pt[]; turn: number; flip: boolean; st: number }[] = [];
     for (let i = 0; i < M; i++) {
       const a = foot[i], b = foot[(i + 1) % M], ta = rim[i], tb = rim[(i + 1) % M];
       const nx = b.y - a.y, ny = -(b.x - a.x), L = Math.hypot(nx, ny);
       // a chip stays inside its side, as if set in the stone
       const clip: Pt[] = [P(a.x, a.y, 0), P(b.x, b.y, 0), P(tb.x, tb.y, tb.h), P(ta.x, ta.y, ta.h)];
-      if (L < 4.5 || a.edge >= 0 || cam.facing(nx / L, ny / L) <= 0.05) continue;
+      if (L < 2.2 || a.edge >= 0 || cam.facing(nx / L, ny / L) <= 0.05) continue;
       // spots in a grid over the side, a low and a high row by its width, each shaken inside its own box and kept off the
       // side's edges, so the chips kept land above one another as well as side by side
-      const n = Math.max(1, Math.round(L / 4)), m = Math.min(0.4, ((r.nugW ?? 4.2) * 0.42) / L);
-      for (let k = 0; k < 2 * n; k++) {
+      const n = Math.max(1, Math.round(L / (r.nugStep ?? 4))), m = Math.min(0.3, ((r.nugW ?? 4.2) * 0.3) / L), rows = r.nugRows ?? 2;
+      for (let k = 0; k < rows * n; k++) {
         const col = k % n, row = Math.floor(k / n);
-        const u = m + ((1 - 2 * m) * (col + 0.15 + 0.7 * hh(ci * 13 + i, cj * 7 + k, 52))) / n, v = 0.16 + 0.34 * row + 0.32 * hh(ci * 13 + i, cj * 7 + k, 53);
+        const u = m + ((1 - 2 * m) * (col + 0.15 + 0.7 * hh(ci * 13 + i, cj * 7 + k, 52))) / n, v = 0.12 + (0.76 * (row + 0.2 + 0.6 * hh(ci * 13 + i, cj * 7 + k, 53))) / rows;
         const fx = a.x + (b.x - a.x) * u, fy = a.y + (b.y - a.y) * u, tx = ta.x + (tb.x - ta.x) * u, ty = ta.y + (tb.y - ta.y) * u, th = ta.h + (tb.h - ta.h) * u;
         spots.push({ x: fx + (tx - fx) * v + (nx / L) * 0.15, y: fy + (ty - fy) * v + (ny / L) * 0.15, h: th * v, ax: [(b.x - a.x) / L, (b.y - a.y) / L], flat: false,
-          s: (r.nugW ?? 4.2) * (hh(ci * 5 + k, cj * 13 + i, 56) < 0.25 ? 1.05 + 0.2 * hh(ci * 5 + k, cj * 13 + i, 54) : 0.5 + 0.35 * hh(ci * 5 + k, cj * 13 + i, 54)), k: i * 3 + k + ci * 3 + cj * 5, w: hh(ci * 17 + i, cj * 3 + k, 55), clip });
+          // mostly small, now and then a big one, never much wider than its side
+          s: Math.min(L * 0.95, (r.nugW ?? 4.2) * (hh(ci * 5 + k, cj * 13 + i, 56) < 0.25 ? 1.05 + 0.2 * hh(ci * 5 + k, cj * 13 + i, 54) : 0.5 + 0.35 * hh(ci * 5 + k, cj * 13 + i, 54))), k: Math.floor(1000 * hh(ci * 11 + k, cj * 17 + i, 57)), w: hh(ci * 17 + i, cj * 3 + k, 55), clip,
+          // every chip its own way: turned, mirrored and stretched a little
+          turn: (hh(ci * 3 + k, cj * 11 + i, 58) - 0.5) * 1.1, flip: hh(ci * 7 + k, cj * 5 + i, 59) < 0.5, st: 0.8 + 0.45 * hh(ci * 19 + k, cj * 7 + i, 61) });
       }
     }
     // the ones kept are picked by chance, but never two on top of each other
@@ -1485,7 +1488,7 @@ export class SceneRenderer {
   }
 
   /** A gold chip stuck in the rock: its picture (or a drawn one) laid flat on a side or on the top. */
-  private rockNugget(p: { x: number; y: number; h: number; ax: Vec; flat: boolean; s: number; k: number; clip?: Pt[] }, r: any, I: Record<string, HTMLImageElement>) {
+  private rockNugget(p: { x: number; y: number; h: number; ax: Vec; flat: boolean; s: number; k: number; clip?: Pt[]; turn?: number; flip?: boolean; st?: number }, r: any, I: Record<string, HTMLImageElement>) {
     const { c, P } = this, gold = ((r.gold ?? []) as string[]).map(k => I[k]).filter(Boolean);
     const [ox, oy] = P(p.x, p.y, p.h), [ex, ey] = P(p.x + p.ax[0], p.y + p.ax[1], p.h);
     let ux = ex - ox, uy = ey - oy;
@@ -1494,9 +1497,13 @@ export class SceneRenderer {
     c.save();
     if (p.clip) { pth(c, p.clip); c.clip(); }
     if (im) {
-      const w = p.s, h = (p.s * im.height) / im.width;
-      c.transform((ux * w) / im.width, (uy * w) / im.width, 0, h / im.height, ox - (ux * w) / 2, oy - h / 2);
-      c.drawImage(im, 0, 0);
+      // the side's own axes, then the chip's turn, mirror and stretch about its centre
+      // the same area for every shape, so a long sliver comes out long and a bead round
+      const a = Math.sqrt(im.width / im.height), w = p.s * a * (p.st ?? 1), h = p.s / a / (p.st ?? 1);
+      c.transform(ux, uy, 0, 1, ox, oy);
+      c.rotate(p.turn ?? 0);
+      if (p.flip) c.scale(-1, 1);
+      c.drawImage(im, -w / 2, -h / 2, w, h);
     } else {
       c.transform(ux, uy, 0, 1, ox, oy);
       const rr = p.s / 2, blob: Pt[] = [];
