@@ -232,7 +232,7 @@ export class Hud {
       const i = Number(li.dataset.m);
       if (this.pinned && this.card === i) { this.pinned = false; this.closeCard(); } else { this.pinned = true; this.openCard(i); }
     });
-    // the trophies over the portrait: hover shows a hint with the mouse, a tap pins it until the next tap elsewhere
+    // the trophies under the discs: hover shows a hint with the mouse, a tap pins it until the next tap elsewhere
     const arts = $('fArts'), sock = (e: Event) => (e.target as HTMLElement).closest<HTMLElement>('.sock');
     arts.addEventListener('pointerover', e => { const b = sock(e); if (b && e.pointerType === 'mouse' && !this.tipPinned) this.openTip(Number(b.dataset.k)); });
     arts.addEventListener('pointerleave', () => { if (!this.tipPinned) this.closeTip(); });
@@ -626,8 +626,9 @@ export class Hud {
   // ------------------------------------------------------------ my hero's trophies
 
   /**
-   * The sockets over the portrait: a token in each for a trophy my hero has, a «?» in the empty ones (a hero gets three
-   * at the most: the bosses of the first two floors and the chest in love). A token that has had its go for the fight
+   * The sockets in the block's column under the stack of discs: a token in each for a trophy my hero has, the first at
+   * the bottom, a «?» in the empty ones (a hero gets three at the most: the bosses of the first two floors and the chest
+   * in love). A token that has had its go for the fight
    * («Носок») or the turn («Бумеранг») is grey; one whose count of goings-off has grown since the last look jumps once.
    */
   private trophies() {
@@ -687,12 +688,12 @@ export class Hud {
     } else html = '<div class="mc-head"><b>Пустое место</b></div><p>Трофеи дают боссы первого и второго этажа, а иногда «Влюблённый сундук».</p>';
     if (tip.dataset.html !== html) { tip.innerHTML = html; tip.dataset.html = html; }
     tip.hidden = false;
-    // over the strip of sockets, kept on the screen, its tail at the token
-    const r = box.getBoundingClientRect(), br = b.getBoundingClientRect(), w = tip.offsetWidth;
-    const left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left));
-    tip.style.left = left + 'px';
-    tip.style.top = Math.max(8, r.top - tip.offsetHeight - 12) + 'px';
-    tip.style.setProperty('--ax', br.left + br.width / 2 - left - 8 + 'px');
+    // beside the column of sockets, over the health, kept on the screen, its tail at the token
+    const r = box.getBoundingClientRect(), br = b.getBoundingClientRect(), hgt = tip.offsetHeight;
+    const top = Math.max(8, Math.min(window.innerHeight - hgt - 8, br.top + br.height / 2 - hgt / 2));
+    tip.style.left = r.right + 12 + 'px';
+    tip.style.top = top + 'px';
+    tip.style.setProperty('--ay', br.top + br.height / 2 - top - 8 + 'px');
     if (this.tip !== k) {
       box.querySelectorAll('.sock').forEach((o, j) => o.classList.toggle('sel', j === k));
       this.tip = k;
