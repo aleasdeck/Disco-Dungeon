@@ -21,9 +21,9 @@ export interface HeroState {
   discs: number;
   /** The rune the hero was put on before the fight: its starting cell. */
   pad: number | null;
-  /** Where the hero stands once the throws have moved it off its rune: the cell where its last disc stopped. */
+  /** Where the hero stands once its throws have moved it off its rune: the cell where its latest disc stopped. */
   at: Pt | null;
-  /** The hero hops over to `at` after the throws: where from, and how far along it is, 0 to 1. */
+  /** The hero hops over to `at` the moment its disc stops: where from, and how far along it is, 0 to 1. */
   from: Pt | null;
   leap: number;
   hand: number;
@@ -120,6 +120,11 @@ export interface Disc {
   beams?: number;
   /** «Бумеранг»: a miss that went back into the hand; it is off the table and nobody walks over to it. */
   back?: boolean;
+  /**
+   * The disc has stopped (or dropped into a hole) and its hero has gone over to it: it is out of play, nothing knocks it
+   * any more, and the hero picks it up as it lands.
+   */
+  held?: boolean;
   /** «Надувные труселя»: the disc has floated over a hole already (the trophy's token flashes once a throw). */
   floated?: boolean;
   /**
@@ -232,8 +237,11 @@ const LAG_WINDOW = 3000, RESYNC_MS = 2500, REPLAY = 360;
  */
 const LEAD = 1, CELL_T = 0.14, BEAT = 0.18, AFTER = 0.35;
 
-/** Seconds a hero takes to hop over to where its last disc stopped. */
+/** Seconds a hero takes to hop over to where its disc stopped. */
 const HOP_T = 0.45;
+
+/** Online client: how long a throw sent to the host holds the next one back at most, in milliseconds, if no disc comes of it. */
+const ASK_MS = 1500;
 
 /** Host: the sounds it sends along with its snapshots are the ones of this many milliseconds back. */
 const CUE_MS = 2000;
@@ -331,9 +339,11 @@ export class Game {
   /** The last physics step whose sounds were played: steps played again after a snapshot stay quiet. */
   private heard = 0;
   private inStep = false;
-  /** The enemy making its move, the cells it has put down on so far, and the turn each hero last landed after its hop. */
+  /** The enemy making its move, the cells it has put down on so far, and the hop each hero last landed from. */
   private walked = { key: '', n: 0 };
-  private hopped = new Map<number, number>();
+  private hopped = new Map<number, string>();
+  /** Online client: the throw each hero last sent the host, with the hand it had then, the turn and this page's clock. */
+  private asked = new Map<number, { hand: number; turn: number; at: number }>();
   /** Which heroes this screen may move, aim and select (online: only the player's own). */
   canControl: (h: HeroState) => boolean = () => true;
   /** Online: placement ends when every hero's player is ready, and heroes cannot swap runes. */
@@ -371,9 +381,6 @@ export class Game {
    * and the host's snapshot doesn't swap them for others.
    */
   private fx = mulberry32(0);
-  /** Host: the disc each hero is hopping over to; it picks the disc up once it lands. */
-  private pickup = new Map<HeroState, Disc>();
-
   /** Start a fight in a new room; unless the spec says otherwise, the room is built for the party's size. */
   loadRoom(spec: RoomSpec) {
     spec = { ...spec, heroes: spec.heroes ?? this.party.length };
@@ -385,9 +392,9 @@ export class Game {
     this.whet = false;
     this.mined = 0;
     this.clean = 0;
-    this.pickup.clear();
     this.walked = { key: '', n: 0 };
     this.hopped.clear();
+    this.asked.clear();
     // sparks carry over from the last room, and the altar fills them up
     const boon = Math.min(AB_COST, this.bank.boon ?? 0), shield = this.bank.shield ?? 0;
     for (const h of this.party) {
@@ -419,6 +426,7 @@ export class Game {
   showRoom(spec: RoomSpec) {
     this.walked = { key: '', n: 0 };
     this.hopped.clear();
+    this.asked.clear();
     this.S = { ...generate(spec), spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], food: [], bombs: [], gas: [], zaps: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [], away: [] };
     this.pickActive();
   }
@@ -441,12 +449,12 @@ export class Game {
     return this.S.heroes.find(h => h.i === i) ?? this.S.heroes[0];
   }
 
-  /** Where a hero stands: on its rune for the first throws, then where its last disc stopped; null before it is placed. */
+  /** Where a hero stands: on its rune for the first throw, then where its latest disc stopped; null before it is placed. */
   spot(h: HeroState): Pt | null {
     return h.at ?? (h.pad !== null ? this.S.pads[h.pad] : null);
   }
 
-  /** Where a hero's figure is seen, and how high it is lifted: it hops over to its new cell for a moment after the throws. */
+  /** Where a hero's figure is seen, and how high it is lifted: it hops over to its new cell for a moment after each throw. */
   figureAt(h: HeroState): { x: number; y: number; lift: number } | null {
     const p = this.spot(h), f = h.from;
     if (!p) return null;
@@ -614,15 +622,44 @@ export class Game {
     this.onChange();
   }
 
+  /**
+   * The hero still waits on its last throw: the disc rolls on, or it has stopped and the hero hops over to it.
+   * The next disc goes from where the hero lands.
+   */
+  waits(h: HeroState) {
+    return !!h.from || this.S.discs.some(d => d.hero === h && this.loose(d)) || this.asking(h);
+  }
+
+  /**
+   * Online client: a throw of the hero's has gone to the host and its disc isn't on this screen yet, so the next one
+   * waits for it too. Given up after ASK_MS, in case the host had no use for the throw.
+   */
+  private asking(h: HeroState) {
+    const a = this.asked.get(h.i);
+    if (!a) return false;
+    if (h.hand < a.hand || a.turn !== this.S.turn || this.clock() - a.at > ASK_MS) { this.asked.delete(h.i); return false; }
+    return true;
+  }
+
+  /** A disc still in play: not gone, not brought back by «Бумеранг», not one of the card sharp's phantoms, and its hero hasn't gone over to it yet. */
+  private loose(d: Disc) {
+    return !d.gone && !d.back && !d.fan && !d.held;
+  }
+
+  /** The hero can throw now: the heroes' turn, a disc in hand, and its last disc stopped and followed. */
+  canThrow(h: HeroState) {
+    return this.S.phase === 'throw' && h.hand > 0 && h.hp > 0 && !!this.spot(h) && !this.ended(h) && !this.waits(h);
+  }
+
   /** Throw the hero's next disc. (dx, dy) is the pull-back vector in world units, up to 60. */
   throwDisc(h: HeroState, dx: number, dy: number) {
     const S = this.S;
     const p = this.spot(h);
-    if (S.phase !== 'throw' || h.hand <= 0 || !p || h.hp <= 0 || this.ended(h)) return;
+    if (!this.canThrow(h) || !p) return;
     const L = Math.hypot(dx, dy);
     if (L < 4) return;
     this.sfx('launch', Math.min(1, L / 60), h.i);
-    if (this.send) { this.send({ k: 'throw', h: h.i, dx, dy }); return; }
+    if (this.send) { this.send({ k: 'throw', h: h.i, dx, dy }); this.asked.set(h.i, { hand: h.hand, turn: S.turn, at: this.clock() }); return; }
     // a reopened save holds only the discs still on the table, so the next number goes past the highest one
     const next = () => Math.max(S.turn * 64 - 1, ...S.discs.map(d => d.id ?? 0)) + 1, s = this.power(h), vol = next();
     const disc = (a: number, fan: boolean): Disc => {
@@ -1587,7 +1624,7 @@ export class Game {
 
   // ------------------------------------------------------------ physics
 
-  private bodies() { return this.S.discs.filter(d => !d.gone && !d.fall); }
+  private bodies() { return this.S.discs.filter(d => !d.gone && !d.fall && !d.held); }
 
   private bounceStatic(d: Disc, o: { x: number; y: number; r: number }, e = d.e) {
     const dx = d.x - o.x, dy = d.y - o.y, L = Math.hypot(dx, dy), mn = d.r + o.r;
@@ -1847,6 +1884,11 @@ export class Game {
     return this.bodies().some(d => Math.hypot(d.vx, d.vy) > 2) || this.S.discs.some(d => d.fall && !d.gone);
   }
 
+  /** Some hero is hopping over to its disc. */
+  hopping() {
+    return this.S.heroes.some(h => h.from);
+  }
+
   /** Every living hero has thrown all its discs; the turn still waits for the players to end it. */
   allThrown() { return this.alive().every(h => h.hand === 0); }
 
@@ -1859,42 +1901,76 @@ export class Game {
     const S = this.S;
     // discs still in hand are lost: the hand fills again next turn
     for (const h of S.heroes) h.hand = 0;
-    for (const d of S.discs) {
-      d.vx = d.vy = 0;
-      if (d.gone || d.fall || d.hero.hp <= 0) continue;
-      if (d.fan) continue;
-      if (!d.hits) this.float(d.x, d.y, 'мимо', '#c7cbe0');
-      // «Надувные труселя»: spikes and lava under the disc don't hurt
-      if (S.haz.has(hazKey(Math.floor(d.x / 16), Math.floor(d.y / 16)))) {
-        if (has(d.hero, 'undies')) this.pop(d.hero, 'undies');
-        else {
-          this.float(d.x, d.y, S.biome.haz === 'lava' ? 'лава!' : 'шипы!', '#ff4d6a');
-          this.hurtHero(d.hero, S.biome.hazDmg);
-        }
-      }
-    }
-    this.regroup();
+    this.follow(true);
     this.rechase();
   }
 
   /**
-   * After the throws every living hero goes over to where its last disc stopped: to the cell holding most of that disc,
-   * or, when that cell is taken, the one holding the next most of it, else the free cell nearest the disc. When two heroes
-   * are after one cell, it goes to the one whose disc covers more of it. A hero whose last disc fell into a pit goes back
-   * to its rune, the cell it started the fight on.
+   * A disc of the hero's has come to rest: a miss says so, and spikes or lava under it hurt the hero who threw it.
+   * A phantom of the card sharp's fan, a disc in a hole and a fallen hero's go unremarked.
    */
-  private regroup() {
+  private land(d: Disc) {
+    const S = this.S;
+    if (d.fall || d.fan || d.hero.hp <= 0) return;
+    if (!d.hits) this.float(d.x, d.y, 'мимо', '#c7cbe0');
+    // «Надувные труселя»: spikes and lava under the disc don't hurt
+    if (!S.haz.has(hazKey(Math.floor(d.x / 16), Math.floor(d.y / 16)))) return;
+    if (has(d.hero, 'undies')) this.pop(d.hero, 'undies');
+    else {
+      this.float(d.x, d.y, S.biome.haz === 'lava' ? 'лава!' : 'шипы!', '#ff4d6a');
+      this.hurtHero(d.hero, S.biome.hazDmg);
+    }
+  }
+
+  /**
+   * Host: the moment a hero's disc stops, the hero goes over to it, and throws its next disc from there. A hero with two
+   * discs a turn moves twice; one whose disc dropped into a hole stays where it stood. `final`: the heroes' turn is over,
+   * and every disc still out is settled, the last one of each hero deciding where it goes.
+   */
+  private follow(final = false) {
+    const S = this.S, movers: [HeroState, Disc][] = [];
+    for (const h of S.heroes) {
+      if (h.hp <= 0 || !this.spot(h) || (h.from && !final)) continue;
+      const out = S.discs.filter(d => d.hero === h && this.loose(d) && (final || d.fall || Math.hypot(d.vx, d.vy) <= 2));
+      const last = final ? out[out.length - 1] : out[0];
+      if (!last) continue;
+      for (const d of final ? out : [last]) {
+        d.held = true;
+        d.vx = d.vy = 0;
+        this.land(d);
+        // the turn is over: earlier discs nobody went over to are cleared away
+        if (d !== last && !d.fall) d.gone = true;
+      }
+      if (h.hp > 0 && !last.fall) movers.push([h, last]);
+    }
+    if (!movers.length) return;
+    this.regroup(movers);
+    if (!final) { this.rechase(); this.onChange(); }
+  }
+
+  /**
+   * Heroes go over to where their discs stopped: to the cell holding most of the disc, or, when that cell is taken, the
+   * one holding the next most of it, else the free cell nearest the disc. When two heroes are after one cell at once, it
+   * goes to the one whose disc covers more of it. Every other hero keeps the cell it stands on (or hops to).
+   */
+  private regroup(movers: [HeroState, Disc][]) {
     const S = this.S, gw = S.gw, taken = this.occupied(null, true);
+    const moving = new Set(movers.map(([h]) => h));
+    for (const h of S.heroes) {
+      const p = this.spot(h);
+      // the others keep their cells, and a fallen hero lies where it fell
+      if (p && !moving.has(h)) taken[Math.floor(p.y / TILE) * gw + Math.floor(p.x / TILE)] = 1;
+    }
     const free = (i: number, j: number) => isFloor(S, i, j) && !taken[j * gw + i];
-    const put = (h: HeroState, i: number, j: number, d?: Disc) => {
+    const put = (h: HeroState, i: number, j: number, d: Disc) => {
       taken[j * gw + i] = 1;
-      const to = cellCentre(i, j), now = this.spot(h)!;
+      const to = cellCentre(i, j), now = this.figureAt(h)!;
       h.at = to;
-      if (now.x !== to.x || now.y !== to.y) { h.from = { x: now.x, y: now.y }; h.leap = 0; if (d) this.pickup.set(h, d); }
+      if (now.x !== to.x || now.y !== to.y) { h.from = { x: now.x, y: now.y }; h.leap = 0; }
       // the disc stopped right under the hero: it picks it up where it stands
-      else if (d) d.gone = true;
+      else d.gone = true;
     };
-    const nearest = (h: HeroState, x: number, y: number, d?: Disc) => {
+    const nearest = (h: HeroState, x: number, y: number, d: Disc) => {
       let best: [number, number] | null = null, bd = Infinity;
       for (let j = 0; j < S.gh; j++) for (let i = 0; i < gw; i++) {
         const c = cellCentre(i, j), far = Math.hypot(c.x - x, c.y - y);
@@ -1902,23 +1978,6 @@ export class Game {
       }
       if (best) put(h, ...best, d);
     };
-    const home: HeroState[] = [], movers: [HeroState, Disc][] = [];
-    for (const h of S.heroes) {
-      const p = this.spot(h);
-      if (!p) continue;
-      // a miss «Бумеранг» brought back is in the hand, not on the table
-      const last = h.hp > 0 ? S.discs.filter(d => d.hero === h && !d.back).pop() : undefined;
-      // a fallen hero lies where it fell
-      if (!last) taken[Math.floor(p.y / TILE) * gw + Math.floor(p.x / TILE)] = 1;
-      else if (last.fall) home.push(h);
-      else movers.push([h, last]);
-    }
-    // the way back to the rune goes first: nobody takes a hero's starting cell from it
-    for (const h of home) {
-      const r = h.pad !== null ? S.pads[h.pad] : this.spot(h)!, i = Math.floor(r.x / TILE), j = Math.floor(r.y / TILE);
-      if (free(i, j)) put(h, i, j);
-      else nearest(h, r.x, r.y);
-    }
     const bids = movers.flatMap(([h, d]) => this.cover(d).map(([i, j, share]) => ({ h, d, i, j, share })));
     bids.sort((a, b) => b.share - a.share);
     const placed = new Set<HeroState>();
@@ -2343,6 +2402,8 @@ export class Game {
     if (this.send) { this.updateRemote(dt); return; }
     this.acc += dt;
     while (this.acc >= STEP) { this.step(STEP); this.acc -= STEP; }
+    // a hero goes over to its disc the moment it stops
+    if (S.phase === 'throw') this.follow();
     // the last enemy down (in the ore cave, the last vein or mushroom spent) ends the room at once, whatever throws are left
     if ((S.phase === 'throw' || S.phase === 'resolve' || S.phase === 'enemy') && this.cleared()) this.finish();
     // the heroes' turn ends by the players' word only, once the discs have stopped
@@ -2476,13 +2537,14 @@ export class Game {
       if (h.flash > 0) h.flash -= dt;
       if (h.knock && (h.knock.t += dt) > KNOCK_T) h.knock = undefined;
       if (h.from && (h.leap += dt / HOP_T) >= 1) {
+        // one knock on the board a hop, however the snapshots set the hop back
+        const hop = `${S.turn}:${h.from.x},${h.from.y}:${h.at?.x},${h.at?.y}`;
+        if (this.hopped.get(h.i) !== hop) { this.hopped.set(h.i, hop); this.onSound('step', 0.9); }
         h.from = null;
         h.leap = 0;
-        if (this.hopped.get(h.i) !== S.turn) { this.hopped.set(h.i, S.turn); this.onSound('step', 0.9); }
-        // landed on its disc: it picks the disc up
-        const d = this.pickup.get(h);
-        if (d) d.gone = true;
-        this.pickup.delete(h);
+        // landed on its disc: it picks the disc up, and may throw the next one
+        for (const d of S.discs) if (d.hero === h && d.held && !d.fall) d.gone = true;
+        this.onChange();
       }
     }
     for (const n of S.nodes) if (n.hit > 0) n.hit -= dt;
