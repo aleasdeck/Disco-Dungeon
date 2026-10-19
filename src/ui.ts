@@ -167,6 +167,10 @@ export class Hud {
   /** The enemy whose card is open, and whether a tap pinned it (a hover card goes when the pointer leaves). */
   private card = -1;
   private pinned = false;
+  /** The floor whose event's window is up: the strip stays in sight over it and speaks of the event, not the room behind. */
+  private evFloor: number | null = null;
+  /** The hero (by index) whose card a tap on the strip's face opened over the event's window. */
+  private peek = -1;
   /** Online: the name of the player whose hero this is. */
   nameOf: (i: number) => string | null = () => null;
   /** This screen's own hero: the one the blacksmith's window sells upgrades for (online not the ones the host stands in for). */
@@ -221,7 +225,20 @@ export class Hud {
       if (this.pinned && !t.closest('#mobCard')) { this.pinned = false; this.closeCard(); }
       if (!t.closest('#logPanel')) this.toggleLog(false);
       if (!t.closest('#ups')) this.toggleCard(false);
+      if (!t.closest('#heroPeek')) this.closeHero();
     });
+  }
+
+  /**
+   * The event's window opens on a floor (or closes, with null): over it the strip keeps the party's faces with their
+   * health and the ore, names the event instead of the room behind, and a tap on a face opens that hero's card.
+   */
+  setEvent(floor: number | null) {
+    if (this.evFloor === floor) return;
+    this.evFloor = floor;
+    document.documentElement.classList.toggle('at-event', floor !== null);
+    if (floor === null) this.closeHero();
+    if (this.g.S) this.refresh();
   }
 
   /** The big band across the room for a moment when the turn passes: "Ваш ход", "Ход врагов". */
@@ -247,8 +264,13 @@ export class Hud {
       b.setAttribute('aria-label', h.def.name);
       b.innerHTML = `<canvas></canvas><b class="who"></b><span class="a-hp"><i></i><s></s><em></em></span><span class="tick">${icon('check')}</span><span class="off">${icon('plug')}</span>`;
       drawPortrait(b.querySelector('canvas')!, h);
-      b.addEventListener('click', () => this.g.select(h.i));
-      b.disabled = !this.g.canControl(h);
+      // over an event a face opens its hero's card; in a fight it picks the hero to throw with
+      b.addEventListener('click', e => {
+        if (this.evFloor === null) { this.g.select(h.i); return; }
+        e.stopPropagation();
+        if (this.peek === h.i) this.closeHero(); else this.openHero(h.i);
+      });
+      b.disabled = this.evFloor === null && !this.g.canControl(h);
       box.appendChild(b);
     }
     this.lastPortrait = '';
@@ -259,7 +281,7 @@ export class Hud {
     const g = this.g, S = g.S;
     fillIcons();
     // the floor is laid out after the room's name (style.css): where the strip is narrow the floor gives way, never the room
-    $('locName').innerHTML = `<span class="fl">Этаж ${S.spec.floor + 1} · </span><span>${ROOM_TYPES[S.spec.type].name}</span>`;
+    $('locName').innerHTML = `<span class="fl">Этаж ${(this.evFloor ?? S.spec.floor) + 1} · </span><span>${ROOM_TYPES[this.evFloor !== null ? 'event' : S.spec.type].name}</span>`;
     // the ore cave counts its turns down: «Ход 2 из 3»
     const max = g.turnsMax(), last = max > 0 && S.turn >= max;
     $('hTurn').textContent = S.phase === 'place' ? 'Расстановка' : max ? `Ход ${S.turn} из ${max}` : `Ход ${S.turn}`;
@@ -300,23 +322,26 @@ export class Hud {
     this.log();
     if (this.card >= 0) this.openCard(this.card);
     if (!$('ups').hidden) this.fillCard();
+    if (this.peek >= 0) this.openHero(this.peek);
     this.forge();
   }
 
   // ------------------------------------------------------------ top strip
 
   private heads() {
-    const g = this.g, S = g.S;
+    // over an event the room behind has nothing to say: no blows coming, nobody ready or done
+    const g = this.g, S = g.S, ev = this.evFloor !== null;
     for (const o of g.party) {
-      const t = $('ally' + o.i);
+      const t = $<HTMLButtonElement>('ally' + o.i);
       if (!t) continue;
+      t.disabled = !ev && !g.canControl(o);
       t.classList.toggle('me', o === g.hero);
       t.classList.toggle('dead', o.hp <= 0);
       // online: the player's name on their hero, greyed with a pulled plug while they are disconnected
       const who = this.nameOf(o.i), away = !g.here(o);
       t.querySelector('.who')!.textContent = who ?? '';
       t.classList.toggle('away', away);
-      const tot = Math.max(o.max, o.hp + o.shield), inc = g.incoming(o);
+      const tot = Math.max(o.max, o.hp + o.shield), inc = ev ? 0 : g.incoming(o);
       const hpPct = (Math.max(0, o.hp) / tot) * 100, risk = (Math.min(inc, Math.max(0, o.hp)) / tot) * 100;
       (t.querySelector('.a-hp i') as HTMLElement).style.width = hpPct + '%';
       const sh = t.querySelector('.a-hp s') as HTMLElement;
@@ -327,7 +352,7 @@ export class Hud {
       em.style.width = risk + '%';
       t.classList.toggle('lethal', o.hp > 0 && inc >= o.hp);
       // a tick: placed and ready (online placement), or done with the turn
-      const done = S.phase === 'place' ? g.online && S.ready.includes(o.i) : S.phase === 'throw' && g.ended(o);
+      const done = !ev && (S.phase === 'place' ? g.online && S.ready.includes(o.i) : S.phase === 'throw' && g.ended(o));
       t.classList.toggle('done', done);
       t.title = (who ? `${who}, ` : '') + `${o.def.name}: ${Math.max(0, o.hp)}/${o.max}` + (o.shield ? `, щит ${o.shield}` : '')
         + (o.hp <= 0 ? ', пал' : done ? (S.phase === 'place' ? ', готов' : ', закончил ход') : '') + (away ? '. Нет связи: пока играет хозяин комнаты, ход его не ждёт' : '');
@@ -519,15 +544,46 @@ export class Hud {
   }
 
   private fillCard() {
-    const g = this.g, h = g.hero, hit = Math.round(fullHit(g.stat(h, 'm'), g.stat(h, 'pw')) * (h.chill > 0 ? 0.7 : 1));
-    $('ups').innerHTML = `<h3 style="color:${h.def.col}">${h.def.name}</h3>`
-      + `<p class="hc-hit" title="Сильнее всего диск бьёт на полной натяжке; прямо в лоб урон удваивается">удар до ${hit}, в лоб ×${CRIT}</p>`
+    const h = this.g.hero;
+    $('ups').innerHTML = `<h3 style="color:${h.def.col}">${h.def.name}</h3>` + this.cardBody(h);
+  }
+
+  /** A hero's card under the name: how hard the disc hits, its upgrades, the ability in full and the bosses' trophies. */
+  private cardBody(h: HeroState) {
+    const g = this.g, hit = Math.round(fullHit(g.stat(h, 'm'), g.stat(h, 'pw')) * (h.chill > 0 ? 0.7 : 1));
+    return `<p class="hc-hit" title="Сильнее всего диск бьёт на полной натяжке; прямо в лоб урон удваивается">удар до ${hit}, в лоб ×${CRIT}</p>`
       + upRows(g, h) + '<small class="ups-note">Прокачка у кузнеца на карте</small>'
       + `<p class="hc-ab"><b>${h.def.ab}.</b> ${h.def.abTxt} ${h.def.abMore}</p>`
       + (h.arts?.length ? `<div class="hc-arts"><small class="ups-note">Трофеи боссов</small>${h.arts.map(k => {
         const a = artDef(k);
         return `<div class="hc-art" title="${a.gag}">${artIcon(k, 'hc-art-ico')}<b>${a.name}</b><small>${a.txt}</small></div>`;
       }).join('')}</div>` : '');
+  }
+
+  /** Any hero's card from its face on the strip over an event: the face, the health in numbers, then the same card. */
+  private openHero(i: number) {
+    const h = this.g.party.find(o => o.i === i), head = $('ally' + i), card = $('heroPeek');
+    if (!h || !head) { this.closeHero(); return; }
+    const hp = Math.max(0, h.hp), tot = Math.max(h.max, h.hp + h.shield), hpPct = (hp / tot) * 100;
+    card.innerHTML = `<div class="mc-head"><img src="${faceUrl(h)}" alt="" style="--c:${h.def.col}"><div><b style="color:${h.def.col}">${h.def.name}</b>`
+      + `<span class="mc-hp"><i style="width:${hpPct}%"></i>${h.shield ? `<s style="left:${hpPct}%;width:${(h.shield / tot) * 100}%"></s>` : ''}`
+      + `<u>${h.hp > 0 ? `${hp}/${h.max}` : 'пал'}${h.shield ? ` +${h.shield} щит` : ''}</u></span></div></div>`
+      + this.cardBody(h);
+    card.hidden = false;
+    // under the face, kept on the screen; a short screen scrolls the card
+    const r = head.getBoundingClientRect(), w = card.offsetWidth;
+    card.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left)) + 'px';
+    card.style.top = r.bottom + 8 + 'px';
+    card.style.maxHeight = window.innerHeight - r.bottom - 16 + 'px';
+    if (this.peek !== i) { $('ally' + this.peek)?.setAttribute('aria-expanded', 'false'); head.setAttribute('aria-expanded', 'true'); }
+    this.peek = i;
+  }
+
+  private closeHero() {
+    if (this.peek < 0) return;
+    $('heroPeek').hidden = true;
+    $('ally' + this.peek)?.setAttribute('aria-expanded', 'false');
+    this.peek = -1;
   }
 
   // ------------------------------------------------------------ the turn button
