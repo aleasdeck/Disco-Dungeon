@@ -421,6 +421,7 @@ export class SceneRenderer {
     this.drawUnder(c, view, sx !== 0 || sy !== 0);
     this.drawGround();
     this.drawAimLine(aim);
+    this.drawHammer();
 
     const items: [number, () => void][] = [];
     for (const d of S.discs) if (!d.gone) items.push([cam.depth(d.x, d.y), () => this.drawDisc(d)]);
@@ -1006,31 +1007,46 @@ export class SceneRenderer {
     c.stroke();
   }
 
-  /** Glowing summon circles and tiles about to turn to lava, a turn ahead; drawn over the figures so nothing hides them. */
-  private drawOmens() {
-    const { c, P, g } = this;
-    const S = g.S;
-    if (S.phase === 'over') return;
-    const pulse = reduce ? 0.7 : 0.55 + 0.35 * Math.sin(this.t * 4);
+  /** The cells an enemy marked a turn ahead, while its move is still to come: the mob has not risen, the floor not turned to lava. */
+  private *omens(hammer: boolean) {
+    const g = this.g;
+    if (g.S.phase === 'over') return;
     for (const m of g.liveMobs()) {
       const it = m.intent;
-      // gone once that enemy has made its move: the mob has risen, the floor has turned to lava
-      if (!it?.spots || g.acted(m) || g.frozen(m)) continue;
-      for (const p of it.spots) {
-        if (it.t === 'summon') {
-          const r = MOBS[MOBS[m.k].acts!.find(a => a.k === 'summon')!.kind!].r + 3, [x, y] = P(p.x, p.y);
-          ell(c, x, y, r * 1.27, r * 0.64);
-          c.fillStyle = `rgba(150,110,255,${0.3 * pulse})`; c.fill();
-          c.strokeStyle = `rgba(200,170,255,${pulse})`; c.lineWidth = 1.6; c.stroke();
-          ell(c, x, y, r * 0.8, r * 0.4);
-          c.setLineDash([2, 2]); c.stroke(); c.setLineDash([]);
-        } else {
-          // lava to come is orange; the smasher's hammer square red
-          const x0 = p.x - 7, y0 = p.y - 7, x1 = p.x + 7, y1 = p.y + 7, hammer = it.t === 'smash', a = hammer ? 0.5 + 0.5 * pulse : pulse;
-          pth(c, [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)]);
-          c.fillStyle = hammer ? `rgba(255,30,20,${0.45 * a})` : `rgba(255,120,40,${0.35 * a})`; c.fill();
-          c.strokeStyle = hammer ? `rgba(255,70,50,${a})` : `rgba(255,170,70,${a})`; c.lineWidth = hammer ? 2 : 1; c.stroke();
-        }
+      if (!it?.spots || g.acted(m) || g.frozen(m) || (it.t === 'smash') !== hammer) continue;
+      for (const p of it.spots) yield { m, it, p };
+    }
+  }
+
+  /** The smasher's hammer square, red on the floor under the figures, so whoever stands in it stands on it. */
+  private drawHammer() {
+    const { c, P } = this, a = reduce ? 0.85 : 0.775 + 0.175 * Math.sin(this.t * 4);
+    for (const { p } of this.omens(true)) {
+      const x0 = p.x - 7, y0 = p.y - 7, x1 = p.x + 7, y1 = p.y + 7;
+      pth(c, [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)]);
+      c.fillStyle = `rgba(255,30,20,${0.45 * a})`; c.fill();
+      c.strokeStyle = `rgba(255,70,50,${a})`; c.lineWidth = 2; c.stroke();
+    }
+  }
+
+  /** Glowing summon circles and tiles about to turn to lava, a turn ahead; drawn over the figures so nothing hides them. */
+  private drawOmens() {
+    const { c, P } = this;
+    const pulse = reduce ? 0.7 : 0.55 + 0.35 * Math.sin(this.t * 4);
+    for (const { m, it, p } of this.omens(false)) {
+      if (it.t === 'summon') {
+        const r = MOBS[MOBS[m.k].acts!.find(a => a.k === 'summon')!.kind!].r + 3, [x, y] = P(p.x, p.y);
+        ell(c, x, y, r * 1.27, r * 0.64);
+        c.fillStyle = `rgba(150,110,255,${0.3 * pulse})`; c.fill();
+        c.strokeStyle = `rgba(200,170,255,${pulse})`; c.lineWidth = 1.6; c.stroke();
+        ell(c, x, y, r * 0.8, r * 0.4);
+        c.setLineDash([2, 2]); c.stroke(); c.setLineDash([]);
+      } else {
+        // lava to come
+        const x0 = p.x - 7, y0 = p.y - 7, x1 = p.x + 7, y1 = p.y + 7;
+        pth(c, [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)]);
+        c.fillStyle = `rgba(255,120,40,${0.35 * pulse})`; c.fill();
+        c.strokeStyle = `rgba(255,170,70,${pulse})`; c.lineWidth = 1; c.stroke();
       }
     }
   }
