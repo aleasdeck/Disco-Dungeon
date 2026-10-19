@@ -113,4 +113,4 @@ plate('pf', (W, H), [(4 + x * (W - 8), 4 + y * (H - 8)) for x, y in ((0.09, 0.03
 # the board of the trophies' sockets in the fight corner, left of the health and the sparks (Vladislav: brighter, and
 # cardboard); 88 x 267 of the corner's units at 3 pixels a unit, its side by the health straight
 W, H = 264, 801
-plate('tray', (W, H), [(10, 16), (W - 3, 4), (W - 3, H - 3), (3, H - 12)], (176, 110, 56), 90, tear=0.45)
+plate('tray', (W, H), [(10, 16), (W - 3, 4), (W - 3, H - 3), (3, H - 12)], (176, 110, 56), 90, tear=1.2)
