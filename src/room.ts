@@ -91,7 +91,7 @@ export interface ResNode {
   y: number;
   left: number;
   hit: number;
-  /** Cells it covers on each side: the ore cave's big vein stands on 2 × 2 cells, the rest on one. */
+  /** Cells it covers on each side, 1 if not set. */
   s?: number;
 }
 
@@ -483,18 +483,20 @@ export const SPK_AREA = [100, 130];
 export const crystals = (cells: number) => 1 + SPK_AREA.filter(a => cells > a).length;
 
 /**
- * The ore cave holds no enemies, and each one is stocked differently: a big vein on 2 × 2 cells in the middle of
- * the room or none, two to five small veins and up to two mushroom patches off to the sides (`n`: how many, each count
- * as likely). It has only `turns` minus the heroes: three turns for a lone hero, one for three heroes, who throw three
- * times as many discs a turn. Each throw goes for ore or for health. It ends once the turns run out or nothing is left
+ * The ore cave holds no enemies, and each one is stocked differently: a clump of three small veins grown into one rock
+ * in the middle of the room or none, two to five small veins and up to two mushroom patches off to the sides (`n`: how
+ * many, each count as likely). The clump stands on three cells of a 2 × 2 square (`r` keeps the room clear round it).
+ * It has only `turns` minus the heroes: three turns for a lone hero, one for three heroes, who throw three times as many
+ * discs a turn. Each throw goes for ore or for health. It ends once the turns run out or nothing is left
  * to hit. Its veins hold as many charges whatever the party: the turns already make up for its size.
  */
-export const CAVE = { turns: 4, big: { r: 12, ch: 6, n: [0, 1] as Range }, small: { ch: 2, n: [2, 5] as Range }, herbs: [0, 2] as Range };
+export const CAVE = { turns: 4, clump: { r: 12, n: [0, 1] as Range }, small: { ch: 2, n: [2, 5] as Range }, herbs: [0, 2] as Range };
 
 /** What one ore cave holds, from its own stream of the seed, so the rest of the room is laid out as before. */
 export function caveStock(spec: Pick<RoomSpec, 'seed' | 'depth'>) {
   const R = makeRng(spec.seed * 31 + spec.depth + 4241), roll = (r: Range) => R.int(r[0], r[1]);
-  return { big: roll(CAVE.big.n), ore: roll(CAVE.small.n), herb: roll(CAVE.herbs) };
+  // the last roll: which cell of the clump's square stays free
+  return { clump: roll(CAVE.clump.n), ore: roll(CAVE.small.n), herb: roll(CAVE.herbs), gap: R.int(0, 3) };
 }
 
 /** Turns the party has in the ore cave: 4 minus the heroes, at least one. */
@@ -677,14 +679,18 @@ export function generate(spec: RoomSpec): Layout {
     }
   }
 
-  // the ore cave's big vein stands in the middle of the room, a straight throw from every rune, on 2 × 2 cells;
-  // it goes in before the blocks, so they keep out of its way
+  // the ore cave's clump of veins stands in the middle of the room, a straight throw from every rune, on three cells of
+  // a 2 × 2 square; it goes in before the blocks, so they keep out of its way
   const cave = type === 'treasure', stock = cave ? caveStock(spec) : null;
-  let big: ResNode | null = null;
-  if (stock?.big) {
-    const { r, ch } = CAVE.big, centre = (x: number, y: number) => Math.abs(x / Wx - 0.5) < 0.18 && Math.abs(y / Wy - 0.5) < 0.18;
+  const clump: ResNode[] = [];
+  if (stock?.clump) {
+    const { r } = CAVE.clump, ch = CAVE.small.ch, centre = (x: number, y: number) => Math.abs(x / Wx - 0.5) < 0.18 && Math.abs(y / Wy - 0.5) < 0.18;
     const q = placeCell(2, r, centre) ?? placeCell(2, r, mid) ?? placeCell(2, r, any) ?? placeCell(2, r, any, true);
-    if (q) { big = { k: 'ore', ...NODES.ore, r, ch, x: q[0], y: q[1], left: ch, hit: 0, s: 2 }; objs.push({ x: q[0], y: q[1], r }); }
+    if (q) {
+      for (let k = 0; k < 4; k++) if (k !== stock.gap) clump.push({ k: 'ore', ...NODES.ore, ch, x: q[0] + (k % 2 ? 8 : -8), y: q[1] + (k < 2 ? -8 : 8), left: ch, hit: 0 });
+      // each vein keeps the others off its sides too, so no other vein grows into the clump
+      objs.push({ x: q[0], y: q[1], r }, ...clump.map(n => ({ x: n.x, y: n.y, r: n.r })));
+    }
   }
 
   const blocks: Block[] = [];
@@ -763,11 +769,11 @@ export function generate(spec: RoomSpec): Layout {
   }
 
   const nodes: ResNode[] = [];
-  if (cave && big) nodes.push(big);
-  // in the ore cave the small veins and the mushrooms stand apart, from the big vein and from each other;
+  nodes.push(...clump);
+  // in the ore cave the small veins and the mushrooms stand apart, from the clump and from each other;
   // in a fight the mushroom patches keep away from each other, so heroes on different runes each have one in reach
   const apart = (x: number, y: number, k: NodeKind) =>
-    cave ? nodes.every(n => Math.hypot(x - n.x, y - n.y) > (n.s ? 3 : 2.5) * TILE) : k !== 'herb' || nodes.every(n => n.k !== 'herb' || Math.hypot(x - n.x, y - n.y) > 4 * TILE);
+    cave ? nodes.every(n => Math.hypot(x - n.x, y - n.y) > (clump.includes(n) ? 3 : 2.5) * TILE) : k !== 'herb' || nodes.every(n => n.k !== 'herb' || Math.hypot(x - n.x, y - n.y) > 4 * TILE);
   const ground = floor.reduce((a, b) => a + b, 0) - pits.reduce((a, p) => a + p.cells.length, 0);
   // a bigger party's mushroom patches come after the room's own resources; a bigger room's second and third crystals
   // come last, and stay out if no fair place is left for them
