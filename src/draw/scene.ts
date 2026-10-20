@@ -24,15 +24,16 @@ const env = (k: string) => envArt.get(k);
 
 /**
  * Resource pictures standing on a pad: the full one (`key`) for a full stock and `<key>_<n>` for n of its `pieces` left,
- * as wide as `w`, set off the cell's centre by `dx`, `dy` and dropped `lift` on screen. A crystal is a spark and a
+ * as wide as `w`, set off the cell's centre on screen by `sx` to the right and `sy` down: the picture always faces the
+ * viewer, so its foot sits the same way on the cell at any turn of the camera. A crystal is a spark and a
  * mushroom a heal, so the toilet shows how many crystals are left and the meadow how many mushrooms. The pad is a
  * picture laid flat on the cell (`pad`): bathroom tiles, or a meadow rounded off (`round`). Ore is a rock built in code
  * (drawRock).
  */
 type PadKind = Exclude<NodeKind, 'ore'>;
-const NODE_ART: Record<PadKind, { key: string; pieces: number; w: number; dx: number; dy: number; lift: number; pad: string; round?: number }> = {
-  spk: { key: 'crystal', pieces: 3, w: 17, dx: 5, dy: 4, lift: 0, pad: 'res_tiles' },
-  herb: { key: 'mushrooms', pieces: 3, w: 18.5, dx: 0, dy: 1.5, lift: 1, pad: 'res_grass', round: 1.06 },
+const NODE_ART: Record<PadKind, { key: string; pieces: number; w: number; sx: number; sy: number; pad: string; round?: number }> = {
+  spk: { key: 'crystal', pieces: 3, w: 17, sx: 1, sy: 2, pad: 'res_tiles' },
+  herb: { key: 'mushrooms', pieces: 3, w: 18.5, sx: 0, sy: 1.7, pad: 'res_grass', round: 1.06 },
 };
 /** How wide a pad is: a cell less a rim of floor. */
 const PAD_W = 14;
@@ -1710,8 +1711,8 @@ export class SceneRenderer {
       c.translate(-x, -y);
     }
     if (im) {
-      const k = nodePieces(n.k, left), [sx, sy] = P(n.x + art.dx, n.y + art.dy);
-      this.standee((k < art.pieces && env(`${art.key}_${k}`)) || im, sx, sy + art.lift, art.w, n.hit > 0);
+      const k = nodePieces(n.k, left), [x, y] = P(n.x, n.y);
+      this.standee((k < art.pieces && env(`${art.key}_${k}`)) || im, x + art.sx, y + art.sy, art.w, n.hit > 0);
     } else this.drawNodeShape(n, left, n.hit > 0);
     if (f) c.restore();
   }
