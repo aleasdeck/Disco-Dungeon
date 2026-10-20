@@ -112,9 +112,13 @@ export const RAGE_FROM_BOSS = 7;
 /** How much of its speed a disc keeps after hitting an enemy or a resource: one throw, one target, no pinball. */
 export const MOB_E = 0.35;
 export const NODE_E = 0.3;
-/** A disc that flies straight into an enemy, nothing touched on the way, and hits it square on deals this much more. */
-export const CRIT = 2;
-export const CRIT_COS = 0.95;
+/**
+ * A disc that flies straight into an enemy, nothing touched on the way, and hits it square on («ТОЧНО!») deals this much more.
+ * Square on means within about 13° of the line between the centres. Set with the bot so precise hits make about 40% of
+ * the heroes' damage, not most of it (thread «ТОЧНО», 2026-10-20).
+ */
+export const CRIT = 1.5;
+export const CRIT_COS = 0.975;
 
 export interface Biome {
   name: string;
@@ -287,8 +291,11 @@ export interface MobDef {
   fem?: boolean;
 }
 
-/** Every enemy is in the room from the start (no reinforcements) and a room holds only a few, so each gets this much more HP. */
-export const MOB_HP_MUL = 1.25;
+/**
+ * Every enemy is in the room from the start (no reinforcements) and a room holds only a few, so each gets this much more HP.
+ * Down from 1.25 when «ТОЧНО!» went from ×2 to ×1.5 and grew rarer, so a run stays as hard as before.
+ */
+export const MOB_HP_MUL = 1.06;
 
 export const MOBS: Record<MobKind, MobDef> = {
   skel: { name: 'Скелет', floor: 0, hp: 9, r: 7, speed: 34, reach: 30, dmg: 4, fig: 31, txt: 'Идёт к ближайшему герою и бьёт вблизи.', acc: 'Скелета' },

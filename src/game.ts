@@ -288,7 +288,7 @@ type Pt = { x: number; y: number };
  */
 export const ART = {
   trayR: 1.33, polishFr: 0.67, slick: 2, insolesE: 0.75, springMax: 4, beamDmg: 1, beamReach: 5 * TILE, beamMax: 3,
-  cup: 3, hedgehog: 3, fangs: 2, tea: 3, energyCost: 2, xrayBounces: 3, critBig: 3, bells: 3,
+  cup: 3, hedgehog: 3, fangs: 2, tea: 3, energyCost: 2, xrayBounces: 3, critBig: 2, bells: 3,
 };
 
 /** Cells a walker covers each enemy turn: its speed in cells, at least one. */
