@@ -23,19 +23,25 @@ const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-
 const env = (k: string) => envArt.get(k);
 
 /**
- * Resource pictures: the full one (`key`) stands for a full stock and `<key>_<n>` for n of its `pieces` left, as wide as
- * `w` either way. A mushroom is a heal and a crystal a spark, so a patch shows how many are left; an ore vein holds one
- * to six charges by the party, so its seven gold nuggets go in step with them.
+ * Resource pictures standing on a pad: the full one (`key`) for a full stock and `<key>_<n>` for n of its `pieces` left,
+ * as wide as `w`, set off the cell's centre by `dx`, `dy` and dropped `lift` on screen. A crystal is a spark and a
+ * mushroom a heal, so the toilet shows how many crystals are left and the meadow how many mushrooms. The pad is a
+ * picture laid flat on the cell (`pad`): bathroom tiles, or a meadow rounded off (`round`). Ore is a rock built in code
+ * (drawRock).
  */
-const NODE_ART: Record<NodeKind, { key: string; pieces: number; w: number }> = {
-  ore: { key: 'ore', pieces: 7, w: 21 },
-  spk: { key: 'crystal', pieces: 3, w: 15.5 },
-  herb: { key: 'mushrooms', pieces: 3, w: 19 },
+type PadKind = Exclude<NodeKind, 'ore'>;
+const NODE_ART: Record<PadKind, { key: string; pieces: number; w: number; dx: number; dy: number; lift: number; pad: string; round?: number }> = {
+  spk: { key: 'crystal', pieces: 3, w: 17, dx: 5, dy: 4, lift: 0, pad: 'res_tiles' },
+  herb: { key: 'mushrooms', pieces: 3, w: 18.5, dx: 0, dy: 1.5, lift: 1, pad: 'res_grass', round: 1.06 },
 };
+/** How wide a pad is: a cell less a rim of floor. */
+const PAD_W = 14;
 
-/** Pieces of a resource's picture still standing with `left` of its `ch` charges. */
-const nodePieces = (k: NodeKind, left: number, ch: number) =>
-  k === 'ore' ? Math.ceil((NODE_ART.ore.pieces * left) / ch) : Math.min(NODE_ART[k].pieces, left);
+/** Pieces of a resource's picture still standing with `left` charges. */
+const nodePieces = (k: PadKind, left: number) => Math.min(NODE_ART[k].pieces, left);
+
+/** The ore rock's look: slate sides and top, and gold nuggets (every `gold_*` picture) at most this wide. */
+const ROCK = { side: 'rock_side', top: 'rock_top', nugW: 4.2 };
 
 /** How thick a disc's ink outline is, in iso units: a hairline, as thin as the ring on its picture. */
 const DISC_LW = 0.6;
@@ -854,7 +860,7 @@ export class SceneRenderer {
     // a spent resource leaves only a flat scatter of chips on its cell, not something to bounce off
     for (const n of S.nodes) {
       if (n.left > 0) continue;
-      // the cave's big vein leaves a scatter as big as it was
+      // a vein on 2 × 2 cells leaves a scatter as big as it was
       const [dx, dy] = P(n.x, n.y), z = n.s ?? 1;
       ell(c, dx, dy, 9 * z, 4.2 * z); c.fillStyle = 'rgba(25,15,10,.18)'; c.fill();
       const tint = n.k === 'ore' ? '#e8b44a' : n.k === 'spk' ? '#a98ae8' : '#c9584a';
@@ -862,7 +868,7 @@ export class SceneRenderer {
       for (const [ox, oy, r0, tinted] of chips) {
         const [x, y] = P(n.x + ox * z, n.y + oy * z), r = r0 * z;
         pth(c, [[x - r * 1.4, y], [x, y - r * 0.6], [x + r * 1.4, y], [x, y + r * 0.6]]);
-        c.fillStyle = tinted ? tint : 'rgba(120,110,104,.85)';
+        c.fillStyle = tinted ? tint : n.k === 'ore' ? 'rgba(78,84,96,.85)' : 'rgba(120,110,104,.85)';
         c.fill();
       }
     }
@@ -877,6 +883,8 @@ export class SceneRenderer {
     c.strokeStyle = 'rgba(184,50,63,.55)';
     c.lineWidth = 0.9;
     c.stroke();
+    // a toilet stands on a square of bathroom tiles, a mushroom patch on a meadow
+    for (const n of S.nodes) if (n.left > 0) this.drawPad(n);
     c.strokeStyle = INK;
     c.lineWidth = OL;
     c.beginPath();
@@ -1199,41 +1207,17 @@ export class SceneRenderer {
    * Cartoon resource props, drawn flat in screen space like the figures: a lumpy boulder with gold nuggets,
    * a cluster of violet crystals, or fat spotted mushrooms. Each loses a piece per charge taken.
    */
+  /** A crystal or a mushroom patch drawn in code, for when its pictures are missing. */
   private drawNodeShape(n: ResNode, left: number, f: boolean) {
-    // the cave's big vein is the same boulder, as big as its 2 × 2 cells
-    const c = this.c, [x, y] = this.P(n.x, n.y), q = left / n.ch, z = n.s ?? 1;
-    const art = NODE_ART[n.k], ni = env(art.key);
-    if (ni) {
-      const k = nodePieces(n.k, left, n.ch);
-      this.standee((k < art.pieces && env(`${art.key}_${k}`)) || ni, x, y + 3 * z, art.w * z, f);
-      return;
-    }
+    const c = this.c, [x, y] = this.P(n.x, n.y);
     const W = (col: string) => (f ? '#ffffff' : col);
     c.lineJoin = 'round';
-    if (n.k === 'ore') {
-      const s = (0.75 + 0.25 * q) * z;
-      const lump: [number, number][] = [[-9, 0], [-9.5, -5], [-6.5, -10], [-2, -12.5], [3, -11.5], [7, -8.5], [9.5, -3.5], [8.5, 1], [3, 3], [-4, 3]];
-      const pts = lump.map(([px, py]) => [x + px * s, y + py * s] as Pt);
-      const path = () => { c.beginPath(); pts.forEach((p, k) => { const nx = pts[(k + 1) % pts.length]; const mx = (p[0] + nx[0]) / 2, my = (p[1] + nx[1]) / 2; if (!k) c.moveTo(mx, my); else c.quadraticCurveTo(p[0], p[1], mx, my); }); const p0 = pts[0], p1 = pts[1]; c.quadraticCurveTo(p0[0], p0[1], (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2); c.closePath(); };
-      path(); c.fillStyle = W('#948c80'); c.fill();
-      c.save(); path(); c.clip();
-      ell(c, x + 6 * s, y - 2 * s, 9 * s, 8 * s); c.fillStyle = W('#6a635a'); c.fill();
-      ell(c, x - 4 * s, y - 9 * s, 4 * s, 2 * s); c.fillStyle = W('#b3ab9f'); c.fill();
-      c.restore();
-      path(); c.strokeStyle = INK; c.lineWidth = 1.5; c.stroke();
-      const nug: [number, number, number][] = [[-5, -5, 1.5], [1, -8, 1.2], [4, -3, 1.6], [-1, -1, 1.1], [6.5, -7, 1], [-6.5, -9, 1]];
-      for (const [ox, oy, r] of nug.slice(0, Math.max(2, Math.round(nug.length * q)))) {
-        const gx = x + ox * s, gy = y + oy * s, t = r * 1.3;
-        pth(c, [[gx - 1.4 * t, gy + 0.3 * t], [gx - 0.5 * t, gy - 1.1 * t], [gx + 1.3 * t, gy - 0.6 * t], [gx + 1 * t, gy + 0.9 * t], [gx - 0.6 * t, gy + 1.1 * t]]);
-        fs(c, W('#f2b83c'), 0.8);
-        circ(c, gx - 0.3 * t, gy - 0.3 * t, 0.4 * t); c.fillStyle = '#fff3c4'; c.fill();
-      }
-    } else if (n.k === 'spk') {
+    if (n.k === 'spk') {
       // a little rock, then up to three crystals: a lit left face and a shaded right face, inked
       ell(c, x, y - 1, 7.5, 3.2); fs(c, W('#7d766c'), 1.2);
       const cr: [number, number, number, number][] = [[-4, -1, 10, -0.35], [4, -1, 9, 0.3], [0, 0, 15, 0.05]];
       for (const [ox, oy, L0, lean] of [cr[2], cr[0], cr[1]].slice(0, left).sort((a, b) => a[1] - b[1])) {
-        const L = L0 * (0.75 + 0.25 * q), bx = x + ox, by = y + oy - 1, w = 2.6;
+        const L = L0 * (0.75 + 0.25 * (left / n.ch)), bx = x + ox, by = y + oy - 1, w = 2.6;
         const tx = bx + lean * L, ty = by - L, sx = bx + lean * L * 0.78, sy = by - L * 0.78;
         pth(c, [[bx - w, by], [sx - w, sy], [tx, ty], [tx, sy + 0.5], [bx, by + 1]]); c.fillStyle = W('#c6b2f4'); c.fill();
         pth(c, [[bx, by + 1], [tx, sy + 0.5], [tx, ty], [sx + w, sy], [bx + w, by]]); c.fillStyle = W('#7650d6'); c.fill();
@@ -1244,7 +1228,7 @@ export class SceneRenderer {
     } else {
       // mushrooms straight on the floor, big one behind
       const sh: [number, number, number][] = [[0, -1.5, 1.35], [5, 1.5, 0.85], [-5, 1.5, 0.7]];
-      for (const [ox, oy, s] of sh.slice(0, nodePieces(n.k, left, n.ch))) {
+      for (const [ox, oy, s] of sh.slice(0, nodePieces('herb', left))) {
         const mx = x + ox, my = y + oy;
         rr(c, mx - 1.6 * s, my - 6 * s, 3.2 * s, 6 * s, 1.2 * s); fs(c, W('#f1e7d0'), 1);
         c.beginPath(); c.ellipse(mx, my - 6 * s, 5.2 * s, 5 * s, 0, Math.PI, 0); c.quadraticCurveTo(mx, my - 4 * s, mx - 5.2 * s, my - 6 * s); c.closePath();
@@ -1255,27 +1239,38 @@ export class SceneRenderer {
   }
 
   /**
-   * PROTOTYPE (not for merge): an ore vein built in code over its cells, as a chunk of rock: per cell a squat prism with
-   * a slanted, chamfered outline and a flat top, a smaller stone sitting on it while the vein is full, gold stuck in its
-   * sides and top. Ore in the cell next door grows into the same rock (no wall, no chamfer between them, the higher one
-   * steps up), and a vein sinks and loses its gold as its charges go. Sides and top take a picture each when given.
+   * An ore vein is a rock built in code over its cell, of slate: a squat prism with a slanted, chamfered outline, sides
+   * leaning in and a faceted top, a smaller stone on it while the vein is full, gold nuggets stuck in its sides. A vein
+   * in the cell next door grows into the same rock (no wall, no chamfer between them, the higher one steps up), and a
+   * vein sinks and loses its gold as its charges go.
    */
   private rockCells() {
     const cells = new Map<string, { q: number; f: number; z: number; ch: number }>();
     for (const m of this.g.S.nodes) {
-      const r = (m as any).pv?.rock;
-      if (!r || m.left <= 0) continue;
+      if (m.k !== 'ore' || m.left <= 0) continue;
       const z = m.s ?? 1, i0 = Math.round((m.x - 8 * z) / TILE), j0 = Math.round((m.y - 8 * z) / TILE);
       const q = Math.min(m.left, m.ch) / m.ch;
-      // one height for the whole vein (the cave's big one spans 2 × 2), a little different from the vein next door
+      // one height for the whole vein (one on 2 × 2 cells too), a little different from the vein next door
       const f = 0.9 + 0.2 * (((Math.imul(i0 * 73856093 ^ j0 * 19349663, 2654435761) >>> 0) % 1000) / 1000);
       for (let a = 0; a < z; a++) for (let b = 0; b < z; b++) cells.set(hazKey(i0 + a, j0 + b), { q, f, z, ch: m.ch });
     }
     return cells;
   }
 
-  private drawRock(n: ResNode, r: any) {
-    const cells = this.rockCells(), z = n.s ?? 1, i0 = Math.round((n.x - 8 * z) / TILE), j0 = Math.round((n.y - 8 * z) / TILE);
+  /** Gold nugget layouts of rock cells (see rockGold). */
+  private goldLay = new Map<string, { c: number; u: number; h: number; img: string; s: number; st: number; turn: number; flip: boolean; lv: number }[]>();
+
+  /** The rock's pictures by key, the gold nuggets' keys, and its look; kept once the pictures are in. */
+  private rockArt: { I: Record<string, HTMLImageElement>; r: typeof ROCK & { gold: string[] } } | null = null;
+  private rockLook() {
+    if (this.rockArt?.r.gold.length) return this.rockArt;
+    const I: Record<string, HTMLImageElement> = {}, gold = [...envArt.keys()].filter(k => k.startsWith('gold_'));
+    for (const k of [ROCK.side, ROCK.top, ...gold]) { const im = env(k); if (im) I[k] = im; }
+    return (this.rockArt = { I, r: { ...ROCK, gold } });
+  }
+
+  private drawRock(n: ResNode) {
+    const { r } = this.rockLook(), cells = this.rockCells(), z = n.s ?? 1, i0 = Math.round((n.x - 8 * z) / TILE), j0 = Math.round((n.y - 8 * z) / TILE);
     const own: [number, number][] = [];
     for (let a = 0; a < z; a++) for (let b = 0; b < z; b++) own.push([i0 + a, j0 + b]);
     own.sort((p, o) => this.cam.depth((p[0] + 0.5) * TILE, (p[1] + 0.5) * TILE) - this.cam.depth((o[0] + 0.5) * TILE, (o[1] + 0.5) * TILE));
@@ -1283,8 +1278,7 @@ export class SceneRenderer {
   }
 
   private rockCell(ci: number, cj: number, cells: Map<string, { q: number; f: number; z: number; ch: number }>, r: any, struck: boolean) {
-    const I = ((globalThis as any).__protoImgs ?? {}) as Record<string, HTMLImageElement>;
-    const q = cells.get(hazKey(ci, cj))?.q;
+    const { I } = this.rockLook(), q = cells.get(hazKey(ci, cj))?.q;
     if (q === undefined) return;
     const hh = (a: number, b: number, k = 0) => {
       let t = (a * 374761393 + b * 668265263 + k * 1442695041) | 0;
@@ -1526,116 +1520,124 @@ export class SceneRenderer {
     const tn = (c: Can) => Math.min(tn0, (0.32 * lim[3]) / Math.max(c.W, 1));
     const seam = (c: Can, u: number) => hc + rise * c.sg * tn(c) * Math.abs(u - c.uc);
     const seamK = (c: Can, u: number) => rise * c.sg * tn(c) * (u >= c.uc ? 1 : -1);
-    // a nugget's drawn shape as an ellipse in canvas units (along u, up h); a sliver runs along its picture's diagonal
-    type Nug = { c: Can; u: number; h: number; img: string; s: number; st: number; turn: number; flip: boolean; lv: number; A: number; B: number; ang: number; sx: number; sy: number };
-    const dims = (img: string, s: number, st: number) => {
-      const im = I[img], a = Math.sqrt(im.width / im.height), w = s * a * st, g = s / a / st;
-      return shape(img) === 'long' ? { w, g, A: 0.45 * Math.hypot(w, g), B: 0.22 * Math.min(w, g), diag: Math.atan2(g, w) } : { w, g, A: 0.45 * w, B: 0.45 * g, diag: 0 };
-    };
-    const reach = (n: { A: number; B: number; ang: number }, phi: number) => {
-      const d = phi - n.ang;
-      return (n.A * n.B) / Math.hypot(n.B * Math.cos(d), n.A * Math.sin(d));
-    };
-    const all: Nug[] = [];
-    const gapOk = (n: Nug) => {
-      let worst = Infinity;
-      for (const o of all) {
-        let gap: number, need: number;
-        if (o.c === n.c) {
-          const du = n.u - o.u, dh = n.h - o.h, phi = Math.atan2(dh, du);
-          gap = Math.hypot(du, dh) - reach(n, phi) - reach(o, phi + Math.PI);
-        } else {
-          // another canvas of this cell: on screen, as circles
-          gap = Math.hypot(n.sx - o.sx, n.sy - o.sy) - Math.max(n.A, n.B) - Math.max(o.A, o.B);
-        }
-        need = o.lv === 1 || n.lv === 1 ? 0.6 * (o.lv === 1 ? o.s : n.s) : 0.5 * Math.min(o.s, n.s);
-        worst = Math.min(worst, gap - need);
-      }
-      return worst;
-    };
-    const ANCHOR = ['chunk', 'flat', 'nugget', 'knobby'];
-    const make = (c: Can, ci2: number, lv: number, sizeK: number, salt: number): Nug | null => {
-      const used = all.filter(o => o.c === c), types = new Set(used.map(o => shape(o.img)));
-      // a picture for it: anchors chunky, slivers (medium only) and knobs kept to their places, no picture twice and three shapes at most on a canvas
-      const pool = keys.filter(k => {
-        const sh = shape(k);
-        if (used.some(o => o.img === k)) return false;
-        if (lv === 1 ? !ANCHOR.includes(sh) : sh === 'knobby') return false;
-        if (sh === 'long' && (lv !== 2 || used.some(o => shape(o.img) === 'long'))) return false;
-        return types.size < 3 || types.has(sh);
-      });
-      if (!pool.length) return null;
-      const img = pool[Math.floor(hh(ci * 31 + ci2, cj * 17 + lv, salt) * pool.length)];
-      const st = 0.9 + 0.22 * hh(ci * 7 + ci2, cj * 11 + lv, salt + 1), flip0 = hh(ci * 5 + ci2, cj * 3 + lv, salt + 2) < 0.5;
-      let s = base * sizeK;
-      const top = lim[lv] - 1.0, H1 = lim[1];
-      for (let tries = 0; tries < 3; tries++, s *= 0.85) {
-        const d = dims(img, s, st);
-        if (lv === 1) s = Math.min(s, (0.4 * c.W * s) / Math.max(d.w, 0.01), (0.55 * H1 * s) / Math.max(d.g, 0.01));
-        const dd = dims(img, s, st);
-        // turn: slivers along the seam, the rest a little either way
-        const cands: Nug[] = [];
-        const N = lv === 1 ? 1 : 12;
-        for (let k = 0; k < N; k++) {
-          let u: number, h: number;
-          const hu0 = 0.5 * dd.w + 0.12 * c.W, hu1 = c.W - 0.5 * dd.w - 0.12 * c.W;
-          if (hu1 < hu0) break;
-          if (lv === 1) {
-            // the anchor in one third of its canvas, never the middle, the other third on the cell's other canvas
-            const third = (ci2 + (hh(ci, cj, 123) < 0.5 ? 0 : 1)) % 2 === 0;
-            u = c.W * (third ? 0.3 + 0.1 * hh(ci, cj, salt + 3) : 0.6 + 0.1 * hh(ci, cj, salt + 3));
-            h = H1 * (0.3 + 0.2 * hh(ci, cj, salt + 4));
+    // the layout is worked out once for a cell as it stands and kept, so a stage is the one before less its top nuggets
+    const key = `${ch},${z},${cam.rot.toFixed(3)},${foot.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(';')}`;
+    let lay = this.goldLay.get(key);
+    if (!lay) {
+      // a nugget's drawn shape as an ellipse in canvas units (along u, up h); a sliver runs along its picture's diagonal
+      type Nug = { c: Can; u: number; h: number; img: string; s: number; st: number; turn: number; flip: boolean; lv: number; A: number; B: number; ang: number; sx: number; sy: number };
+      const dims = (img: string, s: number, st: number) => {
+        const im = I[img], a = Math.sqrt(im.width / im.height), w = s * a * st, g = s / a / st;
+        return shape(img) === 'long' ? { w, g, A: 0.45 * Math.hypot(w, g), B: 0.22 * Math.min(w, g), diag: Math.atan2(g, w) } : { w, g, A: 0.45 * w, B: 0.45 * g, diag: 0 };
+      };
+      const reach = (n: { A: number; B: number; ang: number }, phi: number) => {
+        const d = phi - n.ang;
+        return (n.A * n.B) / Math.hypot(n.B * Math.cos(d), n.A * Math.sin(d));
+      };
+      const all: Nug[] = [];
+      const gapOk = (n: Nug) => {
+        let worst = Infinity;
+        for (const o of all) {
+          let gap: number, need: number;
+          if (o.c === n.c) {
+            const du = n.u - o.u, dh = n.h - o.h, phi = Math.atan2(dh, du);
+            gap = Math.hypot(du, dh) - reach(n, phi) - reach(o, phi + Math.PI);
           } else {
-            u = hu0 + (hu1 - hu0) * hh(ci * 13 + ci2 * 3 + k, cj * 7 + lv, salt + 5);
-            h = seam(c, u) + (hh(ci * 3 + k, cj * 19 + ci2, salt + 6) - 0.5) * 0.2 * lim[lv];
+            // another canvas of this cell: on screen, as circles
+            gap = Math.hypot(n.sx - o.sx, n.sy - o.sy) - Math.max(n.A, n.B) - Math.max(o.A, o.B);
           }
-          u = Math.min(hu1, Math.max(hu0, u));
-          let turn: number, flip = flip0;
-          // the picture's x runs to the right on screen, which may be against u
-          const sp = at(c, u, 0), sX = sp && P(sp.x + sp.ax[0], sp.y + sp.ax[1])[0] >= P(sp.x, sp.y)[0] ? 1 : -1;
-          if (shape(img) === 'long') {
-            // the sliver's picture rises to the right along its diagonal: mirror and turn it onto the seam
-            const beta = Math.atan(seamK(c, u) * sX);
-            flip = beta < 0;
-            turn = -(beta - (flip ? -dd.diag : dd.diag)) + ((hh(ci, cj + k, salt + 7) - 0.5) * 20 * Math.PI) / 180;
-          } else turn = ((hh(ci * 3 + k, cj, salt + 8) - 0.5) * 50 * Math.PI) / 180;
-          const ang = sX * (shape(img) === 'long' ? -turn + (flip ? -dd.diag : dd.diag) : -turn);
-          const rh = Math.sqrt((dd.A * Math.sin(ang)) ** 2 + (dd.B * Math.cos(ang)) ** 2);
-          const lo = 1.2 + rh + (shape(img) === 'long' ? 0.3 * lim[lv] : 0), hi = top - rh;
-          if (hi < lo) continue;
-          h = Math.min(hi, Math.max(lo, h));
-          const p = at(c, u, h);
-          if (!p) continue;
-          const [sx, sy] = P(p.x, p.y, p.h);
-          cands.push({ c, u, h, img, s, st, turn, flip, lv, A: dd.A, B: dd.B, ang, sx, sy });
+          need = o.lv === 1 || n.lv === 1 ? 0.6 * (o.lv === 1 ? o.s : n.s) : 0.5 * Math.min(o.s, n.s);
+          worst = Math.min(worst, gap - need);
         }
-        let best: Nug | null = null, bs = -Infinity;
-        for (const n of cands) { const g = gapOk(n); if (g > bs) { bs = g; best = n; } }
-        if (best && bs >= -0.3 * base) return best;
+        return worst;
+      };
+      const ANCHOR = ['chunk', 'flat', 'nugget', 'knobby'];
+      const make = (c: Can, ci2: number, lv: number, sizeK: number, salt: number): Nug | null => {
+        const used = all.filter(o => o.c === c), types = new Set(used.map(o => shape(o.img)));
+        // a picture for it: anchors chunky, slivers (medium only) and knobs kept to their places, no picture twice and three shapes at most on a canvas
+        const pool = keys.filter(k => {
+          const sh = shape(k);
+          if (used.some(o => o.img === k)) return false;
+          if (lv === 1 ? !ANCHOR.includes(sh) : sh === 'knobby') return false;
+          if (sh === 'long' && (lv !== 2 || used.some(o => shape(o.img) === 'long'))) return false;
+          return types.size < 3 || types.has(sh);
+        });
+        if (!pool.length) return null;
+        const img = pool[Math.floor(hh(ci * 31 + ci2, cj * 17 + lv, salt) * pool.length)];
+        const st = 0.9 + 0.22 * hh(ci * 7 + ci2, cj * 11 + lv, salt + 1), flip0 = hh(ci * 5 + ci2, cj * 3 + lv, salt + 2) < 0.5;
+        let s = base * sizeK;
+        const top = lim[lv] - 1.0, H1 = lim[1];
+        for (let tries = 0; tries < 3; tries++, s *= 0.85) {
+          const d = dims(img, s, st);
+          if (lv === 1) s = Math.min(s, (0.4 * c.W * s) / Math.max(d.w, 0.01), (0.55 * H1 * s) / Math.max(d.g, 0.01));
+          const dd = dims(img, s, st);
+          // turn: slivers along the seam, the rest a little either way
+          const cands: Nug[] = [];
+          const N = lv === 1 ? 1 : 12;
+          for (let k = 0; k < N; k++) {
+            let u: number, h: number;
+            const hu0 = 0.5 * dd.w + 0.12 * c.W, hu1 = c.W - 0.5 * dd.w - 0.12 * c.W;
+            if (hu1 < hu0) break;
+            if (lv === 1) {
+              // the anchor in one third of its canvas, never the middle, the other third on the cell's other canvas
+              const third = (ci2 + (hh(ci, cj, 123) < 0.5 ? 0 : 1)) % 2 === 0;
+              u = c.W * (third ? 0.3 + 0.1 * hh(ci, cj, salt + 3) : 0.6 + 0.1 * hh(ci, cj, salt + 3));
+              h = H1 * (0.3 + 0.2 * hh(ci, cj, salt + 4));
+            } else {
+              u = hu0 + (hu1 - hu0) * hh(ci * 13 + ci2 * 3 + k, cj * 7 + lv, salt + 5);
+              h = seam(c, u) + (hh(ci * 3 + k, cj * 19 + ci2, salt + 6) - 0.5) * 0.2 * lim[lv];
+            }
+            u = Math.min(hu1, Math.max(hu0, u));
+            let turn: number, flip = flip0;
+            // the picture's x runs to the right on screen, which may be against u
+            const sp = at(c, u, 0), sX = sp && P(sp.x + sp.ax[0], sp.y + sp.ax[1])[0] >= P(sp.x, sp.y)[0] ? 1 : -1;
+            if (shape(img) === 'long') {
+              // the sliver's picture rises to the right along its diagonal: mirror and turn it onto the seam
+              const beta = Math.atan(seamK(c, u) * sX);
+              flip = beta < 0;
+              turn = -(beta - (flip ? -dd.diag : dd.diag)) + ((hh(ci, cj + k, salt + 7) - 0.5) * 20 * Math.PI) / 180;
+            } else turn = ((hh(ci * 3 + k, cj, salt + 8) - 0.5) * 50 * Math.PI) / 180;
+            const ang = sX * (shape(img) === 'long' ? -turn + (flip ? -dd.diag : dd.diag) : -turn);
+            const rh = Math.sqrt((dd.A * Math.sin(ang)) ** 2 + (dd.B * Math.cos(ang)) ** 2);
+            const lo = 1.2 + rh + (shape(img) === 'long' ? 0.3 * lim[lv] : 0), hi = top - rh;
+            if (hi < lo) continue;
+            h = Math.min(hi, Math.max(lo, h));
+            const p = at(c, u, h);
+            if (!p) continue;
+            const [sx, sy] = P(p.x, p.y, p.h);
+            cands.push({ c, u, h, img, s, st, turn, flip, lv, A: dd.A, B: dd.B, ang, sx, sy });
+          }
+          let best: Nug | null = null, bs = -Infinity;
+          for (const n of cands) { const g = gapOk(n); if (g > bs) { bs = g; best = n; } }
+          if (best && bs >= -0.3 * base) return best;
+        }
+        return null;
+      };
+      const plans: [Can, number, number, number][] = [];
+      cans.forEach((c, k) => {
+        if (c.thin) { plans.push([c, k, 2, 0.7]); return; }
+        // a 2 × 2 vein: the two cells of a facade take the anchor and the medium nugget by turns
+        const own = z > 1 ? ((ci + cj + (c.sg > 0 ? 1 : 0)) % 2 === 0 ? [1] : [2]) : [1, 2];
+        for (const lv of own) plans.push([c, k, lv, lv === 1 ? 0.95 + 0.15 * hh(ci, cj, 130 + k) : 0.7 + 0.15 * hh(ci, cj, 131 + k)]);
+        plans.push([c, k, 3, 0.5 + 0.15 * hh(ci, cj, 132 + k)]);
+      });
+      // anchors first on every canvas, then the medium ones, then the small, so the low and big ones get the room
+      plans.sort((p, o) => p[2] - o[2]);
+      for (const [c, k, lv, sk] of plans) {
+        const n = make(c, k, lv, sk, 140 + lv * 10);
+        if (n) all.push(n);
       }
-      return null;
-    };
-    const plans: [Can, number, number, number][] = [];
-    cans.forEach((c, k) => {
-      if (c.thin) { plans.push([c, k, 2, 0.7]); return; }
-      // a 2 × 2 vein: the two cells of a facade take the anchor and the medium nugget by turns
-      const own = z > 1 ? ((ci + cj + (c.sg > 0 ? 1 : 0)) % 2 === 0 ? [1] : [2]) : [1, 2];
-      for (const lv of own) plans.push([c, k, lv, lv === 1 ? 0.95 + 0.15 * hh(ci, cj, 130 + k) : 0.7 + 0.15 * hh(ci, cj, 131 + k)]);
-      plans.push([c, k, 3, 0.5 + 0.15 * hh(ci, cj, 132 + k)]);
-    });
-    // anchors first on every canvas, then the medium ones, then the small, so the low and big ones get the room
-    plans.sort((p, o) => p[2] - o[2]);
-    for (const [c, k, lv, sk] of plans) {
-      const n = make(c, k, lv, sk, 140 + lv * 10);
-      if (n) all.push(n);
+      lay = all.map(n => ({ c: cans.indexOf(n.c), u: n.u, h: n.h, img: n.img, s: n.s, st: n.st, turn: n.turn, flip: n.flip, lv: n.lv }));
+      if (this.goldLay.size > 400) this.goldLay.clear();
+      this.goldLay.set(key, lay);
     }
     const clipOf = (c: Can): Pt[] => {
       const ids = [...c.sides, (c.sides[c.sides.length - 1] + 1) % M];
       return [...ids.map(i => P(foot[i].x, foot[i].y, 0)), ...ids.reverse().map(i => P(rim[i].x, rim[i].y, rim[i].h))];
     };
-    all
-      .filter(n => n.lv <= stage)
-      .map(n => ({ ...at(n.c, n.u, n.h)!, s: n.s, k: 0, img: n.img, clip: clipOf(n.c), turn: n.turn, flip: n.flip, st: n.st }))
+    lay
+      .filter(n => n.lv <= stage && cans[n.c])
+      .map(n => ({ ...at(cans[n.c], n.u, n.h)!, s: n.s, k: 0, img: n.img, clip: clipOf(cans[n.c]), turn: n.turn, flip: n.flip, st: n.st }))
       .sort((p, o) => cam.depth(p.x, p.y) - cam.depth(o.x, o.y))
       .forEach(p => this.rockNugget(p, r, I));
   }
@@ -1667,88 +1669,37 @@ export class SceneRenderer {
     c.restore();
   }
 
-  /** PROTOTYPE (not for merge): a resource as a grid-aligned block with a prop standing on it, for the art page shots. */
-  private drawProto(n: ResNode, v: any) {
-    const { c, P, cam } = this, I = ((globalThis as any).__protoImgs ?? {}) as Record<string, HTMLImageElement>;
-    const im = (k?: string) => (!k ? undefined : k === '@wall' ? env(`wall_${this.bk}`) : k === '@cap' ? env(`cap_${this.bk}`) : I[k]);
-    const w = v.w ?? 14, H = v.H ?? 0, x0 = n.x - w / 2, y0 = n.y - w / 2, x1 = n.x + w / 2, y1 = n.y + w / 2;
-    const side = im(v.side), cap = im(v.cap);
-    // the footprint: a square, or for a meadow a wobbly rounded one
-    const ring = (h: number): Pt[] => {
-      if (!v.round) return [P(x0, y0, h), P(x1, y0, h), P(x1, y1, h), P(x0, y1, h)];
-      const out: Pt[] = [], r = v.round, N = 48;
-      for (let k = 0; k < N; k++) {
-        const a = (k / N) * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
-        // superellipse, so it stays square-ish and fills the cell
-        const e = 2 / (v.sq ?? 5), rx = Math.sign(ca) * Math.abs(ca) ** e, ry = Math.sign(sa) * Math.abs(sa) ** e;
-        const wob = 1 + (v.wob ?? 0.05) * Math.sin(a * 7 + n.x) * Math.cos(a * 3);
-        out.push(P(n.x + (w / 2) * rx * wob * r, n.y + (w / 2) * ry * wob * r, h));
-      }
-      return out;
-    };
-    if (v.shadow) { ell(c, ...P(n.x + 2, n.y + 2), w * 0.75, w * 0.36); c.fillStyle = 'rgba(15,8,4,.3)'; c.fill(); }
-    if (H > 0) {
-      const faces: { a: Vec; b: Vec; n: Vec }[] = [
-        { a: [x1, y0], b: [x1, y1], n: [1, 0] },
-        { a: [x0, y1], b: [x1, y1], n: [0, 1] },
-        { a: [x0, y0], b: [x0, y1], n: [-1, 0] },
-        { a: [x0, y0], b: [x1, y0], n: [0, -1] },
-      ];
-      for (const f of faces) {
-        if (cam.facing(f.n[0], f.n[1]) <= 1e-6) continue;
-        const face: Pt[] = [P(...f.a), P(...f.b), P(...f.b, H), P(...f.a, H)];
-        const alongX = f.a[1] === f.b[1], u0 = alongX ? f.a[0] : f.a[1], u1 = alongX ? f.b[0] : f.b[1];
-        const at = (u: number, h: number) => (alongX ? P(u, f.a[1], h) : P(f.a[0], u, h));
-        if (side) this.wallTex(side, face, at, u0, u1, H, (v.dark ?? 0.06) + 0.2 * (0.5 + 0.5 * cam.sideways(f.n[0], f.n[1])), v.texH ?? WALL_H);
-        else { pth(c, face); c.fillStyle = v.col ?? '#6a635a'; c.fill(); }
-        c.beginPath();
-        c.moveTo(...P(...f.a)); c.lineTo(...P(...f.b));
-        c.moveTo(...P(...f.a)); c.lineTo(...P(...f.a, H));
-        c.moveTo(...P(...f.b)); c.lineTo(...P(...f.b, H));
-        c.strokeStyle = INK; c.lineWidth = BL; c.lineCap = 'round'; c.stroke();
+  /**
+   * The pad a toilet or a mushroom patch stands on, flat on its cell: the picture clipped to a square (a meadow's is
+   * rounded off, a little wobbly), inked round. Drawn with the floor.
+   */
+  private drawPad(n: ResNode) {
+    if (n.k === 'ore') return;
+    const { c, P } = this, art = NODE_ART[n.k], w = PAD_W, im = env(art.pad), ring: Pt[] = [];
+    if (!art.round) for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) ring.push(P(n.x + (a * w) / 2, n.y + (b * w) / 2));
+    else {
+      for (let k = 0; k < 48; k++) {
+        // a superellipse, so it stays square-ish and fills the cell
+        const a = (k / 48) * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a), e = 2 / 3.2;
+        const rx = Math.sign(ca) * Math.abs(ca) ** e, ry = Math.sign(sa) * Math.abs(sa) ** e, wob = 1 + 0.07 * Math.sin(a * 7 + n.x) * Math.cos(a * 3);
+        ring.push(P(n.x + (w / 2) * rx * wob * art.round, n.y + (w / 2) * ry * wob * art.round));
       }
     }
-    const top = ring(H);
-    if (cap) {
-      c.save(); pth(c, top); c.clip();
-      const m = v.round ? 1.15 : 1;
-      this.imgOnRect(cap, n.x - (w / 2) * m, n.y - (w / 2) * m, n.x + (w / 2) * m, n.y + (w / 2) * m, 0, H);
+    pth(c, ring);
+    if (im) {
+      const m = art.round ? 1.15 : 1;
+      c.save(); c.clip();
+      this.imgOnRect(im, n.x - (w / 2) * m, n.y - (w / 2) * m, n.x + (w / 2) * m, n.y + (w / 2) * m);
       c.restore();
-    } else if (v.capCol) { pth(c, top); c.fillStyle = v.capCol; c.fill(); }
-    if (cap || v.capCol) { pth(c, top); c.strokeStyle = INK; c.lineWidth = v.capLw ?? BL; c.stroke(); }
-    // the prop on top; with clip it is cut off along the top's front edges, so its foot sits down in the block
-    if (v.clip) {
-      const q = [P(x0, y0, H), P(x1, y0, H), P(x1, y1, H), P(x0, y1, H)];
-      const L = q.reduce((a, b) => (b[0] < a[0] ? b : a)), R = q.reduce((a, b) => (b[0] > a[0] ? b : a));
-      const below = (p: Pt) => p[1] > L[1] + ((R[1] - L[1]) * (p[0] - L[0])) / (R[0] - L[0] || 1) + 1e-6;
-      const front = q.filter(p => p !== L && p !== R && below(p)).sort((a, b) => a[0] - b[0]);
-      c.save();
-      pth(c, [L, ...front, R, [R[0], R[1] - 500], [L[0], L[1] - 500]]);
-      c.clip();
-    }
-    for (const pr of v.props ?? []) {
-      const pi = I[pr.img];
-      if (!pi || pr.side) continue;
-      const [sx, sy] = P(n.x + (pr.dx ?? 0), n.y + (pr.dy ?? 0), H + (pr.dh ?? 0));
-      this.standee(pi, sx, sy + (pr.lift ?? 0), pr.w ?? 12, n.hit > 0);
-    }
-    if (v.clip) c.restore();
-    // nuggets poking out of the sides: a prop at a point on a face, at height h
-    for (const pr of v.props ?? []) {
-      const pi = I[pr.img];
-      if (!pi || !pr.side) continue;
-      const [sx, sy] = P(n.x + (pr.dx ?? 0), n.y + (pr.dy ?? 0), pr.dh ?? 0);
-      this.standee(pi, sx, sy + (pr.lift ?? 0), pr.w ?? 6, n.hit > 0);
-    }
+    } else { c.fillStyle = art.round ? '#5f9a3c' : '#e6ecee'; c.fill(); }
+    pth(c, ring); c.strokeStyle = INK; c.lineWidth = 0.9; c.stroke();
   }
 
   private drawNode(n: ResNode) {
-    // a spent node is drawn with the floor
+    // a spent node is drawn with the floor, and so is the pad under a live one
     if (n.left <= 0) return;
-    if ((n as any).pv?.rock) return this.drawRock(n, (n as any).pv.rock);
-    if ((n as any).pv) return this.drawProto(n, (n as any).pv);
-    const { c, P } = this, z = n.s ?? 1;
-    ell(c, ...P(n.x + 1.5 * z, n.y + 1.5 * z), 11 * z, 5.5 * z); c.fillStyle = 'rgba(15,8,4,.35)'; c.fill();
+    if (n.k === 'ore') return this.drawRock(n);
+    const { c, P } = this, art = NODE_ART[n.k], left = Math.min(n.left, n.ch), im = env(art.key);
     // a struck resource jolts: squashed and shaken for a moment
     const f = n.hit > 0 && !reduce ? n.hit / 0.2 : 0;
     if (f) {
@@ -1758,7 +1709,10 @@ export class SceneRenderer {
       c.scale(1 + 0.1 * f, 1 - 0.14 * f);
       c.translate(-x, -y);
     }
-    this.drawNodeShape(n, Math.min(n.left, n.ch), n.hit > 0);
+    if (im) {
+      const k = nodePieces(n.k, left), [sx, sy] = P(n.x + art.dx, n.y + art.dy);
+      this.standee((k < art.pieces && env(`${art.key}_${k}`)) || im, sx, sy + art.lift, art.w, n.hit > 0);
+    } else this.drawNodeShape(n, left, n.hit > 0);
     if (f) c.restore();
   }
 
@@ -2349,7 +2303,7 @@ export class SceneRenderer {
       ell(c, 0.35 * r * s, (dy - 0.3 * r) * s, 0.14 * r * s, 0.12 * r * s); fs(c, '#fbf3e0', lw * 0.6);
     };
     switch (p.k) {
-      case 'ore': rock('#948c80', '#6a635a'); break;
+      case 'ore': rock('#6b7280', '#41464f'); break;
       case 'gold': nug(0, 0, 1.6); break;
       case 'spk': poly([[-0.35, 0.9], [-0.35, -0.4], [0, -1.1], [0.35, -0.4], [0.35, 0.9]], '#a98ae8'); break;
       case 'cap': cap(1, 0.4); break;

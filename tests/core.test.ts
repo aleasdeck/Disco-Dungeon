@@ -3,7 +3,7 @@ import { Camera, FIT, KEEP, type Vec } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, CLEAN_ORE, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, KINDS, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
 import { ART, FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { CASTS, CAVE, MOB_CAP, mobPool, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob } from '../src/room';
+import { CASTS, CAVE, MOB_CAP, mobPool, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob, type ResNode } from '../src/room';
 import { ELITES, FIGHTS, FLOORS, FORGE_ROWS, LAYERS, REST_ROW, agreed, floorOk, genFloor, isFight, newRun, routes } from '../src/run';
 import { makeRng } from '../src/rng';
 import { EVENTS, applyFx, canPick, eventDef, eventOf, fxParts, rolled } from '../src/events';
@@ -60,7 +60,7 @@ describe('room generator', () => {
 });
 
 describe('resources', () => {
-  it('puts one ore vein in a plain fight, two in an elite one and two to six in the ore cave', () => {
+  it('puts one ore vein in a plain fight, two in an elite one and two to eight in the ore cave', () => {
     const veins = (type: 'fight' | 'elite' | 'treasure' | 'boss', seed: number) =>
       generate({ seed, depth: type === 'boss' ? LAYERS : 5, floor: 0, type }).nodes.filter(n => n.k === 'ore').length;
     for (let seed = 1; seed < 30; seed++) {
@@ -68,7 +68,7 @@ describe('resources', () => {
       expect(veins('elite', seed)).toBe(2);
       expect(veins('boss', seed)).toBe(1);
       expect(veins('treasure', seed)).toBeGreaterThanOrEqual(2);
-      expect(veins('treasure', seed)).toBeLessThanOrEqual(6);
+      expect(veins('treasure', seed)).toBeLessThanOrEqual(8);
     }
   });
 });
@@ -76,17 +76,28 @@ describe('resources', () => {
 describe('ore cave', () => {
   const cave = (seed: number, heroes: number) => generate({ seed, depth: LAYERS + 2, floor: 1, type: 'treasure', heroes });
 
-  it('holds no enemies and its own stock: a big vein on 2 × 2 cells or none, 2–5 small ones, 0–2 mushroom patches, the same for any party', () => {
-    const seen = { big: new Set<number>(), ore: new Set<number>(), herb: new Set<number>() };
+  // the clump's veins stand next to each other, the other veins and the mushrooms well apart
+  const clumped = (nodes: ResNode[]) => nodes.filter(n => n.k === 'ore' && nodes.some(o => o !== n && o.k === 'ore' && Math.hypot(o.x - n.x, o.y - n.y) === TILE));
+
+  it('holds no enemies and its own stock: a clump of three veins or none, 2–5 small ones, 0–2 mushroom patches, the same for any party', () => {
+    const seen = { clump: new Set<number>(), ore: new Set<number>(), herb: new Set<number>(), gap: new Set<number>() };
     for (let seed = 1; seed < 80; seed++) {
       const stock = caveStock({ seed, depth: LAYERS + 2 });
-      for (const k of ['big', 'ore', 'herb'] as const) seen[k].add(stock[k]);
+      for (const k of ['clump', 'ore', 'herb', 'gap'] as const) seen[k].add(stock[k]);
       for (const heroes of [1, 2, 3]) {
-        const L = cave(seed, heroes), big = L.nodes.filter(n => n.s), rest = L.nodes.filter(n => !n.s);
+        const L = cave(seed, heroes), clump = clumped(L.nodes), rest = L.nodes.filter(n => !clump.includes(n));
         const small = rest.filter(n => n.k === 'ore'), herbs = rest.filter(n => n.k === 'herb');
         expect(L.mobs).toHaveLength(0);
-        expect(big).toHaveLength(stock.big);
-        for (const n of big) expect(n).toMatchObject({ k: 'ore', s: 2, r: CAVE.big.r, ch: CAVE.big.ch, left: CAVE.big.ch });
+        expect(clump).toHaveLength(3 * stock.clump);
+        for (const n of L.nodes) expect(n.s).toBeUndefined();
+        for (const n of clump) expect(n).toMatchObject({ k: 'ore', ch: CAVE.small.ch, left: CAVE.small.ch });
+        // three cells of a 2 × 2 square: as much ore as the big vein had
+        if (clump.length) {
+          const xs = clump.map(n => n.x), ys = clump.map(n => n.y);
+          expect(Math.max(...xs) - Math.min(...xs)).toBe(TILE);
+          expect(Math.max(...ys) - Math.min(...ys)).toBe(TILE);
+          expect(clump.reduce((t, n) => t + n.ch, 0)).toBe(6);
+        }
         expect(small).toHaveLength(stock.ore);
         for (const n of small) expect(n).toMatchObject({ ch: CAVE.small.ch, left: CAVE.small.ch });
         expect(herbs).toHaveLength(stock.herb);
@@ -95,7 +106,8 @@ describe('ore cave', () => {
       }
     }
     // every count turns up
-    expect([...seen.big].sort()).toEqual([0, 1]);
+    expect([...seen.clump].sort()).toEqual([0, 1]);
+    expect([...seen.gap].sort()).toEqual([0, 1, 2, 3]);
     expect([...seen.ore].sort()).toEqual([2, 3, 4, 5]);
     expect([...seen.herb].sort()).toEqual([0, 1, 2]);
   });
@@ -104,7 +116,7 @@ describe('ore cave', () => {
     expect([1, 2, 3].map(heroes => caveTurns({ heroes }))).toEqual([3, 2, 1]);
   });
 
-  // a cave with the big vein, in a clear line from the first rune, and a mushroom patch
+  // a cave with the clump, in a clear line from the first rune, and a mushroom patch
   const FULL = 4;
   const enter = (picks: number[], seed = FULL) => {
     const g = new Game();
@@ -135,15 +147,15 @@ describe('ore cave', () => {
   });
 
   it('stays open while mushrooms are left, ends at once when everything is spent, and counts the ore mined', () => {
-    expect(caveStock({ seed: FULL, depth: LAYERS + 2 })).toMatchObject({ big: 1, herb: 1 });
+    expect(caveStock({ seed: FULL, depth: LAYERS + 2 })).toMatchObject({ clump: 1, herb: 1 });
     const { g, won } = enter([0]);
-    const big = g.S.nodes.find(n => n.s)!;
+    const p0 = g.spot(g.hero)!, big = clumped(g.S.nodes).sort((a, b) => Math.hypot(a.x - p0.x, a.y - p0.y) - Math.hypot(b.x - p0.x, b.y - p0.y))[0];
     // the veins spent, a mushroom patch left: a throw may still go for health
     for (const n of g.S.nodes) n.left = n.k === 'herb' ? 1 : 0;
     g.update(1 / 60);
     expect(g.cleared()).toBe(false);
     expect(g.S.phase).toBe('throw');
-    // the last charge: the big vein a hit away, the rest spent
+    // the last charge: the clump's nearest vein a hit away, the rest spent
     for (const n of g.S.nodes) n.left = n === big ? 1 : 0;
     const h = g.hero, p = g.spot(h)!;
     g.throwDisc(h, big.x - p.x, big.y - p.y);
