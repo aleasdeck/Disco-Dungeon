@@ -110,7 +110,8 @@ plate('pf', (W, H), [(4 + x * (W - 8), 4 + y * (H - 8)) for x, y in ((0.09, 0.03
                                                                          (0.78, 1), (0.04, 0.96), (0, 0.18))],
       (128, 128, 128), 80, tear=0.6, parts=True)
 
-# the board of the trophies' sockets in the fight corner, left of the health and the sparks (Vladislav: brighter, and
-# cardboard); 88 x 267 of the corner's units at 3 pixels a unit, its side by the health straight
+# the board of the trophies' sockets in the fight corner, left of the health and the sparks (Vladislav: cardboard; first
+# brighter than the dark stand-in, then of four darker than caramel he picked «горький шоколад»); 88 x 267 of the
+# corner's units at 3 pixels a unit, its side by the health straight
 W, H = 264, 801
-plate('tray', (W, H), [(10, 16), (W - 3, 4), (W - 3, H - 3), (3, H - 12)], (176, 110, 56), 90, tear=1.2)
+plate('tray', (W, H), [(10, 16), (W - 3, 4), (W - 3, H - 3), (3, H - 12)], (96, 60, 34), 90, tear=1.2)
