@@ -5,7 +5,8 @@ import { adsr, bass, bell, brass, clap, cowbell, filt, gain, guitar, hat, kick, 
 
 export type Sfx =
   | 'click' | 'launch' | 'wall' | 'clink' | 'hit' | 'crit' | 'kill' | 'armor' | 'ore' | 'sparks' | 'herb' | 'ice' | 'shatter'
-  | 'pit' | 'hurt' | 'ability' | 'enemyTurn' | 'yourTurn' | 'step' | 'slam' | 'win' | 'lose' | 'zap' | 'eat' | 'gas' | 'boom' | 'freeze';
+  | 'pit' | 'hurt' | 'ability' | 'enemyTurn' | 'yourTurn' | 'step' | 'slam' | 'win' | 'lose' | 'zap' | 'eat' | 'gas' | 'boom' | 'freeze'
+  | 'shove' | 'cuff' | 'kiss';
 
 type Play = (b: Band, o: AudioNode, t: number, p: number) => void;
 
@@ -131,6 +132,22 @@ const SOUNDS: Record<Sfx, Play> = {
     ['B6', 'F#6', 'D#6'].slice(0, p > 0.8 ? 3 : 2).forEach((m, i) => bell(b, o, t + 0.04 + i * 0.05, note(m), 0.45, { ratio: 2.76, dec: 0.45 }));
     hiss(b, o, t, 0.2, 0.2, { type: 'highpass', f: 6500 });
   },
+  // the bouncer's throw: a heavy thud and a short shove of air
+  shove: (b, o, t, p) => {
+    kick(b, o, t, 0.7 + 0.3 * p, { f0: 150, f1: 48, dec: 0.28 });
+    hiss(b, o, t, 0.12, 0.3 + 0.2 * p, { type: 'lowpass', f: 900, q: 0.7 });
+  },
+  // handcuffs: a quick metal ratchet and a snap
+  cuff: (b, o, t, p) => {
+    for (let k = 0; k < 4; k++) tone(b, o, t + k * 0.03, 'square', 2600 - k * 120, 2300, 0.012, 0.12 + 0.08 * p);
+    cowbell(b, o, t + 0.14, 0.4 + 0.4 * p, { f: 900 });
+  },
+  // a blown kiss: a «mwah» sliding up and a little sparkle
+  kiss: (b, o, t) => {
+    tone(b, o, t, 'sine', 480, 1250, 0.13, 0.5);
+    tone(b, o, t + 0.12, 'sine', 1300, 900, 0.05, 0.25);
+    ['E6', 'B6'].forEach((m, i) => bell(b, o, t + 0.14 + i * 0.05, note(m), 0.3, { dec: 0.4 }));
+  },
   lose: (b, o, t) => {
     scratch(b, o, t, true);
     syndrum(b, o, t + 0.3, 0.8, { f0: 600, f1: 60, dec: 1 });
@@ -142,7 +159,7 @@ const SOUNDS: Record<Sfx, Play> = {
 const TRIM: Record<Sfx, number> = {
   click: 3.7, launch: -6.0, wall: 4.0, clink: -0.7, hit: -2.0, crit: -3.2, kill: -1.6, armor: 0.5, ore: 4.4, sparks: 2.6, herb: 10.5,
   ice: 6.3, shatter: 4.6, pit: -7.0, hurt: -7.7, ability: -4.3, enemyTurn: -5.4, yourTurn: 3.9, step: -0.4, slam: -4.3, win: -2.3, lose: -1.9,
-  zap: 0, eat: 6, gas: 2, boom: -3, freeze: 4,
+  zap: 0, eat: 6, gas: 2, boom: -3, freeze: 4, shove: -3, cuff: 3, kiss: 4,
 };
 
 /** How long each sound lasts, about: the trim node is let go after it. */

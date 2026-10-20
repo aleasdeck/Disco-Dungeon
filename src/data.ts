@@ -86,6 +86,18 @@ export const FROST_SLOW_VULN = 0.25;
 export const FROST_VULN = 0.5;
 /** How much more a frosted enemy takes from the heroes: nothing without frost, a quarter slowed, a half frozen. */
 export const frostVuln = (frost = 0) => (frost >= 2 ? FROST_VULN : frost > 0 ? FROST_SLOW_VULN : 0);
+/**
+ * The bouncer's «На выход!»: each hit of his disc throws the enemy a cell on, away from the disc. Into a wall, a block,
+ * a resource, a rune or another enemy it is slammed: SHOVE_DMG more to it, through armour, and as much to the enemy it
+ * hit; over a hole an enemy drops in and is out of the fight; onto spikes or lava it takes what a hero would. A boss or
+ * the floor's elite doesn't budge: SHOVE_DMG more instead.
+ */
+export const SHOVE_DMG = 2;
+/**
+ * The cop's «Наручники»: the first two different enemies his discs hit in a turn are cuffed together for CUFF_TURNS enemy
+ * turns. Whatever one of them loses the other loses too, through armour; one falls, the cuffs drop.
+ */
+export const CUFF_TURNS = 3;
 /** Online, at most this many players sit at one table: rooms are built for one to three heroes. */
 export const MAX_PLAYERS = 3;
 /**
@@ -170,6 +182,9 @@ export const BOOT_GAGS = [
   'Шкет поджёг петарду в почтовом ящике. Опять',
   'Перегар ищет закуску. Нашёл воблу у себя в кармане',
   'Отморозок замораживает пиво. Пиво против',
+  'Вышибала не пускает скелета: не по дресс-коду',
+  'Участковый составляет протокол на гоблина. Гоблин без паспорта',
+  'Вешалка съела лист салата. Теперь неделю без ужина',
   'Ледяная ведьма жалуется, что ей холодно',
   'Ледяной лич размораживает пельмени',
   'Бес-кочегар подкидывает в печь чужие носки',
@@ -428,6 +443,21 @@ export const HEROES: HeroDef[] = [
     key: 'genius', name: 'Отморозок', acc: 'Отморозка', dat: 'Отморозку', col: '#3a9cb8', dk: '#1b4d5c', skin: '#cfe0e4', hp: 22, r: 5, m: 2, e: 0.85, fr: 0.9, pw: 1,
     ab: 'Заморозка', abTxt: `До конца хода его диск морозит: после одного попадания враг еле ползёт, после двух пропускает ход. Урон по замедленному +${Math.round(FROST_SLOW_VULN * 100)}%, по замороженному +${Math.round(FROST_VULN * 100)}%.`, abCol: '#bdf2ff',
     abMore: `Замедленный враг в свой ход проходит не больше ${FROST_STEPS === 1 ? 'клетки' : FROST_STEPS + ' клеток'}, но бьёт и стреляет, как обычно. Замороженный стоит и ничего не делает: ни удара, ни выстрела, ни призыва. Пока мороз держится, а это до конца ближайшего хода врагов, диски и умения героев бьют замедленного врага на ${Math.round(FROST_SLOW_VULN * 100)}% сильнее, замороженного на ${Math.round(FROST_VULN * 100)}%.`,
+  },
+  {
+    key: 'bouncer', name: 'Вышибала', acc: 'Вышибалу', dat: 'Вышибале', col: '#7c828c', dk: '#3a3e45', skin: '#f0c8a8', hp: 32, r: 6, m: 3.6, e: 0.55, fr: 1.1, pw: 0.8,
+    ab: 'На выход!', abTxt: `До конца хода каждое попадание его диска отбрасывает врага на клетку. В стену или другого врага: +${SHOVE_DMG} урона, в яму: враг выбывает.`, abCol: '#ffcf5a',
+    abMore: `Враг отлетает от диска. Врезался в стену, колонну, ресурс, руну или другого врага: +${SHOVE_DMG} ему сквозь броню, и врагу, в которого врезался, тоже ${SHOVE_DMG}. Над ямой враг падает и выбывает из боя. На шипах или в лаве получает урон, как герой. Элиту и босса не сдвинуть: им просто +${SHOVE_DMG}.`,
+  },
+  {
+    key: 'cop', name: 'Участковый', acc: 'Участкового', dat: 'Участковому', col: '#4b5ea8', dk: '#232c55', skin: '#efb48f', hp: 30, r: 6, m: 3.4, e: 0.6, fr: 1.05, pw: 0.8,
+    ab: 'Наручники', abTxt: `До конца хода первых двух врагов, в которых попадут его диски, сковывает на ${CUFF_TURNS} хода: урон по одному достаётся и другому.`, abCol: '#ff8fd0',
+    abMore: `Считается любой урон: диски, огонь, газ, молния, петарда, удар другого врага. Второй получает столько же сквозь броню, обратно урон не отражается. Попал в одного врага: наручники не защёлкнутся. Один из пары пал: наручники падают. Новая пара заменяет старую. Босса можно сковать с его свитой.`,
+  },
+  {
+    key: 'model', name: 'Вешалка', acc: 'Вешалку', dat: 'Вешалке', fem: true, col: '#b5469f', dk: '#5a1f4e', skin: '#c99272', hp: 18, r: 4, m: 1.5, e: 0.9, fr: 0.8, pw: 1.2,
+    ab: 'Воздушный поцелуй', abTxt: 'До конца хода её диск оставляет поцелуй: в свой ход враг бьёт ближайшего другого врага, а не героев.', abCol: '#ff5a8a',
+    abMore: 'Поцелованный враг бьёт своей атакой в полную силу, броня другого врага считается. Стрелок стреляет, если видит цель, а не дотянулся за ход, просто идёт к ней. Других врагов нет: стоит, вздыхает и героев не бьёт. Поцелуй держится до конца ближайшего хода врагов. На боссов не действует.',
   },
 ];
 

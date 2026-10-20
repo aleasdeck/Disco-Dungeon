@@ -134,7 +134,7 @@ export function drawMiniature(c: Ctx, o: MiniatureOpts) {
 // ---------------------------------------------------------------- heroes
 
 /** Which of the three drawn caricatures stands in for a hero until its picture loads: the knight, the rogue or the diva. */
-export const heroLook = (key: string) => ({ bastion: 0, cook: 0, ricochet: 1, sharp: 1, kid: 1 } as Record<string, number>)[key] ?? 2;
+export const heroLook = (key: string) => ({ bastion: 0, cook: 0, bouncer: 0, cop: 0, ricochet: 1, sharp: 1, kid: 1 } as Record<string, number>)[key] ?? 2;
 
 /** Caricature hero, feet at (x, y), s = scale. */
 export function drawHeroFigure(c: Ctx, i: number, x: number, y: number, s: number, flash: boolean, t = 0) {

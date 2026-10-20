@@ -412,6 +412,16 @@ export class Hud {
     const tgt = it.hero >= 0 ? g.heroOf(it.hero) : null, far = isRanged(m.k), bomb = !!MOBS[m.k].charge;
     // a shooter's blow and its walk to where it sees the hero carry a bow by the badge
     const acc = tgt?.def.acc ?? '', out = far && !!it.way && it.way.length > 1, bow = far ? icon('bow', 'qbow') : '';
+    // kissed by the model: it goes for another enemy, or sighs with nobody left to go for
+    if (it.sigh) return { badge: `<span class="ib sp">${icon('kiss')}</span>`, txt: 'Поцелован: вздыхает и никого не ударит' };
+    if (it.foe !== undefined) {
+      const o = g.S.mobs[it.foe], who = MOBS[o.k].acc.toLowerCase(), kiss = icon('kiss', 'qbow');
+      if (it.t === 'hit') {
+        const how = !far ? `ударит ${who}` : bomb ? `бросит бомбу в ${who}` : `выстрелит в ${who}`;
+        return { badge: `${kiss}<span class="ib hit" style="--c:#ff5a8a">${it.dmg}</span>`, txt: `Поцелован: ${out ? 'выйдет на линию огня и ' : ''}${how} на ${it.dmg}, броня считается` };
+      }
+      return { badge: `${kiss}<span class="ib go" style="--c:#ff5a8a">${it.eta ?? icon('move')}</span>`, txt: `Поцелован: идёт ${far ? 'стрелять в' : 'бить'} ${who}, героев не тронет` };
+    }
     if (it.t === 'hit') {
       const how = !far ? `ударит ${acc}` : bomb ? `бросит бомбу в ${acc}` : `выстрелит в ${acc}`;
       return { badge: `${bow}<span class="ib hit" style="--c:${tgt!.def.col}">${it.dmg}</span>`, txt: (g.executes(m) ? 'Казнь: ' : '') + cap(out ? `выйдет на линию огня и ${how}` : how) + ` на ${it.dmg}` };
@@ -444,6 +454,9 @@ export class Hud {
     const brittle = `; урон от дисков и умений героев +${Math.round(frostVuln(m.frost) * 100)}%`;
     if (g.frozen(m)) out.push({ k: 'chill', t: 'Заморожен: пропустит ход' + brittle });
     else if (m.frost) out.push({ k: 'slow', t: `Замедлен: в свой ход пройдёт не больше ${FROST_STEPS === 1 ? 'клетки' : FROST_STEPS + ' клеток'}` + brittle });
+    if (m.kiss !== undefined) out.push({ k: 'kiss', t: 'Поцелуй Вешалки: в свой ход бьёт ближайшего другого врага, а не героев' });
+    const mate = g.cuffedTo(m);
+    if (mate && mate.hp > 0) out.push({ k: 'cuffs', n: g.S.cuffs!.left, t: `В наручниках, в паре: ${MOBS[mate.k].name}. Урон по одному достаётся и другому, ещё ${turns(g.S.cuffs!.left)}` });
     if (isRanged(m.k)) out.push({ k: 'bow', t: 'Дальний бой: стреляет только в того, кого видит' });
     if (m.armor) out.push({ k: 'armor', n: m.armor, t: `Броня ${m.armor}` });
     if (MOBS[m.k].shield) out.push({ k: 'shield', t: 'Дверь вместо щита: диск спереди не ранит, бей сбоку или рикошетом' });

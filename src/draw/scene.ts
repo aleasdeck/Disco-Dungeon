@@ -439,6 +439,7 @@ export class SceneRenderer {
       items.push([cam.depth(wx, wy) + 2, () => this.drawHero(cr.hero, { x: wx, y: wy })]);
     }
     for (const m of S.mobs) if (m.dead <= 1) items.push([cam.depth(m.x, m.y), () => this.drawMob(m)]);
+    this.cuffItems(items);
     for (const b of S.blocks) items.push([cam.depth(b.x0 + 8, b.y0 + 8), () => this.drawBlock(b)]);
     for (const n of S.nodes) items.push([cam.depth(n.x, n.y), () => this.drawNode(n)]);
     for (const f of S.food) items.push([cam.depth(f.x, f.y) - 0.5, () => this.drawFood(f)]);
@@ -1991,12 +1992,26 @@ export class SceneRenderer {
     }
   }
 
+  /** Where an enemy is seen: where it stands, or on its way there while the bouncer's throw slides it over. */
+  private seen(m: Mob) {
+    const sl = m.slid;
+    if (!sl) return { x: m.x, y: m.y };
+    const e = sl.t * (2 - sl.t);
+    return { x: sl.x + (m.x - sl.x) * e, y: sl.y + (m.y - sl.y) * e };
+  }
+
   private drawMob(m: Mob) {
     const { c, P, g } = this;
-    const S = g.S, [x, y] = P(m.x, m.y);
-    const it = m.intent, th = it ? g.heroOf(it.hero) : null, tgt = (th && g.spot(th)) ?? { x: S.Wx, y: S.Wy };
+    // thrown down a hole by the bouncer, it drops out of sight
+    const S = g.S, at = this.seen(m), [x, y0] = P(at.x, at.y), y = y0 + (m.fell ? Math.min(1, m.fell * 2.2) ** 2 * 26 : 0);
+    // a kissed enemy turns to the enemy it goes for
+    const it = m.intent, foe = it?.foe !== undefined ? S.mobs[it.foe] : null, th = it && !foe ? g.heroOf(it.hero) : null;
+    const tgt = foe ?? (th && g.spot(th)) ?? { x: S.Wx, y: S.Wy };
     let pose = this.pose(m.knock, m.x, m.y, m.r), alpha = m.dead ? Math.max(0, 1 - m.dead) : (1 - (m.born ?? 0)) * (m.hp > 0 && !g.solid(m) ? 0.35 : 1);
-    if (m.dead && !reduce) {
+    if (m.fell) {
+      pose = undefined;
+      alpha = Math.max(0, 1 - m.fell * 2.2);
+    } else if (m.dead && !reduce) {
       // beaten, it topples over away from the blow, lies a moment and fades
       const k = m.knock, side = (k && Math.sign(this.onScreen(m.x, m.y, k.x, k.y)[0])) || 1;
       pose = topplePose(m.dead, side, m.r * 1.27);
@@ -2022,6 +2037,8 @@ export class SceneRenderer {
     if (MOBS[m.k].shield) this.drawDoor(m, tgt);
     if (m.frost) this.drawFrost(m, x, y - m.hop);
     const top = y - m.hop - BASE_TH - MOB_TOP[m.k];
+    if (m.kiss !== undefined) this.drawKiss(x, top);
+    if (this.cuffed()?.includes(m)) this.drawCuff(m);
     if (m.burn > 0) {
       // the more fire piled on, the more tongues of flame, and the number says what it burns off next move
       const n = Math.min(5, 2 + Math.floor(m.burn / 3));
@@ -2031,6 +2048,72 @@ export class SceneRenderer {
         c.fillStyle = `rgba(255,140,60,${1 - ph})`; c.fill();
       }
     }
+  }
+
+  /** The model's kiss on an enemy: a red heart bobbing over its head, with a smaller one rising off it now and then. */
+  private drawKiss(x: number, top: number) {
+    const { c } = this, b = reduce ? 0 : Math.sin(this.t * 3) * 1.2, ph = reduce ? 0 : (this.t * 0.7) % 1;
+    const heart = (hx: number, hy: number, r: number) => {
+      c.beginPath();
+      c.moveTo(hx, hy + r);
+      c.bezierCurveTo(hx - r * 1.7, hy - r * 0.1, hx - r * 0.9, hy - r * 1.6, hx, hy - r * 0.55);
+      c.bezierCurveTo(hx + r * 0.9, hy - r * 1.6, hx + r * 1.7, hy - r * 0.1, hx, hy + r);
+      c.closePath();
+    };
+    c.save();
+    c.lineJoin = 'round';
+    heart(x, top - 7 + b, 3.4); fs(c, '#ff4f7e', 0.9);
+    if (ph > 0) {
+      c.globalAlpha = 1 - ph;
+      heart(x + 4 + ph * 2, top - 11 - ph * 8, 1.8); fs(c, '#ff9ab8', 0.6);
+    }
+    c.restore();
+  }
+
+  /** The cop's cuffed pair while both stand: the two enemies, or null. */
+  private cuffed(): [Mob, Mob] | null {
+    const S = this.g.S, cf = S.cuffs;
+    if (!cf || S.phase === 'over') return null;
+    const a = S.mobs[cf.a], b = S.mobs[cf.b];
+    return a && b && a.hp > 0 && b.hp > 0 ? [a, b] : null;
+  }
+
+  /** Where a cuffed enemy's hands are: the cuff and the chain's end. */
+  private cuffAt(m: Mob) {
+    const p = this.seen(m);
+    return this.P(p.x, p.y, BASE_TH + MOBS[m.k].fig * 0.42 + m.hop);
+  }
+
+  /**
+   * The cop's handcuffs: a sagging chain from one cuffed enemy's hands to the other's. It goes in with the figures just in
+   * front of the farther enemy, so the nearer one and whoever stands between them cover it.
+   */
+  private cuffItems(items: [number, () => void][]) {
+    const pair = this.cuffed();
+    if (!pair) return;
+    const [a, b] = pair, { cam } = this;
+    items.push([Math.min(cam.depth(a.x, a.y), cam.depth(b.x, b.y)) + 0.01, () => this.drawChain(a, b)]);
+  }
+
+  private drawChain(a: Mob, b: Mob) {
+    const { c } = this, [ax, ay] = this.cuffAt(a), [bx, by] = this.cuffAt(b);
+    const mx = (ax + bx) / 2, my = (ay + by) / 2 + Math.min(14, Math.hypot(bx - ax, by - ay) * 0.18);
+    c.save();
+    c.lineCap = 'round';
+    c.beginPath(); c.moveTo(ax, ay); c.quadraticCurveTo(mx, my, bx, by);
+    c.strokeStyle = INK; c.lineWidth = 2.6; c.stroke();
+    c.setLineDash([2.2, 1.6]);
+    c.strokeStyle = '#d8dde6'; c.lineWidth = 1.3; c.stroke();
+    c.restore();
+    this.drawCuff(a);
+    this.drawCuff(b);
+  }
+
+  /** A pink fluffy cuff on a cuffed enemy's hands, worn over its figure. */
+  private drawCuff(m: Mob) {
+    const { c } = this, [x, y] = this.cuffAt(m);
+    circ(c, x, y, 2.8); fs(c, '#ff9ccf', 0.9);
+    circ(c, x, y, 1.1); c.fillStyle = INK; c.fill();
   }
 
   /** The guard's door on its stand: a thick arc on the side it faces its hero, where a disc does no damage. */

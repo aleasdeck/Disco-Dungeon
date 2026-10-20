@@ -114,6 +114,10 @@ export interface Intent {
   eta?: number;
   /** A `move` toward the kid's firecracker lying here instead of the hero: it strikes nobody this turn. */
   bang?: { x: number; y: number };
+  /** Kissed by the model, it goes for this enemy (its index in the room's list) instead of the heroes (`hero` is -1). */
+  foe?: number;
+  /** Kissed, with no other enemy left to go for: it stands and sighs and strikes nobody. */
+  sigh?: boolean;
 }
 
 export interface Mob {
@@ -148,6 +152,12 @@ export interface Mob {
   knock?: Knock;
   /** Hits of the ice genius's frosted disc this turn: one slows it on its next move, two make it skip the move. */
   frost?: number;
+  /** The model's kiss, by the hero who blew it: on its next move it goes for the nearest other enemy instead of the heroes. */
+  kiss?: number;
+  /** The bouncer has just thrown it a cell on: where it stood, and how far along the slide is, 0 to 1. */
+  slid?: { x: number; y: number; t: number };
+  /** Thrown over a hole by the bouncer: it dropped in and is out of the fight; counts up as it sinks out of sight. */
+  fell?: number;
   /** A coffin: who lies in it, and the enemy turns till it gets up. */
   hold?: MobKind;
   rise?: number;

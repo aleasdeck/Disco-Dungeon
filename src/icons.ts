@@ -32,6 +32,10 @@ const SHAPES: Record<string, [string, string][]> = {
   gas: [['M5 18a4 4 0 0 1 0-8 5 5 0 0 1 9-3 4 4 0 0 1 5 4 3.5 3.5 0 0 1 0 7z', '#a9d45a'], ['M8 4c1 1 1 2 0 3M12 2c1 1 1 2 0 3M16 4c1 1 1 2 0 3', 'none']],
   slow: [['M4 19h13a4 4 0 0 0 0-8c-1-3-4-5-7-4a5 5 0 0 0-3 7H4z', '#c9a06a'], ['M10 11a2 2 0 1 1 3 2', 'none'], ['M18 11l1-5M20 11l2-4', 'none']],
   petard: [['M15 7c0-3 2-4 4-5', 'none'], ['M7 9l8-2v13l-8 2z', '#d63a35'], ['M7 13l8-2v3l-8 2z', '#f2c94c'], ['M20 1l.8 1.8 1.8.8-1.8.8-.8 1.8-.8-1.8-1.8-.8 1.8-.8z', '#ffd34d']],
+  /** The model's kiss: red lips. */
+  kiss: [['M2 12c3-4 6-6 8-5l2 1 2-1c2-1 5 1 8 5-3 4-6 6-10 6S5 16 2 12z', '#d6334f'], ['M3.5 12c4 1 13 1 17 0', 'none']],
+  /** The cop's handcuffs: two pink fluffy rings on a chain. */
+  cuffs: [['M7 6a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8z', '#ff9ccf'], ['M17 8a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8z', '#ff9ccf'], ['M11.5 11.5l1 1', 'none']],
   disc: [['M3 10c0-3 4-5 9-5s9 2 9 5v4c0 3-4 5-9 5s-9-2-9-5z', 'currentColor'], ['M3 10c0 3 4 5 9 5s9-2 9-5', 'none']],
   /** A boss's trophy until its picture is painted: a little mirror ball on a gold tag. */
   relic: [['M12 1v3', 'none'], ['M12 4a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17z', '#c9ced8'], ['M3.5 12.5h17M12 4v17M5.5 8c4 1.6 9 1.6 13 0M5.5 17c4-1.6 9-1.6 13 0', 'none'],
