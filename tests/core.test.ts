@@ -3,7 +3,7 @@ import { Camera, FIT, KEEP, type Vec } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, CUFF_TURNS, FOOD_HEAL, FOOD_PER_DISC, CLEAN_ORE, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, KISS_TURNS, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, KINDS, RAGE_FROM, SHOVE_DMG, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
 import { ART, DOOR_MUL, FOOD_FLY, FOOD_TOSS, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { CASTS, CAVE, MOB_CAP, bossOf, mobPool, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob, type ResNode } from '../src/room';
+import { BOSS_UP, CASTS, CAVE, MOB_CAP, bossOf, mobPool, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob, type ResNode } from '../src/room';
 import { ELITES, FIGHTS, FLOORS, FORGE_ROWS, LAYERS, REST_ROW, agreed, floorOk, genFloor, isFight, newRun, routes } from '../src/run';
 import { makeRng } from '../src/rng';
 import { EVENTS, applyFx, canPick, eventDef, eventOf, fxParts, rolled } from '../src/events';
@@ -4177,6 +4177,25 @@ describe("the floors' other bosses", () => {
     h.at = cellCentre(6, 3);
     g.pickIntents();
     expect(m.intent!.flee).toBe(true);
+  });
+
+  it('the bosses parties beat too often have more health and a harder blow, by party size', () => {
+    expect(Object.keys(BOSS_UP).sort()).toEqual(['dancer', 'dragon', 'forgelord', 'fridge', 'pahan']);
+    for (const [k, up] of Object.entries(BOSS_UP) as [K, { hp: number[]; dmg: number[] }][]) {
+      const f = MOBS[k].floor;
+      for (const heroes of [1, 2, 3]) {
+        const spec = { seed: 5, depth: f * LAYERS + LAYERS, floor: f, type: 'boss' as const, boss: k, heroes };
+        const now = generate(spec).mobs[0];
+        delete BOSS_UP[k];
+        const was = generate(spec).mobs[0];
+        BOSS_UP[k] = up;
+        expect(now.k).toBe(k);
+        expect(now.max).toBe(Math.round(was.max * up.hp[heroes - 1]));
+        expect(now.hp).toBe(now.max);
+        expect(now.dmg).toBe(was.dmg + up.dmg[heroes - 1]);
+        expect(up.hp[heroes - 1]).toBeGreaterThanOrEqual(1);
+      }
+    }
   });
 
   it('at half health the dancer catches disco fever: the floor lights up on every turn', () => {
