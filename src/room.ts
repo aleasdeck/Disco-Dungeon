@@ -16,6 +16,8 @@ export interface RoomSpec {
   smoke?: boolean;
   /** An event's curse on the fight, «Стробоскоп»: no aiming line. */
   strobe?: boolean;
+  /** The boss room's boss, when not the one its seed picks (bossOf): a test or the bot may name it. */
+  boss?: MobKind;
 }
 
 export interface Pad { x: number; y: number }
@@ -95,13 +97,18 @@ export interface ResNode {
   s?: number;
 }
 
+/** What a floor boss's marked cells do to a hero standing on them: freeze, the dancefloor's beat, the beams, the roll, the fire. */
+export type Zone = 'cold' | 'dance' | 'beam' | 'roll' | 'fire';
+
 /**
  * What a mob will do in the coming enemy turn, shown to the players beforehand.
  * hit/move/charge aim at one hero; slam hits every hero (hero = -1); heal names the mob it mends;
- * summon and heat carry the spots that light up on the floor a turn ahead.
+ * summon and heat carry the spots that light up on the floor a turn ahead. The floor bosses': zone marks the cells its
+ * blow falls on (`z` what it does there), emerge the cells round where the rat swarm comes up out of its burrow; dive
+ * sends the swarm down one, toss is the fridge throwing food at a hero, brew Пахан treating its шестёрки.
  */
 export interface Intent {
-  t: 'hit' | 'move' | 'charge' | 'slam' | 'heal' | 'summon' | 'heat' | 'scream' | 'smash' | 'rise';
+  t: 'hit' | 'move' | 'charge' | 'slam' | 'heal' | 'summon' | 'heat' | 'scream' | 'smash' | 'rise' | 'zone' | 'emerge' | 'dive' | 'toss' | 'brew';
   hero: number;
   dmg: number;
   chill?: boolean;
@@ -118,6 +125,14 @@ export interface Intent {
   foe?: number;
   /** Kissed, with no other enemy left to go for: it stands and sighs and strikes nobody. */
   sigh?: boolean;
+  /** A `zone`: what its cells do to a hero standing on them. */
+  z?: Zone;
+  /** A `toss`: what the fridge throws, an index into FOOD_TOSS. */
+  item?: number;
+  /** A `move` away from the heroes: the swarm's last rats running off, the dancer moonwalking. */
+  flee?: boolean;
+  /** Where the swarm comes up out of its burrow, or where the rolling ball stops. */
+  to?: { x: number; y: number };
 }
 
 export interface Mob {
@@ -163,6 +178,18 @@ export interface Mob {
   /** A coffin: who lies in it, and the enemy turns till it gets up. */
   hold?: MobKind;
   rise?: number;
+  /** The rat swarm is down a burrow: the hole (by index in the room's list) where its eyes glow and it comes up next. */
+  under?: number;
+  /** Пахан's «общак»: the ore its blows have taken from the party, paid back twice when it falls. */
+  pot?: number;
+  /** Times Пахан has treated this шестёрка («Подогрев»): its blow grows with each, up to a limit. */
+  brew?: number;
+  /** The fridge's door stands open till its next move, facing this way: a disc into it hits twice as hard, past the armour. */
+  open?: { x: number; y: number };
+  /** The dragon goes after this hero on its next move, for breaking one of its eggs. */
+  mad?: number;
+  /** Floor cells covered in the disco ball's mirror tiles: a disc that stops there hurts its hero like spikes. */
+  shards?: string[];
 }
 
 export type Shape = 'rect' | 'corner' | 'funnel' | 'alcove' | 'cross';
@@ -429,7 +456,7 @@ const BLOCK_SHAPES = [[[0, 0]], [[0, 0], [1, 0]], [[0, 0], [0, 1]], [[0, 0], [1,
  * elite fight, and its boss. Weak enemies crowd the first rooms and thin out (the prison rat is gone by the fifth row),
  * tougher ones come in half way and the floor's heavy hitters only in the last two rows.
  */
-export const CASTS: { rows: Partial<Record<MobKind, number[]>>; elite: MobKind; boss: MobKind }[] = [
+export const CASTS: { rows: Partial<Record<MobKind, number[]>>; elite: MobKind; boss: MobKind; bosses: MobKind[] }[] = [
   {
     rows: {
       skel: [3, 3, 3, 3, 2, 2],
@@ -438,7 +465,7 @@ export const CASTS: { rows: Partial<Record<MobKind, number[]>>; elite: MobKind; 
       guard: [0, 0, 1, 2, 2, 2],
       necro: [0, 0, 0, 0, 1, 1],
     },
-    elite: 'headsman', boss: 'king',
+    elite: 'headsman', boss: 'king', bosses: ['king', 'ratswarm', 'pahan'],
   },
   {
     rows: {
@@ -448,7 +475,7 @@ export const CASTS: { rows: Partial<Record<MobKind, number[]>>; elite: MobKind; 
       undertaker: [0, 0, 1, 1, 1, 1],
       witch: [0, 0, 0, 0, 1, 1],
     },
-    elite: 'banshee', boss: 'lich',
+    elite: 'banshee', boss: 'lich', bosses: ['lich', 'fridge', 'dancer'],
   },
   {
     rows: {
@@ -458,12 +485,24 @@ export const CASTS: { rows: Partial<Record<MobKind, number[]>>; elite: MobKind; 
       grinder: [0, 0, 1, 1, 2, 2],
       golem: [0, 0, 0, 0, 1, 1],
     },
-    elite: 'smasher', boss: 'forgelord',
+    elite: 'smasher', boss: 'forgelord', bosses: ['forgelord', 'discoball', 'dragon'],
   },
 ];
 
 /** The floor's cast. */
 export const castOf = (f: number) => CASTS[Math.min(f, CASTS.length - 1)];
+
+/**
+ * The boss of a floor's boss room: one of the floor's three, by the room's seed, so every screen, a reloaded game and the
+ * map before it all meet the same one, and the next run may bring another.
+ */
+export const bossOf = (spec: Pick<RoomSpec, 'seed' | 'floor' | 'boss'>) => {
+  const list = castOf(spec.floor).bosses;
+  return spec.boss ?? list[makeRng(spec.seed * 13 + spec.floor * 7 + 991).int(0, list.length - 1)];
+};
+
+/** Enemies a boss brings fewer of: Пахан has his шестёрки instead of an escort, the dragon its eggs. */
+const LESS_ESCORT: Partial<Record<MobKind, number>> = { pahan: 9, dragon: 1 };
 
 /** Enemies a fight on this row of the floor draws from, each as many times as its weight; past the fight rows (the boss's escort) the last row's. */
 export function mobPool(f: number, row: number): MobKind[] {
@@ -669,11 +708,13 @@ export function generate(spec: RoomSpec): Layout {
     }
     return null;
   };
-  const nPits = roll(tier.pits);
+  // the rat swarm's room always has two or three small holes for its burrows
+  const boss = type === 'boss' ? bossOf(spec) : null, burrows = boss === 'ratswarm';
+  const nPits = burrows ? ri(2, 3) : roll(tier.pits);
   if (nPits) {
     // shapes in a random order, so each hole in a room is a different one
     const size = (k: PitKind) => PIT_SHAPES[k].length;
-    const kinds = PIT_KINDS.filter(k => size(k) <= tier.pitCells);
+    const kinds = PIT_KINDS.filter(k => size(k) <= (burrows ? 3 : tier.pitCells));
     for (let k = kinds.length - 1; k > 0; k--) { const m = ri(0, k); [kinds[k], kinds[m]] = [kinds[m], kinds[k]]; }
     const room = (k: PitKind) => pits.reduce((n, p) => n + p.cells.length, size(k)) <= PIT_CELLS;
     while (pits.length < nPits && kinds.length) {
@@ -727,7 +768,8 @@ export function generate(spec: RoomSpec): Layout {
   // ice caves get one cluster more, and most of them are icicles, big and small, rising from the floor:
   // same one-tile footprint and bounce as stone, but discs can shatter them
   const icy = biome.iceMu !== undefined;
-  const nBlocks = roll(tier.blocks) + extra.blocks + (icy ? 1 : 0), nIce = icy ? Math.ceil(nBlocks / 2) : 0;
+  // the disco ball's room has a column more to bank the discs off
+  const nBlocks = roll(tier.blocks) + extra.blocks + (icy ? 1 : 0) + (boss === 'discoball' ? 1 : 0), nIce = icy ? Math.ceil(nBlocks / 2) : 0;
   for (let k = 0; k < nBlocks - nIce; k++) cluster(stone);
   for (let k = 0; k < nIce; k++) cluster(icicle);
 
@@ -763,7 +805,7 @@ export function generate(spec: RoomSpec): Layout {
   const count = Math.min(roll(tier.mobs) + f + extra.mobs, MOB_CAP);
   let mk: MobKind[];
   if (type === 'treasure') mk = [];
-  else if (type === 'boss') mk = [cast.boss, ...draw(fewer(1 + f + extra.mobs, 0), SOLO)];
+  else if (type === 'boss') mk = [boss!, ...draw(fewer(Math.max(0, 1 + f + extra.mobs - (LESS_ESCORT[boss!] ?? 0)), 0), SOLO)];
   else if (type === 'elite') mk = [cast.elite, ...draw(fewer(count - 1, 0), [cast.elite])];
   else mk = draw(fewer(count, 1));
   const mobs: Mob[] = [];
@@ -778,6 +820,18 @@ export function generate(spec: RoomSpec): Layout {
     mobs.push(newMob(k, q[0], q[1], hpMul, dmgAdd, dmgMul));
     objs.push({ x: q[0], y: q[1], r: MOBS[k].r });
     if (piece) bossCell = (q[1] / TILE - 1) * gw + q[0] / TILE - 1;
+  }
+  // the dragon sits on its eggs: they lie on the cells right round it (as many as it can find room for), the same for any
+  // floor, so a fair hit or two breaks one
+  const nest = boss && mobs[0]?.k === boss ? MOBS[boss].nest ?? 0 : 0;
+  for (let k = 0, n = nest && Math.max(1, Math.round(nest * sc.mobs)); k < n; k++) {
+    const b = mobs[0], by = (x: number, y: number) => Math.abs(x - b.x) <= 1.5 * TILE + 1 && Math.abs(y - b.y) <= 1.5 * TILE + 1;
+    const q = placeCell(1, MOBS.egg.r, by, true);
+    if (!q) break;
+    const egg = newMob('egg', q[0], q[1]);
+    egg.owner = 0; egg.hold = 'imp';
+    mobs.push(egg);
+    objs.push({ x: q[0], y: q[1], r: MOBS.egg.r });
   }
 
   const nodes: ResNode[] = [];

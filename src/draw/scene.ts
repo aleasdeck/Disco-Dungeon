@@ -3,11 +3,11 @@
 
 import { WALL_WORDS, FAN_R, GAS_R, GAS_TURNS, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, heroFig, mobSize, type NodeKind } from '../data';
 import { KX, KY, type Camera, type Vec } from '../camera';
-import { ART, FOOD_FLY, SHIELD_COS, ZAP_T, type Bomb, type Disc, type Food, type Game, type Gas, type HeroState, type Spark, type Zap } from '../game';
+import { ART, FOOD_FLY, SHIELD_COS, ZAP_T, ZONE_COL, type Bomb, type Disc, type Food, type Game, type Gas, type HeroState, type Spark, type Zap } from '../game';
 import { cellAt, floorAt, hazKey, inPit, isFloor, pitAt, type Block, type Decal, type Edge, type Mob, type Pit, type ResNode } from '../room';
 import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure, heroLook } from './figures';
 import { circ, ell, fs, mix, pth, rr, type Ctx, type Pt } from './util';
-import { GRAFFITI_FONTS, envArt } from '../assets';
+import { GRAFFITI_FONTS, envArt, sprites } from '../assets';
 import { knockPose, topplePose, type Knock, type Pose } from '../fx';
 import { hl } from '../hl';
 import { has } from '../artifacts';
@@ -439,6 +439,7 @@ export class SceneRenderer {
     this.drawGround();
     this.drawAimLine(aim);
     this.drawHammer();
+    this.drawEyes();
 
     const items: [number, () => void][] = [];
     for (const d of S.discs) if (!d.gone) items.push([cam.depth(d.x, d.y), () => this.drawDisc(d)]);
@@ -448,7 +449,8 @@ export class SceneRenderer {
       const [wx, wy] = cam.screenToWorld(cr.x, cr.y);
       items.push([cam.depth(wx, wy) + 2, () => this.drawHero(cr.hero, { x: wx, y: wy })]);
     }
-    for (const m of S.mobs) if (m.dead <= 1) items.push([cam.depth(m.x, m.y), () => this.drawMob(m)]);
+    // the rat swarm down a burrow is only its eyes in the hole
+    for (const m of S.mobs) if (m.dead <= 1 && m.under === undefined) items.push([cam.depth(m.x, m.y), () => this.drawMob(m)]);
     this.cuffItems(items);
     for (const b of S.blocks) items.push([cam.depth(b.x0 + 8, b.y0 + 8), () => this.drawBlock(b)]);
     for (const n of S.nodes) items.push([cam.depth(n.x, n.y), () => this.drawNode(n)]);
@@ -493,7 +495,8 @@ export class SceneRenderer {
       S.blocks.map(b => `${b.x0},${b.y0},${b.x1},${b.y1},${b.ice ? 1 : 0}`).join(' '),
       [...this.decor].map(([d, k]) => decals.indexOf(d) + k).join(' '),
       S.nodes.map(n => `${n.k},${n.x},${n.y},${n.s ?? 1},${n.left > 0 ? 1 : 0}`).join(' '),
-      S.mobs.map(o => (o.hp > 0 ? `${o.k},${o.tx},${o.ty}` : '')).join(' '),
+      S.mobs.map(o => (o.hp > 0 ? `${o.k},${o.tx},${o.ty},${o.under ?? ''}` : '')).join(' '),
+      S.mobs.map(o => o.shards?.join(';') ?? '').join(' '),
     ].join('|');
   }
 
@@ -887,11 +890,11 @@ export class SceneRenderer {
     // the cells enemies and resources stand on are shaded like a square on a board; enemies get a red rim
     c.beginPath();
     for (const n of S.nodes) if (n.left > 0) { const z = n.s ?? 1, [i, j] = cellAt(n.x, n.y, z); quad(i * TILE + g2, j * TILE + g2, (i + z) * TILE - g2, (j + z) * TILE - g2); }
-    for (const m of S.mobs) if (m.hp > 0) { const s = mobSize(m.k), [i, j] = cellAt(m.tx, m.ty, s); quad(i * TILE + gap, j * TILE + gap, (i + s) * TILE - gap, (j + s) * TILE - gap); }
+    for (const m of S.mobs) if (m.hp > 0 && m.under === undefined) { const s = mobSize(m.k), [i, j] = cellAt(m.tx, m.ty, s); quad(i * TILE + gap, j * TILE + gap, (i + s) * TILE - gap, (j + s) * TILE - gap); }
     c.fillStyle = 'rgba(25,15,10,.2)';
     c.fill();
     c.beginPath();
-    for (const m of S.mobs) if (m.hp > 0) { const s = mobSize(m.k), [i, j] = cellAt(m.tx, m.ty, s); quad(i * TILE + 1.6, j * TILE + 1.6, (i + s) * TILE - 1.6, (j + s) * TILE - 1.6); }
+    for (const m of S.mobs) if (m.hp > 0 && m.under === undefined) { const s = mobSize(m.k), [i, j] = cellAt(m.tx, m.ty, s); quad(i * TILE + 1.6, j * TILE + 1.6, (i + s) * TILE - 1.6, (j + s) * TILE - 1.6); }
     c.strokeStyle = 'rgba(184,50,63,.55)';
     c.lineWidth = 0.9;
     c.stroke();
@@ -903,6 +906,7 @@ export class SceneRenderer {
     for (const e of S.edges) { c.moveTo(...P(...e.a)); c.lineTo(...P(...e.b)); }
     c.stroke();
     for (const p of S.pits) this.drawPit(p);
+    this.drawShards();
     if (B.mu < 30) {
       c.strokeStyle = 'rgba(255,255,255,.5)';
       c.lineWidth = 0.8;
@@ -1033,19 +1037,75 @@ export class SceneRenderer {
     if (g.S.phase === 'over') return;
     for (const m of g.liveMobs()) {
       const it = m.intent;
-      if (!it?.spots || g.acted(m) || g.frozen(m) || (it.t === 'smash') !== hammer) continue;
+      const flat = it?.t === 'smash' || it?.t === 'zone' || it?.t === 'emerge';
+      if (!it?.spots || g.acted(m) || g.frozen(m) || flat !== hammer) continue;
       for (const p of it.spots) yield { m, it, p };
     }
   }
 
-  /** The smasher's hammer square, red on the floor under the figures, so whoever stands in it stands on it. */
+  /**
+   * The smasher's hammer square, red on the floor under the figures, so whoever stands in it stands on it; the floor
+   * bosses' marked cells the same way, each in the colour of what they do (one path a colour: the dancefloor is half the room).
+   */
   private drawHammer() {
     const { c, P } = this, a = reduce ? 0.85 : 0.775 + 0.175 * Math.sin(this.t * 4);
-    for (const { p } of this.omens(true)) {
-      const x0 = p.x - 7, y0 = p.y - 7, x1 = p.x + 7, y1 = p.y + 7;
-      pth(c, [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)]);
-      c.fillStyle = `rgba(255,30,20,${0.45 * a})`; c.fill();
-      c.strokeStyle = `rgba(255,70,50,${a})`; c.lineWidth = 2; c.stroke();
+    const by = new Map<string, { x: number; y: number }[]>();
+    for (const { it, p } of this.omens(true)) {
+      const col = it.t === 'smash' ? '' : it.t === 'zone' ? ZONE_COL[it.z ?? 'cold'] : ZONE_COL.bite;
+      (by.get(col) ?? by.set(col, []).get(col)!).push(p);
+    }
+    for (const [col, ps] of by) {
+      c.beginPath();
+      for (const p of ps) {
+        const x0 = p.x - 7, y0 = p.y - 7, x1 = p.x + 7, y1 = p.y + 7;
+        c.moveTo(...P(x0, y0)); c.lineTo(...P(x1, y0)); c.lineTo(...P(x1, y1)); c.lineTo(...P(x0, y1)); c.closePath();
+      }
+      if (!col) {
+        c.fillStyle = `rgba(255,30,20,${0.45 * a})`; c.fill();
+        c.strokeStyle = `rgba(255,70,50,${a})`; c.lineWidth = 2; c.stroke();
+        continue;
+      }
+      const rgb = [1, 3, 5].map(k => parseInt(col.slice(k, k + 2), 16)).join(',');
+      c.fillStyle = `rgba(${rgb},${0.38 * a})`; c.fill();
+      c.strokeStyle = `rgba(${rgb},${a})`; c.lineWidth = 1.4; c.stroke();
+    }
+  }
+
+  /** The rat swarm down a burrow: pairs of eyes glowing in the hole it will come up by, blinking now and then. */
+  private drawEyes() {
+    const { c, P, g } = this, S = g.S;
+    if (S.phase === 'over') return;
+    for (const m of g.liveMobs()) {
+      const pit = m.under !== undefined ? S.pits[m.under] : undefined;
+      if (!pit) continue;
+      const n = Math.min(3, pit.cells.length + 1);
+      for (let k = 0; k < n; k++) {
+        const [i, j] = pit.cells[k % pit.cells.length], ox = [5, 10, 7][k], oy = [6, 9, 11][k];
+        const blink = reduce ? 1 : Math.max(0.15, Math.min(1, Math.abs(Math.sin(this.t * 1.3 + k * 2.1)) * 6));
+        const [x, y] = P(i * TILE + ox, j * TILE + oy, -3);
+        for (const dx of [-1.6, 1.6]) {
+          ell(c, x + dx, y, 1.1, 0.9 * blink);
+          c.fillStyle = '#ffe27a'; c.fill();
+          ell(c, x + dx, y, 0.45, 0.6 * blink);
+          c.fillStyle = '#2a1500'; c.fill();
+        }
+      }
+    }
+  }
+
+  /** The disco ball's mirror tiles on the floor: broken glass in a cell, glinting; a disc that stops on them hurts its hero. */
+  private drawShards() {
+    const { c, P, g } = this;
+    for (const m of g.S.mobs) for (const key of m.shards ?? []) {
+      const [i, j] = key.split(',').map(Number);
+      for (const [ox, oy, r, a] of [[4, 5, 2.4, 0.3], [10.5, 6, 2, 1.4], [6.5, 11, 2.8, 2.2], [12, 12, 1.6, 0.9]]) {
+        const pts: Pt[] = [0, 1, 2, 3].map(q => { const t = a + (q * Math.PI) / 2, rr = q % 2 ? r * 0.55 : r; return P(i * TILE + ox + Math.cos(t) * rr, j * TILE + oy + Math.sin(t) * rr); });
+        pth(c, pts);
+        c.fillStyle = '#cfefff'; c.fill();
+        c.strokeStyle = INK; c.lineWidth = 0.5; c.stroke();
+        pth(c, [pts[0], pts[1], pts[2]]);
+        c.fillStyle = 'rgba(255,255,255,.8)'; c.fill();
+      }
     }
   }
 
@@ -2017,7 +2077,8 @@ export class SceneRenderer {
     // a kissed enemy turns to the enemy it goes for
     const it = m.intent, foe = it?.foe !== undefined ? S.mobs[it.foe] : null, th = it && !foe ? g.heroOf(it.hero) : null;
     const tgt = foe ?? (th && g.spot(th)) ?? { x: S.Wx, y: S.Wy };
-    let pose = this.pose(m.knock, m.x, m.y, m.r), alpha = m.dead ? Math.max(0, 1 - m.dead) : (1 - (m.born ?? 0)) * (m.hp > 0 && !g.solid(m) ? 0.35 : 1);
+    const fixed = !!MOBS[m.k].fixed;
+    let pose = this.pose(m.knock, m.x, m.y, m.r), alpha = m.dead ? Math.max(0, 1 - m.dead) : (1 - (m.born ?? 0)) * (m.hp > 0 && !g.solid(m) && !fixed ? 0.35 : 1);
     if (m.fell) {
       pose = undefined;
       alpha = Math.max(0, 1 - m.fell * 2.2);
@@ -2038,10 +2099,11 @@ export class SceneRenderer {
     const door = !!MOBS[m.k].shield && m.hp > 0, lift = y - y0 - m.hop;
     if (door) this.drawDoor(at, m.r, tgt, lift, alpha, false);
     drawMiniature(c, {
-      key: m.k, x, y, baseR: m.r, baseCol: ENEMY_BASE, fig: MOBS[m.k].fig,
+      // the fridge with its door open has a picture of its own; Пахан's empty bunk is no enemy: a grey stand and no health
+      key: m.open && sprites.has(m.k + '_open') ? m.k + '_open' : m.k, x, y, baseR: m.r, baseCol: fixed ? '#77736c' : ENEMY_BASE, fig: MOBS[m.k].fig,
       faceRight: this.faceRight(m.x, m.y, tgt.x, tgt.y), flash: m.flash > 0, hop: m.hop,
       alpha,
-      hp: m.hp > 0 ? { now: m.hp, max: m.max } : undefined,
+      hp: m.hp > 0 && !fixed ? { now: m.hp, max: m.max } : undefined,
       pose,
       light: S.biome.light,
       placeholder: (cc, fx, fy, fl) => drawMobFigure(cc, m.k, fx, fy, fl),

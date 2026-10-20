@@ -161,6 +161,8 @@ export function newRun(seed = Math.floor(Math.random() * 90000) + 10000): Run {
 
 export const nodeById = (run: Run, f: number, id: string) => run.floors[f].flat().find(n => n.id === id)!;
 export const depthOf = (f: number, n: MapNode) => f * LAYERS + n.l + 1;
+/** The seed a fight room on the map is built from: the run's, its depth and its place in the row. */
+export const roomSeed = (run: Run, f: number, n: MapNode) => run.seed + depthOf(f, n) * 97 + n.i;
 
 export function reachable(run: Run, f: number): string[] {
   if (f !== run.floor) return [];

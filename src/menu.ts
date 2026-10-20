@@ -64,7 +64,8 @@ export function renderCollection(tab: 'heroes' | 'mobs' | 'arts') {
     }
   } else {
     // the undertaker's coffin is a thing, not an enemy of its own
-    (Object.keys(MOBS) as MobKind[]).filter(k => !MOBS[k].prop).forEach(k => {
+    // a boss's later phases are told on its own card
+    (Object.keys(MOBS) as MobKind[]).filter(k => !MOBS[k].prop && !MOBS[k].of).forEach(k => {
       const d = MOBS[k], card = document.createElement('article');
       card.className = 'card';
       card.innerHTML = `<img src="${mobIcon(k)}" alt=""><div><h3>${d.name}</h3><p><b>${FLOOR_NAMES[d.floor]}${d.boss ? ', босс' : CASTS.some(c => c.elite === k) ? ', элита' : ''}.</b> ${d.txt}</p>`

@@ -4,8 +4,8 @@ import { BIOMES, MOBS, ROOM_TYPES, type RoomType } from './data';
 import type { HeroState } from './game';
 import { uiArt } from './assets';
 import { icon as ico } from './icons';
-import { CASTS } from './room';
-import { FLOORS, reachable, type Run } from './run';
+import { bossOf } from './room';
+import { FLOORS, reachable, roomSeed, type Run } from './run';
 import { faceUrl, mobFace } from './ui';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -117,9 +117,9 @@ export class MapView {
       g.setAttribute('class', 'mnode' + (isR ? ' reach' : '') + (isV ? ' visited' : '') + (isCur ? ' cur' : '') + (past ? ' past' : '')
         + (isR && votes?.mine === n.id ? ' mine' : ''));
       g.dataset.id = n.id;
-      const boss = n.type === 'boss', r = rad[n.id], pic = boss ? undefined : uiArt.get('room_' + n.type);
+      const boss = n.type === 'boss' ? bossOf({ seed: roomSeed(run, f, n), floor: f }) : null, r = rad[n.id], pic = boss ? undefined : uiArt.get('room_' + n.type);
       // what is in the room, for a mouse resting on it
-      el(g, 'title', {}).textContent = `${t.name}. ${boss ? `${MOBS[CASTS[f].boss].name} со свитой.` : t.txt}`;
+      el(g, 'title', {}).textContent = boss ? `${t.name}: ${MOBS[boss].name}.` : `${t.name}. ${t.txt}`;
       if (pic) {
         // a painted room is its own token: no disc under it, and it glows instead of a ring when it can be picked
         g.classList.add('art');
@@ -133,7 +133,7 @@ export class MapView {
         // who waits at the top: the floor's boss in a round frame, a crown on top
         const clip = el(el(g, 'defs', {}), 'clipPath', { id: 'bossFace' });
         el(clip, 'circle', { cx: x, cy: y, r: r - 2 });
-        el(g, 'image', { href: mobFace(CASTS[f].boss), x: x - r, y: y - r, width: r * 2, height: r * 2, 'clip-path': 'url(#bossFace)', preserveAspectRatio: 'xMidYMid slice' });
+        el(g, 'image', { href: mobFace(boss), x: x - r, y: y - r, width: r * 2, height: r * 2, 'clip-path': 'url(#bossFace)', preserveAspectRatio: 'xMidYMid slice' });
         el(g, 'circle', { cx: x, cy: y, r, class: 'rim' });
         el(g, 'path', { d: `M${x - 13} ${y - r + 4}L${x - 14} ${y - r - 10}L${x - 6} ${y - r - 3}L${x} ${y - r - 14}L${x + 6} ${y - r - 3}L${x + 14} ${y - r - 10}L${x + 13} ${y - r + 4}Z`, class: 'crown' });
       } else if (!pic) icon(g, n.type, x, y);

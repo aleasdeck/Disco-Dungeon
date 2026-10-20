@@ -14,7 +14,7 @@ import { SceneRenderer } from './draw/scene';
 import { loadAll } from './assets';
 import { sound, type Track } from './sound';
 import { clearSeat, keepKey, keyFor, loadHost, loadSeat, newKey, saveHost, saveSeat, type Ending, type HostSave } from './resume';
-import { FLOORS, LAYERS, agreed, depthOf, newRun, nodeById, reachable, type Run, type Votes } from './run';
+import { FLOORS, LAYERS, agreed, depthOf, newRun, nodeById, reachable, roomSeed, type Run, type Votes } from './run';
 import { applyFx, canPick, eventDef, eventOf, rolled, type EventState } from './events';
 import { EventView, type EventVotes } from './eventview';
 import { campDo, campLeave, type CampPick, type CampState } from './camp';
@@ -319,7 +319,7 @@ function choose(id: string) {
   showLoot();
   if (COMBAT_ROOMS.includes(n.type)) {
     choosing = false;
-    game.loadRoom({ seed: run.seed + depth * 97 + n.i, depth, floor: f, type: n.type });
+    game.loadRoom({ seed: roomSeed(run, f, n), depth, floor: f, type: n.type });
     controls.fit();
     showMap(false);
   } else if (n.type === 'forge') {

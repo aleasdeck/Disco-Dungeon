@@ -4,7 +4,7 @@
 
 import { AB_COST, CRIT, E_MAX, ENEMY_BASE, FROST_STEPS, GAS_WEAK, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, frostVuln, fullHit, gasDmg, isRanged, type MobKind, type RoomType, type StatKey } from './data';
 import { envArt, eventArt, sprites, uiArt } from './assets';
-import type { Game, HeroState } from './game';
+import { FOOD_TOSS, ZONE_COL, type Game, type HeroState } from './game';
 import type { Mob } from './room';
 import { BASE_TH, drawHeroFigure, drawMiniature, drawMobFigure } from './draw/figures';
 import { lg } from './draw/util';
@@ -41,6 +41,8 @@ export function mobIcon(k: MobKind) {
 
 /** A mob's head and shoulders on red for the round queue icons: the top of its picture, or the whole miniature until art loads. */
 const mobFaces = new Map<string, string>();
+/** Where across its picture a mob's face is, when not in the middle (the last two rats of the swarm stand side by side). */
+const FACE_X: Partial<Record<MobKind, number>> = { ratswarm3: 0.25 };
 export function mobFace(k: MobKind) {
   const sp = sprites.get(k);
   if (!sp) return mobIcon(k);
@@ -51,7 +53,7 @@ export function mobFace(k: MobKind) {
     c.fillStyle = lg(c, 0, 0, 0, n, '#c9474f', '#6e1a22');
     c.fillRect(0, 0, n, n);
     const iw = sp.img.naturalWidth, ih = sp.img.naturalHeight, side = Math.min(iw, ih * 0.62);
-    c.drawImage(sp.img, (iw - side) / 2, 0, side, side, 4, 8, n - 8, n - 8);
+    c.drawImage(sp.img, Math.max(0, Math.min(iw - side, iw * (FACE_X[k] ?? 0.5) - side / 2)), 0, side, side, 4, 8, n - 8, n - 8);
     url = cv.toDataURL();
     mobFaces.set(k, url);
   }
@@ -447,13 +449,41 @@ export class Hud {
       const how = !far ? `ударит ${acc}` : bomb ? `бросит бомбу в ${acc}` : `выстрелит в ${acc}`;
       return { badge: `${bow}<span class="ib hit" style="--c:${tgt!.def.col}">${it.dmg}</span>`, txt: (g.executes(m) ? 'Казнь: ' : '') + cap(out ? `выйдет на линию огня и ${how}` : how) + ` на ${it.dmg}` };
     }
+    if (it.t === 'rise' && m.k === 'egg') {
+      return { badge: `<span class="ib go">${it.eta}</span>`, txt: (it.eta ?? 1) > 1 ? `Через ${turns(it.eta!)} вылупится бес-кочегар, если не разбить яйцо` : 'В этот ход вылупится бес-кочегар, если не разбить яйцо' };
+    }
     if (it.t === 'rise') {
       const who = MOBS[m.hold ?? 'skel'].name.toLowerCase();
       return { badge: `<span class="ib go">${it.eta}</span>`, txt: (it.eta ?? 1) > 1 ? `Через ${turns(it.eta!)} встанет ${who}, если не разбить гроб` : `В этот ход встанет ${who}, если не разбить гроб` };
     }
     if (it.t === 'smash') return { badge: `<span class="ib hit" style="--c:#d9434f">${it.dmg}</span>`, txt: `Ударит молотом по красному квадрату на ${it.dmg}: уходи оттуда броском` };
+    // the floor bosses' marked cells, coloured by what they do
+    if (it.t === 'zone' || it.t === 'emerge') {
+      const z = it.t === 'emerge' ? 'bite' : it.z ?? 'cold', d = it.dmg;
+      const txt = {
+        bite: `Вылезет из норы у ямы с глазами и укусит всех на красных клетках вокруг на ${d}. Диск в яму с глазами бьёт вдвое`,
+        cold: 'Морозилка: кто останется в голубом конусе, примёрзнет. Следующий ход бросает слабее и не переходит к диску',
+        dance: `Танцпол: на бит ударит всех на розовых клетках на ${d}. Встань на тёмную`,
+        beam: `Светомузыка: лучи по жёлтым клеткам через всю комнату, на ${d}`,
+        roll: `Покатится по оранжевой дорожке и задавит всех на ней на ${d}`,
+        fire: 'Отрыжка: кто останется на огненной линии, загорится',
+      }[z];
+      return { badge: d ? `<span class="ib hit" style="--c:${ZONE_COL[z]}">${d}</span>` : `<span class="ib sp">${icon(z === 'fire' ? 'fire' : 'chill')}</span>`, txt };
+    }
+    if (it.t === 'dive') return { badge: `<span class="ib sp">${icon('move')}</span>`, txt: 'Нырнёт в нору, а в следующий ход вылезет у ямы с глазами и укусит всех вокруг' };
+    if (it.t === 'brew') return { badge: `<span class="ib sp">${icon('rage')}</span>`, txt: 'Подогрев: шестёрки бьют сильнее и держат больше' };
+    if (it.t === 'toss') {
+      const f = FOOD_TOSS[it.item ?? 0];
+      if (!it.dmg) return { badge: `<span class="ib sp">${icon('daze')}</span>`, txt: `Наденет ${tgt!.def.dat} на голову ${f.acc}: следующий ход без линии прицела` };
+      return { badge: `<span class="ib hit" style="--c:${tgt!.def.col}">${it.dmg}</span>`, txt: `Швырнёт ${f.acc} в ${acc} на ${it.dmg}${f.chill ? ', морозит' : ''}` };
+    }
+    // the swarm's last rats run, the dancer moonwalks off
+    if (it.flee) return { badge: `<span class="ib sp">${icon('move')}</span>`, txt: MOBS[m.k].moon ? 'Лунной походкой уходит от героя рядом' : 'Удирает от героев' };
     // drawn by the kid's firecracker: it runs to the noise and strikes nobody this turn
     if (it.bang) return { badge: `<span class="ib sp">${icon('petard')}</span>`, txt: `Бежит на треск петарды и в этот ход ${!far ? 'никого не ударит' : bomb ? 'не бросит бомбу' : 'не выстрелит'}` };
+    // the dragon on its eggs never leaves them: it waits for a hero to come right up
+    if (it.t === 'move' && !far && m.speed <= 0)
+      return { badge: `<span class="ib go" style="--c:${tgt!.def.col}">${icon('move')}</span>`, txt: `${MOBS[m.k].nest ? 'Сидит на яйцах' : 'Стоит на месте'}: ударит только того, кто подойдёт вплотную` };
     if (it.t === 'move') {
       const txt = !far ? `Идёт к ${tgt!.def.dat}` + (it.eta ? `, ударит через ${turns(it.eta)}` : '')
         : `Не видит ${acc}` + (it.way ? ': идёт на линию огня' + (it.eta && !bomb ? `, выстрелит через ${turns(it.eta)}` : '') : '');
@@ -483,7 +513,14 @@ export class Hud {
     if (MOBS[m.k].shield) out.push({ k: 'shield', t: 'Дверь вместо щита: диск спереди ранит вполовину, бей сбоку или рикошетом' });
     const honed = g.honed(m);
     if (honed) out.push({ k: 'hit', n: honed, t: `Наточен: точильщик рядом, бьёт на ${honed} сильнее` });
-    if (!g.solid(m)) out.push({ k: 'ghost', t: 'Бесплотен в этот ход: диски пролетают насквозь' });
+    if (m.under !== undefined) out.push({ k: 'ghost', t: 'В норе: диски не достают. Попади диском в яму с глазами, удар вдвое' });
+    else if (!g.solid(m) && !MOBS[m.k].fixed) out.push({ k: 'ghost', t: 'Бесплотен в этот ход: диски пролетают насквозь' });
+    if (MOBS[m.k].mirror) out.push({ k: 'shield', t: 'На цепи: прямой удар отражается, ранит только рикошет. Огонь, газ, молния и мороз проходят' });
+    if (m.open) out.push({ k: 'shield', t: 'Дверца открыта: диск в неё бьёт вдвое и мимо брони' });
+    if (g.coverOf(m, m)) out.push({ k: 'shield', t: 'Шестёрка рядом прикрывает: диск по Пахану попадёт в неё' });
+    if (m.pot) out.push({ k: 'ore', n: m.pot, t: `Общак: ${m.pot} руды. Вернётся вдвое, когда Пахан падёт` });
+    if (m.brew) out.push({ k: 'rage', n: m.brew, t: 'Подогрета чифиром: бьёт сильнее' });
+    if (m.mad !== undefined) out.push({ k: 'rage', t: `Не трожь яйца: идёт за ${g.heroOf(m.mad).def.acc} и бьёт вдвое` });
     if (m.intent?.t === 'charge') out.push({ k: 'fuse', t: 'Фитиль горит' });
     if (g.rage() > 0) out.push({ k: 'rage', n: g.rage(), t: `Ярость: бьёт на ${g.rage()} сильнее` });
     return out;
@@ -571,7 +608,8 @@ export class Hud {
     const st: Status[] = [];
     if (h.chill > 0) st.push({ k: 'chill', n: h.chill, t: `Озноб: бросок слабее ещё ${turns(h.chill)}` });
     if (h.daze > 0) st.push({ k: 'daze', n: h.daze, t: `Звон в ушах: без линии прицела ещё ${turns(h.daze)}` });
-    if (h.fire > 0) st.push({ k: 'fire', n: 2, t: 'Горит: в ход врагов потеряет 2' });
+    if (h.fire > 0) st.push({ k: 'fire', n: 2, t: h.fire > 1 ? `Горит: в ход врагов потеряет 2, и так ещё ${turns(h.fire)}` : 'Горит: в ход врагов потеряет 2' });
+    if (h.pin) st.push({ k: 'slow', n: h.pin, t: `Примёрз: бросает, но не переходит к диску ещё ${turns(h.pin)}` });
     $('fStatus').innerHTML = statusHtml(st);
 
     // the discs of this turn as chips in a row, the first on the left, only the ones the hero has: the ones still in hand

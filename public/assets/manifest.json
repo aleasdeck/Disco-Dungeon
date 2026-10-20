@@ -33,7 +33,21 @@
     "banshee": { "file": "mobs/banshee.png", "facing": "left" },
     "grinder": { "file": "mobs/grinder.png", "facing": "left" },
     "smasher": { "file": "mobs/smasher.png", "facing": "right" },
-    "coffin": { "file": "mobs/coffin.png", "facing": "left" }
+    "coffin": { "file": "mobs/coffin.png", "facing": "left" },
+    "ratswarm": { "file": "mobs/ratswarm.png", "facing": "left" },
+    "ratswarm2": { "file": "mobs/ratswarm2.png", "facing": "left" },
+    "ratswarm3": { "file": "mobs/ratswarm3.png", "facing": "left" },
+    "pahan": { "file": "mobs/pahan.png", "facing": "left" },
+    "pahan2": { "file": "mobs/pahan2.png", "facing": "left" },
+    "six": { "file": "mobs/six.png", "facing": "left" },
+    "bunk": { "file": "mobs/bunk.png", "facing": "left" },
+    "fridge": { "file": "mobs/fridge.png", "facing": "left" },
+    "fridge_open": { "file": "mobs/fridge_open.png", "facing": "left" },
+    "dancer": { "file": "mobs/dancer.png", "facing": "left" },
+    "discoball": { "file": "mobs/discoball.png", "facing": "left" },
+    "discoball2": { "file": "mobs/discoball2.png", "facing": "left" },
+    "dragon": { "file": "mobs/dragon.png", "facing": "left" },
+    "dragon2": { "file": "mobs/dragon2.png", "facing": "left" }
   },
   "env": {
     "anvil": "env/anvil.webp",
