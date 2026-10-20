@@ -1,7 +1,7 @@
 // Artifacts: the floor boss's trophies. After the boss of the first and the second floor falls (and in an event that gives
 // one), the party is offered three that nobody in it has yet. A lone hero takes one; online each player takes a different
-// one for their own hero (two players leave the third behind, three share all of them), and the heroes of players who
-// dropped out get what is left.
+// one for their own hero (two players leave the third behind, three share all of them), and what is left waits for the
+// heroes of players who dropped out: they pick their own once back.
 // An artifact works for the hero who owns it, all fight long and all run long; the rules that read it live in src/game.ts.
 
 import type { HeroState } from './game';
@@ -75,15 +75,21 @@ export interface LootState {
   from?: string;
 }
 
-/** The trophies a boss leaves: OFFER of the artifacts nobody in the party has yet, the same on every screen. */
-export function rollOffer(seed: number, party: Pick<HeroState, 'arts'>[]): ArtKey[] {
-  const owned = new Set(party.flatMap(h => h.arts ?? []));
+/**
+ * Online: the trophies left on the pile for a hero whose player was away when they were shared out (a fallen hero's
+ * player often puts the phone down). They pick one of them once back; heroes away from the same share-out pick from one pile.
+ */
+export type Kept = Pick<LootState, 'seed' | 'floor' | 'offer' | 'from'>;
+
+/** The trophies a boss leaves: OFFER of the artifacts nobody in the party has yet (nor has waiting for them), the same on every screen. */
+export function rollOffer(seed: number, party: Pick<HeroState, 'arts' | 'kept'>[]): ArtKey[] {
+  const owned = new Set(party.flatMap(h => [...(h.arts ?? []), ...(h.kept?.offer ?? [])]));
   const left = ARTIFACTS.map(a => a.key).filter(k => !owned.has(k)), R = makeRng(seed * 13 + 7), out: ArtKey[] = [];
   while (out.length < OFFER && left.length) out.push(left.splice(R.int(0, left.length - 1), 1)[0]);
   return out;
 }
 
-export function newLoot(seed: number, floor: number, party: Pick<HeroState, 'arts'>[]): LootState {
+export function newLoot(seed: number, floor: number, party: Pick<HeroState, 'arts' | 'kept'>[]): LootState {
   return { seed, floor, offer: rollOffer(seed, party), picks: {} };
 }
 
@@ -94,8 +100,9 @@ export function lootAgreed(loot: LootState, table: number[]) {
 }
 
 /**
- * Share the trophies out: every player here gets the one they point at; the heroes of players who dropped out get what
- * is left, in the party's order, one each while it lasts. A trophy that changes the hero at once (more health) does it now.
+ * Share the trophies out: every player here gets the one they point at. The heroes of players who dropped out get none by
+ * lot: what is left is kept for them to pick from once back (`HeroState.kept`). A trophy that changes the hero at once
+ * (more health) does it now.
  */
 export function settleLoot(loot: LootState, party: HeroState[], table: number[]) {
   if (loot.done) return;
@@ -107,14 +114,37 @@ export function settleLoot(loot: LootState, party: HeroState[], table: number[])
     taken.add(p);
   }
   const rest = loot.offer.filter((_, k) => !taken.has(k));
-  for (const h of party) if (done[h.i] === undefined && !table.includes(h.i) && rest.length) done[h.i] = rest.shift()!;
   for (const h of party) {
-    const k = done[h.i];
-    if (!k) continue;
-    (h.arts ??= []).push(k);
-    if (k === 'belly') { h.max += BELLY; if (h.hp > 0) h.hp += BELLY; }
+    if (done[h.i] !== undefined || table.includes(h.i) || !rest.length) continue;
+    // still away since a share-out before: that pile can't wait any longer, the first of it is theirs
+    if (h.kept?.offer.length) takeKept(party, h.i, h.kept.offer[0]);
+    h.kept = { seed: loot.seed, floor: loot.floor, offer: [...rest], ...(loot.from ? { from: loot.from } : {}) };
   }
+  for (const h of party) if (done[h.i]) give(h, done[h.i]);
   loot.done = done;
+}
+
+/**
+ * A player back at the table takes one of the trophies kept for their hero; it leaves the pile of every other hero who
+ * was away from the same share-out. False when it is not on their pile (someone back a moment sooner took it).
+ */
+export function takeKept(party: HeroState[], hero: number, k: ArtKey) {
+  const h = party.find(o => o.i === hero), pile = h?.kept;
+  if (!h || !pile?.offer.includes(k)) return false;
+  give(h, k);
+  // null, not left out: the snapshots carry it over the hero the clients already hold
+  h.kept = null;
+  for (const o of party) {
+    if (o.kept?.seed !== pile.seed) continue;
+    o.kept.offer = o.kept.offer.filter(x => x !== k);
+    if (!o.kept.offer.length) o.kept = null;
+  }
+  return true;
+}
+
+function give(h: HeroState, k: ArtKey) {
+  (h.arts ??= []).push(k);
+  if (k === 'belly') { h.max += BELLY; if (h.hp > 0) h.hp += BELLY; }
 }
 
 /** «Пивной живот»: this much more of the most health, and as much health at once. */

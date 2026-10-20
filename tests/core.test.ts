@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, CUFF_TURNS, FOOD_HEAL, FOOD_PER_DISC, CLEAN_ORE, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, KISS_TURNS, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, KINDS, RAGE_FROM, SHOVE_DMG, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
-import { ART, FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
+import { ART, DOOR_MUL, FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { CASTS, CAVE, MOB_CAP, mobPool, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob, type ResNode } from '../src/room';
 import { ELITES, FIGHTS, FLOORS, FORGE_ROWS, LAYERS, REST_ROW, agreed, floorOk, genFloor, isFight, newRun, routes } from '../src/run';
 import { makeRng } from '../src/rng';
 import { EVENTS, applyFx, canPick, eventDef, eventOf, fxParts, rolled } from '../src/events';
 import { CAMP_HEAL, DIG_MAX, campDo, campLeave, canCamp, digOre, type CampState } from '../src/camp';
-import { ARTIFACTS, BELLY, OFFER, lootAgreed, newLoot, rollOffer, settleLoot } from '../src/artifacts';
+import { ARTIFACTS, BELLY, OFFER, lootAgreed, newLoot, rollOffer, settleLoot, takeKept } from '../src/artifacts';
 
 /** Put every living hero on its own rune, as players do before the fight. */
 const placeAll = (g: Game) => g.alive().forEach((h, k) => g.movePad(h, k));
@@ -909,13 +909,56 @@ describe('boss trophies', () => {
     expect(Object.values(loot.done!)).not.toContain(loot.offer[2]);
   });
 
-  it('shares all three among a trio, and a hero whose player dropped out gets what is left', () => {
+  it('shares all three among a trio, and keeps what is left for a hero whose player dropped out', () => {
     const party = newParty([0, 1, 2]), loot = newLoot(79, 0, party), table = [0, 2];
     loot.picks[0] = 2;
     loot.picks[2] = 0;
     expect(lootAgreed(loot, table)).toBe(true);
     settleLoot(loot, party, table);
-    expect(party.map(h => h.arts![0])).toEqual([loot.offer[2], loot.offer[1], loot.offer[0]]);
+    expect([party[0].arts, party[1].arts ?? [], party[2].arts]).toEqual([[loot.offer[2]], [], [loot.offer[0]]]);
+    expect(party[1].kept).toEqual({ seed: 79, floor: 0, offer: [loot.offer[1]] });
+    // back at the table, the player takes it
+    expect(takeKept(party, 1, loot.offer[1])).toBe(true);
+    expect(party[1].arts).toEqual([loot.offer[1]]);
+    expect(party[1].kept).toBeNull();
+  });
+
+  it('lets a fallen hero whose player was away pick their own once back, from what the others left', () => {
+    const party = newParty([0, 2]), loot = newLoot(81, 0, party);
+    party[1].hp = 0;
+    loot.picks[0] = 1;
+    // the fallen hero's player dropped out: the one here takes theirs, two stay on the pile
+    expect(lootAgreed(loot, [0])).toBe(true);
+    settleLoot(loot, party, [0]);
+    expect(party[0].arts).toEqual([loot.offer[1]]);
+    expect(party[1].arts ?? []).toEqual([]);
+    expect(party[1].kept!.offer).toEqual([loot.offer[0], loot.offer[2]]);
+    // the kept ones are offered to nobody else meanwhile
+    for (let s = 0; s < 30; s++) for (const k of party[1].kept!.offer) expect(rollOffer(s, party)).not.toContain(k);
+    // one the others took isn't theirs to take
+    expect(takeKept(party, party[1].i, loot.offer[1])).toBe(false);
+    expect(takeKept(party, party[1].i, loot.offer[2])).toBe(true);
+    expect(party[1].arts).toEqual([loot.offer[2]]);
+    expect(party[1].kept).toBeNull();
+  });
+
+  it('two heroes away from one share-out pick from one pile; away again, the old pile pays out its first', () => {
+    const party = newParty([0, 1, 2]), loot = newLoot(82, 0, party);
+    loot.offer = ['tea', 'cup', 'sock'];
+    loot.picks[0] = 0;
+    settleLoot(loot, party, [0]);
+    expect(party[1].kept!.offer).toEqual(['cup', 'sock']);
+    expect(party[2].kept!.offer).toEqual(['cup', 'sock']);
+    expect(takeKept(party, 2, 'sock')).toBe(true);
+    expect(party[1].kept!.offer).toEqual(['cup']);
+    // the next boss falls while hero 1's player is still away
+    const next = newLoot(83, 1, party);
+    expect(next.offer).not.toContain('cup');
+    next.picks[0] = 0;
+    next.picks[2] = 1;
+    settleLoot(next, party, [0, 2]);
+    expect(party[1].arts).toEqual(['cup']);
+    expect(party[1].kept).toEqual({ seed: 83, floor: 1, offer: [next.offer[2]] });
   });
 
   it('adds the beer belly\'s health at once', () => {
@@ -3734,6 +3777,23 @@ describe('enemies by map row, the new enemies and the elite\'s reward', () => {
     expect(g.shielded(m, m.x - (fx / L) * 10, m.y - (fy / L) * 10)).toBe(false);
     expect(g.shielded(m, m.x - (fy / L) * 10, m.y + (fx / L) * 10)).toBe(false);
     expect(g.shielded(newMob('skel', m.x, m.y), m.x + fx / L, m.y + fy / L)).toBe(false);
+  });
+
+  it('a disc into the guard\'s door still wounds it, by half the blow rounded up, «ТОЧНО!» counted first', () => {
+    const blow = (side: number) => {
+      const g = room(0, [['guard', 4, 6]]), [m] = g.S.mobs, p = g.spot(g.heroOf(m.intent!.hero))!;
+      const L = Math.hypot(p.x - m.x, p.y - m.y), fx = (side * (p.x - m.x)) / L, fy = (side * (p.y - m.y)) / L, at = m.r + 5.5;
+      m.hp = m.max = 99;
+      g.S.discs = [{ hero: g.party[0], x: m.x + fx * at, y: m.y + fy * at, vx: -fx * 200, vy: -fy * 200, r: 5, m: 4, e: 0.6, fr: 1, fall: 0, gone: false, charged: false, bounces: 0, spin: 0, hits: 0, ab: false, rico: 0 }];
+      g.step(1 / 60);
+      return { dmg: 99 - m.hp, door: g.S.floats.some(f => f.txt === 'дверь!'), sure: g.S.floats.some(f => f.txt === 'ТОЧНО!') };
+    };
+    const front = blow(1), back = blow(-1);
+    expect(back.door).toBe(false);
+    expect(front.door).toBe(true);
+    expect(front.sure && back.sure).toBe(true);
+    expect(back.dmg).toBeGreaterThan(2);
+    expect(front.dmg).toBe(Math.max(1, Math.ceil(back.dmg * DOOR_MUL)));
   });
 
   it('the headsman goes after the most hurt hero and strikes twice as hard every third turn', () => {

@@ -19,7 +19,7 @@ import { applyFx, canPick, eventDef, eventOf, rolled, type EventState } from './
 import { EventView, type EventVotes } from './eventview';
 import { campDo, campLeave, type CampPick, type CampState } from './camp';
 import { CampView } from './campview';
-import { lootAgreed, newLoot, settleLoot, type LootState } from './artifacts';
+import { lootAgreed, newLoot, settleLoot, takeKept, type ArtKey, type LootState } from './artifacts';
 import { LootView, type LootVotes } from './lootview';
 import { beginRun, endRun, playTime, saveStats, syncRun } from './stats';
 
@@ -59,6 +59,11 @@ let campFor = -1;
 let loot: LootState | null = null;
 /** The seed of the trophies this player has read and closed: the window stays shut for them. */
 let lootShut = -1;
+/** Online: the window of the trophies kept for this player's hero while they were away (keptLoot), and the seed of the one they closed. */
+let kept: LootState | null = null;
+let keptShut = -1;
+/** Which trophies the window shows now: the party's share-out, or the ones kept for this player's hero. */
+let lootShows: 'loot' | 'kept' | null = null;
 let view = { w: 0, h: 0, dpr: 1 };
 
 // ------------------------------------------------------------ camera
@@ -483,15 +488,38 @@ function eventVotes(): EventVotes | undefined {
 
 /**
  * Show the trophies' window while the party stands over the boss's hoard, until this player has read who got what and
- * closed it. An event's trophies wait until this player has read the event's outcome.
+ * closed it. An event's trophies wait until this player has read the event's outcome. Online a player who was away at the
+ * share-out gets the trophies kept for their hero instead, and picks one.
  */
 function showLoot() {
-  const open = !!loot && !(loot.done && lootShut === loot.seed) && !(loot.from && ev && evShut !== ev.seed);
-  $('lootScreen').hidden = !open;
-  if (!open) return;
+  // a player back at the table picks from what was kept for them, unless a share-out they take part in is under way
+  const mine = !loot || loot.done ? keptLoot() : null;
+  const open = !mine && !!loot && !(loot.done && lootShut === loot.seed) && !(loot.from && ev && evShut !== ev.seed);
+  lootShows = open ? 'loot' : mine ? 'kept' : null;
+  $('lootScreen').hidden = !lootShows;
+  if (!lootShows) return;
   const nameOf = game.online ? (h: HeroState) => players.find(p => p.hero === h.i)?.name ?? h.def.name : team() ? (h: HeroState) => h.def.name : undefined;
-  lootView.render(loot!, lootHero(), game.party, lootVotes(), nameOf, team());
+  if (mine) lootView.render(mine, meHero(), game.party, undefined, nameOf, false, true);
+  else lootView.render(loot!, lootHero(), game.party, lootVotes(), nameOf, team());
 }
+
+/**
+ * Online: the trophies kept for this player's hero while they were away, as a window to pick one from once the party is
+ * between rooms; after the pick it shows what they took until they close it.
+ */
+function keptLoot(): LootState | null {
+  const me = game.online ? meHero() : null, pile = me?.kept;
+  if (kept?.done) {
+    // the pick stands, unless a teammate back a moment sooner took that very trophy: then the pile is offered again
+    const k = me ? kept.done[me.i] : undefined;
+    if (!(pile && pile.seed === kept.seed && k && !pile.offer.includes(k))) return kept;
+  }
+  kept = me && pile?.offer.length && pile.seed !== keptShut && game.S?.phase === 'over' ? { ...pile, picks: {} } : null;
+  return kept;
+}
+/** What the window of kept trophies hangs on: a snapshot that changes it opens, updates or shuts the window. */
+const keptSign = () => { const me = game.online ? meHero() : null; return `${me?.i}:${game.S?.phase === 'over'}:${me?.kept?.seed}:${me?.kept?.offer.join()}`; };
+let keptSeen = '';
 
 /**
  * The hero the trophies' window speaks for: online and alone this screen's own; for a party the first still without a
@@ -508,6 +536,7 @@ function lootHero(): HeroState | null {
 // alone a tap takes the trophy; online it points at the one the player wants, and they are shared out once no two want the
 // same; for a party it goes to the hero whose turn it is, and a tap on a trophy another hero took takes it back from them
 lootView.onPick = opt => {
+  if (lootShows === 'kept') return keptTake(opt);
   if (!loot || loot.done) return;
   if (team()) {
     const by = game.party.find(h => loot!.picks[h.i] === opt);
@@ -522,10 +551,40 @@ lootView.onPick = opt => {
   } else lootPick(me, opt);
 };
 lootView.onLeave = () => {
+  // the kept trophies' window shuts over whatever the party is at: the map, the camp, the blacksmith's
+  if (lootShows === 'kept') {
+    // the hoard they came back to has been read with it
+    if (kept) { keptShut = kept.seed; if (loot?.seed === kept.seed) lootShut = loot.seed; }
+    kept = null;
+    showLoot();
+    return;
+  }
   if (loot) lootShut = loot.seed;
   showLoot();
   showMap(true);
 };
+
+/** Online: this player, back at the table, takes one of the trophies kept for their hero; the host hands it over. */
+function keptTake(opt: number) {
+  const me = meHero(), k = kept?.offer[opt];
+  if (!me || !kept || kept.done || !k) return;
+  kept = { ...kept, done: { [me.i]: k } };
+  showLoot();
+  if (mode === 'client') net.send({ t: 'kept', k });
+  else keptPick(me.i, k);
+}
+
+/** Host: a player back at the table takes one of the trophies kept for their hero. */
+function keptPick(hero: number, k: ArtKey) {
+  const seed = game.party.find(h => h.i === hero)?.kept?.seed;
+  if (!takeKept(game.party, hero, k)) return;
+  // the boss's window, while the party still stands over the hoard, lists it among who got what
+  if (loot?.done && loot.seed === seed) loot.done[hero] = k;
+  hud.buildAllies();
+  game.onChange();
+  showLoot();
+  shareMap();
+}
 
 /** The heroes whose players share the trophies out: online the ones here, alone every hero of the party. */
 const lootTable = () => (game.online ? atTable() : game.party.map(h => h.i));
@@ -1013,6 +1072,7 @@ net.onMsg = (from, m) => {
     else if (m.t === 'evote' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) evVote(h, m.opt); }
     else if (m.t === 'camp' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) campPick(h, m.pick); }
     else if (m.t === 'loot' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) lootPick(h, m.opt); }
+    else if (m.t === 'kept' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) keptPick(h, m.k as ArtKey); }
     else if (m.t === 'act' && started && ownerOf(m.a.h) === from) game.perform(m.a);
     return;
   }
@@ -1050,6 +1110,9 @@ net.onMsg = (from, m) => {
     const ch = applySnapshot(game, m.s);
     stale = true;
     if (ch.party) hud.buildAllies();
+    // a player back at the table: the trophies' window speaks for their hero once it comes, and the ones kept for it show up
+    const sign = keptSign();
+    if (ch.party || sign !== keptSeen) { keptSeen = sign; showLoot(); }
     if (ch.room) controls.fit();
     hud.refresh();
     // health and ore by the fire come with the game state: the camp window and the map's party row show them

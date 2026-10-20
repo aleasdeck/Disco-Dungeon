@@ -2,7 +2,8 @@
 // cleared and the scene on the right, and a slab for each trophy under it (an event's trophies come under the event's
 // picture and name). Alone a tap takes one; online each player points at the one for their own hero, and once nobody
 // shares a pick the trophies are handed out. Alone with a party the player picks one for each hero in turn. Then the
-// same window tells who got what.
+// same window tells who got what. Online a player who was away at the share-out gets the trophies kept for their hero in
+// it once back, and picks their own.
 
 import { eventArt, uiArt } from './assets';
 import { artDef, type LootState } from './artifacts';
@@ -50,8 +51,9 @@ export class LootView {
   /**
    * `me` is this screen's hero; online `nameOf` gives the players' names and `votes` the picks as they stand. With `team`
    * one player picks for every hero: `me` is the hero whose trophy is picked now, and `votes` shows the heroes' picks.
+   * With `kept` the trophies are the ones kept for `me` while their player was away.
    */
-  render(loot: LootState, me: HeroState | null, party: HeroState[], votes?: LootVotes, nameOf?: (h: HeroState) => string, team = false) {
+  render(loot: LootState, me: HeroState | null, party: HeroState[], votes?: LootVotes, nameOf?: (h: HeroState) => string, team = false, kept = false) {
     // an event's trophies come with the event's own picture and name
     const key = loot.from ?? ART[loot.floor] ?? ART[0], pic = eventArt.get(key) ?? uiArt.get(loot.from ? 'room_event' : 'room_boss'), img = $('lootImg') as HTMLImageElement;
     if (pic && img.getAttribute('src') !== pic.src) img.src = pic.src;
@@ -67,10 +69,14 @@ export class LootView {
       $('lootText').textContent = mine ? artDef(mine).gag : 'Трофеи поделены.';
       // what this screen's hero took first, then the others'; a trophy nobody took stays with the boss
       const order = me ? [me, ...party.filter(h => h !== me)] : party;
-      $('lootOpts').innerHTML = order.filter(h => done[h.i]).map(h => this.got(h, done[h.i], h === me || solo ? '' : nameOf?.(h) ?? h.def.name)).join('');
+      // a hero whose player was away still has their own to pick once back
+      const away = party.filter(h => !done[h.i] && h.kept?.seed === loot.seed);
+      $('lootOpts').innerHTML = order.filter(h => done[h.i]).map(h => this.got(h, done[h.i], h === me || solo ? '' : nameOf?.(h) ?? h.def.name)).join('')
+        + away.map(h => `<p class="camp-ask">${nameOf?.(h) ?? h.def.name} выберет свой трофей, когда вернётся.</p>`).join('');
     } else {
-      $('lootText').textContent = loot.from ? FOUND[loot.from] ?? 'Здесь нашлись трофеи.' : `${SCENES[loot.floor] ?? SCENES[0]} ${healed}`;
-      const ask = solo ? 'Забери один трофей' : team && me ? `<img src="${faceUrl(me)}" alt="">Выбери трофей ${me.def.dat}` : 'Каждый берёт по трофею';
+      $('lootText').textContent = kept ? 'Пока тебя не было, остальные разобрали свои трофеи. Твой отложили до твоего возвращения.'
+        : loot.from ? FOUND[loot.from] ?? 'Здесь нашлись трофеи.' : `${SCENES[loot.floor] ?? SCENES[0]} ${healed}`;
+      const ask = solo || kept ? 'Забери один трофей' : team && me ? `<img src="${faceUrl(me)}" alt="">Выбери трофей ${me.def.dat}` : 'Каждый берёт по трофею';
       $('lootOpts').innerHTML = `<p class="camp-ask${team && me ? ' camp-for' : ''}"${me ? ` style="--c:${me.def.col}"` : ''}>${ask}</p>`
         + loot.offer.map((k, i) => this.option(k, i, votes)).join('');
     }
