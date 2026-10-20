@@ -47,6 +47,10 @@ html, body {
   font: 14px/1.35 var(--hand);
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
+  /* an iPhone blows up the font of long paragraphs on its own (descriptions came out half as big again as on Android);
+     the sizes here are already made for a phone */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 /* static, so the browser composites it once instead of the game painting it every frame */

@@ -88,9 +88,11 @@ export function drawPortrait(cv: HTMLCanvasElement, h: Pick<HeroState, 'i' | 'de
   }
   const sp = sprites.get(h.def.key);
   if (sp) {
-    // the upper ~60% of the figure, scaled to fill the frame
+    // the upper ~60% of the figure, scaled to fill the frame; a figure narrower than that (Вешалка) keeps its build and
+    // stands in the middle instead of being stretched to the frame's width
     const iw = sp.img.naturalWidth, ih = sp.img.naturalHeight, sh = ih * 0.6, sw = Math.min(iw, sh);
-    c.drawImage(sp.img, (iw - sw) / 2, 0, sw, sh, 4, 6, size - 8, size - 6);
+    const dh = size - 6, dw = Math.min(size - 8, (sw * dh) / sh);
+    c.drawImage(sp.img, (iw - sw) / 2, 0, sw, sh, (size - dw) / 2, 6, dw, dh);
   } else {
     drawHeroFigure(c, h.i, 48, 136, 3.1, false, 0);
   }
