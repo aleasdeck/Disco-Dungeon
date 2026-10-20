@@ -504,6 +504,13 @@ export const bossOf = (spec: Pick<RoomSpec, 'seed' | 'floor' | 'boss'>) => {
   return spec.boss ?? list[makeRng(spec.seed * 13 + spec.floor * 7 + 991).int(0, list.length - 1)];
 };
 
+/**
+ * Floor bosses parties beat too often (thread «Сложность боссов»): more health and a harder blow, by party size (one, two,
+ * three heroes). `hp` multiplies the boss's health, `dmg` is added to its blow after the party's cut, so its special moves
+ * and later phases hit that much harder too.
+ */
+export const BOSS_UP: Partial<Record<MobKind, { hp: number[]; dmg: number[] }>> = {};
+
 /** Enemies a boss brings fewer of: Пахан has his шестёрки instead of an escort, the dragon its eggs. */
 const LESS_ESCORT: Partial<Record<MobKind, number>> = { pahan: 9, dragon: 1 };
 
@@ -820,7 +827,9 @@ export function generate(spec: RoomSpec): Layout {
     const far2 = (x: number, y: number) => far(x, y) && onMain(x, y), short = (x: number, y: number) => x / Wx + y / Wy < 1.25 && onMain(x, y);
     const q = placeCell(sz, r, far2) ?? placeCell(sz, r, short) ?? placeCell(sz, r, far2, true) ?? placeCell(sz, r, short, true) ?? (piece && placeCell(sz, r, onMain, true)) ?? placeCell(sz, r, any, true);
     if (!q) continue;
-    mobs.push(newMob(k, q[0], q[1], hpMul, dmgAdd, dmgMul));
+    const m = newMob(k, q[0], q[1], hpMul, dmgAdd, dmgMul), up = MOBS[k].boss && BOSS_UP[k], at = Math.max(1, Math.min(3, spec.heroes ?? 3)) - 1;
+    if (up) { m.hp = m.max = Math.round(m.hp * up.hp[at]); m.dmg += up.dmg[at]; }
+    mobs.push(m);
     objs.push({ x: q[0], y: q[1], r: MOBS[k].r });
     if (piece) bossCell = (q[1] / TILE - 1) * gw + q[0] / TILE - 1;
   }
