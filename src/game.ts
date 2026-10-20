@@ -275,9 +275,9 @@ const specialName = (k: keyof typeof SPECIAL | 'slam' | 'zone', chill?: boolean,
 export const ZONE_CRY: Record<Zone, string> = { cold: 'МОРОЗИЛКА!', dance: 'БИТ!', beam: 'СВЕТОМУЗЫКА!', roll: 'КАТИТСЯ!', fire: 'ОТРЫЖКА!' };
 export const ZONE_COL: Record<Zone | 'bite', string> = { bite: '#ff3a2a', cold: '#7fd8ff', dance: '#ff5ad1', beam: '#ffe27a', roll: '#ff9a3a', fire: '#ff6a1a' };
 /** The cry over a floor boss as it turns into its next phase. */
-const PHASE_CRY: Partial<Record<MobKind, string>> = { ratswarm2: 'свора редеет!', ratswarm3: 'разбегаются!', pahan2: 'БЕСПРЕДЕЛ!', discoball2: 'сорвался!', dragon2: 'слез с яиц!' };
+const PHASE_CRY: Partial<Record<MobKind, string>> = { ratswarm2: 'свора редеет!', ratswarm3: 'разбегаются!', pahan2: 'БЕСПРЕДЕЛ!', dancer2: 'ЛИХОРАДКА!', discoball2: 'сорвался!', dragon2: 'слез с яиц!' };
 /** How the journal tells a shooter's shot when it isn't an arrow: Пахан's shiv, the dancer's record, the disco ball's beam. */
-const SHOT: Partial<Record<MobKind, string>> = { pahan: 'метнул заточку в', dancer: 'запустил пластинкой в', discoball: 'ударил лучом в', discoball2: 'ударил лучом в' };
+const SHOT: Partial<Record<MobKind, string>> = { pahan: 'метнул заточку в', dancer: 'запустил пластинкой в', dancer2: 'запустил пластинкой в', discoball: 'ударил лучом в', discoball2: 'ударил лучом в' };
 
 /**
  * The fridge's snacks («Закусь»), by `Intent.item`: what it throws, the share of its blow each deals, and what else it does:
@@ -1718,8 +1718,8 @@ export class Game {
     const aim = () => this.heroOf(this.goAfter(m, hs, false).hero), at = (h: HeroState) => this.spot(h) ?? this.spot(hs[0])!;
     if (a.k === 'dive') return this.able(m, a) ? { t: 'dive', hero: aim().i, dmg: 0 } : null;
     if (a.k === 'brew') return this.able(m, a) ? { t: 'brew', hero: -1, dmg: 0 } : null;
-    if (a.k === 'cone') { const h = aim(); return { t: 'zone', z: 'cold', hero: h.i, dmg: 0, spots: this.cone(m, at(h)) }; }
-    if (a.k === 'belch') { const h = aim(); return { t: 'zone', z: 'fire', hero: h.i, dmg: 0, spots: this.fireLine(m, at(h)) }; }
+    if (a.k === 'cone') { const h = aim(); return { t: 'zone', z: 'cold', hero: h.i, dmg: this.zoneDmg(m), spots: this.cone(m, at(h)) }; }
+    if (a.k === 'belch') { const h = aim(); return { t: 'zone', z: 'fire', hero: h.i, dmg: this.zoneDmg(m), spots: this.fireLine(m, at(h)) }; }
     if (a.k === 'dance') return { t: 'zone', z: 'dance', hero: -1, dmg: this.zoneDmg(m), spots: this.pattern(m) };
     if (a.k === 'lights') return { t: 'zone', z: 'beam', hero: -1, dmg: this.zoneDmg(m), spots: this.beams(m) };
     if (a.k === 'roll') return this.rollPlan(m, hs);
@@ -2468,11 +2468,17 @@ export class Game {
     for (let k = 0; k < spots.length; k += Math.max(1, Math.floor(spots.length / 24))) this.burst(spots[k].x, spots[k].y, col, 2);
     if (!hit.length) this.note(`${m.name}: ${ZONE_NAME[z]} мимо`);
     for (const h of hit) {
+      // the freezer and the belch hit as well (thread «Сложность боссов»), then freeze or set on fire whoever is still up
       if (z === 'cold') {
+        const blk = it.dmg ? this.hurtHero(h, it.dmg, '', m) : 0;
+        if (it.dmg) this.noteBlow(`${m.name}: морозилка по ${h.def.dat} на ${it.dmg}`, h, blk);
         this.pinHero(h);
         this.chillHero(h);
-        this.note(`${m.name} ${did(d, 'заморозил')} ${h.def.acc}: ход без перехода к диску`);
+        if (h.hp > 0) this.note(`${m.name} ${did(d, 'заморозил')} ${h.def.acc}: ход без перехода к диску`);
       } else if (z === 'fire') {
+        const blk = it.dmg ? this.hurtHero(h, it.dmg, '', m) : 0;
+        if (it.dmg) this.noteBlow(`${m.name}: отрыжка по ${h.def.dat} на ${it.dmg}`, h, blk);
+        if (h.hp <= 0) continue;
         h.fire = Math.max(h.fire, 2);
         const p = this.spot(h);
         if (p) { this.float(p.x, p.y - 8, 'горит!', '#ff7a3d'); this.burst(p.x, p.y, '#ff7a3d', 8); }

@@ -1832,9 +1832,11 @@ describe('floor casts and enemy abilities', () => {
     const king = fight(0, ['king', 'skel']);
     expect(on(king, 1)).toEqual([{ name: 'удар по всем', turns: 2 }, null]);
     expect(on(king, 3)).toEqual([{ name: 'удар по всем', turns: 0 }, null]);
+    // the forgelord's hammer falls on turns 2, 5, 8, a turn before the floor heats on 3, 6, 9
     const forge = fight(2, ['forgelord', 'bomber']);
-    expect(on(forge, 1)).toEqual([{ name: 'жар', turns: 2 }, { name: 'фитиль', turns: 0 }]);
-    expect(on(forge, 2)).toEqual([{ name: 'жар', turns: 1 }, { name: 'фитиль', turns: 1 }]);
+    expect(on(forge, 1)).toEqual([{ name: 'удар молотом', turns: 1 }, { name: 'фитиль', turns: 0 }]);
+    expect(on(forge, 2)).toEqual([{ name: 'удар молотом', turns: 0 }, { name: 'фитиль', turns: 1 }]);
+    expect(on(forge, 3)).toEqual([{ name: 'жар', turns: 0 }, { name: 'фитиль', turns: 0 }]);
   });
 
   it('a summoner\'s countdown starts over once it has raised its mob, and stops at its limit', () => {
@@ -4140,14 +4142,18 @@ describe("the floors' other bosses", () => {
     expect(m.open).toBeUndefined();
   });
 
-  it("the fridge's freezer freezes whoever stays in its cone: next turn that hero throws but stays where it stands", () => {
+  it("the fridge's freezer hits and freezes whoever stays in its cone: next turn that hero throws but stays where it stands", () => {
     const g = arena([['fridge', 4, 3]]), [m] = g.S.mobs, [h] = g.party;
     h.at = cellCentre(7, 4);
     g.S.turn = 2;
     g.pickIntents();
-    expect(m.intent!.z).toBe('cold');
-    expect(on(g, h, m.intent!.spots!)).toBe(true);
-    act(g, m, m.intent!);
+    const it = m.intent!, hp = h.hp;
+    expect(it.z).toBe('cold');
+    expect(it.dmg).toBe(m.dmg);
+    expect(on(g, h, it.spots!)).toBe(true);
+    expect(g.incoming(h)).toBe(it.dmg);
+    act(g, m, it);
+    expect(h.hp).toBe(hp - it.dmg);
     expect(h.pin).toBe(2);
     expect(h.chill).toBe(2);
     (g as unknown as { nextTurn: () => void }).nextTurn();
@@ -4171,6 +4177,59 @@ describe("the floors' other bosses", () => {
     h.at = cellCentre(6, 3);
     g.pickIntents();
     expect(m.intent!.flee).toBe(true);
+  });
+
+  it('at half health the dancer catches disco fever: the floor lights up on every turn', () => {
+    const g = arena([['dancer', 4, 3]]), [m] = g.S.mobs;
+    g.S.turn = 3;
+    g.pickIntents();
+    expect(m.intent!.t).not.toBe('zone');
+    g.hurtMob(m, m.hp - Math.floor(m.max / 2), '#fff', true);
+    expect(m.k).toBe('dancer2');
+    for (const turn of [3, 4, 5]) {
+      g.S.turn = turn;
+      g.pickIntents();
+      expect(m.intent!.z).toBe('dance');
+    }
+  });
+
+  it('Пахан calls up to three шестёрки for a party of three, two for a pair and one for a lone hero', () => {
+    for (const [picks, most] of [[[0, 1, 2], 3], [[0, 1], 2], [[0], 1]] as const) {
+      const g = arena([['pahan', 4, 2]], [...picks]), [p] = g.S.mobs;
+      for (let turn = 2; turn <= 16; turn += 2) {
+        g.S.turn = turn;
+        g.pickIntents();
+        if (p.intent!.t === 'summon') act(g, p, p.intent!);
+      }
+      expect(g.liveMobs().filter(o => o.k === 'six' && o.owner === 0)).toHaveLength(most);
+    }
+  });
+
+  it("the forgelord brings its hammer down on a 3 × 3 square round its hero a turn before the floor heats", () => {
+    const g = arena([['forgelord', 4, 3]]), [m] = g.S.mobs;
+    g.S.turn = 2;
+    g.pickIntents();
+    const it = m.intent!, h = g.party.find(o => on(g, o, it.spots ?? []))!, hp = h.hp;
+    expect(it.t).toBe('smash');
+    expect(it.spots!.length).toBeGreaterThan(3);
+    act(g, m, it);
+    expect(h.hp).toBe(hp - it.dmg);
+    g.S.turn = 3;
+    g.pickIntents();
+    expect(m.intent!.t).toBe('heat');
+  });
+
+  it("the dragon's belch hits whoever is on the fire line and sets them on fire", () => {
+    const g = arena([['dragon', 4, 3]]), [d] = g.S.mobs;
+    g.S.turn = 2;
+    g.pickIntents();
+    const it = d.intent!, h = g.heroOf(it.hero), hp = h.hp;
+    expect(it.z).toBe('fire');
+    expect(it.dmg).toBe(d.dmg);
+    expect(on(g, h, it.spots!)).toBe(true);
+    act(g, d, it);
+    expect(h.hp).toBe(hp - it.dmg);
+    expect(h.fire).toBe(2);
   });
 
   it('the disco ball on its chain turns a straight disc away; a ricochet hurts it and knocks off mirror tiles that cut like spikes', () => {
