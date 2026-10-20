@@ -513,9 +513,9 @@ export const bossOf = (spec: Pick<RoomSpec, 'seed' | 'floor' | 'boss'>) => {
 export const BOSS_UP: Partial<Record<MobKind, { hp: number[]; dmg: number[] }>> = {
   pahan: { hp: [1, 1.3, 1.45], dmg: [0, 0, 0] },
   fridge: { hp: [1.3, 1.6, 2], dmg: [0, 3, 6] },
-  dancer: { hp: [1, 1.25, 1.5], dmg: [0, 0, 0] },
-  forgelord: { hp: [1.4, 1.8, 2.1], dmg: [2, 3, 6] },
-  dragon: { hp: [1.2, 1.5, 2], dmg: [2, 3, 3] },
+  dancer: { hp: [1, 1.1, 1.3], dmg: [0, 0, 0] },
+  forgelord: { hp: [1.4, 2, 2.1], dmg: [2, 3, 6] },
+  dragon: { hp: [1.2, 1.7, 2], dmg: [2, 3, 3] },
 };
 
 /** Enemies a boss brings fewer of: Пахан has his шестёрки instead of an escort, the dragon its eggs. */
