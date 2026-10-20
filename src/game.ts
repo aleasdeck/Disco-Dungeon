@@ -954,7 +954,7 @@ export class Game {
    */
   private listen() {
     const S = this.S, bombs = S.bombs.filter(b => b.t >= FOOD_FLY);
-    const can = this.liveMobs().filter(m => m.speed > 0 && m.kiss === undefined && m.intent && (m.intent.t === 'hit' || m.intent.t === 'move' || m.intent.t === 'charge'));
+    const can = this.liveMobs().filter(m => m.speed > 0 && m.kiss === undefined && m.intent && m.intent.foe === undefined && (m.intent.t === 'hit' || m.intent.t === 'move' || m.intent.t === 'charge'));
     const pairs: { b: Bomb; m: Mob; d: number }[] = [];
     for (const b of bombs) for (const m of can) pairs.push({ b, m, d: Math.hypot(b.x - m.x, b.y - m.y) });
     pairs.sort((p, q) => p.d - q.d);
@@ -1066,6 +1066,8 @@ export class Game {
     if (!it || m.hp <= 0) return;
     // kissed, it goes for the nearest other enemy from where it stands now
     if (m.kiss !== undefined) { m.intent = this.charm(m); return; }
+    // going for a kissed one, it heads there from where it stands now
+    if (it.foe !== undefined) { const o = this.S.mobs[it.foe]; if (this.lover(o)) m.intent = this.lit(m, this.toward(m, o)); return; }
     if (it.t === 'slam') { it.dmg = this.slamDmg(m, it.chill); return; }
     // drawn by a firecracker, a frosted walker gets that much less far toward it
     if (it.bang) { m.intent = this.lureTo(m, it.bang) ?? it; return; }
@@ -1201,9 +1203,12 @@ export class Game {
     if (MOBS[m.k].boss || MOBS[m.k].prop) { this.float(m.x, m.y - 14, 'не берёт', '#ff9ab8'); return; }
     // a second disc of the same turn adds nothing; one kissed last turn is kissed anew
     if (m.kiss === undefined || m.kissLeft !== KISS_TURNS) { this.float(m.x, m.y - 14, 'чмок!', '#ff5a8a'); this.burst(m.x, m.y, '#ff7ab0', 10); this.sfx('kiss'); }
+    const fresh = m.kiss === undefined;
     m.kiss = h.i;
     m.kissLeft = KISS_TURNS;
     this.retune(m);
+    // the others may go for it now, as they would for a hero
+    if (fresh) this.retarget();
   }
 
   /**
@@ -1212,14 +1217,48 @@ export class Game {
    * nobody else left in the room it stands and sighs.
    */
   private charm(m: Mob): Intent {
-    const S = this.S, o = this.liveMobs().filter(q => q !== m).sort((p, q) => Math.hypot(p.x - m.x, p.y - m.y) - Math.hypot(q.x - m.x, q.y - m.y))[0];
-    if (!o) return { t: 'move', hero: -1, dmg: 0, sigh: true };
-    const foe = S.mobs.indexOf(o), far = isRanged(m.k);
+    const o = this.liveMobs().filter(q => q !== m).sort((p, q) => Math.hypot(p.x - m.x, p.y - m.y) - Math.hypot(q.x - m.x, q.y - m.y))[0];
+    return o ? this.toward(m, o) : { t: 'move', hero: -1, dmg: 0, sigh: true };
+  }
+
+  /**
+   * Enemy m going for enemy o instead of a hero, with its own blow at full strength: a walker strikes from right next to it,
+   * a shooter fires once it sees it, walking to where it would if not.
+   */
+  private toward(m: Mob, o: Mob): Intent {
+    const foe = this.S.mobs.indexOf(o), far = isRanged(m.k);
     if (far && this.clearShot(m, o)) return { t: 'hit', hero: -1, dmg: this.blow(m), foe };
     const way = m.speed > 0 ? this.route(m, o, true, far) : null;
     if (!way) return { t: 'move', hero: -1, dmg: 0, foe };
     const n = way.length - 1, now = this.steps(m), go = wayLen(way.slice(0, this.stopAt(m, way) + 1));
     return n <= now ? { t: 'hit', hero: -1, dmg: this.blow(m), foe, way, go, eta: 1 } : { t: 'move', hero: -1, dmg: 0, foe, way, go, eta: 1 + Math.ceil((n - now) / stepsOf(m)) };
+  }
+
+  /** An enemy still standing with the model's kiss on it: the others may go for it as for a hero. */
+  private lover(o: Mob | undefined) {
+    return !!o && o.hp > 0 && o.kiss !== undefined;
+  }
+
+  /** The kissed enemies m may go for: all standing but itself. */
+  private lovers(m: Mob) {
+    return this.liveMobs().filter(o => o !== m && o.kiss !== undefined);
+  }
+
+  /**
+   * A kiss has just landed in the heroes' turn, or a kissed enemy has fallen: every enemy not kissed itself that means to go
+   * for a hero or a kissed enemy looks again. One whose kissed enemy has fallen picks afresh; one that would rather go for a
+   * kissed enemy now does. Firecrackers' draws, blows on everyone, heals and summons stay as they were.
+   */
+  private retarget() {
+    const S = this.S, hs = this.alive().filter(h => this.spot(h));
+    if (!hs.length) return;
+    this.liveMobs().forEach((m, i) => {
+      const it = m.intent;
+      if (m.kiss !== undefined || !it || it.bang || (it.t !== 'hit' && it.t !== 'move' && it.t !== 'charge')) return;
+      const lost = it.foe !== undefined && !this.lover(S.mobs[it.foe]);
+      const pick = isRanged(m.k) ? this.shoot(m, hs, S.turn + i) : this.goAfter(m, hs);
+      if (lost || (pick.foe !== undefined && pick.foe !== it.foe)) m.intent = pick;
+    });
   }
 
   /** Whether two enemies stand right next to each other, close enough for one to strike the other. */
@@ -1230,9 +1269,12 @@ export class Game {
     return gx <= 0 && gy <= 0 && (gx === 0 || gy === 0);
   }
 
-  /** A kissed enemy's move: it walks up to the enemy it goes for and strikes it, or fires at it, as it would at a hero. */
+  /**
+   * A move against another enemy, by a kissed one or at a kissed one: it walks up to it and strikes it, or fires at it, as
+   * it would at a hero. The blow counts for the model who blew the kiss.
+   */
   private charmed(m: Mob) {
-    const S = this.S, it = m.intent!, d = MOBS[m.k], o = S.mobs[it.foe!], by = S.heroes.find(h => h.i === m.kiss), far = isRanged(m.k);
+    const S = this.S, it = m.intent!, d = MOBS[m.k], o = S.mobs[it.foe!], by = S.heroes.find(h => h.i === (m.kiss ?? o?.kiss)), far = isRanged(m.k);
     if (!o || o.hp <= 0) return;
     const acc = MOBS[o.k].acc.toLowerCase();
     if (it.t === 'move') {
@@ -1379,17 +1421,22 @@ export class Game {
 
   /**
    * A walker picks the hero it goes after: the nearest by its route, or (the headsman) the one with the least health it can
-   * reach, the nearer of two as hurt.
+   * reach, the nearer of two as hurt. An enemy the model has kissed is picked the same way, unless `lovers` is off.
    */
-  private goAfter(m: Mob, hs: HeroState[]): Intent {
-    let best = hs[0], way: Pt[] | null = null, bd = Infinity;
+  private goAfter(m: Mob, hs: HeroState[], lovers = true): Intent {
+    let best = hs[0], way: Pt[] | null = null, bd = Infinity, foe: Mob | null = null;
     const hunts = MOBS[m.k].hunts;
     for (const h of hs) {
       const w = this.route(m, this.spot(h)!);
       const sc = !w ? Infinity : hunts ? h.hp * 1000 + w.length : w.length;
       if (sc < bd) { bd = sc; best = h; way = w; }
     }
-    return this.chase(m, best, way);
+    for (const o of lovers ? this.lovers(m) : []) {
+      const w = this.route(m, o);
+      const sc = !w ? Infinity : hunts ? o.hp * 1000 + w.length : w.length;
+      if (sc < bd) { bd = sc; foe = o; }
+    }
+    return foe ? this.toward(m, foe) : this.chase(m, best, way);
   }
 
   /** A coffin waits to get up: the enemy turns it still has, counting this one. */
@@ -1429,7 +1476,8 @@ export class Game {
   /** The door its holder faces its hero with covers the point (x, y): a disc hitting there deals only half. */
   shielded(m: Mob, x: number, y: number) {
     if (!MOBS[m.k].shield) return false;
-    const it = m.intent, h = it && it.hero >= 0 ? this.heroOf(it.hero) : null, p = (h && this.spot(h)) ?? { x: this.S.Wx, y: this.S.Wy };
+    const it = m.intent, foe = it?.foe !== undefined ? this.S.mobs[it.foe] : null, h = it && it.hero >= 0 ? this.heroOf(it.hero) : null;
+    const p = foe ?? (h && this.spot(h)) ?? { x: this.S.Wx, y: this.S.Wy };
     const fx = p.x - m.x, fy = p.y - m.y, dx = x - m.x, dy = y - m.y, L = Math.hypot(fx, fy) * Math.hypot(dx, dy);
     return L > 0 && (fx * dx + fy * dy) / L > SHIELD_COS;
   }
@@ -1479,22 +1527,35 @@ export class Game {
   }
 
   /**
-   * What a shooter does about the heroes `hs`: it fires at one it sees, taking them in turn by `k`; seeing none, it walks
-   * to the nearest spot it sees one from and fires on arriving, if its steps take it there this turn. A bomber lighting
-   * its fuse walks the same way, so it has the hero in sight when the bomb is ready.
+   * What a shooter does about the heroes `hs` and the enemies the model has kissed (unless `lovers` is off): it fires at one
+   * it sees, taking them in turn by `k`; seeing none, it walks to the nearest spot it sees one from and fires on arriving,
+   * if its steps take it there this turn. A bomber lighting its fuse walks the same way, so it has its mark in sight when
+   * the bomb is ready.
    */
-  private shoot(m: Mob, hs: HeroState[], k: number): Intent {
-    const seen = hs.filter(h => this.sees(m, h));
+  private shoot(m: Mob, hs: HeroState[], k: number, lovers = true): Intent {
+    const S = this.S, foes = lovers ? this.lovers(m) : [];
+    const seen: (HeroState | Mob)[] = [...hs.filter(h => this.sees(m, h)), ...foes.filter(o => this.clearShot(m, o))];
     let it: Intent;
-    if (seen.length) it = { t: 'hit', hero: seen[k % seen.length].i, dmg: this.blow(m) };
-    else {
-      let best = hs[k % hs.length], way: Pt[] | null = null;
+    if (seen.length) {
+      const t = seen[k % seen.length];
+      it = 'def' in t ? { t: 'hit', hero: t.i, dmg: this.blow(m) } : { t: 'hit', hero: -1, dmg: this.blow(m), foe: S.mobs.indexOf(t) };
+    } else {
+      let best = hs[k % hs.length], way: Pt[] | null = null, foe: Mob | null = null;
       for (const h of hs) {
         const w = this.route(m, this.spot(h)!, true, true);
         if (w && (!way || w.length < way.length)) { best = h; way = w; }
       }
-      it = this.chase(m, best, way);
+      for (const o of foes) {
+        const w = this.route(m, o, true, true);
+        if (w && (!way || w.length < way.length)) { foe = o; way = w; }
+      }
+      it = foe ? this.toward(m, foe) : this.chase(m, best, way);
     }
+    return this.lit(m, it);
+  }
+
+  /** A bomber lights its fuse every other turn instead of throwing: it walks as it would, the bomb comes next turn. */
+  private lit(m: Mob, it: Intent): Intent {
     return MOBS[m.k].charge && this.S.turn % 2 === 1 ? { ...it, t: 'charge', dmg: 0 } : it;
   }
 
@@ -1504,16 +1565,24 @@ export class Game {
    * a hero who has stepped out of its sight makes it walk to where it sees that hero again.
    */
   private rechase() {
-    for (const m of this.liveMobs()) {
-      if (m.kiss !== undefined) { m.intent = this.charm(m); continue; }
+    const hs = this.alive().filter(o => this.spot(o));
+    this.liveMobs().forEach((m, i) => {
+      if (m.kiss !== undefined) { m.intent = this.charm(m); return; }
       const it = m.intent;
       if (it?.t === 'slam') it.dmg = this.slamDmg(m, it.chill);
-      if (!it || it.bang || (it.t !== 'hit' && it.t !== 'move' && it.t !== 'charge')) continue;
+      if (!it || it.bang || (it.t !== 'hit' && it.t !== 'move' && it.t !== 'charge')) return;
+      // going for a kissed one: to where it stands now, or, that one fallen, for whoever is there to go for
+      if (it.foe !== undefined) {
+        const o = this.S.mobs[it.foe];
+        if (this.lover(o)) m.intent = this.lit(m, this.toward(m, o));
+        else if (hs.length) m.intent = isRanged(m.k) ? this.shoot(m, hs, this.S.turn + i) : this.goAfter(m, hs);
+        return;
+      }
       const h = this.heroOf(it.hero), p = this.spot(h);
-      if (h.hp <= 0 || !p) continue;
-      if (isRanged(m.k)) m.intent = this.shoot(m, it.t === 'charge' ? this.alive().filter(o => this.spot(o)) : [h], 0);
+      if (h.hp <= 0 || !p) return;
+      if (isRanged(m.k)) m.intent = this.shoot(m, it.t === 'charge' ? hs : [h], 0, false);
       else if (it.t !== 'charge') m.intent = this.chase(m, h, this.route(m, p));
-    }
+    });
     // and the firecrackers draw the enemies nearest them afresh, from where everybody stands now
     this.listen();
   }
@@ -1559,7 +1628,7 @@ export class Game {
     if (a.k === 'scream') return { t: 'scream', hero: -1, dmg: 0 };
     if (a.k === 'smash') {
       // the square round the hero it would go after: it stays where it is marked, so a throw that lands outside dodges it
-      const p = this.spot(this.heroOf(this.goAfter(m, hs).hero)) ?? this.spot(hs[0])!;
+      const p = this.spot(this.heroOf(this.goAfter(m, hs, false).hero)) ?? this.spot(hs[0])!;
       const [ci, cj] = cellAt(p.x, p.y), spots: Pt[] = [];
       for (let j = cj - 1; j <= cj + 1; j++) for (let i = ci - 1; i <= ci + 1; i++) if (isFloor(S, i, j)) spots.push(cellCentre(i, j));
       return { t: 'smash', hero: -1, dmg: this.smashDmg(m), spots };
@@ -1731,6 +1800,8 @@ export class Game {
       m.dead = 0.001; this.burst(m.x, m.y, '#ffd34d', 22); this.float(m.x, m.y - 6, 'повержен', '#ffd34d');
       if (m.burn > 0) this.spreadFire(m);
       if (by) this.killed(m, by);
+      // those that went for it look for someone else
+      if (m.kiss !== undefined && this.S.phase === 'throw') this.retarget();
       // one the bouncer threw down a hole is gone: nobody buries it, no lava spills where it fell
       if (!m.fell) this.bury(m);
       if (d.lava && !m.fell) {
@@ -2251,6 +2322,8 @@ export class Game {
       }
       // kissed, it looks for the nearest other enemy as its move begins: the ones before it have moved, some have fallen
       if (m.kiss !== undefined && m.hp > 0) m.intent = this.charm(m);
+      // one going for a kissed enemy sizes it up where it stands now: it may have walked off on its own move
+      else if (m.hp > 0 && m.intent?.foe !== undefined && this.lover(S.mobs[m.intent.foe])) m.intent = this.lit(m, this.toward(m, S.mobs[m.intent.foe]));
       this.planWalk(m);
       if (burnt || gassed || (m.hp > 0 && !this.idle(m))) return true;
     }
@@ -2509,7 +2582,8 @@ export class Game {
     } else if (it.t === 'charge') {
       this.float(m.x, m.y - 10, 'фитиль горит', '#ffb070');
       this.sfx('launch', 0.3);
-      this.note(`${m.name} ${did(d, 'поджёг', 'подожгла')} фитиль` + (m.walk ? ` и ${did(d, 'пошёл', 'пошла')} к ${this.heroOf(it.hero).def.dat}` : ''));
+      const to = it.foe !== undefined ? 'на линию огня' : `к ${this.heroOf(it.hero).def.dat}`;
+      this.note(`${m.name} ${did(d, 'поджёг', 'подожгла')} фитиль` + (m.walk ? ` и ${did(d, 'пошёл', 'пошла')} ${to}` : ''));
     } else if (it.sigh) {
       const by = S.heroes.find(h => h.i === m.kiss);
       this.float(m.x, m.y - 10, 'вздыхает…', '#ff9ab8');

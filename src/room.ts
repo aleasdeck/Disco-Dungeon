@@ -114,7 +114,10 @@ export interface Intent {
   eta?: number;
   /** A `move` toward the kid's firecracker lying here instead of the hero: it strikes nobody this turn. */
   bang?: { x: number; y: number };
-  /** Kissed by the model, it goes for this enemy (its index in the room's list) instead of the heroes (`hero` is -1). */
+  /**
+   * It goes for this enemy (its index in the room's list) instead of a hero (`hero` is -1): kissed by the model, the nearest
+   * other one; not kissed, one the model has kissed.
+   */
   foe?: number;
   /** Kissed, with no other enemy left to go for: it stands and sighs and strikes nobody. */
   sigh?: boolean;
