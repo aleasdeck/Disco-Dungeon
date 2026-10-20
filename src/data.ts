@@ -102,7 +102,7 @@ export const CUFF_TURNS = 3;
  * The model's «Воздушный поцелуй»: an enemy her disc kisses goes for the nearest other enemy instead of the heroes for
  * KISS_TURNS enemy turns, the one right after the kiss among them. Another kiss starts the count afresh.
  */
-export const KISS_TURNS = 2;
+export const KISS_TURNS = 3;
 /** Online, at most this many players sit at one table: rooms are built for one to three heroes. */
 export const MAX_PLAYERS = 3;
 /**
