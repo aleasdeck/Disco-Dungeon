@@ -84,11 +84,12 @@ export class MapView {
     const svg = $('map');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.innerHTML = '';
-    // layer 0 at the bottom; rooms of a layer spread across, zigzagging a little so the paths read; a pair stands wider so its names don't touch
+    // layer 0 at the bottom; rooms of a layer spread across, zigzagging a little so the paths read; a pair stands wider so its names
+    // don't touch, the four rest rooms of a wide floor closer so they fit the screen
     const pos: Record<string, [number, number]> = {}, rad: Record<string, number> = {};
     layers.forEach((L, l) => L.forEach((n, i) => {
       rad[n.id] = n.type === 'boss' ? R_BOSS : R_ROOM;
-      pos[n.id] = [W / 2 + (i - (L.length - 1) / 2) * (L.length > 2 ? 104 : 124) + (l % 2 ? 8 : -8) * (L.length > 1 ? 1 : 0), H - 92 - l * ((H - 150) / (layers.length - 1))];
+      pos[n.id] = [W / 2 + (i - (L.length - 1) / 2) * (L.length > 3 ? 76 : L.length > 2 ? 104 : 124) + (l % 2 ? 8 : -8) * (L.length > 1 ? 1 : 0), H - 92 - l * ((H - 150) / (layers.length - 1))];
     }));
     const path = run.path[f], reach = canChoose ? reachable(run, f) : [], gate: [number, number] = [W / 2, H - 22];
     const gl = el(svg, 'g', {});
