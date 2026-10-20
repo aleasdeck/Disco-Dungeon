@@ -1,10 +1,11 @@
 """Draws the interface's plates in the fight corner's cardboard (cardboard.py: a flat print on kraft, no ink outline, no
 rim, rubbed edges and a torn corner): the windows' boards (panel, panel_tall), the big mustard button (btn_main), the dark
-button (btn_dark), the square tile of the top strip's buttons (btn_tile), the light slab under each choice in the event,
-camp, trophy and blacksmith windows (opt), a plate of its own shape for each button of the main menu and the pause
-(mb_*), the board of the trophies' sockets beside the health (tray), and the board behind the hero's portrait in the
-corner (pf_board, with its print apart as pf_ink, which style.css colours in the hero's colour). Each old one keeps the
-size of the picture it replaces, so style.css cuts and stretches it as before. Run from the repo root:
+button (btn_dark) and its light twin for the windows' small buttons (btn_sub), the square tile of the top strip's buttons
+(btn_tile), the light slab under each choice in the event, camp, trophy and blacksmith windows (opt), a plate of its own
+shape for each button of the main menu and the pause (mb_*), the board of the trophies' sockets beside the health
+(tray), and the board behind the hero's portrait in the corner (pf_board, with its print apart as pf_ink, which
+style.css colours in the hero's colour). Each old one keeps the size of the picture it replaces, so style.css cuts and
+stretches it as before. Run from the repo root:
 
     python3 art/ui/draw_plates.py [folder]
 
@@ -25,6 +26,7 @@ MUSTARD = (190, 152, 66)
 # white paper, so the choices stand out of the dark board (Vladislav: dark slabs melted into it; of kraft, paper and
 # mustard he picked paper)
 PALE = (240, 229, 204)
+SUB = PALE
 
 
 def lighter(col, n):
@@ -69,6 +71,10 @@ plate('btn_main', (W, H), [(20, 40), (640, 22), (754, 136), (684, 258), (26, 250
 # the dark button: a slanting slab
 W, H = 768, 244
 plate('btn_dark', (W, H), [(70, 22), (740, 14), (756, 120), (744, 228), (12, 232), (36, 120)], DARK, 64, small=True)
+
+# the small buttons in the windows («Назад», «Закрыть», «Скопировать ссылку», the tabs): the dark one's slab printed
+# light, so they stand out of the dark board (Vladislav: the dark ones melted into it)
+plate('btn_sub', (W, H), [(70, 22), (740, 14), (756, 120), (744, 228), (12, 232), (36, 120)], SUB, 67, small=True)
 
 # the top strip's square tile
 W, H = 768, 713
