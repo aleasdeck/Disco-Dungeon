@@ -614,7 +614,7 @@ export class Hud {
   /** A hero's card under the name: how hard the disc hits, its upgrades, the ability in full and the bosses' trophies. */
   private cardBody(h: HeroState) {
     const g = this.g, hit = Math.round(fullHit(g.stat(h, 'm'), g.stat(h, 'pw')) * (h.chill > 0 ? 0.7 : 1));
-    return `<p class="hc-hit" title="Сильнее всего диск бьёт на полной натяжке; прямо в лоб урон удваивается">удар до ${hit}, в лоб ×${CRIT}</p>`
+    return `<p class="hc-hit" title="Сильнее всего диск бьёт на полной натяжке; прямо в лоб урон в ${CRIT} раза больше">удар до ${hit}, в лоб ×${CRIT}</p>`
       + upRows(g, h) + '<small class="ups-note">Прокачка у кузнеца на карте</small>'
       + `<p class="hc-ab"><b>${h.def.ab}.</b> ${h.def.abTxt} ${h.def.abMore}</p>`
       + (h.arts?.length ? `<div class="hc-arts"><small class="ups-note">Трофеи боссов</small>${h.arts.map(k => {
