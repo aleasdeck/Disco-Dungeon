@@ -127,7 +127,7 @@ const forgeTxt = (ore: number) => 'Гном-кузнец закаляет рас
  * The blacksmith's slab for each of a hero's upgrades: what it is, its level, where the stat goes with the next level,
  * and the price in the party's ore. A slab the ore does not cover, or a stat at its top, is shut.
  */
-function forgeRows(g: Game, h: HeroState) {
+function forgeRows(g: Game, h: HeroState, team: boolean) {
   // a stat level an elite owes the hero costs nothing; in the sharpening window that is all there is
   const free = g.freeUp(h);
   const row = (k: string, name: string, txt: string, n: number, lv: number, now: string, next: string, cost: number, gratis = false) => {
@@ -137,7 +137,12 @@ function forgeRows(g: Game, h: HeroState) {
       + `<span class="fg-fx">${cost ? `${now}<i>→</i>${next}` : `${now}, больше некуда`}</span>`
       + (!cost || !sold ? '' : gratis ? '<span class="fg-cost free">даром</span>' : `<span class="fg-cost${short ? ' short' : ''}">${cost}${icon('ore')}</span>`) + '</button>';
   };
-  return `<div class="fg-me"><img src="${faceUrl(h)}" alt=""><b>${h.def.name}</b><span>${h.hp > 0 ? `${h.hp}/${h.max} HP` : 'пал'}</span></div>`
+  // alone with a party the window serves every hero: a tab with each face, the shown one lit, a free level marked on its tab
+  const head = team
+    ? `<div class="fg-team">${g.party.map(o => `<button class="fg-tab${o === h ? ' on' : ''}" data-hero="${o.i}" style="--c:${o.def.col}" aria-pressed="${o === h}">`
+      + `<img src="${faceUrl(o)}" alt=""><b>${o.def.name}</b>${g.freeUp(o) ? '<em>даром</em>' : ''}</button>`).join('')}</div>`
+    : `<div class="fg-me"><img src="${faceUrl(h)}" alt=""><b>${h.def.name}</b><span>${h.hp > 0 ? `${h.hp}/${h.max} HP` : 'пал'}</span></div>`;
+  return head
     + (g.whet ? '' : row('n', 'Диски за ход', 'Больше бросков за ход. Самое сильное улучшение', HAND_MAX - HAND_START, h.discs - HAND_START, String(g.handOf(h)), String(g.handOf(h) + 1), g.discCost(h)))
     + UPS.map(u => {
       const lv = h.up[u.k], v = g.stat(h, u.k), next = u.k === 'e' ? Math.min(E_MAX, v + u.step) : v;
@@ -187,6 +192,9 @@ export class Hud {
   nameOf: (i: number) => string | null = () => null;
   /** This screen's own hero: the one the blacksmith's window sells upgrades for (online not the ones the host stands in for). */
   me: () => HeroState | null = () => this.g.party[0] ?? null;
+  /** Alone with a party: the hero (by index) whose tab is open in the blacksmith's window, at the visit `forgeAt`. */
+  private forgeFor = -1;
+  private forgeAt = '';
   /** The first press of «Конец хода» with discs still in hand only asks «ТОЧНО?»; a second press within a moment ends. */
   private confirmUntil = 0;
   private act: TurnAct = 'none';
@@ -213,10 +221,17 @@ export class Hud {
     $('pfBtn').addEventListener('click', e => { e.stopPropagation(); this.toggleCard(); });
     $('btnLog').addEventListener('click', e => { e.stopPropagation(); this.toggleLog(); });
     $('forgeMine').addEventListener('click', e => {
-      const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-k]'), h = this.me();
+      const t = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-hero]');
+      if (t) { this.forgeFor = Number(t.dataset.hero); this.forge(); return; }
+      const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-k]'), h = this.forgeHero();
       if (!b || b.disabled || !h) return;
       if (b.dataset.k === 'n') g.buyDisc(h);
       else g.upgrade(b.dataset.k as StatKey, h);
+      // sharpening for a party: once a hero has taken its free level, the next one still owed one comes up
+      if (this.forgeTeam() && g.whet && !g.freeUp(h)) {
+        const next = g.party.find(o => g.freeUp(o));
+        if (next) { this.forgeFor = next.i; this.forge(); }
+      }
     });
 
     // the enemy queue: hover shows a mob's card and rings its figure; a tap pins the card until the next tap elsewhere
@@ -719,7 +734,8 @@ export class Hud {
     let txt = '', sub = '', cls = 'idle', act: TurnAct = 'none';
     // «готовы N из M» counts the players at the table: the ones who dropped out hold nobody up
     const here = g.alive().filter(o => g.here(o)).map(o => o.i), alive = here.length;
-    if (S.phase === 'over' || h.hp <= 0 && S.phase !== 'enemy' && S.phase !== 'resolve') {
+    // alone with a party the button speaks for every hero, so it stays when the picked one has fallen
+    if (S.phase === 'over' || h.hp <= 0 && S.phase !== 'enemy' && S.phase !== 'resolve' && !this.team()) {
       b.hidden = true;
       this.act = 'none';
       return;
@@ -729,6 +745,12 @@ export class Hud {
       if (g.online && ready) { txt = 'Ждём'; sub = `готовы ${S.ready.filter(i => here.includes(i)).length} из ${alive}`; cls = 'wait'; }
       else if (g.online ? g.placed(h) : g.placed()) { txt = g.online ? 'Готов' : 'В бой!'; cls = 'lit'; act = 'fight'; }
       else { txt = g.party.length > 1 && !g.online ? 'Поставь героев' : 'Поставь героя'; }
+    } else if (S.phase === 'throw' && this.team()) {
+      // alone with a party the one press ends the turn for every hero, and the discs left are counted over all of them
+      const left = g.alive().reduce((n, o) => n + (g.ended(o) ? 0 : o.hand), 0);
+      if (g.allDone()) { txt = 'Ждём…'; cls = 'wait'; act = 'cancel'; }
+      else if (left > 0 && performance.now() < this.confirmUntil) { txt = 'Точно?'; sub = `не брошено: ${left}`; cls = 'confirm'; act = 'end'; }
+      else { txt = 'Конец хода'; cls = left > 0 ? 'idle' : 'lit'; act = 'end'; }
     } else if (S.phase === 'throw') {
       const done = S.done.filter(i => here.includes(i)).length;
       if (g.ended(h)) { txt = 'Ждём…'; sub = alive > 1 ? `готовы ${done} из ${alive}` : ''; cls = 'wait'; act = 'cancel'; }
@@ -743,7 +765,7 @@ export class Hud {
       cls = 'enemy';
     }
     // the faces of the heroes whose players already pressed, stuck on the button's edge
-    const pressed = alive < 2 ? [] : (S.phase === 'place' ? (g.online ? S.ready : []) : S.phase === 'throw' ? S.done : []).filter(i => here.includes(i));
+    const pressed = alive < 2 || this.team() ? [] : (S.phase === 'place' ? (g.online ? S.ready : []) : S.phase === 'throw' ? S.done : []).filter(i => here.includes(i));
     const who = pressed.map(i => g.heroOf(i)), whoKey = who.map(o => faceUrl(o)).join();
     if (this.whoKey !== whoKey) {
       this.whoKey = whoKey;
@@ -759,18 +781,24 @@ export class Hud {
     this.act = act;
   }
 
+  /** One player plays the whole party (the campaign of two or three): the turn button speaks for every hero. */
+  private team() {
+    return !this.g.online && this.g.alive().length > 1;
+  }
+
   private pressTurn() {
-    const g = this.g, h = g.hero;
+    const g = this.g, h = g.hero, team = this.team(), all = team ? g.alive() : [h];
+    const left = all.reduce((n, o) => n + (g.ended(o) ? 0 : o.hand), 0);
     if (this.act === 'fight') g.startFight();
-    else if (this.act === 'cancel') g.cancelEndTurn(h);
+    else if (this.act === 'cancel') for (const o of all) g.cancelEndTurn(o);
     else if (this.act === 'end') {
-      if (h.hand > 0 && performance.now() >= this.confirmUntil) {
+      if (left > 0 && performance.now() >= this.confirmUntil) {
         // discs left in hand: ask once, and fall back to the plain button if no second press comes
         this.confirmUntil = performance.now() + 2600;
         setTimeout(() => this.turnButton(), 2700);
       } else {
         this.confirmUntil = 0;
-        g.endTurn(h);
+        for (const o of all) g.endTurn(o);
       }
     }
     this.turnButton();
@@ -799,21 +827,38 @@ export class Hud {
     else $('btnLog').classList.toggle('new', this.g.S.log.length > this.logSeen);
   }
 
+  /** Alone with a party (the campaign of two or three) the blacksmith's window serves every hero, a tab each. */
+  private forgeTeam() {
+    return !this.g.online && this.g.party.length > 1;
+  }
+
+  /**
+   * The hero whose upgrades the blacksmith's window shows: online and alone this screen's own; for a party the one whose
+   * tab is open, at first the first hero (when sharpening, the first still owed its free level).
+   */
+  private forgeHero() {
+    const g = this.g;
+    if (!this.forgeTeam()) return this.me();
+    return g.party.find(o => o.i === this.forgeFor) ?? (g.whet ? g.party.find(o => g.freeUp(o)) : undefined) ?? g.party[0] ?? null;
+  }
+
   /** The blacksmith's window: the smithy's picture and scene, and this screen's own hero's upgrades for the party's shared ore. */
   private forge() {
     const g = this.g;
     $('forgeScreen').hidden = !this.atForge;
     if (!g.forge) { this.forgeHtml = ''; this.forgeLeft = 0; }
+    // a new visit (or the sharpening after an elite) opens on its first hero again
+    if (this.forgeAt !== `${g.forge}:${g.whet}`) { this.forgeAt = `${g.forge}:${g.whet}`; this.forgeFor = -1; }
     if (!this.atForge) return;
     const pic = eventArt.get('forge') ?? uiArt.get('room_forge'), img = $<HTMLImageElement>('forgeImg');
     if (pic && img.getAttribute('src') !== pic.src) img.src = pic.src;
     img.hidden = !pic;
     $('forgeArt').classList.toggle('stub', !eventArt.has('forge'));
-    const h = this.me();
+    const h = this.forgeHero();
     $('forgeTitle').textContent = g.whet ? 'Заточка' : 'Кузнец';
     $('forgeText').textContent = g.whet ? whetTxt(!!h && g.freeUp(h)) : forgeTxt(g.gift);
     $('forgeOre').textContent = String(g.bank.ore);
-    const box = $('forgeMine'), html = h ? forgeRows(g, h) : '';
+    const box = $('forgeMine'), html = h ? forgeRows(g, h, this.forgeTeam()) : '';
     if (html !== this.forgeHtml) {
       box.innerHTML = html;
       if (h) box.style.setProperty('--c', h.def.col);

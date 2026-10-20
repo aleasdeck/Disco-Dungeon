@@ -1,5 +1,5 @@
 // The camp on the run map opens its own window, where every hero does one thing by the fire: rests, patches up a
-// teammate (online, where the party has more than one hero), or digs the ore vein behind the fire for 0 to 3 ore.
+// teammate (in a party of two or three), or digs the ore vein behind the fire for 0 to 3 ore.
 
 import type { Bank, HeroState } from './game';
 import { makeRng } from './rng';

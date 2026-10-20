@@ -339,6 +339,8 @@ export class Game {
   /** The last physics step whose sounds were played: steps played again after a snapshot stay quiet. */
   private heard = 0;
   private inStep = false;
+  /** The hero (by index) who has just thrown its last disc of the turn: the next one takes over once it lands (`passOn`). */
+  private passing = -1;
   /** The enemy making its move, the cells it has put down on so far, and the hop each hero last landed from. */
   private walked = { key: '', n: 0 };
   private hopped = new Map<number, string>();
@@ -395,6 +397,7 @@ export class Game {
     this.walked = { key: '', n: 0 };
     this.hopped.clear();
     this.asked.clear();
+    this.passing = -1;
     // sparks carry over from the last room, and the altar fills them up
     const boon = Math.min(AB_COST, this.bank.boon ?? 0), shield = this.bank.shield ?? 0;
     for (const h of this.party) {
@@ -489,6 +492,7 @@ export class Game {
     const h = this.party.find(o => o.i === i);
     if (!h || !this.canControl(h)) return;
     this.act = i;
+    this.passing = -1;
     this.onChange();
   }
 
@@ -675,6 +679,7 @@ export class Game {
     if (h.boost && h.def.key === 'sharp') for (const a of [-FAN_ANGLE, FAN_ANGLE]) S.discs.push(disc(a, true));
     S.discs.push(disc(0, false));
     h.hand--;
+    if (!h.hand) this.passing = h.i;
     h.thrown = true;
     tallyOf(h).throws++;
     this.onChange();
@@ -1894,6 +1899,20 @@ export class Game {
     return this.S.heroes.some(h => h.from);
   }
 
+  /**
+   * Alone with a party (the campaign of two or three): once the selected hero has thrown its last disc of the turn and gone
+   * over to it, the next hero in the party with discs in hand is picked, so the player throws on without a tap. Only right
+   * after that throw: a hero the player picks afterwards stays picked.
+   */
+  private passOn() {
+    const h = this.hero;
+    if (this.online || this.passing !== h.i || this.waits(h)) return;
+    this.passing = -1;
+    const k = this.party.indexOf(h), order = [...this.party.slice(k + 1), ...this.party.slice(0, k + 1)];
+    const next = order.find(o => o.hp > 0 && o.hand > 0 && !this.ended(o) && this.canControl(o));
+    if (next) { this.act = next.i; this.onChange(); }
+  }
+
   /** Every living hero has thrown all its discs; the turn still waits for the players to end it. */
   allThrown() { return this.alive().every(h => h.hand === 0); }
 
@@ -2361,6 +2380,7 @@ export class Game {
     S.turn++;
     S.discs = [];
     S.done = [];
+    this.passing = -1;
     // the frost wears off after one enemy turn, a cloud of gas thins out turn by turn, a firecracker nobody came to fizzles out
     for (const m of S.mobs) delete m.frost;
     S.gas = S.gas.filter(g => --g.left > 0);
@@ -2407,8 +2427,8 @@ export class Game {
     if (this.send) { this.updateRemote(dt); return; }
     this.acc += dt;
     while (this.acc >= STEP) { this.step(STEP); this.acc -= STEP; }
-    // a hero goes over to its disc the moment it stops
-    if (S.phase === 'throw') this.follow();
+    // a hero goes over to its disc the moment it stops; alone with a party, the next hero with discs then takes over
+    if (S.phase === 'throw') { this.follow(); this.passOn(); }
     // the last enemy down (in the ore cave, the last vein or mushroom spent) ends the room at once, whatever throws are left
     if ((S.phase === 'throw' || S.phase === 'resolve' || S.phase === 'enemy') && this.cleared()) this.finish();
     // the heroes' turn ends by the players' word only, once the discs have stopped

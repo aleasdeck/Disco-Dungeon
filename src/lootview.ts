@@ -1,7 +1,8 @@
 // The window of the floor boss's trophies, in the event window's dress: the boss's hoard taped on the left, the floor
 // cleared and the scene on the right, and a slab for each trophy under it (an event's trophies come under the event's
 // picture and name). Alone a tap takes one; online each player points at the one for their own hero, and once nobody
-// shares a pick the trophies are handed out. Then the same window tells who got what.
+// shares a pick the trophies are handed out. Alone with a party the player picks one for each hero in turn. Then the
+// same window tells who got what.
 
 import { eventArt, uiArt } from './assets';
 import { artDef, type LootState } from './artifacts';
@@ -46,8 +47,11 @@ export class LootView {
     $('lootLeave').addEventListener('click', () => this.onLeave());
   }
 
-  /** `me` is this screen's hero; online `nameOf` gives the players' names and `votes` the picks as they stand. */
-  render(loot: LootState, me: HeroState | null, party: HeroState[], votes?: LootVotes, nameOf?: (h: HeroState) => string) {
+  /**
+   * `me` is this screen's hero; online `nameOf` gives the players' names and `votes` the picks as they stand. With `team`
+   * one player picks for every hero: `me` is the hero whose trophy is picked now, and `votes` shows the heroes' picks.
+   */
+  render(loot: LootState, me: HeroState | null, party: HeroState[], votes?: LootVotes, nameOf?: (h: HeroState) => string, team = false) {
     // an event's trophies come with the event's own picture and name
     const key = loot.from ?? ART[loot.floor] ?? ART[0], pic = eventArt.get(key) ?? uiArt.get(loot.from ? 'room_event' : 'room_boss'), img = $('lootImg') as HTMLImageElement;
     if (pic && img.getAttribute('src') !== pic.src) img.src = pic.src;
@@ -66,11 +70,12 @@ export class LootView {
       $('lootOpts').innerHTML = order.filter(h => done[h.i]).map(h => this.got(h, done[h.i], h === me || solo ? '' : nameOf?.(h) ?? h.def.name)).join('');
     } else {
       $('lootText').textContent = loot.from ? FOUND[loot.from] ?? 'Здесь нашлись трофеи.' : `${SCENES[loot.floor] ?? SCENES[0]} ${healed}`;
-      $('lootOpts').innerHTML = `<p class="camp-ask">${solo ? 'Забери один трофей' : 'Каждый берёт по трофею'}</p>`
+      const ask = solo ? 'Забери один трофей' : team && me ? `<img src="${faceUrl(me)}" alt="">Выбери трофей ${me.def.dat}` : 'Каждый берёт по трофею';
+      $('lootOpts').innerHTML = `<p class="camp-ask${team && me ? ' camp-for' : ''}"${me ? ` style="--c:${me.def.col}"` : ''}>${ask}</p>`
         + loot.offer.map((k, i) => this.option(k, i, votes)).join('');
     }
     $('lootNote').textContent = (!done && votes?.note) || '';
-    $('lootNote').hidden = !!done || !votes;
+    $('lootNote').hidden = !!done || !votes?.note;
     $('lootLeave').hidden = !done;
   }
 
