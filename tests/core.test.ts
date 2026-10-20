@@ -2083,6 +2083,63 @@ describe('hero abilities work through the discs', () => {
     expect(sure.rico).toBe(AB_BOUNCES - 1);
   });
 
+  it('Ricochet: a disc thrown with it rolls over the holes the whole way, on every screen, and the aim line runs on over them', () => {
+    /** A disc of Ricochet's rolling right along row 4 over a hole at (6, 4); `rico` sure bounces left. */
+    const lay = (ab: boolean, rico = ab ? AB_BOUNCES : 0) => {
+      const g = arena(['archer']), h = byKey(g, 'ricochet');
+      g.S.mobs[0].x = g.S.mobs[0].y = 8; // out of the way, in the corner
+      g.S.pits = [{ k: '1x1', cells: [[6, 4]] }];
+      g.S.discs = [{ hero: h, x: 4 * TILE, y: 4.5 * TILE, vx: 250, vy: 0, r: h.def.r, m: g.stat(h, 'm'), e: g.stat(h, 'e'), fr: h.def.fr,
+        fall: 0, gone: false, charged: false, bounces: 0, spin: 0, hits: 0, ab, rico }];
+      return { g, h, hp: h.hp, d: g.S.discs[0] };
+    };
+    const roll = (g: Game, d: Disc) => {
+      let far = d.x;
+      for (let k = 0; k < 240 && !d.fall; k++) { g.step(1 / 120); far = Math.max(far, d.x); }
+      return far;
+    };
+    const plain = lay(false);
+    roll(plain.g, plain.d);
+    expect(plain.d.fall).toBeGreaterThan(0);
+    expect(plain.h.hp).toBe(plain.hp - 2);
+    // with sure bounces left, and with them all spent: over the hole and on
+    for (const rico of [AB_BOUNCES, 0]) {
+      const { g, h, hp, d } = lay(true, rico);
+      expect(roll(g, d)).toBeGreaterThan(7 * TILE);
+      expect(d.fall).toBe(0);
+      expect(h.hp).toBe(hp);
+    }
+    // an online client plays the same disc on from the host's state, over the hole too
+    const host = lay(true), cli = new Game();
+    cli.online = true;
+    cli.send = () => {};
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host.g))));
+    // the client builds the room from its seed: clear it as the host's was
+    Object.assign(cli.S, { pits: host.g.S.pits, blocks: [], rock: [], nodes: [] });
+    const cd = cli.S.discs[0];
+    expect(roll(cli, cd)).toBeGreaterThan(7 * TILE);
+    expect(cd.fall).toBe(0);
+    // stopped right over the hole, the disc stays up and Ricochet hops to the floor beside it
+    const still = lay(true, 0);
+    Object.assign(still.d, cellCentre(6, 4), { vx: 0, vy: 0, hits: 1 });
+    still.g.update(0.02);
+    expect(still.d.fall).toBe(0);
+    const at = still.g.spot(still.h)!;
+    expect(pitAt(still.g.S.pits, at.x, at.y)).toBeUndefined();
+    expect(Math.hypot(at.x - still.d.x, at.y - still.d.y)).toBeLessThan(1.5 * TILE);
+    // the aim line: it stops at the hole, with the ability on it runs over it
+    const aim = (ab: boolean) => {
+      const g = arena(['archer']), h = byKey(g, 'ricochet'), p = g.spot(h)!, i = Math.floor(p.x / TILE), j = Math.floor(p.y / TILE) - 2;
+      g.S.mobs = [];
+      g.S.pits = [{ k: '1x1', cells: [[i, j]] }];
+      h.boost = ab;
+      const pr = g.predict(h, 0, -40, 0);
+      return pr.path[pr.path.length - 1][1] - j * TILE;
+    };
+    expect(aim(false)).toBeGreaterThan(0);
+    expect(aim(true)).toBeLessThan(0);
+  });
+
   it('online, a client asks the host for its ability and sees it on, and the fire on the enemies', () => {
     const host = new Game(), cli = new Game();
     host.party = newParty([0, 2]);

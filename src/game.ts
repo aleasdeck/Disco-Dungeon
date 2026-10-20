@@ -702,9 +702,9 @@ export class Game {
     const s = this.power(h);
     const d = {
       hero: h, x: p.x + (dx / L) * 6, y: p.y + (dy / L) * 6, vx: dx * s, vy: dy * s, r: this.discR(h), e: this.stat(h, 'e'), fr: this.discFr(h), spin: 0,
-      rico: h.boost && h.def.key === 'ricochet' ? AB_BOUNCES : 0, slick: has(h, 'lube') ? ART.slick : 0,
+      ab: h.boost, rico: h.boost && h.def.key === 'ricochet' ? AB_BOUNCES : 0, slick: has(h, 'lube') ? ART.slick : 0,
     } as Disc;
-    const boxes = standing(S.blocks).concat(S.rock), over = has(h, 'undies');
+    const boxes = standing(S.blocks).concat(S.rock), over = has(h, 'undies') || this.wild(d);
     // a bounce that costs no speed spends one of the disc's sure bounces, as in play
     const keep = () => this.keep(d), spend = () => { if (d.rico > 0) d.rico--; else if (d.slick) d.slick--; };
     path.push([d.x, d.y]);
@@ -1661,6 +1661,11 @@ export class Game {
     return -vn;
   }
 
+  /** Ricochet's disc thrown with «Шальной диск»: it rolls over the holes as over the floor the whole way, its sure bounces spent or not. */
+  private wild(d: Disc) {
+    return d.ab && d.hero.def.key === 'ricochet';
+  }
+
   /** Share of its speed a disc keeps off a wall or a block: all of it while it has sure bounces left (Ricochet's, «Смазка»). */
   private keep(d: Disc) {
     return d.rico > 0 || (d.slick ?? 0) > 0 ? 1 : d.e;
@@ -1742,10 +1747,10 @@ export class Game {
       if (d.y < d.r) { d.y = d.r; d.vy = -d.vy * this.keep(d); this.bounced(d, v0, 0, 1); }
       if (d.x > S.Wx - d.r) { d.x = S.Wx - d.r; d.vx = -d.vx * this.keep(d); this.bounced(d, v0, -1, 0); }
       if (d.y > S.Wy - d.r) { d.y = S.Wy - d.r; d.vy = -d.vy * this.keep(d); this.bounced(d, v0, 0, -1); }
-      // «Надувные труселя»: the disc floats over the holes and never drops in
-      const pit = pitAt(S.pits, d.x, d.y);
-      if (pit && !d.floated && !d.fan && has(d.hero, 'undies')) { d.floated = true; this.pop(d.hero, 'undies'); }
-      if (!has(d.hero, 'undies') && pit) {
+      // «Надувные труселя»: the disc floats over the holes and never drops in; so does Ricochet's with his ability on
+      const pit = pitAt(S.pits, d.x, d.y), wild = this.wild(d);
+      if (pit && !wild && !d.floated && !d.fan && has(d.hero, 'undies')) { d.floated = true; this.pop(d.hero, 'undies'); }
+      if (!wild && !has(d.hero, 'undies') && pit) {
         d.fall = 0.001; d.vx = d.vy = 0;
         this.sfx('pit');
         // a phantom just melts away down there

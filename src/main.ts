@@ -166,10 +166,30 @@ let reconnecting = 0;
 const playerName = () => settings.name || 'Игрок';
 const ownerOf = (i: number) => players.find(p => p.hero === i)?.id ?? 'host';
 
+/** A player who drops out mid-game is waited for this long before the others go on without them: a reload is back sooner. */
+const GRACE = 30_000;
+/** Host: when the player of each hero dropped out, while they are gone. */
+const leftAt = new Map<number, number>();
+
+/** Host: this player is at the table: connected, or dropped out only a moment ago and likely on their way back. */
+const seated = (p: Player) => net.has(p.id) || (p.hero !== null && Date.now() - (leftAt.get(p.hero) ?? -GRACE) < GRACE);
+
 /** Host: tell the game whose players are not at the table right now, so nobody waits for them. */
 function seatAway() {
   if (mode !== 'host' || !started || !game.S) return;
-  game.setAway(players.filter(p => p.hero !== null && p.id !== 'host' && !net.has(p.id)).map(p => p.hero!).sort());
+  game.setAway(players.filter(p => p.hero !== null && p.id !== 'host' && !seated(p)).map(p => p.hero!).sort());
+}
+
+/** Host: whoever dropped out and isn't back yet stops holding the others up: the turn, a vote, the trophies go on without them. */
+function goOn() {
+  if (mode !== 'host' || !started) return;
+  seatAway();
+  hud.buildAllies();
+  hud.refresh();
+  // the others may already agree
+  settle();
+  if (ev && !ev.done) { const go = agreed(ev.votes, atTable()); if (go !== null) settleEvent(go); else shareMap(); }
+  if (loot && !loot.done) { if (lootAgreed(loot, atTable())) shareLoot(); else shareMap(); }
 }
 const myHero = () => players.find(p => p.id === net.id)?.hero ?? null;
 /** This screen's own hero: online the player's, alone the one hero of the campaign. */
@@ -492,7 +512,7 @@ mapView.onChoose = id => {
 };
 
 /** Host: the heroes whose players are here to vote; the host plays the others, and they have no say. */
-const atTable = () => players.filter(p => p.hero !== null && net.has(p.id)).map(p => p.hero!);
+const atTable = () => players.filter(p => p.hero !== null && seated(p)).map(p => p.hero!);
 
 /** Host: a player points at a room. */
 function vote(hero: number, id: string) {
@@ -682,6 +702,7 @@ function leaveOnline() {
   if (net.active) net.close();
   clearSeat();
   players = [];
+  leftAt.clear();
   started = false;
   wait('');
   if (mode !== 'solo') { setOnline('menu'); ev = null; showEvent(); camp = null; showCamp(); loot = null; showLoot(); }
@@ -868,6 +889,7 @@ function welcome(id: string, name: string, key: string) {
       net.sendTo(id, { t: 'screen', ...lastScreen });
       if (ending?.kind === 'map') net.sendTo(id, { t: 'end', e: ending });
       game.float(game.S.Wx / 2, 20, `${name} вернулся`, '#c7cbe0');
+      if (back.hero !== null) leftAt.delete(back.hero);
       setOnline('host');
       seatAway();
       hud.buildAllies();
@@ -891,18 +913,15 @@ net.onLeave = id => {
     lobbyView();
     return;
   }
-  // mid-game the hero stays; the host plays it until its player comes back
+  // mid-game the hero stays; the host may play it until its player comes back, and the others wait a little for them
   const p = players.find(o => o.id === id);
   if (!p) return;
   game.float(game.S.Wx / 2, 20, `${p.name} отключился`, '#c7cbe0');
+  if (p.hero !== null) leftAt.set(p.hero, Date.now());
   setOnline('host');
-  seatAway();
   hud.buildAllies();
   hud.refresh();
-  // the vote goes on without them: the others may already agree
-  settle();
-  if (ev && !ev.done) { const go = agreed(ev.votes, atTable()); if (go !== null) settleEvent(go); else shareMap(); }
-  if (loot && !loot.done) { if (lootAgreed(loot, atTable())) shareLoot(); else shareMap(); }
+  setTimeout(goOn, GRACE + 100);
 };
 
 net.onLost = () => { if (mode === 'client') reconnect(net.code); };
@@ -1042,7 +1061,9 @@ async function reopen(code: string) {
     return;
   }
   // players get a moment to find their seats again; whoever is still missing after it stops holding the others up
-  setTimeout(seatAway, 15_000);
+  for (const p of players) if (p.id !== 'host' && p.hero !== null) leftAt.set(p.hero, Date.now());
+  seatAway();
+  setTimeout(goOn, GRACE + 100);
   if (s.ending) showEnd(s.ending);
   else if (camp) showCamp();
   else if (loot) { showEvent(); showLoot(); if (choosing) showMap(true); }
