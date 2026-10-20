@@ -1,10 +1,11 @@
 """Draws the interface's plates in the fight corner's cardboard (cardboard.py: a flat print on kraft, no ink outline, no
 rim, rubbed edges and a torn corner): the windows' boards (panel, panel_tall), the big mustard button (btn_main), the dark
-button (btn_dark), the square tile of the top strip's buttons (btn_tile), the light slab under each choice in the event,
-camp, trophy and blacksmith windows (opt), a plate of its own shape for each button of the main menu and the pause
-(mb_*), the board of the trophies' sockets beside the health (tray), and the board behind the hero's portrait in the
-corner (pf_board, with its print apart as pf_ink, which style.css colours in the hero's colour). Each old one keeps the
-size of the picture it replaces, so style.css cuts and stretches it as before. Run from the repo root:
+button (btn_dark) and its light twin for the windows' small buttons (btn_sub), the square tile of the top strip's buttons
+(btn_tile), the light slab under each choice in the event, camp, trophy and blacksmith windows (opt), a plate of its own
+shape for each button of the main menu and the pause (mb_*), the board of the trophies' sockets beside the health
+(tray), and the board behind the hero's portrait in the corner (pf_board, with its print apart as pf_ink, which
+style.css colours in the hero's colour). Each old one keeps the size of the picture it replaces, so style.css cuts and
+stretches it as before. Run from the repo root:
 
     python3 art/ui/draw_plates.py [folder]
 
@@ -25,6 +26,8 @@ MUSTARD = (190, 152, 66)
 # white paper, so the choices stand out of the dark board (Vladislav: dark slabs melted into it; of kraft, paper and
 # mustard he picked paper)
 PALE = (240, 229, 204)
+# the windows' small buttons on light kraft (Vladislav picked it over paper and teal: the dark ones melted into the board)
+SUB = (222, 190, 140)
 
 
 def lighter(col, n):
@@ -70,6 +73,10 @@ plate('btn_main', (W, H), [(20, 40), (640, 22), (754, 136), (684, 258), (26, 250
 W, H = 768, 244
 plate('btn_dark', (W, H), [(70, 22), (740, 14), (756, 120), (744, 228), (12, 232), (36, 120)], DARK, 64, small=True)
 
+# the small buttons in the windows («Назад», «Закрыть», «Скопировать ссылку», the tabs): the dark one's slab printed
+# light, so they stand out of the dark board
+plate('btn_sub', (W, H), [(70, 22), (740, 14), (756, 120), (744, 228), (12, 232), (36, 120)], SUB, 67, small=True)
+
 # the top strip's square tile
 W, H = 768, 713
 plate('btn_tile', (W, H), [(90, 24), (736, 46), (748, 590), (650, 694), (22, 684), (34, 130)], DARK, 65, small=True)
@@ -110,7 +117,8 @@ plate('pf', (W, H), [(4 + x * (W - 8), 4 + y * (H - 8)) for x, y in ((0.09, 0.03
                                                                          (0.78, 1), (0.04, 0.96), (0, 0.18))],
       (128, 128, 128), 80, tear=0.6, parts=True)
 
-# the board of the trophies' sockets in the fight corner, left of the health and the sparks (Vladislav: brighter, and
-# cardboard); 88 x 267 of the corner's units at 3 pixels a unit, its side by the health straight
+# the board of the trophies' sockets in the fight corner, left of the health and the sparks (Vladislav: cardboard; first
+# brighter than the dark stand-in, then of four darker than caramel he picked «горький шоколад»); 88 x 267 of the
+# corner's units at 3 pixels a unit, its side by the health straight
 W, H = 264, 801
-plate('tray', (W, H), [(10, 16), (W - 3, 4), (W - 3, H - 3), (3, H - 12)], (176, 110, 56), 90, tear=1.2)
+plate('tray', (W, H), [(10, 16), (W - 3, 4), (W - 3, H - 3), (3, H - 12)], (96, 60, 34), 90, tear=1.2)

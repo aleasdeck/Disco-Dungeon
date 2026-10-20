@@ -47,6 +47,10 @@ html, body {
   font: 14px/1.35 var(--hand);
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
+  /* an iPhone blows up the font of long paragraphs on its own (descriptions came out half as big again as on Android);
+     the sizes here are already made for a phone */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 /* static, so the browser composites it once instead of the game painting it every frame */
@@ -853,6 +857,11 @@ i.ico { display: inline-block; font-style: normal; }
 .art-btn_dark .btn:not(.round):hover { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)) brightness(1.2); }
 .art-btn_main .btn.big { background: var(--ui-btn_main) center / 100% 100% no-repeat; border: 0; border-radius: 0; box-shadow: none; color: #1c120a; padding: 12px 28px; }
 .art-btn_main .tab.on { background: var(--ui-btn_main) center / 100% 100% no-repeat; color: #1c120a; }
+/* the small buttons on a window's board («Назад», «Закрыть», «Скопировать ссылку», the tabs not picked) on the dark
+   one's slab printed in light kraft, with the words in ink, so they stand out of the dark board (Vladislav: they melted
+   into it; of paper, kraft and teal he picked kraft) */
+.art-btn_sub .panel .btn:not(.round, .big, .tab.on) { background: var(--ui-btn_sub) center / 100% 100% no-repeat; color: #2a1a0d; }
+.art-btn_sub .panel .btn:not(.round, .big, .tab.on):hover { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)) brightness(1.07); }
 
 /* painted stickers: rooms, upgrades, menu buttons; an empty slot (picture not in yet) takes no room */
 i[data-art] { display: inline-block; flex: none; font-style: normal; }
@@ -1225,14 +1234,18 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
   content: ''; position: absolute; inset: 0; z-index: -1;
   background: #3a2b20 var(--grain) 0 0 / 160px; background-blend-mode: overlay; clip-path: polygon(1% 3%, 100% 0, 100% 100%, 0 98%);
 }
-/* the board printed on cardboard (art/ui/draw_plates.py: tray), brighter than the dark stand-in drawn above */
+/* the board printed on cardboard (art/ui/draw_plates.py: tray), «горький шоколад», lighter than the dark stand-in
+   drawn above */
 .art-tray .trophies::before { clip-path: none; background: var(--ui-tray) center / 100% 100% no-repeat; }
+/* a socket is cut into the board down to a brown layer a shade darker than it (Vladislav: brown, not black, so they
+   don't stand out) */
 .sock {
   position: relative; flex: none; width: var(--tr-s); height: var(--tr-s); padding: 0; border: 0; border-radius: 50%; cursor: pointer;
-  background: #120c09; box-shadow: inset 0 3px 4px rgba(0, 0, 0, 0.9), 0 1px 0 rgba(255, 230, 190, 0.18);
+  background: #462d1b var(--grain) 0 0 / 120px; background-blend-mode: overlay;
+  box-shadow: inset 0 3px 5px rgba(30, 14, 4, 0.7), 0 1px 0 rgba(255, 230, 190, 0.16);
 }
-.sock.empty::after { content: ''; position: absolute; inset: 12%; border-radius: 50%; border: 1.5px dashed rgba(201, 168, 119, 0.45); }
-.sock.empty b { position: absolute; inset: 0; display: grid; place-items: center; font: 700 calc(var(--tr-s) * 0.38)/1 Oswald, sans-serif; color: rgba(201, 168, 119, 0.5); }
+.sock.empty::after { content: ''; position: absolute; inset: 12%; border-radius: 50%; border: 1.5px dashed rgba(214, 180, 128, 0.5); }
+.sock.empty b { position: absolute; inset: 0; display: grid; place-items: center; font: 700 calc(var(--tr-s) * 0.38)/1 Oswald, sans-serif; color: rgba(214, 180, 128, 0.6); }
 .tok {
   position: absolute; inset: 0; border-radius: 50%;
   background: #c9a877 var(--grain) 0 0 / 120px; background-blend-mode: overlay;
@@ -1242,7 +1255,7 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .tok .art, .tok .ico { position: absolute; inset: 14%; width: 72%; height: 72%; object-fit: contain; filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.3)); }
 .sock.spent .tok { background-color: #6f604c; }
 .sock.spent .tok .art { filter: grayscale(1) brightness(0.62) contrast(0.9); opacity: 0.8; }
-.sock.sel { box-shadow: 0 0 0 3px var(--gold-1), inset 0 3px 4px rgba(0, 0, 0, 0.9); }
+.sock.sel { box-shadow: 0 0 0 3px var(--gold-1), inset 0 3px 5px rgba(30, 14, 4, 0.7); }
 .sock:focus-visible { outline: 3px solid var(--gold-1); outline-offset: 2px; }
 .corner.dead .trophies { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.4)) grayscale(1) brightness(0.6); }
 /* the hero's card from the portrait opens over the portrait and the discs, whichever stands taller */
