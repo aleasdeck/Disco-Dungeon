@@ -1261,7 +1261,7 @@ export class SceneRenderer {
    * steps up), and a vein sinks and loses its gold as its charges go. Sides and top take a picture each when given.
    */
   private rockCells() {
-    const cells = new Map<string, { q: number; f: number; z: number }>();
+    const cells = new Map<string, { q: number; f: number; z: number; ch: number }>();
     for (const m of this.g.S.nodes) {
       const r = (m as any).pv?.rock;
       if (!r || m.left <= 0) continue;
@@ -1269,7 +1269,7 @@ export class SceneRenderer {
       const q = Math.min(m.left, m.ch) / m.ch;
       // one height for the whole vein (the cave's big one spans 2 × 2), a little different from the vein next door
       const f = 0.9 + 0.2 * (((Math.imul(i0 * 73856093 ^ j0 * 19349663, 2654435761) >>> 0) % 1000) / 1000);
-      for (let a = 0; a < z; a++) for (let b = 0; b < z; b++) cells.set(hazKey(i0 + a, j0 + b), { q, f, z });
+      for (let a = 0; a < z; a++) for (let b = 0; b < z; b++) cells.set(hazKey(i0 + a, j0 + b), { q, f, z, ch: m.ch });
     }
     return cells;
   }
@@ -1282,8 +1282,8 @@ export class SceneRenderer {
     for (const [ci, cj] of own) this.rockCell(ci, cj, cells, r, n.hit > 0);
   }
 
-  private rockCell(ci: number, cj: number, cells: Map<string, { q: number; f: number; z: number }>, r: any, struck: boolean) {
-    const { P, cam } = this, I = ((globalThis as any).__protoImgs ?? {}) as Record<string, HTMLImageElement>;
+  private rockCell(ci: number, cj: number, cells: Map<string, { q: number; f: number; z: number; ch: number }>, r: any, struck: boolean) {
+    const I = ((globalThis as any).__protoImgs ?? {}) as Record<string, HTMLImageElement>;
     const q = cells.get(hazKey(ci, cj))?.q;
     if (q === undefined) return;
     const hh = (a: number, b: number, k = 0) => {
@@ -1365,38 +1365,9 @@ export class SceneRenderer {
       const o = E[e].n;
       return (cells.has(hazKey(ci + o[0], cj + o[1])) ? hOf(ci + o[0], cj + o[1]) : -1) / ht;
     }, ci * 7 + cj);
-    // gold: chips stuck in the outward sides, scattered up and down them (none on top), fewer as the vein runs out
-    const spots: { x: number; y: number; h: number; ax: Vec; flat: boolean; s: number; k: number; w: number; clip: Pt[]; turn: number; flip: boolean; st: number }[] = [];
-    for (let i = 0; i < M; i++) {
-      const a = foot[i], b = foot[(i + 1) % M], ta = rim[i], tb = rim[(i + 1) % M];
-      const nx = b.y - a.y, ny = -(b.x - a.x), L = Math.hypot(nx, ny);
-      // a chip stays inside its side, as if set in the stone
-      const clip: Pt[] = [P(a.x, a.y, 0), P(b.x, b.y, 0), P(tb.x, tb.y, tb.h), P(ta.x, ta.y, ta.h)];
-      if (L < 2.2 || a.edge >= 0 || cam.facing(nx / L, ny / L) <= 0.05) continue;
-      // spots in a grid over the side, a low and a high row by its width, each shaken inside its own box and kept off the
-      // side's edges, so the chips kept land above one another as well as side by side
-      const n = Math.max(1, Math.round(L / (r.nugStep ?? 4))), m = Math.min(0.3, ((r.nugW ?? 4.2) * 0.3) / L), rows = r.nugRows ?? 2;
-      for (let k = 0; k < rows * n; k++) {
-        const col = k % n, row = Math.floor(k / n);
-        const u = m + ((1 - 2 * m) * (col + 0.15 + 0.7 * hh(ci * 13 + i, cj * 7 + k, 52))) / n, v = 0.12 + (0.76 * (row + 0.2 + 0.6 * hh(ci * 13 + i, cj * 7 + k, 53))) / rows;
-        const fx = a.x + (b.x - a.x) * u, fy = a.y + (b.y - a.y) * u, tx = ta.x + (tb.x - ta.x) * u, ty = ta.y + (tb.y - ta.y) * u, th = ta.h + (tb.h - ta.h) * u;
-        spots.push({ x: fx + (tx - fx) * v + (nx / L) * 0.15, y: fy + (ty - fy) * v + (ny / L) * 0.15, h: th * v, ax: [(b.x - a.x) / L, (b.y - a.y) / L], flat: false,
-          // mostly small, now and then a big one, never much wider than its side
-          s: Math.min(L * 0.95, (r.nugW ?? 4.2) * (hh(ci * 5 + k, cj * 13 + i, 56) < 0.25 ? 1.05 + 0.2 * hh(ci * 5 + k, cj * 13 + i, 54) : 0.5 + 0.35 * hh(ci * 5 + k, cj * 13 + i, 54))), k: Math.floor(1000 * hh(ci * 11 + k, cj * 17 + i, 57)), w: hh(ci * 17 + i, cj * 3 + k, 55), clip,
-          // every chip its own way: turned, mirrored and stretched a little
-          turn: (hh(ci * 3 + k, cj * 11 + i, 58) - 0.5) * 1.1, flip: hh(ci * 7 + k, cj * 5 + i, 59) < 0.5, st: 0.8 + 0.45 * hh(ci * 19 + k, cj * 7 + i, 61) });
-      }
-    }
-    // the ones kept are picked by chance, but never two on top of each other
-    // a big vein shares its gold out over its cells, so it isn't four times as rich
-    const keep = Math.ceil(((r.nugs ?? 4) * q) / (cells.get(hazKey(ci, cj))?.z ?? 1) - 1e-6), kept: typeof spots = [];
-    for (const s of spots.sort((p, o) => p.w - o.w)) {
-      if (kept.length >= keep) break;
-      const [sx, sy] = P(s.x, s.y, s.h);
-      if (kept.some(o => { const [ox, oy] = P(o.x, o.y, o.h); return Math.hypot(sx - ox, sy - oy) < (s.s + o.s) * 0.45; })) continue;
-      kept.push(s);
-    }
-    kept.sort((p, o) => cam.depth(p.x, p.y) - cam.depth(o.x, o.y)).forEach(s => this.rockNugget(s, r, I));
+    // gold on the outward sides, never on top: the lowest nugget stays to the last hit
+    const cell = cells.get(hazKey(ci, cj))!;
+    this.rockGold(ci, cj, foot, rim, q, cell.z, cell.ch, (qq: number) => H0 * (low + (1 - low) * qq) * cell.f, r, I, hh);
     // a boulder on top while the vein is full: it goes with the first hit
     if (q > (r.stoneTill ?? 0.7) && r.stone !== false && hh(ci, cj, 69) < (r.stones ?? 0.5)) {
       const cx = x0 + 5 + 4 * hh(ci, cj, 70), cy = y0 + 5 + 4 * hh(ci, cj, 71), R = (r.stoneR ?? 6) * (0.85 + 0.3 * hh(ci, cj, 72)), N = 5;
@@ -1488,13 +1459,194 @@ export class SceneRenderer {
     }
   }
 
+  /**
+   * Gold nuggets on one rock cell, laid out like a prop artist would: each run of outward sides facing one way on screen
+   * is one canvas, and every canvas gets an anchor nugget low down (it stays to the last hit), a medium one (from the
+   * second hit back) and a small one (full vein only), the last two along a slanting seam that runs on round the front
+   * corner. A canvas too narrow on screen gets one medium nugget at most; a 2 × 2 vein shares anchor and medium between
+   * the two cells of a facade. Heights are kept in world units, each nugget below the rim of the lowest rock it shows
+   * on, so every stage is the one before less its highest nuggets. Spacing is measured on the drawn shapes.
+   */
+  private rockGold(ci: number, cj: number, foot: { x: number; y: number; edge: number }[], rim: { x: number; y: number; h: number }[], q: number, z: number, ch: number,
+    hAt: (q: number) => number, r: any, I: Record<string, HTMLImageElement>, hh: (a: number, b: number, k?: number) => number) {
+    const { P, cam } = this, M = foot.length, base = r.nugW ?? 4.2;
+    const keys = ((r.gold ?? []) as string[]).filter(k => I[k]);
+    if (!keys.length) return;
+    const shape = (k: string) => k.replace(/_\d+$/, '').replace(/^gold_/, '');
+    // the stage now (3 full, 2 after a hit, 1 before the last) and the lowest rock each stage stands at with this many
+    // charges (a stage no charge comes to takes the next one's)
+    const stOf = (qq: number) => Math.min(3, Math.max(1, Math.ceil(qq * 3 - 1e-6))), stage = stOf(q), lim = [0, 0, 0, 0];
+    for (let left = Math.max(1, ch); left >= 1; left--) lim[stOf(left / Math.max(1, ch))] = hAt(left / Math.max(1, ch));
+    for (let k = 3; k >= 1; k--) if (!lim[k]) lim[k] = lim[k + 1] ?? hAt(1);
+    // canvases: runs of outward sides that face the viewer, split by which way they face on screen
+    const side = (i: number) => {
+      const a = foot[i], b = foot[(i + 1) % M], L = Math.hypot(b.x - a.x, b.y - a.y);
+      return { a, b, L, nx: (b.y - a.y) / (L || 1), ny: -(b.x - a.x) / (L || 1) };
+    };
+    const look = foot.map((p, i) => {
+      const sd = side(i);
+      return p.edge < 0 && sd.L > 0.3 && cam.facing(sd.nx, sd.ny) > 0.15 ? (cam.sideways(sd.nx, sd.ny) >= 0 ? 1 : -1) : 0;
+    });
+    let start = look.findIndex((v, i) => v !== look[(i + M - 1) % M]);
+    if (start < 0) start = 0;
+    type Can = { sides: number[]; sg: number; W: number; thin: boolean; uc: number };
+    const cans: Can[] = [];
+    for (let n = 0, i = start; n < M; n++, i = (i + 1) % M) {
+      if (!look[i]) continue;
+      const last = cans[cans.length - 1];
+      if (last && last.sg === look[i] && last.sides[last.sides.length - 1] === (i + M - 1) % M) last.sides.push(i);
+      else cans.push({ sides: [i], sg: look[i], W: 0, thin: false, uc: 0 });
+    }
+    const [ox] = P(foot[0].x, foot[0].y), ref = Math.max(Math.abs(P(foot[0].x + TILE, foot[0].y)[0] - ox), Math.abs(P(foot[0].x, foot[0].y + TILE)[0] - ox));
+    for (const c of cans) {
+      c.W = c.sides.reduce((t, i) => t + side(i).L, 0);
+      const s0 = foot[c.sides[0]], s1 = foot[(c.sides[c.sides.length - 1] + 1) % M];
+      c.thin = Math.abs(P(s1.x, s1.y)[0] - P(s0.x, s0.y)[0]) < 0.35 * ref;
+      // the end of the canvas at the front corner, where the seam passes over to the other canvas
+      c.uc = cam.depth(s1.x, s1.y) > cam.depth(s0.x, s0.y) ? c.W : 0;
+    }
+    // a point on a canvas: arc length u along its foot, height h up its leaning side
+    const at = (c: Can, u: number, h: number) => {
+      let acc = 0;
+      for (const i of c.sides) {
+        const sd = side(i);
+        if (u <= acc + sd.L || i === c.sides[c.sides.length - 1]) {
+          const t = Math.min(1, Math.max(0, (u - acc) / (sd.L || 1))), ta = rim[i], tb = rim[(i + 1) % M];
+          const fx = sd.a.x + (sd.b.x - sd.a.x) * t, fy = sd.a.y + (sd.b.y - sd.a.y) * t, th = ta.h + (tb.h - ta.h) * t;
+          const v = Math.min(1, h / (th || 1)), rx = ta.x + (tb.x - ta.x) * t, ry = ta.y + (tb.y - ta.y) * t;
+          return { x: fx + (rx - fx) * v + sd.nx * 0.15, y: fy + (ry - fy) * v + sd.ny * 0.15, h, ax: [(sd.b.x - sd.a.x) / sd.L, (sd.b.y - sd.a.y) / sd.L] as Vec };
+        }
+        acc += sd.L;
+      }
+      return null;
+    };
+    // one seam per cell: through the front corner at a middle height, slanting 20–35° one way or the other on screen
+    // (on a wide canvas it slants less, so it doesn't run into the foot or the rim)
+    const hc = lim[3] * (0.5 + 0.12 * hh(ci, cj, 120)), rise = hh(ci, cj, 121) < 0.5 ? 1 : -1, tn0 = Math.tan(((20 + 15 * hh(ci, cj, 122)) * Math.PI) / 180);
+    const tn = (c: Can) => Math.min(tn0, (0.32 * lim[3]) / Math.max(c.W, 1));
+    const seam = (c: Can, u: number) => hc + rise * c.sg * tn(c) * Math.abs(u - c.uc);
+    const seamK = (c: Can, u: number) => rise * c.sg * tn(c) * (u >= c.uc ? 1 : -1);
+    // a nugget's drawn shape as an ellipse in canvas units (along u, up h); a sliver runs along its picture's diagonal
+    type Nug = { c: Can; u: number; h: number; img: string; s: number; st: number; turn: number; flip: boolean; lv: number; A: number; B: number; ang: number; sx: number; sy: number };
+    const dims = (img: string, s: number, st: number) => {
+      const im = I[img], a = Math.sqrt(im.width / im.height), w = s * a * st, g = s / a / st;
+      return shape(img) === 'long' ? { w, g, A: 0.45 * Math.hypot(w, g), B: 0.22 * Math.min(w, g), diag: Math.atan2(g, w) } : { w, g, A: 0.45 * w, B: 0.45 * g, diag: 0 };
+    };
+    const reach = (n: { A: number; B: number; ang: number }, phi: number) => {
+      const d = phi - n.ang;
+      return (n.A * n.B) / Math.hypot(n.B * Math.cos(d), n.A * Math.sin(d));
+    };
+    const all: Nug[] = [];
+    const gapOk = (n: Nug) => {
+      let worst = Infinity;
+      for (const o of all) {
+        let gap: number, need: number;
+        if (o.c === n.c) {
+          const du = n.u - o.u, dh = n.h - o.h, phi = Math.atan2(dh, du);
+          gap = Math.hypot(du, dh) - reach(n, phi) - reach(o, phi + Math.PI);
+        } else {
+          // another canvas of this cell: on screen, as circles
+          gap = Math.hypot(n.sx - o.sx, n.sy - o.sy) - Math.max(n.A, n.B) - Math.max(o.A, o.B);
+        }
+        need = o.lv === 1 || n.lv === 1 ? 0.6 * (o.lv === 1 ? o.s : n.s) : 0.5 * Math.min(o.s, n.s);
+        worst = Math.min(worst, gap - need);
+      }
+      return worst;
+    };
+    const ANCHOR = ['chunk', 'flat', 'nugget', 'knobby'];
+    const make = (c: Can, ci2: number, lv: number, sizeK: number, salt: number): Nug | null => {
+      const used = all.filter(o => o.c === c), types = new Set(used.map(o => shape(o.img)));
+      // a picture for it: anchors chunky, slivers (medium only) and knobs kept to their places, no picture twice and three shapes at most on a canvas
+      const pool = keys.filter(k => {
+        const sh = shape(k);
+        if (used.some(o => o.img === k)) return false;
+        if (lv === 1 ? !ANCHOR.includes(sh) : sh === 'knobby') return false;
+        if (sh === 'long' && (lv !== 2 || used.some(o => shape(o.img) === 'long'))) return false;
+        return types.size < 3 || types.has(sh);
+      });
+      if (!pool.length) return null;
+      const img = pool[Math.floor(hh(ci * 31 + ci2, cj * 17 + lv, salt) * pool.length)];
+      const st = 0.9 + 0.22 * hh(ci * 7 + ci2, cj * 11 + lv, salt + 1), flip0 = hh(ci * 5 + ci2, cj * 3 + lv, salt + 2) < 0.5;
+      let s = base * sizeK;
+      const top = lim[lv] - 1.0, H1 = lim[1];
+      for (let tries = 0; tries < 3; tries++, s *= 0.85) {
+        const d = dims(img, s, st);
+        if (lv === 1) s = Math.min(s, (0.4 * c.W * s) / Math.max(d.w, 0.01), (0.55 * H1 * s) / Math.max(d.g, 0.01));
+        const dd = dims(img, s, st);
+        // turn: slivers along the seam, the rest a little either way
+        const cands: Nug[] = [];
+        const N = lv === 1 ? 1 : 12;
+        for (let k = 0; k < N; k++) {
+          let u: number, h: number;
+          const hu0 = 0.5 * dd.w + 0.12 * c.W, hu1 = c.W - 0.5 * dd.w - 0.12 * c.W;
+          if (hu1 < hu0) break;
+          if (lv === 1) {
+            // the anchor in one third of its canvas, never the middle, the other third on the cell's other canvas
+            const third = (ci2 + (hh(ci, cj, 123) < 0.5 ? 0 : 1)) % 2 === 0;
+            u = c.W * (third ? 0.3 + 0.1 * hh(ci, cj, salt + 3) : 0.6 + 0.1 * hh(ci, cj, salt + 3));
+            h = H1 * (0.3 + 0.2 * hh(ci, cj, salt + 4));
+          } else {
+            u = hu0 + (hu1 - hu0) * hh(ci * 13 + ci2 * 3 + k, cj * 7 + lv, salt + 5);
+            h = seam(c, u) + (hh(ci * 3 + k, cj * 19 + ci2, salt + 6) - 0.5) * 0.2 * lim[lv];
+          }
+          u = Math.min(hu1, Math.max(hu0, u));
+          let turn: number, flip = flip0;
+          // the picture's x runs to the right on screen, which may be against u
+          const sp = at(c, u, 0), sX = sp && P(sp.x + sp.ax[0], sp.y + sp.ax[1])[0] >= P(sp.x, sp.y)[0] ? 1 : -1;
+          if (shape(img) === 'long') {
+            // the sliver's picture rises to the right along its diagonal: mirror and turn it onto the seam
+            const beta = Math.atan(seamK(c, u) * sX);
+            flip = beta < 0;
+            turn = -(beta - (flip ? -dd.diag : dd.diag)) + ((hh(ci, cj + k, salt + 7) - 0.5) * 20 * Math.PI) / 180;
+          } else turn = ((hh(ci * 3 + k, cj, salt + 8) - 0.5) * 50 * Math.PI) / 180;
+          const ang = sX * (shape(img) === 'long' ? -turn + (flip ? -dd.diag : dd.diag) : -turn);
+          const rh = Math.sqrt((dd.A * Math.sin(ang)) ** 2 + (dd.B * Math.cos(ang)) ** 2);
+          const lo = 1.2 + rh + (shape(img) === 'long' ? 0.3 * lim[lv] : 0), hi = top - rh;
+          if (hi < lo) continue;
+          h = Math.min(hi, Math.max(lo, h));
+          const p = at(c, u, h);
+          if (!p) continue;
+          const [sx, sy] = P(p.x, p.y, p.h);
+          cands.push({ c, u, h, img, s, st, turn, flip, lv, A: dd.A, B: dd.B, ang, sx, sy });
+        }
+        let best: Nug | null = null, bs = -Infinity;
+        for (const n of cands) { const g = gapOk(n); if (g > bs) { bs = g; best = n; } }
+        if (best && bs >= -0.3 * base) return best;
+      }
+      return null;
+    };
+    const plans: [Can, number, number, number][] = [];
+    cans.forEach((c, k) => {
+      if (c.thin) { plans.push([c, k, 2, 0.7]); return; }
+      // a 2 × 2 vein: the two cells of a facade take the anchor and the medium nugget by turns
+      const own = z > 1 ? ((ci + cj + (c.sg > 0 ? 1 : 0)) % 2 === 0 ? [1] : [2]) : [1, 2];
+      for (const lv of own) plans.push([c, k, lv, lv === 1 ? 0.95 + 0.15 * hh(ci, cj, 130 + k) : 0.7 + 0.15 * hh(ci, cj, 131 + k)]);
+      plans.push([c, k, 3, 0.5 + 0.15 * hh(ci, cj, 132 + k)]);
+    });
+    // anchors first on every canvas, then the medium ones, then the small, so the low and big ones get the room
+    plans.sort((p, o) => p[2] - o[2]);
+    for (const [c, k, lv, sk] of plans) {
+      const n = make(c, k, lv, sk, 140 + lv * 10);
+      if (n) all.push(n);
+    }
+    const clipOf = (c: Can): Pt[] => {
+      const ids = [...c.sides, (c.sides[c.sides.length - 1] + 1) % M];
+      return [...ids.map(i => P(foot[i].x, foot[i].y, 0)), ...ids.reverse().map(i => P(rim[i].x, rim[i].y, rim[i].h))];
+    };
+    all
+      .filter(n => n.lv <= stage)
+      .map(n => ({ ...at(n.c, n.u, n.h)!, s: n.s, k: 0, img: n.img, clip: clipOf(n.c), turn: n.turn, flip: n.flip, st: n.st }))
+      .sort((p, o) => cam.depth(p.x, p.y) - cam.depth(o.x, o.y))
+      .forEach(p => this.rockNugget(p, r, I));
+  }
+
   /** A gold chip stuck in the rock: its picture (or a drawn one) laid flat on a side or on the top. */
-  private rockNugget(p: { x: number; y: number; h: number; ax: Vec; flat: boolean; s: number; k: number; clip?: Pt[]; turn?: number; flip?: boolean; st?: number }, r: any, I: Record<string, HTMLImageElement>) {
+  private rockNugget(p: { x: number; y: number; h: number; ax: Vec; s: number; k: number; img?: string; clip?: Pt[]; turn?: number; flip?: boolean; st?: number }, r: any, I: Record<string, HTMLImageElement>) {
     const { c, P } = this, gold = ((r.gold ?? []) as string[]).map(k => I[k]).filter(Boolean);
     const [ox, oy] = P(p.x, p.y, p.h), [ex, ey] = P(p.x + p.ax[0], p.y + p.ax[1], p.h);
     let ux = ex - ox, uy = ey - oy;
     if (ux < 0) { ux = -ux; uy = -uy; }
-    const im = gold[p.k % Math.max(1, gold.length)];
+    const im = (p.img && I[p.img]) || gold[p.k % Math.max(1, gold.length)];
     c.save();
     if (p.clip) { pth(c, p.clip); c.clip(); }
     if (im) {
