@@ -2927,6 +2927,8 @@ describe('the heroes past the first three', () => {
   it('the model: a kissed enemy strikes the nearest other enemy on its move instead of the heroes, at full strength', () => {
     const g = arena([at('model')], [['skel', 2, 2], ['skel', 3, 2], ['golem', 7, 1]]), h = g.party[0], [kissed, near, far] = g.S.mobs;
     h.hp = h.max = 99;
+    // the others go for it now, it lives through their blows
+    kissed.hp = kissed.max = 99;
     corner(g, h);
     g.S.discs = [];
     into(g, h, kissed, true);
@@ -2949,6 +2951,40 @@ describe('the heroes past the first three', () => {
     expect(kissed.kiss).toBeUndefined();
     expect(kissed.kissLeft).toBeUndefined();
     expect(kissed.intent!.hero).toBe(h.i);
+  });
+
+  it('the model: the other enemies go for a kissed one as for a hero, and leave it once it falls', () => {
+    const g = arena([at('model')], [['skel', 2, 2], ['skel', 3, 2], ['skel', 9, 6]]), h = g.party[0], [kissed, near, far] = g.S.mobs;
+    h.hp = h.max = 99;
+    kissed.hp = kissed.max = 99;
+    corner(g, h);
+    expect(near.intent!.hero).toBe(h.i);
+    g.S.discs = []; into(g, h, kissed, true); g.step(1 / 120);
+    // the one beside it turns on it at once, the one by the hero keeps to the hero
+    expect(near.intent).toMatchObject({ t: 'hit', hero: -1, foe: 0, dmg: near.dmg });
+    expect(far.intent!.hero).toBe(h.i);
+    const hp = kissed.hp;
+    turn(g);
+    expect(hp - kissed.hp).toBe(near.dmg);
+    // next turn it picks it again, as the nearest
+    expect(near.intent).toMatchObject({ hero: -1, foe: 0 });
+    // the kissed one falls in the heroes' turn: the other goes back to the hero
+    g.hurtMob(kissed, 999);
+    expect(near.intent!.hero).toBe(h.i);
+    expect(near.intent!.foe).toBeUndefined();
+  });
+
+  it('the model: a shooter takes a kissed enemy it sees in turn with the heroes', () => {
+    const g = arena([at('model')], [['skel', 2, 2], ['archer', 2, 6]]), h = g.party[0], [kissed, archer] = g.S.mobs;
+    h.hp = h.max = 99;
+    kissed.hp = kissed.max = 99;
+    corner(g, h);
+    g.S.discs = []; into(g, h, kissed, true); g.step(1 / 120);
+    // the archer sees both: it takes the hero and the kissed one in turn, by the turn and its place in the queue
+    const marks = new Set<number>();
+    for (let t = 0; t < 2; t++) { g.S.turn = 1 + t; g.pickIntents(); marks.add(archer.intent!.foe ?? -10 - archer.intent!.hero); }
+    expect(marks.has(0)).toBe(true);
+    expect(marks.has(-10 - h.i)).toBe(true);
   });
 
   it('the model: a kiss on one still kissed starts its turns afresh', () => {

@@ -437,7 +437,16 @@ export class Hud {
     const acc = tgt?.def.acc ?? '', out = far && !!it.way && it.way.length > 1, bow = far ? icon('bow', 'qbow') : '';
     // kissed by the model: it goes for another enemy, or sighs with nobody left to go for
     if (it.sigh) return { badge: `<span class="ib sp">${icon('kiss')}</span>`, txt: 'Поцелован: вздыхает и никого не ударит' };
-    if (it.foe !== undefined) {
+    // going for an enemy the model has kissed, as it would for a hero
+    if (it.foe !== undefined && m.kiss === undefined && it.t !== 'charge') {
+      const o = MOBS[g.S.mobs[it.foe].k], who = o.acc.toLowerCase(), kissed = o.fem ? 'поцелована' : 'поцелован';
+      if (it.t === 'hit') {
+        const how = !far ? `ударит ${who}` : bomb ? `бросит бомбу в ${who}` : `выстрелит в ${who}`;
+        return { badge: `${bow}<span class="ib hit" style="--c:#ff5a8a">${it.dmg}</span>`, txt: cap(`${out ? 'выйдет на линию огня и ' : ''}${how} на ${it.dmg}: ${o.fem ? 'та' : 'тот'} ${kissed} Вешалкой, броня считается`) };
+      }
+      return { badge: `${bow}<span class="ib go" style="--c:#ff5a8a">${it.eta ?? icon('move')}</span>`, txt: `Идёт ${far ? 'стрелять в' : 'бить'} ${who}: ${o.fem ? 'та' : 'тот'} ${kissed} Вешалкой` };
+    }
+    if (it.foe !== undefined && m.kiss !== undefined) {
       const o = g.S.mobs[it.foe], who = MOBS[o.k].acc.toLowerCase(), kiss = icon('kiss', 'qbow');
       if (it.t === 'hit') {
         const how = !far ? `ударит ${who}` : bomb ? `бросит бомбу в ${who}` : `выстрелит в ${who}`;
@@ -505,7 +514,7 @@ export class Hud {
     const brittle = `; урон от дисков и умений героев +${Math.round(frostVuln(m.frost) * 100)}%`;
     if (g.frozen(m)) out.push({ k: 'chill', t: 'Заморожен: пропустит ход' + brittle });
     else if (m.frost) out.push({ k: 'slow', t: `Замедлен: в свой ход пройдёт не больше ${FROST_STEPS === 1 ? 'клетки' : FROST_STEPS + ' клеток'}` + brittle });
-    if (m.kiss !== undefined) out.push({ k: 'kiss', n: m.kissLeft, t: `Поцелуй Вешалки: бьёт ближайшего другого врага, а не героев, ещё ${turns(m.kissLeft ?? 1)}` });
+    if (m.kiss !== undefined) out.push({ k: 'kiss', n: m.kissLeft, t: `Поцелуй Вешалки: бьёт ближайшего другого врага, а не героев, и другие враги могут пойти на него; ещё ${turns(m.kissLeft ?? 1)}` });
     const mate = g.cuffedTo(m);
     if (mate && mate.hp > 0) out.push({ k: 'cuffs', n: g.S.cuffs!.left, t: `В наручниках, в паре: ${MOBS[mate.k].name}. Урон по одному достаётся и другому, ещё ${turns(g.S.cuffs!.left)}` });
     if (isRanged(m.k)) out.push({ k: 'bow', t: 'Дальний бой: стреляет только в того, кого видит' });
