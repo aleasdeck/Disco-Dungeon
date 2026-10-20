@@ -1,12 +1,12 @@
 // Combat rules: turn flow, disc physics, damage, abilities.
 // Rendering and input live elsewhere; this module only changes state.
 
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CLEAN_ORE, CRIT, CRIT_COS, E_MAX, ELITE_UPS, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, RAGE_FROM, RAGE_FROM_BOSS, TILE, UPS, UP_COST, ZAP, ZAP_REACH, frostVuln, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CLEAN_ORE, CRIT, CRIT_COS, CUFF_TURNS, E_MAX, ELITE_UPS, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, RAGE_FROM, RAGE_FROM_BOSS, SHOVE_DMG, TILE, UPS, UP_COST, ZAP, ZAP_REACH, frostVuln, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
 import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { mulberry32 } from './rng';
 import { has, type ArtKey } from './artifacts';
 import type { Sfx } from './audio/sfx';
-import { caveTurns, cellAt, cellCentre, generate, hazKey, isFloor, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
+import { CASTS, caveTurns, cellAt, cellCentre, generate, hazKey, inPit, isFloor, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
 
@@ -53,6 +53,8 @@ export interface HeroState {
   tally?: Tally;
   /** Stat levels an elite owes the hero: the next one costs no ore (the sharpening window right after it, or the next blacksmith's). */
   free?: number;
+  /** The cop's «Наручники»: the enemies (by index) his discs have hit this turn, the first two; the second hit cuffs them. */
+  cuffing?: number[];
 }
 
 /**
@@ -147,6 +149,8 @@ export const FOOD_FLY = 0.35;
  * `left` the enemy turns it has left and `turn` the turn it was laid in.
  */
 export interface Bomb { x: number; y: number; fx: number; fy: number; by?: number; h: number; t: number; left: number; turn: number }
+/** The cop's handcuffs on two enemies, by their index in the room's list, for `left` more enemy turns. */
+export interface Cuffs { a: number; b: number; left: number }
 /** A cloud of the bum's gas: its middle cell, the enemy turns it has left, and its age, for the eye. */
 export interface Gas { i: number; j: number; left: number; t: number }
 /** How close a disc's edge must pass the middle of a dish to pick it up: the dish fills most of its cell. */
@@ -195,6 +199,8 @@ export interface State extends Layout {
   bombs: Bomb[];
   /** The bum's clouds of gas over the floor. */
   gas: Gas[];
+  /** The two enemies the cop has cuffed together, if any. */
+  cuffs: Cuffs | null;
   zaps: Zap[];
   floats: Float[];
   sparks: Spark[];
@@ -237,6 +243,8 @@ const LAG_WINDOW = 3000, RESYNC_MS = 2500, REPLAY = 360;
  */
 const LEAD = 1, CELL_T = 0.14, BEAT = 0.18, AFTER = 0.35;
 
+/** Seconds an enemy the bouncer threw takes to slide a cell over. */
+const SLIDE_T = 0.16;
 /** Seconds a hero takes to hop over to where its disc stopped. */
 const HOP_T = 0.45;
 
@@ -369,6 +377,8 @@ export class Game {
   /** Host: ore the room paid for nobody losing any health in it («Без царапины»), for the room's result. */
   clean = 0;
   private acc = 0;
+  /** A blow the cop's cuffs are passing on to the other enemy in them: it isn't passed back. */
+  private linked = false;
   /** Physics steps run so far on this page; online, every snapshot carries the host's count. */
   tick = 0;
   /** Online client: this page's clock in milliseconds (tests set their own). */
@@ -409,6 +419,7 @@ export class Game {
         pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? this.handOf(h) : 0, thrown: false, shield: h.hp > 0 ? shield + cup : 0, flash: 0, chill: 0, daze: 0, fire: 0,
         boost: false, sparks: Math.min(AB_COST, Math.max(h.sparks, full)), boomed: 0, lucky: false,
       });
+      delete h.cuffing;
     }
     // an event's curse: the room's enemies come in angrier
     if (this.bank.rage) for (const m of L.mobs) m.dmg += this.bank.rage;
@@ -417,7 +428,7 @@ export class Game {
     delete this.bank.rage;
     delete this.bank.smoke;
     delete this.bank.strobe;
-    this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], food: [], bombs: [], gas: [], zaps: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [], away: this.online ? this.S?.away ?? [] : [] };
+    this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], food: [], bombs: [], gas: [], cuffs: null, zaps: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [], away: this.online ? this.S?.away ?? [] : [] };
     // every rune starts empty: the players put their heroes on them before the fight
     this.pickActive();
     this.pickIntents();
@@ -430,7 +441,7 @@ export class Game {
     this.walked = { key: '', n: 0 };
     this.hopped.clear();
     this.asked.clear();
-    this.S = { ...generate(spec), spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], food: [], bombs: [], gas: [], zaps: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [], away: [] };
+    this.S = { ...generate(spec), spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], food: [], bombs: [], gas: [], cuffs: null, zaps: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [], away: [] };
     this.pickActive();
   }
 
@@ -818,8 +829,8 @@ export class Game {
 
   /**
    * A disc thrown with the ability on hits an enemy: Bastion's shields the whole party, Ash's stokes the enemy's fire,
-   * Electra's strikes lightning, the cook's drops a dish, the bum's lets out its gas. This goes before the hit's damage;
-   * Electra's lightning and the ice genius's frost come after it.
+   * Electra's strikes lightning, the cook's drops a dish, the bum's lets out its gas, the cop's cuffs it. This goes before
+   * the hit's damage; Electra's lightning, the ice genius's frost, the bouncer's throw and the model's kiss come after it.
    */
   private abilityHit(d: Disc, m: Mob) {
     const k = d.hero.def.key;
@@ -835,7 +846,7 @@ export class Game {
       m.burn += AB_BURN;
       this.float(m.x, m.y - 14, `огонь ${m.burn}`, '#ff7a3d');
       this.burst(m.x, m.y, '#ff7a3d', 14);
-    }
+    } else if (k === 'cop') this.cuff(d.hero, m);
   }
 
   /**
@@ -959,7 +970,7 @@ export class Game {
    */
   private listen() {
     const S = this.S, bombs = S.bombs.filter(b => b.t >= FOOD_FLY);
-    const can = this.liveMobs().filter(m => m.speed > 0 && m.intent && (m.intent.t === 'hit' || m.intent.t === 'move' || m.intent.t === 'charge'));
+    const can = this.liveMobs().filter(m => m.speed > 0 && m.kiss === undefined && m.intent && (m.intent.t === 'hit' || m.intent.t === 'move' || m.intent.t === 'charge'));
     const pairs: { b: Bomb; m: Mob; d: number }[] = [];
     for (const b of bombs) for (const m of can) pairs.push({ b, m, d: Math.hypot(b.x - m.x, b.y - m.y) });
     pairs.sort((p, q) => p.d - q.d);
@@ -1063,12 +1074,14 @@ export class Game {
   }
 
   /**
-   * Gas or frost has just caught an enemy in the heroes' turn: what it means to do this turn is worked out afresh, so the
-   * badge shows it. A frosted walker gets as far as its steps take it, a gassed blow is weaker.
+   * Gas, frost, a kiss or the bouncer has just caught an enemy in the heroes' turn: what it means to do this turn is worked
+   * out afresh, so the badge shows it. A frosted walker gets as far as its steps take it, a gassed blow is weaker.
    */
   private retune(m: Mob) {
     const it = m.intent;
     if (!it || m.hp <= 0) return;
+    // kissed, it goes for the nearest other enemy from where it stands now
+    if (m.kiss !== undefined) { m.intent = this.charm(m); return; }
     if (it.t === 'slam') { it.dmg = this.slamDmg(m, it.chill); return; }
     // drawn by a firecracker, a frosted walker gets that much less far toward it
     if (it.bang) { m.intent = this.lureTo(m, it.bang) ?? it; return; }
@@ -1077,6 +1090,182 @@ export class Game {
     if (h.hp <= 0 || !p) return;
     if (isRanged(m.k)) m.intent = this.shoot(m, [h], 0);
     else if (it.t !== 'charge') m.intent = this.chase(m, h, this.route(m, p));
+  }
+
+  /** A boss or the floor's elite: too heavy for the bouncer to throw anywhere. */
+  heavy(m: Mob) {
+    return !!MOBS[m.k].boss || mobSize(m.k) > 1 || CASTS.some(c => c.elite === m.k);
+  }
+
+  /**
+   * The bouncer's disc has hit m and left it standing: m is thrown a cell on, away from the disc, to the nearest of the eight
+   * ways a piece goes on the board. A wall, a block, a resource, a rune or another enemy in the way slams it (SHOVE_DMG through
+   * armour, and as much to the other enemy); a hole swallows it; spikes or lava burn it as they would a hero. A boss or the
+   * floor's elite doesn't budge and takes the slam.
+   */
+  private shove(d: Disc, m: Mob) {
+    const S = this.S, h = d.hero;
+    if (m.hp <= 0) return;
+    if (this.heavy(m)) {
+      this.float(m.x, m.y - 14, 'не сдвинуть', '#ffcf5a');
+      this.slam(m, h);
+      return;
+    }
+    const a = Math.round(Math.atan2(m.y - d.y, m.x - d.x) / (Math.PI / 4)) * (Math.PI / 4), di = Math.round(Math.cos(a)), dj = Math.round(Math.sin(a));
+    const sz = mobSize(m.k), [i, j] = cellAt(m.x, m.y, sz), ni = i + di, nj = j + dj, stands = this.standCells();
+    const cells: Pt[] = [];
+    for (let b = 0; b < sz; b++) for (let c = 0; c < sz; c++) cells.push({ x: ni + c, y: nj + b });
+    // rock, a block, a resource, a rune or a summoning circle: it bangs into it; going slantwise it can't cut past a corner either
+    const circles = new Set(this.liveMobs().flatMap(q => (q.intent?.t === 'summon' ? q.intent.spots ?? [] : []).map(p => hazKey(...cellAt(p.x, p.y)))));
+    const hard = (ci: number, cj: number) => !isFloor(S, ci, cj) || stands.has(hazKey(ci, cj)) || circles.has(hazKey(ci, cj))
+      || standing(S.blocks).some(b => Math.floor(b.x0 / TILE) === ci && Math.floor(b.y0 / TILE) === cj)
+      || S.nodes.some(n => { if (n.left <= 0) return false; const s = n.s ?? 1, [p, q] = cellAt(n.x, n.y, s); return ci >= p && ci < p + s && cj >= q && cj < q + s; });
+    const corner = di && dj && [[i + di, j], [i, j + dj]].some(([ci, cj]) => cells.length === 1 && hard(ci, cj));
+    if (corner || cells.some(c => hard(c.x, c.y))) {
+      this.float(m.x, m.y - 14, 'БАМ!', '#ffcf5a');
+      this.slam(m, h);
+      return;
+    }
+    const o = this.liveMobs().find(q => {
+      if (q === m) return false;
+      const qs = mobSize(q.k), [p, r] = cellAt(q.x, q.y, qs);
+      return cells.some(c => c.x >= p && c.x < p + qs && c.y >= r && c.y < r + qs);
+    });
+    if (o) {
+      this.float((m.x + o.x) / 2, (m.y + o.y) / 2 - 14, 'БАМ!', '#ffcf5a');
+      this.knock(o, o.x, o.y, m.x, m.y, 0.7, 0.05);
+      this.slam(m, h, o);
+      return;
+    }
+    // a free cell: it slides over
+    const c = cellCentre(ni, nj, sz);
+    m.slid = { x: m.x, y: m.y, t: 0 };
+    m.x = m.fx = m.tx = c.x;
+    m.y = m.fy = m.ty = c.y;
+    this.sfx('shove', 0.6);
+    if (cells.some(q => S.pits.some(pt => inPit(pt, q.x, q.y)))) {
+      // over a hole: down it goes, out of the fight
+      m.fell = 0.001;
+      this.float(m.x, m.y - 14, 'на выход!', '#ffcf5a');
+      this.note(`${h.def.name} ${did(h.def, 'выкинул')} ${MOBS[m.k].acc.toLowerCase()} в яму`);
+      this.sfx('pit');
+      this.hurtMob(m, m.hp, '#ffcf5a', true, 0.8, h);
+      return;
+    }
+    if (cells.some(q => S.haz.has(hazKey(q.x, q.y)))) {
+      this.float(m.x, m.y - 22, S.biome.haz === 'lava' ? 'лава!' : 'шипы!', '#ff4d6a');
+      this.hurtMob(m, S.biome.hazDmg, '#ff4d6a', true, 0.6, h);
+    }
+    this.retune(m);
+  }
+
+  /** Thrown into something by the bouncer: SHOVE_DMG to m through armour, and as much to the enemy `o` it hit. */
+  private slam(m: Mob, h: HeroState, o?: Mob) {
+    this.S.shake = Math.max(this.S.shake, 0.12);
+    this.sfx('shove');
+    this.hurtMob(m, SHOVE_DMG, '#ffcf5a', true, 0.6, h);
+    if (o) this.hurtMob(o, SHOVE_DMG, '#ffcf5a', true, 0.6, h);
+  }
+
+  /**
+   * The cop's disc hits an enemy: the first two different ones his discs hit this turn are cuffed together, before the second
+   * hit's damage, so that already goes to both. A pair cuffed before comes off, the new one goes on. If the first has
+   * fallen meanwhile, this one waits for its pair instead.
+   */
+  private cuff(h: HeroState, m: Mob) {
+    const S = this.S, k = S.mobs.indexOf(m), got = (h.cuffing ??= []);
+    if (m.hp <= 0 || got.includes(k) || got.length >= 2) return;
+    if (got.length && S.mobs[got[0]].hp <= 0) got.length = 0;
+    got.push(k);
+    if (got.length < 2) { this.float(m.x, m.y - 14, 'клац', '#ff8fd0'); this.sfx('cuff', 0.4); return; }
+    S.cuffs = { a: got[0], b: k, left: CUFF_TURNS };
+    for (const o of [S.mobs[got[0]], m]) { this.float(o.x, o.y - 14, 'в наручниках!', '#ff8fd0'); this.burst(o.x, o.y, '#ff8fd0', 10); }
+    this.sfx('cuff');
+  }
+
+  /** The enemy cuffed to m, standing or not; null for one not in cuffs. */
+  cuffedTo(m: Mob) {
+    const S = this.S, c = S.cuffs, k = S.mobs.indexOf(m);
+    return !c ? null : k === c.a ? S.mobs[c.b] : k === c.b ? S.mobs[c.a] : null;
+  }
+
+  /**
+   * The cuffs pass a blow on: whatever m has just lost, the enemy cuffed to it loses too, through armour, and not back again.
+   * With either of them down the cuffs drop off.
+   */
+  private chain(m: Mob, n: number, p: number, by?: HeroState) {
+    const S = this.S, c = S.cuffs, o = this.cuffedTo(m);
+    if (!c || !o) return;
+    if (!this.linked && o.hp > 0) {
+      this.linked = true;
+      this.hurtMob(o, n, '#ff8fd0', true, p * 0.7, by);
+      this.linked = false;
+    }
+    if (S.cuffs === c && (m.hp <= 0 || o.hp <= 0)) {
+      S.cuffs = null;
+      const up = m.hp > 0 ? m : o;
+      if (up.hp > 0) this.float(up.x, up.y - 18, 'наручники упали', '#ff8fd0');
+    }
+  }
+
+  /**
+   * The model's disc hits m: a kiss, and on its next move it goes for the nearest other enemy instead of the heroes. Bosses
+   * shrug it off, and a coffin has nobody inside to charm.
+   */
+  private kiss(m: Mob, h: HeroState) {
+    if (m.hp <= 0) return;
+    if (MOBS[m.k].boss || MOBS[m.k].prop) { this.float(m.x, m.y - 14, 'не берёт', '#ff9ab8'); return; }
+    if (m.kiss === undefined) { this.float(m.x, m.y - 14, 'чмок!', '#ff5a8a'); this.burst(m.x, m.y, '#ff7ab0', 10); this.sfx('kiss'); }
+    m.kiss = h.i;
+    this.retune(m);
+  }
+
+  /**
+   * What a kissed enemy does on its move: it goes for the nearest other enemy instead of the heroes, with its own blow at full
+   * strength. A walker strikes from right next to it, a shooter fires once it sees it, walking to where it would if not; with
+   * nobody else left in the room it stands and sighs.
+   */
+  private charm(m: Mob): Intent {
+    const S = this.S, o = this.liveMobs().filter(q => q !== m).sort((p, q) => Math.hypot(p.x - m.x, p.y - m.y) - Math.hypot(q.x - m.x, q.y - m.y))[0];
+    if (!o) return { t: 'move', hero: -1, dmg: 0, sigh: true };
+    const foe = S.mobs.indexOf(o), far = isRanged(m.k);
+    if (far && this.clearShot(m, o)) return { t: 'hit', hero: -1, dmg: this.blow(m), foe };
+    const way = m.speed > 0 ? this.route(m, o, true, far) : null;
+    if (!way) return { t: 'move', hero: -1, dmg: 0, foe };
+    const n = way.length - 1, now = this.steps(m), go = wayLen(way.slice(0, this.stopAt(m, way) + 1));
+    return n <= now ? { t: 'hit', hero: -1, dmg: this.blow(m), foe, way, go, eta: 1 } : { t: 'move', hero: -1, dmg: 0, foe, way, go, eta: 1 + Math.ceil((n - now) / stepsOf(m)) };
+  }
+
+  /** Whether two enemies stand right next to each other, close enough for one to strike the other. */
+  private besideMob(m: Mob, o: Mob) {
+    const a = mobSize(m.k), b = mobSize(o.k), [i, j] = cellAt(m.x, m.y, a), [p, q] = cellAt(o.x, o.y, b);
+    // the gap between the two footprints along each axis, in cells: 0 touching, below 0 overlapping
+    const gx = Math.max(p - (i + a), i - (p + b)), gy = Math.max(q - (j + a), j - (q + b));
+    return gx <= 0 && gy <= 0 && (gx === 0 || gy === 0);
+  }
+
+  /** A kissed enemy's move: it walks up to the enemy it goes for and strikes it, or fires at it, as it would at a hero. */
+  private charmed(m: Mob) {
+    const S = this.S, it = m.intent!, d = MOBS[m.k], o = S.mobs[it.foe!], by = S.heroes.find(h => h.i === m.kiss), far = isRanged(m.k);
+    if (!o || o.hp <= 0) return;
+    const acc = MOBS[o.k].acc.toLowerCase();
+    if (it.t === 'move') {
+      if (m.walk) this.note(`${m.name} идёт ${far ? 'стрелять в' : 'бить'} ${acc}`);
+      return;
+    }
+    if (far ? !this.clearShot(m, o) : !this.besideMob(m, o)) {
+      this.float(m.x, m.y, far ? 'не видит' : 'не достал', '#c7cbe0');
+      this.note(`${m.name} не ${did(d, far ? 'увидел' : 'достал')} ${acc}`);
+      return;
+    }
+    if (far) this.knock(m, m.x, m.y, o.x, o.y, 0.3);
+    else this.knock(m, o.x, o.y, m.x, m.y, 0.5);
+    m.flash = 0.12;
+    const hp = o.hp;
+    this.hurtMob(o, it.dmg, '#ff7ab0', false, 0.7, by);
+    this.knock(o, o.x, o.y, m.x, m.y, 0.6, 0.05);
+    const how = !far ? `${did(d, 'ударил')} ${acc}` : d.charge ? `${did(d, 'бросил')} бомбу в ${acc}` : `${did(d, 'выстрелил')} в ${acc}`;
+    this.note(`${m.name} ${how}` + (hp > o.hp ? ` на ${hp - o.hp}` : ', но броня выдержала') + (o.hp <= 0 ? `, ${did(MOBS[o.k], 'пал')}` : ''));
   }
 
   /** Dishes on the floor this disc rolls over: the hero who threw it eats, if hurt, any but the dishes this disc dropped. */
@@ -1328,6 +1517,7 @@ export class Game {
    */
   private rechase() {
     for (const m of this.liveMobs()) {
+      if (m.kiss !== undefined) { m.intent = this.charm(m); continue; }
       const it = m.intent;
       if (it?.t === 'slam') it.dmg = this.slamDmg(m, it.chill);
       if (!it || it.bang || (it.t !== 'hit' && it.t !== 'move' && it.t !== 'charge')) continue;
@@ -1531,10 +1721,12 @@ export class Game {
   /**
    * Damage an enemy; `by` is the hero whose disc (or its lightning, firecracker or light spot) dealt it, for the trophies
    * that pay for kills. A hero's blow on an enemy the ice genius has frosted hits harder (`frostVuln`); fire and gas don't.
+   * What it takes, the enemy cuffed to it takes too (`chain`).
    */
   hurtMob(m: Mob, n: number, col = '#fff', pierce = false, p = 0.6, by?: HeroState) {
     if (m.hp <= 0) return;
-    if (by && m.frost) { n = Math.ceil(n * (1 + frostVuln(m.frost))); this.burst(m.x, m.y, '#cfefff', 6); }
+    // a blow the cuffs pass on is as big as the one they took, frost or not
+    if (by && m.frost && !this.linked) { n = Math.ceil(n * (1 + frostVuln(m.frost))); this.burst(m.x, m.y, '#cfefff', 6); }
     if (m.armor && !pierce && n < m.armor) { this.float(m.x, m.y, 'броня', '#c7cbe0'); this.sfx('armor'); return; }
     // the statistics count the health the blow took off, and the blow itself as the record
     if (by) { const t = tallyOf(by); t.dmg += Math.min(n, m.hp); t.top = Math.max(t.top, n); }
@@ -1551,12 +1743,14 @@ export class Game {
       m.dead = 0.001; this.burst(m.x, m.y, '#ffd34d', 22); this.float(m.x, m.y - 6, 'повержен', '#ffd34d');
       if (m.burn > 0) this.spreadFire(m);
       if (by) this.killed(m, by);
-      this.bury(m);
-      if (d.lava) {
+      // one the bouncer threw down a hole is gone: nobody buries it, no lava spills where it fell
+      if (!m.fell) this.bury(m);
+      if (d.lava && !m.fell) {
         const S = this.S, i = Math.floor(m.x / TILE), j = Math.floor(m.y / TILE);
         if (isFloor(S, i, j) && this.stands().every(p => Math.hypot(p.x - (i * TILE + 8), p.y - (j * TILE + 8)) > 20)) { S.haz.add(hazKey(i, j)); this.float(m.x, m.y + 4, 'лава!', '#ff7a3d'); }
       }
     }
+    this.chain(m, n, p, by);
   }
 
   /** A hero's disc has felled an enemy: «Клыки» mend the hero, «Копилка» drops ore into the pool. */
@@ -1843,6 +2037,8 @@ export class Game {
         else this.hurtMob(m, dmg, '#fff', has(h, 'opener'), Math.min(1, vn / 250), h);
         if (d.ab && h.def.key === 'electra') this.zap(m, h);
         if (d.ab && h.def.key === 'genius') this.freeze(m);
+        if (d.ab && h.def.key === 'bouncer') this.shove(d, m);
+        if (d.ab && h.def.key === 'model') this.kiss(m, h);
         this.burst(d.x, d.y, d.hero.def.col, 8);
         // the figure rocks away from the disc, a big one less; a sure hit or a kill shakes the table
         this.knock(m, m.x, m.y, d.x, d.y, Math.min(1, 0.3 + vn / 260) * Math.min(1, (7 / m.r) ** 0.6));
@@ -2067,6 +2263,8 @@ export class Game {
         this.note(`${m.name} дышит газом: −${gas}`);
         if (m.hp <= 0) this.note(`${m.name} ${did(MOBS[m.k], 'задохнулся', 'задохнулась')}`);
       }
+      // kissed, it looks for the nearest other enemy as its move begins: the ones before it have moved, some have fallen
+      if (m.kiss !== undefined && m.hp > 0) m.intent = this.charm(m);
       this.planWalk(m);
       if (burnt || gassed || (m.hp > 0 && !this.idle(m))) return true;
     }
@@ -2082,10 +2280,12 @@ export class Game {
     m.fx = m.tx = m.x;
     m.fy = m.ty = m.y;
     m.walk = undefined;
-    if (m.hp <= 0 || !it || it.hero < 0 || m.speed === 0 || this.frozen(m)) return;
-    // one drawn by a firecracker runs to where it crackled, even when another enemy has set it off on the way
-    const h = this.heroOf(it.hero), p = it.bang ?? this.spot(h), aim = !it.bang && isRanged(m.k);
-    if (!p || (!it.bang && (h.hp <= 0 || (aim && this.sees(m, h))))) return;
+    const foe = it?.foe !== undefined ? this.S.mobs[it.foe] : null;
+    if (m.hp <= 0 || !it || (it.hero < 0 && !foe) || m.speed === 0 || this.frozen(m)) return;
+    // one drawn by a firecracker runs to where it crackled, even when another enemy has set it off on the way; a kissed one
+    // goes for the other enemy, a shooter only till it sees it
+    const h = this.heroOf(it.hero), p = foe ?? it.bang ?? this.spot(h), aim = !it.bang && isRanged(m.k);
+    if (!p || (foe ? foe.hp <= 0 || (aim && this.clearShot(m, foe)) : !it.bang && (h.hp <= 0 || (aim && this.sees(m, h))))) return;
     // the room has changed since the intent was picked: the enemies before it have moved, an icicle may have broken
     const way = this.route(m, p, true, aim);
     if (!way) return;
@@ -2099,8 +2299,9 @@ export class Game {
   /** An enemy with nothing to do on its move: walled off, or the one it was after has already fallen. */
   private idle(m: Mob) {
     const it = m.intent!;
-    // frozen stiff, it still takes its turn to stand there
-    if (this.frozen(m)) return false;
+    // frozen stiff, it still takes its turn to stand there; kissed with nobody to go for, to sigh
+    if (this.frozen(m) || it.sigh) return false;
+    if (it.foe !== undefined) { const o = this.S.mobs[it.foe]; return !o || o.hp <= 0 || (it.t === 'move' && !m.walk); }
     if (it.t === 'move') return !m.walk;
     if (it.t === 'hit') { const h = this.heroOf(it.hero); return h.hp <= 0 || !this.spot(h); }
     if (it.t === 'heal') { const o = this.S.mobs[it.mob!]; return !o || o.hp <= 0; }
@@ -2323,6 +2524,12 @@ export class Game {
       this.float(m.x, m.y - 10, 'фитиль горит', '#ffb070');
       this.sfx('launch', 0.3);
       this.note(`${m.name} ${did(d, 'поджёг', 'подожгла')} фитиль` + (m.walk ? ` и ${did(d, 'пошёл', 'пошла')} к ${this.heroOf(it.hero).def.dat}` : ''));
+    } else if (it.sigh) {
+      const by = S.heroes.find(h => h.i === m.kiss);
+      this.float(m.x, m.y - 10, 'вздыхает…', '#ff9ab8');
+      this.note(`${m.name} вздыхает${by ? ' по ' + by.def.dat : ''} и никого не бьёт`);
+    } else if (it.foe !== undefined) {
+      this.charmed(m);
     } else if (it.t === 'move') {
       // walled off, it stayed put: nothing to tell
       if (m.walk) this.note(it.bang ? `${m.name} ${did(d, 'побежал', 'побежала')} на треск петарды` : `${m.name} идёт к ${this.heroOf(it.hero).def.dat}`);
@@ -2382,12 +2589,14 @@ export class Game {
     S.done = [];
     this.passing = -1;
     // the frost wears off after one enemy turn, a cloud of gas thins out turn by turn, a firecracker nobody came to fizzles out
-    for (const m of S.mobs) delete m.frost;
+    for (const m of S.mobs) { delete m.frost; delete m.kiss; }
+    // the cuffs hold for their turns, the cop cuffs anew next turn
+    if (S.cuffs && --S.cuffs.left <= 0) S.cuffs = null;
     S.gas = S.gas.filter(g => --g.left > 0);
     for (const b of S.bombs) if (--b.left <= 0) { this.float(b.x, b.y - 10, 'пшик', '#c9c2b4'); this.burst(b.x, b.y, '#9a948a', 8); }
     S.bombs = S.bombs.filter(b => b.left > 0);
     for (const h of S.heroes) if (h.hp > 0 && has(h, 'cup')) this.pop(h, 'cup');
-    for (const h of S.heroes) { h.shield = h.hp > 0 && has(h, 'cup') ? ART.cup : 0; h.thrown = false; h.boost = false; h.hand = h.hp > 0 ? this.handOf(h) : 0; if (h.chill > 0) h.chill--; if (h.daze > 0) h.daze--; }
+    for (const h of S.heroes) { delete h.cuffing; h.shield = h.hp > 0 && has(h, 'cup') ? ART.cup : 0; h.thrown = false; h.boost = false; h.hand = h.hp > 0 ? this.handOf(h) : 0; if (h.chill > 0) h.chill--; if (h.daze > 0) h.daze--; }
     S.phase = 'throw';
     this.sfx('yourTurn');
     this.pickActive();
@@ -2557,6 +2766,8 @@ export class Game {
     for (const m of S.mobs) {
       if (m.flash > 0) m.flash -= dt; if (m.dead) m.dead += dt; if (m.born > 0) m.born = Math.max(0, m.born - dt * 1.5);
       if (m.knock && (m.knock.t += dt) > KNOCK_T) m.knock = undefined;
+      if (m.slid && (m.slid.t += dt / SLIDE_T) >= 1) m.slid = undefined;
+      if (m.fell) m.fell += dt;
     }
     for (const h of S.heroes) {
       if (h.flash > 0) h.flash -= dt;

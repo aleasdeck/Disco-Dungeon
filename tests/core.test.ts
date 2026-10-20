@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_PER_DISC, CLEAN_ORE, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, KINDS, RAGE_FROM, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, CUFF_TURNS, FOOD_HEAL, FOOD_PER_DISC, CLEAN_ORE, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, KINDS, RAGE_FROM, SHOVE_DMG, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
 import { ART, FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { CASTS, CAVE, MOB_CAP, mobPool, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob, type ResNode } from '../src/room';
@@ -2206,14 +2206,15 @@ describe('the heroes past the first three', () => {
     return d;
   };
 
-  it('nine heroes to pick from, each with its own colour, disc and ability, a row of each kind; online still three seats', () => {
-    expect(HEROES.map(d => d.key)).toEqual(['bastion', 'ricochet', 'ash', 'cook', 'sharp', 'electra', 'kid', 'bum', 'genius']);
-    // the pick screens lay them out a row per disc size, the biggest first: two «толстяки», four «чуваки», three «дрищи»
+  it('twelve heroes to pick from, each with its own colour, disc and ability, four of each kind; online still three seats', () => {
+    // new heroes go on the end, so the saves' hero numbers keep meaning the same heroes
+    expect(HEROES.map(d => d.key)).toEqual(['bastion', 'ricochet', 'ash', 'cook', 'sharp', 'electra', 'kid', 'bum', 'genius', 'bouncer', 'cop', 'model']);
+    // the pick screens lay them out a row per disc size, the biggest first: four «толстяки», four «чуваки», four «дрищи»
     expect(KINDS.map(k => k.row)).toEqual(['Толстяки', 'Чуваки', 'Дрищи']);
-    expect(heroesByKind().map(row => row.map(i => HEROES[i].key))).toEqual([['bastion', 'cook'], ['ash', 'electra', 'bum', 'genius'], ['ricochet', 'sharp', 'kid']]);
+    expect(heroesByKind().map(row => row.map(i => HEROES[i].key))).toEqual([['bastion', 'cook', 'bouncer', 'cop'], ['ash', 'electra', 'bum', 'genius'], ['ricochet', 'sharp', 'kid', 'model']]);
     expect(heroesByKind().flat().length).toBe(HEROES.length);
     // a heroine's card says it her way
-    expect(HEROES.map(kindOf)).toEqual(['Толстяк', 'Дрищ', 'Чувиха', 'Толстуха', 'Дрищ', 'Чувиха', 'Дрищ', 'Чувак', 'Чувак']);
+    expect(HEROES.map(kindOf)).toEqual(['Толстяк', 'Дрищ', 'Чувиха', 'Толстуха', 'Дрищ', 'Чувиха', 'Дрищ', 'Чувак', 'Чувак', 'Толстяк', 'Толстяк', 'Дрищ']);
     expect(new Set(HEROES.map(d => d.col)).size).toBe(HEROES.length);
     expect(new Set(HEROES.map(d => d.ab)).size).toBe(HEROES.length);
     expect(HEROES[at('electra')].fem && HEROES[at('cook')].fem && !HEROES[at('sharp')].fem && !HEROES[at('bum')].fem).toBe(true);
@@ -2754,6 +2755,202 @@ describe('the heroes past the first three', () => {
     g.S.phase = 'enemy'; g.S.actor = -1;
     (g as unknown as { nextActor: () => boolean }).nextActor();
     expect(hp - cold.hp).toBe(4);
+  });
+
+  /** Puts the hero in the far corner of the arena, away from the enemies the tests set up in the other one. */
+  const corner = (g: Game, h: HeroState) => { h.at = cellCentre(10, 8); g.pickIntents(); };
+  /** The cell an enemy stands on. */
+  const cell = (m: Mob) => cellAt(m.x, m.y, mobSize(m.k));
+  /** The bouncer's disc with the ability on, rolling straight up into m. */
+  const shoved = (g: Game, m: Mob) => { g.S.discs = []; const d = into(g, g.party[0], m, true); g.step(1 / 120); return Math.ceil((d.m * 200) / 120); };
+
+  it('the bouncer: his hit throws an enemy a cell on, away from the disc, and it slides over', () => {
+    const g = arena([at('bouncer')], [['skel', 4, 4]]), [skel] = g.S.mobs;
+    corner(g, g.party[0]);
+    const hit = shoved(g, skel);
+    expect(cell(skel)).toEqual([4, 3]);
+    expect([skel.x, skel.y]).toEqual([skel.tx, skel.ty]);
+    expect(skel.slid).toMatchObject({ x: cellCentre(4, 4).x, y: cellCentre(4, 4).y });
+    expect(skel.max - skel.hp).toBe(hit);
+    // its route to the hero is worked out from the new cell
+    expect(skel.intent!.way![0]).toEqual({ x: skel.x, y: skel.y });
+    // without the ability his disc just hits
+    g.S.discs = [];
+    into(g, g.party[0], skel, false);
+    g.step(1 / 120);
+    expect(cell(skel)).toEqual([4, 3]);
+  });
+
+  it('the bouncer: an enemy thrown into another enemy or a wall is slammed, both enemies take two more', () => {
+    const g = arena([at('bouncer')], [['skel', 4, 4], ['rat', 4, 3], ['skel', 7, 0]]), [skel, rat, top] = g.S.mobs;
+    corner(g, g.party[0]);
+    const hit = shoved(g, skel);
+    expect([cell(skel), cell(rat)]).toEqual([[4, 4], [4, 3]]);
+    expect(skel.max - skel.hp).toBe(hit + SHOVE_DMG);
+    expect(rat.max - rat.hp).toBe(SHOVE_DMG);
+    // the top row has rock behind it
+    const hit2 = shoved(g, top);
+    expect(cell(top)).toEqual([7, 0]);
+    expect(top.max - top.hp).toBe(hit2 + SHOVE_DMG);
+  });
+
+  it('the bouncer: over a hole an enemy drops in and is out of the fight; onto spikes it takes what a hero would', () => {
+    const g = arena([at('bouncer')], [['skel', 4, 4], ['skel', 2, 4]]), [skel, other] = g.S.mobs, h = g.party[0];
+    g.S.pits = [{ k: PIT_KINDS[0], cells: [[4, 3]] }];
+    g.S.haz.add(hazKey(2, 3));
+    corner(g, h);
+    shoved(g, skel);
+    expect(cell(skel)).toEqual([4, 3]);
+    expect(skel.hp).toBeLessThanOrEqual(0);
+    expect(skel.fell).toBeGreaterThan(0);
+    expect(h.tally?.kills).toBe(1);
+    const hit = shoved(g, other);
+    expect(cell(other)).toEqual([2, 3]);
+    expect(other.max - other.hp).toBe(hit + g.S.biome.hazDmg);
+  });
+
+  it('the bouncer: a boss or the floor\'s elite doesn\'t budge and takes two more instead', () => {
+    for (const k of ['headsman', 'king'] as const) {
+      const g = arena([at('bouncer')], [[k, 4, 5]]), [m] = g.S.mobs, was = cell(m);
+      corner(g, g.party[0]);
+      m.armor = 0;
+      const hit = shoved(g, m);
+      expect(g.heavy(m)).toBe(true);
+      expect(cell(m)).toEqual(was);
+      expect(m.max - m.hp).toBe(hit + SHOVE_DMG);
+    }
+  });
+
+  it('the cop: the first two enemies his discs hit are cuffed, and whatever one takes the other takes too, through armour', () => {
+    const g = arena([at('cop')], [['skel', 2, 2], ['golem', 6, 2], ['rat', 2, 6]]), cop = g.party[0], [skel, golem, rat] = g.S.mobs;
+    corner(g, cop);
+    const hit = (m: Mob, ab = true) => { g.S.discs = []; const d = into(g, cop, m, ab); g.step(1 / 120); return Math.ceil((d.m * 200) / 120); };
+    // one enemy hit: the cuffs don't close yet
+    const a = hit(skel);
+    expect(g.S.cuffs).toBe(null);
+    expect(cop.cuffing).toEqual([0]);
+    // the second closes them, and its own hit already goes to both
+    const b = hit(golem);
+    expect(g.S.cuffs).toEqual({ a: 0, b: 1, left: CUFF_TURNS });
+    expect(golem.max - golem.hp).toBe(b);
+    expect(skel.max - skel.hp).toBe(a + b);
+    // a third enemy that turn changes nothing
+    hit(rat);
+    expect(g.S.cuffs).toEqual({ a: 0, b: 1, left: CUFF_TURNS });
+    expect(rat.max - rat.hp).toBe(a);
+    // fire, gas, anything: the other one loses as much, through its armour, and the blow isn't passed back
+    let [s0, g0] = [skel.hp, golem.hp];
+    g.hurtMob(golem, 4, '#f00', true);
+    expect([s0 - skel.hp, g0 - golem.hp]).toEqual([4, 4]);
+    [s0, g0] = [skel.hp, golem.hp];
+    g.hurtMob(skel, 2);
+    expect([s0 - skel.hp, g0 - golem.hp]).toEqual([2, 2]);
+    // a blow the golem's armour stops isn't passed on: it took nothing
+    [s0, g0] = [skel.hp, golem.hp];
+    g.hurtMob(golem, 2);
+    expect([s0 - skel.hp, g0 - golem.hp]).toEqual([0, 0]);
+    // one falls: the cuffs drop
+    skel.hp = 1;
+    g0 = golem.hp;
+    g.hurtMob(skel, 5);
+    expect(g0 - golem.hp).toBe(5);
+    expect(g.S.cuffs).toBe(null);
+    // without the ability his discs cuff nobody
+    const g2 = arena([at('cop')], [['skel', 2, 2], ['skel', 6, 2]]), c2 = g2.party[0];
+    for (const m of g2.S.mobs) { g2.S.discs = []; into(g2, c2, m, false); g2.step(1 / 120); }
+    expect(g2.S.cuffs).toBe(null);
+  });
+
+  it('the cop: the cuffs hold three enemy turns, he cuffs anew each turn and a new pair takes the old one\'s place', () => {
+    const g = arena([at('cop')], [['skel', 1, 1], ['skel', 3, 1], ['skel', 1, 3], ['skel', 3, 3]]), cop = g.party[0], [a, b, c, d] = g.S.mobs;
+    cop.hp = cop.max = 99;
+    corner(g, cop);
+    const hit = (m: Mob) => { g.S.discs = []; into(g, cop, m, true); g.step(1 / 120); };
+    hit(a); hit(b);
+    expect(g.S.cuffs).toMatchObject({ a: 0, b: 1 });
+    turn(g);
+    expect(cop.cuffing).toBeUndefined();
+    expect(g.S.cuffs).toMatchObject({ a: 0, b: 1, left: CUFF_TURNS - 1 });
+    hit(c); hit(d);
+    expect(g.S.cuffs).toEqual({ a: 2, b: 3, left: CUFF_TURNS });
+    for (let k = 0; k < CUFF_TURNS - 1; k++) turn(g);
+    expect(g.S.cuffs).toMatchObject({ left: 1 });
+    turn(g);
+    expect(g.S.cuffs).toBe(null);
+  });
+
+  it('the model: a kissed enemy strikes the nearest other enemy on its move instead of the heroes, at full strength', () => {
+    const g = arena([at('model')], [['skel', 2, 2], ['skel', 3, 2], ['golem', 7, 1]]), h = g.party[0], [kissed, near, far] = g.S.mobs;
+    h.hp = h.max = 99;
+    corner(g, h);
+    g.S.discs = [];
+    into(g, h, kissed, true);
+    g.step(1 / 120);
+    expect(kissed.kiss).toBe(h.i);
+    expect(kissed.intent).toMatchObject({ t: 'hit', hero: -1, foe: 1, dmg: kissed.dmg });
+    // it means the heroes no harm this turn
+    expect(g.incoming(h)).toBe(0);
+    const hp = near.hp, fh = far.hp;
+    turn(g);
+    expect(hp - near.hp).toBe(kissed.dmg);
+    expect(far.hp).toBe(fh);
+    expect(h.hp).toBe(99);
+    // the kiss is gone after its move: it goes for the hero again
+    expect(kissed.kiss).toBeUndefined();
+    expect(kissed.intent!.hero).toBe(h.i);
+  });
+
+  it('the model: a kissed enemy walks to the other enemy, the other\'s armour counts, a shooter shoots one it sees', () => {
+    const g = arena([at('model')], [['grinder', 1, 1], ['golem', 4, 1], ['archer', 1, 5], ['rat', 4, 5]]), h = g.party[0], [grinder, golem, archer, rat] = g.S.mobs;
+    h.hp = h.max = 99;
+    corner(g, h);
+    for (const m of [grinder, archer]) { g.S.discs = []; into(g, h, m, true); g.step(1 / 120); }
+    // the grinder walks up to the golem and strikes, but its blow of 2 can't get through armour 3
+    expect(grinder.intent).toMatchObject({ t: 'hit', hero: -1, foe: 1 });
+    expect(grinder.intent!.way!.length).toBeGreaterThan(1);
+    // the archer sees the rat and shoots it from where it stands
+    expect(archer.intent).toMatchObject({ t: 'hit', hero: -1, foe: 3 });
+    const gh = golem.hp, rh = rat.hp;
+    turn(g);
+    expect(cell(grinder)).toEqual([3, 1]);
+    expect(golem.hp).toBe(gh);
+    expect(rh - rat.hp).toBe(archer.dmg);
+    expect(h.hp).toBe(99);
+    // too far to get there this turn, it just walks toward it
+    const g2 = arena([at('model')], [['skel', 1, 1], ['skel', 7, 1]]), h2 = g2.party[0], [walker] = g2.S.mobs;
+    corner(g2, h2);
+    g2.S.discs = []; into(g2, h2, walker, true); g2.step(1 / 120);
+    expect(walker.intent).toMatchObject({ t: 'move', hero: -1, foe: 1, eta: 3 });
+    turn(g2);
+    expect(cell(walker)).toEqual([3, 1]);
+  });
+
+  it('the model: with no other enemy a kissed one just sighs, and bosses don\'t care for kisses', () => {
+    const g = arena([at('model')], [['skel', 9, 7]]), h = g.party[0], [skel] = g.S.mobs;
+    h.hp = h.max = 99;
+    corner(g, h);
+    expect(skel.intent!.t).toBe('hit');
+    g.S.discs = []; into(g, h, skel, true); g.step(1 / 120);
+    expect(skel.intent).toMatchObject({ t: 'move', hero: -1, sigh: true });
+    turn(g);
+    expect(h.hp).toBe(99);
+    expect(g.S.log.some(l => l.txt.includes('вздыхает по Вешалке'))).toBe(true);
+    const g2 = arena([at('model')], [['king', 4, 4], ['skel', 1, 1]]), [king] = g2.S.mobs;
+    g2.S.discs = []; into(g2, g2.party[0], king, true); g2.step(1 / 120);
+    expect(king.kiss).toBeUndefined();
+  });
+
+  it('the cop\'s cuffs and the model\'s kisses travel to the other screens with the snapshot', () => {
+    const host = new Game(), cli = new Game();
+    host.party = newParty([at('cop'), at('model')]);
+    host.loadRoom({ seed: 21, depth: 2, floor: 0, type: 'fight' });
+    host.S.cuffs = { a: 0, b: 1, left: 2 };
+    host.S.mobs[0].kiss = at('model');
+    cli.send = () => {};
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    expect(cli.S.cuffs).toEqual({ a: 0, b: 1, left: 2 });
+    expect(cli.S.mobs[0].kiss).toBe(at('model'));
+    expect(cli.cuffedTo(cli.S.mobs[1])).toBe(cli.S.mobs[0]);
   });
 
   it('the kid\'s firecrackers and the bum\'s gas travel to the other screens with the snapshot', () => {
