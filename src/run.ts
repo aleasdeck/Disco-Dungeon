@@ -17,7 +17,7 @@ export interface Run {
 export const FLOORS = 3;
 /** Rows of a floor: the entrance fight, five rows of choices, the rest row and the boss. */
 export const LAYERS = 8;
-/** The row before the boss: every route there picks between the camp and the blacksmith's. */
+/** The row before the boss: camps and blacksmith's in turn, so every route there picks between the two without paths crossing. */
 export const REST_ROW = LAYERS - 2;
 /**
  * Rows where a floor may hold a blacksmith's before the rest row. Disc upgrades are sold only there, so every entrance
@@ -63,8 +63,9 @@ export function floorOk(layers: MapNode[][]): boolean {
 
 /**
  * One floor, built row by row like Slay the Spire's map: random rooms, but every route holds FIGHTS fights, a fork never
- * leads to two rooms of a kind, a special room never comes twice in a row, elites wait for the third row, and the rest
- * row before the boss is a camp and a blacksmith's that every room before it leads to.
+ * leads to two rooms of a kind, a special room never comes twice in a row, elites wait for the third row, no two paths
+ * cross, and the rest row before the boss is camps and blacksmith's in turn, one room more than the row before it, each
+ * room of which leads to the two rest rooms above it: a camp and a blacksmith's.
  */
 export function genFloor(seed: number, f: number): MapNode[][] {
   const R = makeRng(seed + f * 1013);
@@ -85,10 +86,11 @@ export function genFloor(seed: number, f: number): MapNode[][] {
   ];
   let layers: MapNode[][] = [];
   for (let tries = 0; tries < 500; tries++) {
-    const sizes = [...Array.from({ length: REST_ROW }, () => R.int(2, 3)), 2, 1];
+    const sizes = Array.from({ length: REST_ROW }, () => R.int(2, 3));
+    sizes.push(sizes[REST_ROW - 1] + 1, 1);
     layers = sizes.map((n, l) => Array.from({ length: n }, (_, i): MapNode => ({ id: `${f}-${l}-${i}`, l, i, type: 'fight', next: [] })));
     link(layers, R);
-    layers[REST_ROW - 1].forEach(n => (n.next = layers[REST_ROW].map(x => x.id)));
+    layers[REST_ROW - 1].forEach((n, i) => (n.next = [layers[REST_ROW][i].id, layers[REST_ROW][i + 1].id]));
     const by = new Map(layers.flat().map(n => [n.id, n]));
     const parents = (n: MapNode) => layers[n.l - 1]?.filter(p => p.next.includes(n.id)) ?? [];
     // fights so far on the routes into each room: fewest and most
@@ -119,28 +121,36 @@ export function genFloor(seed: number, f: number): MapNode[][] {
     }
     if (stuck) continue;
     const camp = R.next() < 0.5 ? 0 : 1;
-    layers[REST_ROW].forEach(n => (n.type = n.i === camp ? 'camp' : 'forge'));
+    layers[REST_ROW].forEach(n => (n.type = n.i % 2 === camp ? 'camp' : 'forge'));
     layers[LAYERS - 1][0].type = 'boss';
     if (floorOk(layers)) return layers;
   }
   return layers;
 }
 
-/** Links between rows: each room to the one straight ahead and often a neighbour, and every room reached from somewhere. */
+/**
+ * Links between rows: each room to the one straight ahead and often a neighbour, every room reached from somewhere, and
+ * no two links crossing. Rooms stand in a row by their index, so links i→j and p→q cross when i, p and j, q go opposite ways.
+ */
 function link(layers: MapNode[][], R: ReturnType<typeof makeRng>) {
   for (let l = 0; l < layers.length - 1; l++) {
-    const A = layers[l], B = layers[l + 1];
-    A.forEach((a, i) => {
-      const j = A.length === 1 ? Math.floor((B.length - 1) / 2) : Math.round((i * (B.length - 1)) / (A.length - 1));
-      a.next.push(B[j].id);
-      const k = j + (R.next() < 0.5 ? -1 : 1);
-      if (B[k] && R.next() < 0.55 && !a.next.includes(B[k].id)) a.next.push(B[k].id);
-    });
-    B.forEach((b, j) => {
-      if (!A.some(a => a.next.includes(b.id))) {
-        const i = Math.round((j * (A.length - 1)) / Math.max(1, B.length - 1));
-        A[Math.min(i, A.length - 1)].next.push(b.id);
-      }
+    const A = layers[l], B = layers[l + 1], es: [number, number][] = [];
+    const add = (i: number, j: number) => { es.push([i, j]); A[i].next.push(B[j].id); };
+    const crosses = (i: number, j: number) => es.some(([p, q]) => (p - i) * (q - j) < 0);
+    const ahead = (i: number) => A.length === 1 ? Math.floor((B.length - 1) / 2) : Math.round((i * (B.length - 1)) / (A.length - 1));
+    A.forEach((_, i) => add(i, ahead(i)));
+    // the neighbours in a random order, so when two of them would cross neither side of the row always keeps its fork
+    const order = A.map((_, i) => i);
+    for (let i = order.length - 1; i > 0; i--) { const j = R.int(0, i); [order[i], order[j]] = [order[j], order[i]]; }
+    for (const i of order) {
+      const k = ahead(i) + (R.next() < 0.5 ? -1 : 1);
+      if (B[k] && R.next() < 0.55 && !crosses(i, k)) add(i, k);
+    }
+    B.forEach((_, j) => {
+      if (es.some(([, q]) => q === j)) return;
+      // the room level with it, kept between the rooms that link to its neighbours so the new link crosses none
+      const lo = Math.max(0, ...es.filter(([, q]) => q < j).map(([p]) => p)), hi = Math.min(A.length - 1, ...es.filter(([, q]) => q > j).map(([p]) => p));
+      add(Math.min(hi, Math.max(lo, Math.round((j * (A.length - 1)) / Math.max(1, B.length - 1)))), j);
     });
   }
 }
