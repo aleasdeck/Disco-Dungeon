@@ -1,7 +1,7 @@
 // Combat rules: turn flow, disc physics, damage, abilities.
 // Rendering and input live elsewhere; this module only changes state.
 
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CLEAN_ORE, CRIT, CRIT_COS, CUFF_TURNS, E_MAX, ELITE_UPS, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, RAGE_FROM, RAGE_FROM_BOSS, SHOVE_DMG, TILE, UPS, UP_COST, ZAP, ZAP_REACH, frostVuln, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CLEAN_ORE, CRIT, CRIT_COS, CUFF_TURNS, E_MAX, ELITE_UPS, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, KISS_TURNS, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, RAGE_FROM, RAGE_FROM_BOSS, SHOVE_DMG, TILE, UPS, UP_COST, ZAP, ZAP_REACH, frostVuln, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
 import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { mulberry32 } from './rng';
 import { has, type ArtKey, type Kept } from './artifacts';
@@ -1193,14 +1193,16 @@ export class Game {
   }
 
   /**
-   * The model's disc hits m: a kiss, and on its next move it goes for the nearest other enemy instead of the heroes. Bosses
-   * shrug it off, and a coffin has nobody inside to charm.
+   * The model's disc hits m: a kiss, and for its next KISS_TURNS moves it goes for the nearest other enemy instead of the
+   * heroes; a kiss on one already kissed starts the count afresh. Bosses shrug it off, and a coffin has nobody inside to charm.
    */
   private kiss(m: Mob, h: HeroState) {
     if (m.hp <= 0) return;
     if (MOBS[m.k].boss || MOBS[m.k].prop) { this.float(m.x, m.y - 14, 'не берёт', '#ff9ab8'); return; }
-    if (m.kiss === undefined) { this.float(m.x, m.y - 14, 'чмок!', '#ff5a8a'); this.burst(m.x, m.y, '#ff7ab0', 10); this.sfx('kiss'); }
+    // a second disc of the same turn adds nothing; one kissed last turn is kissed anew
+    if (m.kiss === undefined || m.kissLeft !== KISS_TURNS) { this.float(m.x, m.y - 14, 'чмок!', '#ff5a8a'); this.burst(m.x, m.y, '#ff7ab0', 10); this.sfx('kiss'); }
     m.kiss = h.i;
+    m.kissLeft = KISS_TURNS;
     this.retune(m);
   }
 
@@ -1362,6 +1364,8 @@ export class Game {
     this.liveMobs().forEach((m, i) => {
       const d = MOBS[m.k];
       if (m.k === 'coffin') { m.intent = this.rising(m); return; }
+      // still kissed from a turn before, it goes for another enemy again
+      if (m.kiss !== undefined) { m.intent = this.charm(m); return; }
       for (const a of d.acts ?? []) {
         if (S.turn % a.every !== a.at) continue;
         const it = this.special(m, a, hs, taken);
@@ -2570,8 +2574,14 @@ export class Game {
     S.discs = [];
     S.done = [];
     this.passing = -1;
-    // the frost wears off after one enemy turn, a cloud of gas thins out turn by turn, a firecracker nobody came to fizzles out
-    for (const m of S.mobs) { delete m.frost; delete m.kiss; }
+    // the frost wears off after one enemy turn, a kiss after its turns, a cloud of gas thins out turn by turn, a firecracker
+    // nobody came to fizzles out
+    for (const m of S.mobs) {
+      delete m.frost;
+      if (m.kiss !== undefined && (m.kissLeft = (m.kissLeft ?? 1) - 1) > 0) continue;
+      delete m.kiss;
+      delete m.kissLeft;
+    }
     // the cuffs hold for their turns, the cop cuffs anew next turn
     if (S.cuffs && --S.cuffs.left <= 0) S.cuffs = null;
     S.gas = S.gas.filter(g => --g.left > 0);

@@ -98,6 +98,11 @@ export const SHOVE_DMG = 2;
  * turns. Whatever one of them loses the other loses too, through armour; one falls, the cuffs drop.
  */
 export const CUFF_TURNS = 3;
+/**
+ * The model's «Воздушный поцелуй»: an enemy her disc kisses goes for the nearest other enemy instead of the heroes for
+ * KISS_TURNS enemy turns, the one right after the kiss among them. Another kiss starts the count afresh.
+ */
+export const KISS_TURNS = 2;
 /** Online, at most this many players sit at one table: rooms are built for one to three heroes. */
 export const MAX_PLAYERS = 3;
 /**
@@ -463,8 +468,8 @@ export const HEROES: HeroDef[] = [
   },
   {
     key: 'model', name: 'Вешалка', acc: 'Вешалку', dat: 'Вешалке', fem: true, col: '#b5469f', dk: '#5a1f4e', skin: '#c99272', hp: 18, r: 4, m: 1.5, e: 0.9, fr: 0.8, pw: 1.2,
-    ab: 'Воздушный поцелуй', abTxt: 'До конца хода её диск оставляет поцелуй: в свой ход враг бьёт ближайшего другого врага, а не героев.', abCol: '#ff5a8a',
-    abMore: 'Поцелованный враг бьёт своей атакой в полную силу, броня другого врага считается. Стрелок стреляет, если видит цель, а не дотянулся за ход, просто идёт к ней. Других врагов нет: стоит, вздыхает и героев не бьёт. Поцелуй держится до конца ближайшего хода врагов. На боссов не действует.',
+    ab: 'Воздушный поцелуй', abTxt: `До конца хода её диск оставляет поцелуй: ${KISS_TURNS} хода враг бьёт ближайшего другого врага, а не героев.`, abCol: '#ff5a8a',
+    abMore: 'Поцелованный враг бьёт своей атакой в полную силу, броня другого врага считается. Стрелок стреляет, если видит цель, а не дотянулся за ход, просто идёт к ней. Других врагов нет: стоит, вздыхает и героев не бьёт. Новый поцелуй начинает отсчёт заново. На боссов не действует.',
   },
 ];
 

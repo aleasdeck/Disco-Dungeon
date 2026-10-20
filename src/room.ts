@@ -152,8 +152,10 @@ export interface Mob {
   knock?: Knock;
   /** Hits of the ice genius's frosted disc this turn: one slows it on its next move, two make it skip the move. */
   frost?: number;
-  /** The model's kiss, by the hero who blew it: on its next move it goes for the nearest other enemy instead of the heroes. */
+  /** The model's kiss, by the hero who blew it: on its moves it goes for the nearest other enemy instead of the heroes. */
   kiss?: number;
+  /** The enemy turns the kiss still holds, the coming one among them. */
+  kissLeft?: number;
   /** The bouncer has just thrown it a cell on: where it stood, and how far along the slide is, 0 to 1. */
   slid?: { x: number; y: number; t: number };
   /** Thrown over a hole by the bouncer: it dropped in and is out of the fight; counts up as it sinks out of sight. */
