@@ -269,6 +269,8 @@ export const COFFIN_REACH = 5 * TILE;
 export const HONE_REACH = 2 * TILE + 4;
 /** The door shield covers this much on each side of the way its holder faces (cosine of the half angle: ±45°). */
 export const SHIELD_COS = 0.7;
+/** A disc into the door still wounds its holder by this share of the blow (rounded up, a point at the least). */
+export const DOOR_MUL = 0.5;
 /** The hammer's blow on its square hits this much harder than a plain strike. */
 export const SMASH_MUL = 1.5;
 
@@ -1418,7 +1420,7 @@ export class Game {
     return this.cut(m, Math.ceil(m.dmg * SMASH_MUL) + this.honed(m) + this.rage());
   }
 
-  /** The door its holder faces its hero with covers the point (x, y): a disc hitting there does no damage. */
+  /** The door its holder faces its hero with covers the point (x, y): a disc hitting there deals only half. */
   shielded(m: Mob, x: number, y: number) {
     if (!MOBS[m.k].shield) return false;
     const it = m.intent, h = it && it.hero >= 0 ? this.heroOf(it.hero) : null, p = (h && this.spot(h)) ?? { x: this.S.Wx, y: this.S.Wy };
@@ -2012,9 +2014,9 @@ export class Game {
         t.rico = Math.max(t.rico, d.bounces);
         // the ability goes first: fire on an enemy this very hit kills leaps on to the next one
         if (d.ab) this.abilityHit(d, m);
-        // the guard's door takes a disc from the front: it bounces off and wounds nobody
-        if (this.shielded(m, d.x, d.y)) { this.float(m.x, m.y - 14, 'дверь!', '#c7cbe0'); this.sfx('armor'); }
-        else this.hurtMob(m, dmg, '#fff', has(h, 'opener'), Math.min(1, vn / 250), h);
+        // the guard's door takes a disc from the front: the blow comes through it at half, «ТОЧНО!» and the rest counted first
+        if (this.shielded(m, d.x, d.y)) { dmg = Math.max(1, Math.ceil(dmg * DOOR_MUL)); this.float(m.x, m.y - 14, 'дверь!', '#c7cbe0'); this.sfx('armor'); }
+        this.hurtMob(m, dmg, '#fff', has(h, 'opener'), Math.min(1, vn / 250), h);
         if (d.ab && h.def.key === 'electra') this.zap(m, h);
         if (d.ab && h.def.key === 'genius') this.freeze(m);
         if (d.ab && h.def.key === 'bouncer') this.shove(d, m);
