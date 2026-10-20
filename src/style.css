@@ -854,7 +854,8 @@ i.ico { display: inline-block; font-style: normal; }
 .art-btn_main .btn.big { background: var(--ui-btn_main) center / 100% 100% no-repeat; border: 0; border-radius: 0; box-shadow: none; color: #1c120a; padding: 12px 28px; }
 .art-btn_main .tab.on { background: var(--ui-btn_main) center / 100% 100% no-repeat; color: #1c120a; }
 /* the small buttons on a window's board («Назад», «Закрыть», «Скопировать ссылку», the tabs not picked) on the dark
-   one's slab printed light, with the words in ink, so they stand out of the dark board (Vladislav: they melted into it) */
+   one's slab printed in light kraft, with the words in ink, so they stand out of the dark board (Vladislav: they melted
+   into it; of paper, kraft and teal he picked kraft) */
 .art-btn_sub .panel .btn:not(.round, .big, .tab.on) { background: var(--ui-btn_sub) center / 100% 100% no-repeat; color: #2a1a0d; }
 .art-btn_sub .panel .btn:not(.round, .big, .tab.on):hover { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)) brightness(1.07); }
 

@@ -26,7 +26,8 @@ MUSTARD = (190, 152, 66)
 # white paper, so the choices stand out of the dark board (Vladislav: dark slabs melted into it; of kraft, paper and
 # mustard he picked paper)
 PALE = (240, 229, 204)
-SUB = PALE
+# the windows' small buttons on light kraft (Vladislav picked it over paper and teal: the dark ones melted into the board)
+SUB = (222, 190, 140)
 
 
 def lighter(col, n):
@@ -73,7 +74,7 @@ W, H = 768, 244
 plate('btn_dark', (W, H), [(70, 22), (740, 14), (756, 120), (744, 228), (12, 232), (36, 120)], DARK, 64, small=True)
 
 # the small buttons in the windows («Назад», «Закрыть», «Скопировать ссылку», the tabs): the dark one's slab printed
-# light, so they stand out of the dark board (Vladislav: the dark ones melted into it)
+# light, so they stand out of the dark board
 plate('btn_sub', (W, H), [(70, 22), (740, 14), (756, 120), (744, 228), (12, 232), (36, 120)], SUB, 67, small=True)
 
 # the top strip's square tile
