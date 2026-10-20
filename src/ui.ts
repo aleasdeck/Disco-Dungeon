@@ -478,7 +478,7 @@ export class Hud {
     if (mate && mate.hp > 0) out.push({ k: 'cuffs', n: g.S.cuffs!.left, t: `В наручниках, в паре: ${MOBS[mate.k].name}. Урон по одному достаётся и другому, ещё ${turns(g.S.cuffs!.left)}` });
     if (isRanged(m.k)) out.push({ k: 'bow', t: 'Дальний бой: стреляет только в того, кого видит' });
     if (m.armor) out.push({ k: 'armor', n: m.armor, t: `Броня ${m.armor}` });
-    if (MOBS[m.k].shield) out.push({ k: 'shield', t: 'Дверь вместо щита: диск спереди не ранит, бей сбоку или рикошетом' });
+    if (MOBS[m.k].shield) out.push({ k: 'shield', t: 'Дверь вместо щита: диск спереди ранит вполовину, бей сбоку или рикошетом' });
     const honed = g.honed(m);
     if (honed) out.push({ k: 'hit', n: honed, t: `Наточен: точильщик рядом, бьёт на ${honed} сильнее` });
     if (!g.solid(m)) out.push({ k: 'ghost', t: 'Бесплотен в этот ход: диски пролетают насквозь' });

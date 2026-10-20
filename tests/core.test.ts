@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, CUFF_TURNS, FOOD_HEAL, FOOD_PER_DISC, CLEAN_ORE, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, KINDS, RAGE_FROM, SHOVE_DMG, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
-import { ART, FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
+import { ART, DOOR_MUL, FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { CASTS, CAVE, MOB_CAP, mobPool, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob, type ResNode } from '../src/room';
 import { ELITES, FIGHTS, FLOORS, FORGE_ROWS, LAYERS, REST_ROW, agreed, floorOk, genFloor, isFight, newRun, routes } from '../src/run';
@@ -3710,6 +3710,23 @@ describe('enemies by map row, the new enemies and the elite\'s reward', () => {
     expect(g.shielded(m, m.x - (fx / L) * 10, m.y - (fy / L) * 10)).toBe(false);
     expect(g.shielded(m, m.x - (fy / L) * 10, m.y + (fx / L) * 10)).toBe(false);
     expect(g.shielded(newMob('skel', m.x, m.y), m.x + fx / L, m.y + fy / L)).toBe(false);
+  });
+
+  it('a disc into the guard\'s door still wounds it, by half the blow rounded up, «ТОЧНО!» counted first', () => {
+    const blow = (side: number) => {
+      const g = room(0, [['guard', 4, 6]]), [m] = g.S.mobs, p = g.spot(g.heroOf(m.intent!.hero))!;
+      const L = Math.hypot(p.x - m.x, p.y - m.y), fx = (side * (p.x - m.x)) / L, fy = (side * (p.y - m.y)) / L, at = m.r + 5.5;
+      m.hp = m.max = 99;
+      g.S.discs = [{ hero: g.party[0], x: m.x + fx * at, y: m.y + fy * at, vx: -fx * 200, vy: -fy * 200, r: 5, m: 4, e: 0.6, fr: 1, fall: 0, gone: false, charged: false, bounces: 0, spin: 0, hits: 0, ab: false, rico: 0 }];
+      g.step(1 / 60);
+      return { dmg: 99 - m.hp, door: g.S.floats.some(f => f.txt === 'дверь!'), sure: g.S.floats.some(f => f.txt === 'ТОЧНО!') };
+    };
+    const front = blow(1), back = blow(-1);
+    expect(back.door).toBe(false);
+    expect(front.door).toBe(true);
+    expect(front.sure && back.sure).toBe(true);
+    expect(back.dmg).toBeGreaterThan(2);
+    expect(front.dmg).toBe(Math.max(1, Math.ceil(back.dmg * DOOR_MUL)));
   });
 
   it('the headsman goes after the most hurt hero and strikes twice as hard every third turn', () => {

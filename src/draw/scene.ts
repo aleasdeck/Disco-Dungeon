@@ -17,6 +17,16 @@ export interface Aim { hero: HeroState; dx: number; dy: number }
 export interface Carry { hero: HeroState; x: number; y: number; pad: number | null; moved: boolean }
 
 
+/**
+ * The guard's door round its stand: how far out from the stand's edge it runs, how high it is, how many boards it is made
+ * of and their colours in turn, and the heights of its two iron bands.
+ */
+const DOOR_OFF = 3;
+const DOOR_H = 4.5;
+const DOOR_BOARDS = 5;
+const DOOR_WOOD = ['#9c6840', '#8a5934', '#a06c42'];
+const DOOR_BANDS: [number, number][] = [[DOOR_H * 0.17, DOOR_H * 0.32], [DOOR_H * 0.66, DOOR_H * 0.81]];
+
 const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** Room art from the manifest; anything missing is drawn by code in the same cartoon look. */
@@ -2024,6 +2034,9 @@ export class SceneRenderer {
       c.strokeStyle = '#ffd864'; c.lineWidth = 2.2; c.stroke();
       c.strokeStyle = 'rgba(255,216,100,.35)'; c.lineWidth = 5; c.stroke();
     }
+    // the guard's door turned away from the viewer stands behind the figure, turned to it in front
+    const door = !!MOBS[m.k].shield && m.hp > 0, lift = y - y0 - m.hop;
+    if (door) this.drawDoor(at, m.r, tgt, lift, alpha, false);
     drawMiniature(c, {
       key: m.k, x, y, baseR: m.r, baseCol: ENEMY_BASE, fig: MOBS[m.k].fig,
       faceRight: this.faceRight(m.x, m.y, tgt.x, tgt.y), flash: m.flash > 0, hop: m.hop,
@@ -2034,7 +2047,7 @@ export class SceneRenderer {
       placeholder: (cc, fx, fy, fl) => drawMobFigure(cc, m.k, fx, fy, fl),
     });
     if (m.hp <= 0) return;
-    if (MOBS[m.k].shield) this.drawDoor(m, tgt);
+    if (door) this.drawDoor(at, m.r, tgt, lift, alpha, true);
     if (m.frost) this.drawFrost(m, x, y - m.hop);
     const top = y - m.hop - BASE_TH - MOB_TOP[m.k];
     if (m.kiss !== undefined) this.drawKiss(x, top);
@@ -2116,18 +2129,90 @@ export class SceneRenderer {
     circ(c, x, y, 1.1); c.fillStyle = INK; c.fill();
   }
 
-  /** The guard's door on its stand: a thick arc on the side it faces its hero, where a disc does no damage. */
-  private drawDoor(m: Mob, to: { x: number; y: number }) {
-    const { c, P } = this;
-    const a = Math.atan2(to.y - m.y, to.x - m.x), half = Math.acos(SHIELD_COS), R = m.r + 3, pts: [number, number][] = [];
-    for (let k = 0; k <= 8; k++) {
-      const b = a - half + (2 * half * k) / 8;
-      pts.push(P(m.x + Math.cos(b) * R, m.y + Math.sin(b) * R));
+  /**
+   * The guard's door: a low curved door of planks bound with iron round its stand, on the side it faces `to` (±45°), where
+   * a disc deals only half. It is cut in thin upright strips drawn far to near; `near` draws the strips nearer the viewer
+   * than the figure, after it, else the ones behind it.
+   */
+  private drawDoor(at: { x: number; y: number }, r: number, to: { x: number; y: number }, lift: number, alpha: number, near: boolean) {
+    const { c, P, cam } = this, a = Math.atan2(to.y - at.y, to.x - at.x), half = Math.acos(SHIELD_COS);
+    const R = r + DOOR_OFF, T = 2, H = DOOR_H, N = DOOR_BOARDS * 3, ro = R + T / 2, ri = R - T / 2, mid = cam.depth(at.x, at.y), cx = P(at.x, at.y)[0], e = 0.004;
+    const pt = (b: number, rad: number, h: number): Pt => {
+      const q = P(at.x + Math.cos(b) * rad, at.y + Math.sin(b) * rad, h);
+      return [q[0], q[1] + lift];
+    };
+    const quad = (b0: number, b1: number, r0: number, r1: number, h0: number, h1: number) => pth(c, [pt(b0, r0, h0), pt(b1, r1, h0), pt(b1, r1, h1), pt(b0, r0, h1)]);
+    const line = (p: Pt, q: Pt) => { c.moveTo(...p); c.lineTo(...q); };
+    const strips = [], hidden: number[] = [];
+    for (let k = 0; k < N; k++) {
+      const b0 = a - half + (2 * half * k) / N, b1 = a - half + (2 * half * (k + 1)) / N, bm = (b0 + b1) / 2;
+      const d = cam.depth(at.x + Math.cos(bm) * R, at.y + Math.sin(bm) * R);
+      if (d > mid === near) strips.push({ k, b0, b1, bm, d });
+      // behind the figure, unless it sticks out to the side of it
+      else if (near && Math.abs(pt(bm, R, H)[0] - cx) < r * 1.1) hidden.push(k);
     }
-    c.beginPath(); pts.forEach(([x, y], k) => (k ? c.lineTo(x, y - m.hop) : c.moveTo(x, y - m.hop)));
+    c.save();
+    c.globalAlpha *= alpha;
+    c.lineJoin = 'round';
     c.lineCap = 'round';
-    c.strokeStyle = INK; c.lineWidth = 5; c.stroke();
-    c.strokeStyle = '#8a6a4a'; c.lineWidth = 2.6; c.stroke();
+    // the part behind the figure shows through it as a dashed outline of its top, so the player sees where the door is
+    if (hidden.length) {
+      c.beginPath();
+      for (const k of hidden) {
+        const b0 = a - half + (2 * half * k) / N, b1 = a - half + (2 * half * (k + 1)) / N;
+        line(pt(b0, ro, H), pt(b1, ro, H));
+        line(pt(b0, ri, H), pt(b1, ri, H));
+      }
+      c.setLineDash([1.6, 1.3]);
+      c.strokeStyle = 'rgba(255,232,190,.75)';
+      c.lineWidth = 0.9;
+      c.stroke();
+      c.setLineDash([]);
+    }
+    strips.sort((p, q) => p.d - q.d);
+    for (const { k, b0, b1, bm } of strips) {
+      // the outside of the door where it is turned to the viewer, the inside where it curves away
+      const nx = Math.cos(bm), ny = Math.sin(bm), out = cam.facing(nx, ny) > 0, rad = out ? ro : ri, board = Math.floor(k / 3);
+      const wood = DOOR_WOOD[board % DOOR_WOOD.length], lit = 0.5 - 0.5 * cam.sideways(out ? nx : -nx, out ? ny : -ny);
+      quad(b0 - e, b1 + e, rad, rad, 0, H);
+      c.fillStyle = out ? mix(wood, '#2a160a', 0.35 * (1 - lit)) : mix(wood, '#1a0d06', 0.5);
+      c.fill();
+      for (const [h0, h1] of DOOR_BANDS) {
+        quad(b0 - e, b1 + e, rad, rad, h0, h1);
+        c.fillStyle = out ? mix('#4a4a50', '#1c1c20', 0.5 * (1 - lit)) : '#232327';
+        c.fill();
+      }
+      c.beginPath();
+      // the seam where one board meets the next, and a rivet on each band of the second board and the second to last
+      if (k % 3 === 0 && k) { line(pt(b0, rad, 0), pt(b0, rad, H)); c.strokeStyle = '#3a2010'; c.lineWidth = 0.5; c.stroke(); }
+      if (out && k % 3 === 1) {
+        c.fillStyle = '#b4b4ba';
+        if (board === 1 || board === DOOR_BOARDS - 2) for (const [h0, h1] of DOOR_BANDS) { circ(c, ...pt(bm, rad + 0.2, (h0 + h1) / 2), 0.5); c.fill(); }
+        // the note with a lipstick kiss, stuck on the middle board between the bands
+        if (board === 2) {
+          quad(bm - 0.09, bm + 0.09, rad + 0.1, rad + 0.1, H * 0.36, H * 0.62);
+          c.fillStyle = '#efe6cf'; c.fill();
+          circ(c, ...pt(bm + 0.04, rad + 0.15, H * 0.43), 0.5); c.fillStyle = '#d8323f'; c.fill();
+        }
+      }
+      // the top of the planks
+      pth(c, [pt(b0 - e, ri, H), pt(b1 + e, ri, H), pt(b1 + e, ro, H), pt(b0 - e, ro, H)]);
+      c.fillStyle = mix(wood, '#ffe2c0', 0.25);
+      c.fill();
+      // the cut end of the door, at either side
+      const end = k === 0 ? b0 : k === N - 1 ? b1 : null;
+      if (end !== null) { quad(end, end, ri, ro, 0, H); c.fillStyle = mix(wood, '#2a160a', 0.3); c.fill(); }
+      // the outline: the top edges, the foot of the side in sight, and the end
+      c.beginPath();
+      line(pt(b0, ro, H), pt(b1, ro, H));
+      line(pt(b0, ri, H), pt(b1, ri, H));
+      line(pt(b0, rad, 0), pt(b1, rad, 0));
+      if (end !== null) { line(pt(end, ri, 0), pt(end, ri, H)); line(pt(end, ro, 0), pt(end, ro, H)); line(pt(end, ri, 0), pt(end, ro, 0)); }
+      c.strokeStyle = INK;
+      c.lineWidth = 0.7;
+      c.stroke();
+    }
+    c.restore();
   }
 
   /**

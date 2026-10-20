@@ -274,7 +274,7 @@ export interface MobDef {
   rage?: boolean;
   /** Spends odd turns lighting a bomb and throws it for double damage on even turns. */
   charge?: boolean;
-  /** Holds a door for a shield: a disc that hits it from the front (the side it faces its hero) does no damage. */
+  /** Holds a door for a shield: a disc that hits it from the front (the side it faces its hero) deals only half. */
   shield?: boolean;
   /** Goes after the hero with the least health, not the nearest one. */
   hunts?: boolean;
@@ -306,7 +306,7 @@ export const MOBS: Record<MobKind, MobDef> = {
     acts: [{ k: 'summon', every: 2, at: 0, n: 1, kind: 'skel', cap: 3 }],
     txt: 'Каждый второй ход поднимает скелета из светящегося круга. Круг видно заранее: убей некроманта, пока не поздно.',
   },
-  guard: { name: 'Вертухай', floor: 0, hp: 9, r: 8, speed: 28, reach: 30, dmg: 3, fig: 33, shield: true, txt: 'Держит тюремную дверь как щит. Диск, прилетевший в дверь спереди, отскакивает без урона: бей сбоку, со спины или рикошетом от стены.', acc: 'Вертухая' },
+  guard: { name: 'Вертухай', floor: 0, hp: 9, r: 8, speed: 28, reach: 30, dmg: 3, fig: 33, shield: true, txt: 'Держит тюремную дверь как щит. Диск, прилетевший в дверь спереди, ранит вполовину: бей сбоку, со спины или рикошетом от стены.', acc: 'Вертухая' },
   headsman: {
     name: 'Палач', acc: 'Палача', floor: 0, hp: 24, r: 9, speed: 24, reach: 34, dmg: 5, armor: 1, fig: 40, hunts: true,
     acts: [{ k: 'execute', every: 3, at: 0 }],
