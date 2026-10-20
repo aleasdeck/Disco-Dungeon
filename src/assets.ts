@@ -14,6 +14,9 @@ export interface Sprite {
 
 interface ManifestEntry { file: string; facing?: 'left' | 'right' }
 
+/** Figures with a second picture for a moment of theirs: the fridge with its door open (`fridge_open`) stands as tall as the fridge. */
+const figOf = (key: string) => MOBS[key.replace(/_open$/, '') as MobKind]?.fig;
+
 export const sprites = new Map<string, Sprite>();
 /** Room art by key: floor slabs, brickwork, torches, pillars, resources, disc tops (keys in the README). */
 export const envArt = new Map<string, HTMLImageElement>();
@@ -78,7 +81,7 @@ export async function loadAll(onProgress: (part: number) => void): Promise<void>
   await Promise.all([
     ...Object.entries(figures).map(([key, e]) => load(e.file, img => {
       const hero = HEROES.find(h => h.key === key), facing = e.facing ?? 'right';
-      const fig = MOBS[key as MobKind]?.fig ?? (hero ? heroFig(hero) : HERO_FIG), tint = hero?.col ?? ENEMY_BASE;
+      const fig = figOf(key) ?? (hero ? heroFig(hero) : HERO_FIG), tint = hero?.col ?? ENEMY_BASE;
       sprites.set(key, { img, facing, standee: makeStandee(img, facing, fig / HERO_FIG, tint) });
     })),
     ...Object.entries(env).map(([key, file]) => load(file, img => envArt.set(key, img))),

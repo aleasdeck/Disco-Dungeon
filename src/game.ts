@@ -1,12 +1,12 @@
 // Combat rules: turn flow, disc physics, damage, abilities.
 // Rendering and input live elsewhere; this module only changes state.
 
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CLEAN_ORE, CRIT, CRIT_COS, CUFF_TURNS, E_MAX, ELITE_UPS, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, KISS_TURNS, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, RAGE_FROM, RAGE_FROM_BOSS, SHOVE_DMG, TILE, UPS, UP_COST, ZAP, ZAP_REACH, frostVuln, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CLEAN_ORE, CRIT, CRIT_COS, CUFF_TURNS, E_MAX, ELITE_UPS, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, KISS_TURNS, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, RAGE_FROM, RAGE_FROM_BOSS, SHOVE_DMG, TILE, UPS, UP_COST, ZAP, ZAP_REACH, frostVuln, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type MobKind, type StatKey } from './data';
 import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { mulberry32 } from './rng';
 import { has, type ArtKey, type Kept } from './artifacts';
 import type { Sfx } from './audio/sfx';
-import { CASTS, caveTurns, cellAt, cellCentre, generate, hazKey, inPit, isFloor, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
+import { CASTS, caveTurns, cellAt, cellCentre, generate, hazKey, inPit, isFloor, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec, type Zone } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
 
@@ -33,8 +33,10 @@ export interface HeroState {
   chill: number;
   /** Turns left without the aiming line, from a banshee's scream (`dazeHero`). */
   daze: number;
-  /** Burning: takes 2 damage at the start of the next enemy turn. */
+  /** Burning: takes 2 damage at the start of each enemy turn while this lasts. */
   fire: number;
+  /** Turns left frozen to its cell by the fridge's freezer: it throws, but doesn't go over to its discs. */
+  pin?: number;
   /** The ability is on for the rest of this turn: the discs thrown now shield, set on fire or keep their speed. */
   boost: boolean;
   /** Sparks for the ability, 0 to AB_COST: a spark crystal fills every hero's at once, each spends its own, and they last the whole run. */
@@ -260,8 +262,40 @@ export type Cue = [n: number, ev: Sfx, p: number, h?: number];
 const LOG_MAX = 40;
 
 /** What the HUD calls a mob's special move. */
-const SPECIAL = { summon: 'призыв', heal: 'лечение', heat: 'жар', charge: 'фитиль', execute: 'казнь', scream: 'визг', smash: 'удар молотом', rise: 'подъём' };
-const specialName = (k: keyof typeof SPECIAL | 'slam', chill?: boolean) => (k === 'slam' ? (chill ? 'метель' : 'удар по всем') : SPECIAL[k]);
+const SPECIAL = {
+  summon: 'призыв', heal: 'лечение', heat: 'жар', charge: 'фитиль', execute: 'казнь', scream: 'визг', smash: 'удар молотом', rise: 'подъём',
+  dive: 'в нору', emerge: 'из норы', brew: 'подогрев', cone: 'морозилка', dance: 'танцпол', lights: 'светомузыка', roll: 'каток', belch: 'отрыжка',
+  toss: 'закусь', hatch: 'вылупление',
+};
+/** What the HUD calls a floor boss's marked cells, by what they do. */
+const ZONE_NAME: Record<Zone, string> = { cold: 'морозилка', dance: 'танцпол', beam: 'светомузыка', roll: 'каток', fire: 'отрыжка' };
+const specialName = (k: keyof typeof SPECIAL | 'slam' | 'zone', chill?: boolean, z?: Zone) =>
+  k === 'slam' ? (chill ? 'метель' : 'удар по всем') : k === 'zone' ? ZONE_NAME[z ?? 'cold'] : SPECIAL[k];
+/** The cry over a floor boss as its marked cells go off, and the colour of the cells. */
+export const ZONE_CRY: Record<Zone, string> = { cold: 'МОРОЗИЛКА!', dance: 'БИТ!', beam: 'СВЕТОМУЗЫКА!', roll: 'КАТИТСЯ!', fire: 'ОТРЫЖКА!' };
+export const ZONE_COL: Record<Zone | 'bite', string> = { bite: '#ff3a2a', cold: '#7fd8ff', dance: '#ff5ad1', beam: '#ffe27a', roll: '#ff9a3a', fire: '#ff6a1a' };
+/** The cry over a floor boss as it turns into its next phase. */
+const PHASE_CRY: Partial<Record<MobKind, string>> = { ratswarm2: 'свора редеет!', ratswarm3: 'разбегаются!', pahan2: 'БЕСПРЕДЕЛ!', discoball2: 'сорвался!', dragon2: 'слез с яиц!' };
+/** How the journal tells a shooter's shot when it isn't an arrow: Пахан's shiv, the dancer's record, the disco ball's beam. */
+const SHOT: Partial<Record<MobKind, string>> = { pahan: 'метнул заточку в', dancer: 'запустил пластинкой в', discoball: 'ударил лучом в', discoball2: 'ударил лучом в' };
+
+/**
+ * The fridge's snacks («Закусь»), by `Intent.item`: what it throws, the share of its blow each deals, and what else it does:
+ * the frozen chicken chills, the boxers land on the hero's head and hide the aiming line.
+ */
+export const FOOD_TOSS: { name: string; acc: string; k: number; chill?: boolean; daze?: boolean }[] = [
+  { name: 'огурцы', acc: 'банку огурцов', k: 0.5 },
+  { name: 'курица', acc: 'мороженую курицу', k: 0.625, chill: true },
+  { name: 'семейники', acc: 'семейники в сердечки', k: 0, daze: true },
+];
+/** A disc into the hole where the rat swarm's eyes glow, or into the fridge's open door, hits this many times as hard. */
+export const WEAK_MUL = 2;
+/** The fridge's door is open to discs this far round from the way it faces (cosine: ±60°). */
+const FRIDGE_COS = 0.5;
+/** The dragon goes after whoever broke its egg this fast. */
+const MAD_SPEED = 32;
+/** The disco ball's shards lie this many cells round it at most. */
+const SHARD_REACH = 2;
 
 /** The coffin a beaten enemy is laid in gets up as that enemy after this many enemy turns, unless broken. */
 export const COFFIN_TURNS = 2;
@@ -418,6 +452,7 @@ export class Game {
         boost: false, sparks: Math.min(AB_COST, Math.max(h.sparks, full)), boomed: 0, lucky: false,
       });
       delete h.cuffing;
+      delete h.pin;
     }
     // an event's curse: the room's enemies come in angrier
     if (this.bank.rage) for (const m of L.mobs) m.dmg += this.bank.rage;
@@ -475,7 +510,8 @@ export class Game {
   }
 
   alive = () => this.S.heroes.filter(h => h.hp > 0);
-  liveMobs = () => this.S.mobs.filter(m => m.hp > 0);
+  /** The enemies still standing; Пахан's empty bunk is only cover, never one of them. */
+  liveMobs = () => this.S.mobs.filter(m => m.hp > 0 && !MOBS[m.k].fixed);
   /** The ore cave: no enemies, only veins and mushrooms, and a few turns to mine or heal. */
   cave = () => this.S.spec.type === 'treasure';
   /** Turns the room gives the party, 0 for no limit: a fight lasts as long as its enemies stand. */
@@ -685,10 +721,18 @@ export class Game {
     return ((270 * this.stat(h, 'pw')) / 60) * (h.chill > 0 ? 0.7 : 1);
   }
 
-  /** A ghost is bodiless on even turns: discs pass through it. */
+  /** A ghost is bodiless on even turns: discs pass through it. The rat swarm down a burrow is out of their reach too. */
   solid(m: Mob) {
     // a coffin still settling on the floor lets the disc that felled its enemy roll on
-    return m.hp > 0 && !(m.born > 0) && !(MOBS[m.k].ghost && this.S.turn % 2 === 0);
+    return m.hp > 0 && !(m.born > 0) && m.under === undefined && !MOBS[m.k].fixed && !(MOBS[m.k].ghost && this.S.turn % 2 === 0);
+  }
+
+  /** Пахан's empty bunk stands in the room like a 2 × 2 block: discs bounce off it, shots don't pass it. */
+  fixtures() {
+    return this.S.mobs.filter(m => m.hp > 0 && MOBS[m.k].fixed).map(m => {
+      const h = (mobSize(m.k) * TILE) / 2;
+      return { x0: m.x - h, y0: m.y - h, x1: m.x + h, y1: m.y + h };
+    });
   }
 
   /**
@@ -704,7 +748,7 @@ export class Game {
       hero: h, x: p.x + (dx / L) * 6, y: p.y + (dy / L) * 6, vx: dx * s, vy: dy * s, r: this.discR(h), e: this.stat(h, 'e'), fr: this.discFr(h), spin: 0,
       ab: h.boost, rico: h.boost && h.def.key === 'ricochet' ? AB_BOUNCES : 0, slick: has(h, 'lube') ? ART.slick : 0,
     } as Disc;
-    const boxes = standing(S.blocks).concat(S.rock), over = has(h, 'undies') || this.wild(d);
+    const boxes = [...standing(S.blocks), ...S.rock, ...this.fixtures()], over = has(h, 'undies') || this.wild(d);
     // a bounce that costs no speed spends one of the disc's sure bounces, as in play
     const keep = () => this.keep(d), spend = () => { if (d.rico > 0) d.rico--; else if (d.slick) d.slick--; };
     path.push([d.x, d.y]);
@@ -941,7 +985,7 @@ export class Game {
     if (S.phase !== 'enemy') return;
     for (const b of S.bombs.slice()) {
       if (b.t < FOOD_FLY) continue;
-      const m = this.liveMobs().filter(o => this.near(o, b)).sort((p, q) => Math.hypot(p.x - b.x, p.y - b.y) - Math.hypot(q.x - b.x, q.y - b.y))[0];
+      const m = this.liveMobs().filter(o => o.under === undefined && this.near(o, b)).sort((p, q) => Math.hypot(p.x - b.x, p.y - b.y) - Math.hypot(q.x - b.x, q.y - b.y))[0];
       if (m) this.blast(b, m);
     }
   }
@@ -954,7 +998,7 @@ export class Game {
    */
   private listen() {
     const S = this.S, bombs = S.bombs.filter(b => b.t >= FOOD_FLY);
-    const can = this.liveMobs().filter(m => m.speed > 0 && m.kiss === undefined && m.intent && (m.intent.t === 'hit' || m.intent.t === 'move' || m.intent.t === 'charge'));
+    const can = this.liveMobs().filter(m => m.speed > 0 && m.kiss === undefined && m.intent && !m.intent.flee && (m.intent.t === 'hit' || m.intent.t === 'move' || m.intent.t === 'charge'));
     const pairs: { b: Bomb; m: Mob; d: number }[] = [];
     for (const b of bombs) for (const m of can) pairs.push({ b, m, d: Math.hypot(b.x - m.x, b.y - m.y) });
     pairs.sort((p, q) => p.d - q.d);
@@ -1008,7 +1052,7 @@ export class Game {
 
   /** Whether an enemy stands in the gas: any of its cells in a cloud. */
   inGas(m: Mob) {
-    if (!this.S.gas.length) return false;
+    if (!this.S.gas.length || m.under !== undefined) return false;
     const sz = mobSize(m.k), [i, j] = cellAt(m.x, m.y, sz);
     for (let b = 0; b < sz; b++) for (let a = 0; a < sz; a++) if (this.gasAt(i + a, j + b)) return true;
     return false;
@@ -1067,8 +1111,12 @@ export class Game {
     // kissed, it goes for the nearest other enemy from where it stands now
     if (m.kiss !== undefined) { m.intent = this.charm(m); return; }
     if (it.t === 'slam') { it.dmg = this.slamDmg(m, it.chill); return; }
+    // a floor boss's marked cells stay where they are, its blow on them weakens in the gas
+    if ((it.t === 'zone' || it.t === 'emerge') && it.dmg) { it.dmg = it.z === 'roll' ? this.smashDmg(m) : this.zoneDmg(m); return; }
     // drawn by a firecracker, a frosted walker gets that much less far toward it
     if (it.bang) { m.intent = this.lureTo(m, it.bang) ?? it; return; }
+    const d = MOBS[m.k], hs = this.alive().filter(h => this.spot(h));
+    if ((it.t === 'hit' || it.t === 'move' || it.t === 'toss') && hs.length && m.mad === undefined && (d.toss || d.flees || d.moon)) { m.intent = this.basic(m, hs, 0); return; }
     if (it.t !== 'hit' && it.t !== 'move' && it.t !== 'charge') return;
     const h = this.heroOf(it.hero), p = this.spot(h);
     if (h.hp <= 0 || !p) return;
@@ -1110,8 +1158,8 @@ export class Game {
       this.slam(m, h);
       return;
     }
-    const o = this.liveMobs().find(q => {
-      if (q === m) return false;
+    const o = S.mobs.find(q => {
+      if (q === m || q.hp <= 0 || q.under !== undefined) return false;
       const qs = mobSize(q.k), [p, r] = cellAt(q.x, q.y, qs);
       return cells.some(c => c.x >= p && c.x < p + qs && c.y >= r && c.y < r + qs);
     });
@@ -1212,7 +1260,7 @@ export class Game {
    * nobody else left in the room it stands and sighs.
    */
   private charm(m: Mob): Intent {
-    const S = this.S, o = this.liveMobs().filter(q => q !== m).sort((p, q) => Math.hypot(p.x - m.x, p.y - m.y) - Math.hypot(q.x - m.x, q.y - m.y))[0];
+    const S = this.S, o = this.liveMobs().filter(q => q !== m && q.under === undefined).sort((p, q) => Math.hypot(p.x - m.x, p.y - m.y) - Math.hypot(q.x - m.x, q.y - m.y))[0];
     if (!o) return { t: 'move', hero: -1, dmg: 0, sigh: true };
     const foe = S.mobs.indexOf(o), far = isRanged(m.k);
     if (far && this.clearShot(m, o)) return { t: 'hit', hero: -1, dmg: this.blow(m), foe };
@@ -1308,7 +1356,9 @@ export class Game {
     let n = h.fire > 0 && S.phase !== 'enemy' ? 2 : 0;
     for (const m of this.liveMobs()) {
       const it = m.intent;
-      if (it && !this.acted(m) && !this.frozen(m) && ((it.t === 'hit' && it.hero === h.i) || it.t === 'slam' || (it.t === 'smash' && this.underHammer(h, it.spots!)))) n += it.dmg;
+      if (!it || this.acted(m) || this.frozen(m)) continue;
+      if (((it.t === 'hit' || it.t === 'toss') && it.hero === h.i) || it.t === 'slam') n += it.dmg;
+      else if ((it.t === 'smash' || it.t === 'zone' || it.t === 'emerge') && this.underHammer(h, it.spots!)) n += it.dmg;
     }
     return Math.max(0, n - h.shield);
   }
@@ -1330,9 +1380,11 @@ export class Game {
     if (m.hp <= 0 || S.phase === 'over') return null;
     // a coffin's only move is to get up
     if (m.k === 'coffin') return { name: SPECIAL.rise, turns: Math.max(0, (m.rise ?? COFFIN_TURNS) - 1) };
-    if (!d.acts && !d.charge) return null;
+    // an egg's only move is to hatch, on its turn
+    if (m.k === 'egg') return it?.eta ? { name: SPECIAL.hatch, turns: Math.max(0, it.eta - 1) } : null;
+    if (!d.acts && !d.charge && m.under === undefined) return null;
     // the move picked for this turn, unless it is made already or has come to nothing (the one to heal has fallen)
-    if (it && it.t !== 'hit' && it.t !== 'move' && !this.acted(m) && !this.idle(m) && !this.frozen(m)) return { name: specialName(it.t, it.chill), turns: 0 };
+    if (it && it.t !== 'hit' && it.t !== 'move' && it.t !== 'toss' && !this.acted(m) && !this.idle(m) && !this.frozen(m)) return { name: specialName(it.t, it.chill, it.z), turns: 0 };
     // the headsman's execution is a strike of its own: this turn's counts while it is still to land
     if (it && this.executes(m) && !this.acted(m) && !this.frozen(m)) return { name: SPECIAL.execute, turns: 0 };
     for (let k = 1; k <= 6; k++) {
@@ -1347,7 +1399,15 @@ export class Game {
   private able(m: Mob, a: MobAct) {
     if (a.k === 'summon') return this.risen(m, a) > 0;
     if (a.k === 'heal') return this.liveMobs().some(o => o !== m);
+    if (a.k === 'dive') return this.S.pits.length > 0;
+    if (a.k === 'brew') return this.sixes(m).length > 0;
     return true;
+  }
+
+  /** Пахан's шестёрки still standing. */
+  private sixes(m: Mob) {
+    const mi = this.S.mobs.indexOf(m);
+    return this.liveMobs().filter(o => o.k === 'six' && o.owner === mi);
   }
 
   /** How many mobs a summon raises now: fewer for a smaller party, never past the summoner's limit or a crowded room. */
@@ -1358,23 +1418,45 @@ export class Game {
   }
 
   pickIntents() {
-    const S = this.S, hs = this.alive().filter(h => this.spot(h));
+    const hs = this.alive().filter(h => this.spot(h));
     if (!hs.length) return;
     const taken: { x: number; y: number }[] = [];
-    this.liveMobs().forEach((m, i) => {
-      const d = MOBS[m.k];
-      if (m.k === 'coffin') { m.intent = this.rising(m); return; }
-      // still kissed from a turn before, it goes for another enemy again
-      if (m.kiss !== undefined) { m.intent = this.charm(m); return; }
-      for (const a of d.acts ?? []) {
-        if (S.turn % a.every !== a.at) continue;
-        const it = this.special(m, a, hs, taken);
-        if (it) { if (it.t === 'slam') it.dmg = this.slamDmg(m, it.chill); m.intent = it; return; }
-      }
-      if (isRanged(m.k)) { m.intent = this.shoot(m, hs, S.turn + i); return; }
-      m.intent = this.goAfter(m, hs);
-    });
+    this.liveMobs().forEach((m, i) => { m.intent = this.intentFor(m, hs, taken, i); });
     this.listen();
+  }
+
+  /**
+   * What a mob means to do this turn: a coffin gets up, a kissed one goes for another enemy, an egg hatches, the rat swarm comes up out of its burrow; else its
+   * special act on that act's turns (the dragon after whoever broke its egg has no time for one), else its usual move.
+   */
+  private intentFor(m: Mob, hs: HeroState[], taken: Pt[], i: number): Intent {
+    const S = this.S;
+    if (m.k === 'coffin') return this.rising(m);
+    // still kissed from a turn before, it goes for another enemy again
+    if (m.kiss !== undefined) return this.charm(m);
+    if (m.k === 'egg') return this.hatching(m);
+    if (m.under !== undefined) return this.emerging(m);
+    if (m.mad === undefined) for (const a of MOBS[m.k].acts ?? []) {
+      if (S.turn % a.every !== a.at) continue;
+      const it = this.special(m, a, hs, taken);
+      if (it) { if (it.t === 'slam') it.dmg = this.slamDmg(m, it.chill); return it; }
+    }
+    return this.basic(m, hs, S.turn + i);
+  }
+
+  /**
+   * A mob's move on a turn without a special act: the dragon goes after whoever broke its egg, the fridge bites or throws
+   * food, the swarm's last rats run, the dancer moonwalks off a hero right by it; a shooter fires (taking the heroes in
+   * turn by `k`), a walker goes after its hero.
+   */
+  private basic(m: Mob, hs: HeroState[], k: number): Intent {
+    const d = MOBS[m.k], mad = m.mad !== undefined ? hs.find(h => h.i === m.mad) : undefined;
+    if (mad) return this.chase(m, mad, this.route(m, this.spot(mad)!));
+    if (d.toss) return this.snack(m, hs);
+    if (d.flees) return this.runOff(m, hs);
+    if (d.moon && hs.some(h => this.beside(m, this.spot(h)!))) return this.backOff(m, hs, k);
+    if (isRanged(m.k)) return this.shoot(m, hs, k);
+    return this.goAfter(m, hs);
   }
 
   /**
@@ -1417,7 +1499,7 @@ export class Game {
    * twice as much, a grinder's edge and the rage of a long fight on top, and less from the gas.
    */
   private blow(m: Mob) {
-    const d = MOBS[m.k], twice = d.charge || this.executes(m);
+    const d = MOBS[m.k], twice = d.charge || this.executes(m) || m.mad !== undefined;
     return this.cut(m, (twice ? m.dmg * 2 : m.dmg) + this.honed(m) + this.rage());
   }
 
@@ -1471,6 +1553,8 @@ export class Game {
   private chase(m: Mob, h: HeroState, way: Pt[] | null): Intent {
     // walled off from the hero: it stays put
     if (!way) return { t: 'move', hero: h.i, dmg: 0 };
+    // one that never walks (the dragon on its eggs) strikes only a hero right by it
+    if (m.speed <= 0 && way.length > 1) return { t: 'move', hero: h.i, dmg: 0 };
     // a frosted walker covers fewer cells this turn only
     const p = this.spot(h)!, n = way.length - 1, go = wayLen(way.slice(0, this.stopAt(m, way) + 1)), now = this.steps(m);
     const eta = n <= now ? 1 : 1 + Math.ceil((n - now) / stepsOf(m));
@@ -1504,11 +1588,16 @@ export class Game {
    * a hero who has stepped out of its sight makes it walk to where it sees that hero again.
    */
   private rechase() {
+    const hs = this.alive().filter(h => this.spot(h));
     for (const m of this.liveMobs()) {
       if (m.kiss !== undefined) { m.intent = this.charm(m); continue; }
-      const it = m.intent;
+      const it = m.intent, d = MOBS[m.k];
       if (it?.t === 'slam') it.dmg = this.slamDmg(m, it.chill);
-      if (!it || it.bang || (it.t !== 'hit' && it.t !== 'move' && it.t !== 'charge')) continue;
+      // an egg's turn to hatch comes sooner once one before it is broken
+      if (m.k === 'egg') { m.intent = this.hatching(m); continue; }
+      if (!it || it.bang || (it.t !== 'hit' && it.t !== 'move' && it.t !== 'charge' && it.t !== 'toss')) continue;
+      // the fridge, the swarm's last rats and the dancer weigh things up afresh from where everybody stands now
+      if (hs.length && m.mad === undefined && (d.toss || d.flees || d.moon)) { m.intent = this.basic(m, hs, 0); continue; }
       const h = this.heroOf(it.hero), p = this.spot(h);
       if (h.hp <= 0 || !p) continue;
       if (isRanged(m.k)) m.intent = this.shoot(m, it.t === 'charge' ? this.alive().filter(o => this.spot(o)) : [h], 0);
@@ -1525,7 +1614,7 @@ export class Game {
    */
   clearShot(a: Pt, b: Pt) {
     const S = this.S, dx = b.x - a.x, dy = b.y - a.y, E = 0.01;
-    for (const o of S.rock.concat(standing(S.blocks))) {
+    for (const o of [...S.rock, ...standing(S.blocks), ...this.fixtures()]) {
       let t0 = 0, t1 = 1;
       for (const [p, d, lo, hi] of [[a.x, dx, o.x0 + E, o.x1 - E], [a.y, dy, o.y0 + E, o.y1 - E]]) {
         if (Math.abs(d) < 1e-9) { if (p <= lo || p >= hi) t1 = -1; continue; }
@@ -1557,6 +1646,15 @@ export class Game {
     // the execution is the strike itself, twice as hard (blow)
     if (a.k === 'execute') return null;
     if (a.k === 'scream') return { t: 'scream', hero: -1, dmg: 0 };
+    // the floor bosses': the hero they would go after is the one they aim at
+    const aim = () => this.heroOf(this.goAfter(m, hs).hero), at = (h: HeroState) => this.spot(h) ?? this.spot(hs[0])!;
+    if (a.k === 'dive') return this.able(m, a) ? { t: 'dive', hero: aim().i, dmg: 0 } : null;
+    if (a.k === 'brew') return this.able(m, a) ? { t: 'brew', hero: -1, dmg: 0 } : null;
+    if (a.k === 'cone') { const h = aim(); return { t: 'zone', z: 'cold', hero: h.i, dmg: 0, spots: this.cone(m, at(h)) }; }
+    if (a.k === 'belch') { const h = aim(); return { t: 'zone', z: 'fire', hero: h.i, dmg: 0, spots: this.fireLine(m, at(h)) }; }
+    if (a.k === 'dance') return { t: 'zone', z: 'dance', hero: -1, dmg: this.zoneDmg(m), spots: this.pattern(m) };
+    if (a.k === 'lights') return { t: 'zone', z: 'beam', hero: -1, dmg: this.zoneDmg(m), spots: this.beams(m) };
+    if (a.k === 'roll') return this.rollPlan(m, hs);
     if (a.k === 'smash') {
       // the square round the hero it would go after: it stays where it is marked, so a throw that lands outside dodges it
       const p = this.spot(this.heroOf(this.goAfter(m, hs).hero)) ?? this.spot(hs[0])!;
@@ -1712,7 +1810,7 @@ export class Game {
    * What it takes, the enemy cuffed to it takes too (`chain`).
    */
   hurtMob(m: Mob, n: number, col = '#fff', pierce = false, p = 0.6, by?: HeroState) {
-    if (m.hp <= 0) return;
+    if (m.hp <= 0 || MOBS[m.k].fixed) return;
     // a blow the cuffs pass on is as big as the one they took, frost or not
     if (by && m.frost && !this.linked) { n = Math.ceil(n * (1 + frostVuln(m.frost))); this.burst(m.x, m.y, '#cfefff', 6); }
     if (m.armor && !pierce && n < m.armor) { this.float(m.x, m.y, 'броня', '#c7cbe0'); this.sfx('armor'); return; }
@@ -1727,8 +1825,17 @@ export class Game {
       m.rage = true; m.dmg += up; this.float(m.x, m.y - 12, `ЯРОСТЬ +${up}`, '#ff7a3d'); this.burst(m.x, m.y, '#ff7a3d', 18);
     }
     this.sfx(m.hp <= 0 ? 'kill' : 'hit', p);
+    if (m.hp > 0) this.phase(m);
     if (m.hp <= 0) {
-      m.dead = 0.001; this.burst(m.x, m.y, '#ffd34d', 22); this.float(m.x, m.y - 6, 'повержен', '#ffd34d');
+      m.dead = 0.001; this.burst(m.x, m.y, '#ffd34d', 22); this.float(m.x, m.y - 6, m.k === 'egg' ? 'хрусь!' : 'повержен', '#ffd34d');
+      // Пахан's «общак» comes back to the party twice over
+      if (m.pot) {
+        const ore = m.pot * 2;
+        this.bank.ore += ore; this.mined += ore; m.pot = 0;
+        this.float(m.x, m.y + 8, `общак +${ore} руды`, '#ffb070');
+        this.note(`Общак ${MOBS[m.k].acc} вернулся отряду: +${ore} руды`);
+      }
+      if (m.k === 'egg' && by) this.enrage(by);
       if (m.burn > 0) this.spreadFire(m);
       if (by) this.killed(m, by);
       // one the bouncer threw down a hole is gone: nobody buries it, no lava spills where it fell
@@ -1807,6 +1914,505 @@ export class Game {
     if (dmg) { this.burst(p.x, p.y, '#ff4d6a', 10); S.shake = 0.2; }
     if (h.hp <= 0) { this.float(p.x, p.y - 6, 'пал', '#ff4d6a'); h.hand = 0; }
     return blk;
+  }
+
+  // ------------------------------------------------------------ floor bosses
+
+  /** A floor boss hurt down to the share of its health its next phase begins at turns into it (twice over, for a hard enough blow). */
+  private phase(m: Mob) {
+    for (let nx = MOBS[m.k].next; nx && m.hp > 0 && m.hp <= m.max * nx.at; nx = MOBS[m.k].next) this.become(m, nx.k);
+  }
+
+  /**
+   * A floor boss turns into its next phase `k`, keeping its health and whatever has added to its blows. The rat swarm sheds
+   * prison rats and shrinks onto a cell of the pile, Пахан gets up off his bunk (it stays behind as cover), the dragon's
+   * eggs all hatch at once. What it means to do this turn is worked out afresh.
+   */
+  private become(m: Mob, k: MobKind) {
+    const S = this.S, was = MOBS[m.k], d = MOBS[k], mi = S.mobs.indexOf(m), sz0 = mobSize(m.k), sz = mobSize(k);
+    const [i0, j0] = cellAt(m.x, m.y, sz0), scaled = (n: number) => Math.max(1, Math.round((n + S.dmgAdd) * S.dmgMul));
+    m.dmg += scaled(d.dmg) - scaled(was.dmg);
+    Object.assign(m, { k, name: d.name, r: d.r, speed: d.speed, reach: d.reach, armor: d.armor });
+    delete m.mad;
+    const foot = this.footprint(i0, j0, sz0), area = m.under !== undefined ? S.pits[m.under].cells.map(([x, y]) => ({ x, y })) : foot;
+    if (was.sheds) this.scatter(m, area, Math.max(1, Math.round(was.sheds * partyScale(S.spec).mobs)));
+    if (k === 'pahan2') {
+      const bunk = newMob('bunk', m.x, m.y);
+      bunk.owner = mi;
+      S.mobs.push(bunk);
+    }
+    if (m.under === undefined && (sz !== sz0 || k === 'pahan2')) {
+      // a smaller body stands on the cell of the old one nearest the heroes; Пахан steps off his bunk beside it
+      const cells = k === 'pahan2' ? this.around(foot, 1) : foot, taken = this.occupied(m, true), stands = this.standCells();
+      const ok = cells.filter(c => this.fits(c.x, c.y, sz, taken) && !this.onStand(c.x, c.y, sz, stands)).map(c => cellCentre(c.x, c.y, sz));
+      const at = this.nearestHero(ok) ?? cellCentre(i0, j0, sz);
+      m.x = m.fx = m.tx = at.x;
+      m.y = m.fy = m.ty = at.y;
+    }
+    m.walk = undefined;
+    m.hop = 0;
+    if (was.nest) for (const o of this.liveMobs()) if (o.k === 'egg' && o.owner === mi) this.hatch(o);
+    const cry = PHASE_CRY[k] ?? '!';
+    this.float(m.x, m.y - 16, cry, '#ff4d6a');
+    this.burst(m.x, m.y, '#ff4d6a', 18);
+    S.shake = Math.max(S.shake, 0.25);
+    this.sfx('slam');
+    this.note(`${d.name}: ${cry.toLowerCase()}`);
+    this.repick(m);
+  }
+
+  /** What a mob does this turn, worked out afresh after it has changed (a new phase, a broken egg); one that has made its move keeps it. */
+  private repick(m: Mob) {
+    const S = this.S, hs = this.alive().filter(h => this.spot(h));
+    if (m.hp <= 0 || !hs.length || S.phase === 'over' || this.acted(m)) return;
+    m.intent = this.intentFor(m, hs, [], S.mobs.indexOf(m));
+    if (S.phase === 'enemy' && S.mobs[S.actor] === m) this.planWalk(m);
+  }
+
+  /** The cells of an s × s footprint with its top-left cell at (i, j). */
+  private footprint(i: number, j: number, s: number): Pt[] {
+    const out: Pt[] = [];
+    for (let b = 0; b < s; b++) for (let a = 0; a < s; a++) out.push({ x: i + a, y: j + b });
+    return out;
+  }
+
+  /** The cells exactly r steps away (kingwise) from a group of cells. */
+  private around(cells: Pt[], r: number): Pt[] {
+    const xs = cells.map(c => c.x), ys = cells.map(c => c.y), out: Pt[] = [];
+    const dist = (x: number, y: number) => Math.min(...cells.map(c => Math.max(Math.abs(c.x - x), Math.abs(c.y - y))));
+    for (let y = Math.min(...ys) - r; y <= Math.max(...ys) + r; y++) for (let x = Math.min(...xs) - r; x <= Math.max(...xs) + r; x++) if (dist(x, y) === r) out.push({ x, y });
+    return out;
+  }
+
+  /** Of the points, the one nearest a hero standing in the room (the first when nobody stands); null for none. */
+  private nearestHero(pts: Pt[]): Pt | null {
+    const hs = this.alive().map(h => this.spot(h)).filter((p): p is Pt => !!p);
+    let best = pts[0] ?? null, bd = Infinity;
+    for (const p of pts) {
+      const far = Math.min(...hs.map(q => Math.hypot(q.x - p.x, q.y - p.y)));
+      if (far < bd) { bd = far; best = p; }
+    }
+    return best;
+  }
+
+  /** Of the heroes, the one standing nearest the mob. */
+  private nearestOf(m: Mob, hs: HeroState[]) {
+    const far = (h: HeroState) => { const p = this.spot(h)!; return Math.hypot(p.x - m.x, p.y - m.y); };
+    return hs.reduce((a, b) => (far(b) < far(a) ? b : a));
+  }
+
+  /** The rat swarm thins out: n prison rats run off it onto free cells round `area`, as many as there is room for (nine enemies at most). */
+  private scatter(m: Mob, area: Pt[], n: number) {
+    const S = this.S, taken = this.occupied(null, true), stands = this.standCells();
+    n = Math.min(n, 9 - this.liveMobs().length);
+    for (const c of [...this.around(area, 1), ...this.around(area, 2)]) {
+      if (n <= 0) break;
+      if (!this.cellFree(c.x, c.y, taken) || stands.has(hazKey(c.x, c.y)) || S.haz.has(hazKey(c.x, c.y))) continue;
+      const p = cellCentre(c.x, c.y), o = newMob('rat', p.x, p.y, S.hpMul, S.dmgAdd, S.dmgMul);
+      o.owner = S.mobs.indexOf(m);
+      o.born = 1;
+      S.mobs.push(o);
+      taken[c.y * S.gw + c.x] = 1;
+      this.burst(p.x, p.y, '#b7a07a', 8);
+      n--;
+    }
+  }
+
+  /** A dragon's egg hatches: a fire imp gets up in its place, and goes from the next turn on. */
+  private hatch(o: Mob) {
+    const S = this.S, imp = newMob(o.hold ?? 'imp', o.x, o.y, S.hpMul, S.dmgAdd, S.dmgMul);
+    Object.assign(o, imp, { owner: o.owner, born: 1, intent: null, hold: undefined });
+    this.burst(o.x, o.y, '#ff7a3d', 14);
+    this.float(o.x, o.y - 12, 'вылупился!', '#ff7a3d');
+    this.note(`Из яйца ${did(MOBS[o.k], 'вылупился', 'вылупилась')} ${o.name.toLowerCase()}`);
+  }
+
+  /** An egg waits to hatch: one every third turn, in the order they lie in the room; `eta` counts the enemy turns this one has, this one too. */
+  private hatching(m: Mob): Intent {
+    const S = this.S, r = Math.max(0, this.liveMobs().filter(o => o.k === 'egg' && o.owner === m.owner).indexOf(m));
+    return { t: 'rise', hero: -1, dmg: 0, eta: (3 - (S.turn % 3)) % 3 + 3 * r + 1 };
+  }
+
+  /** A hero has broken one of the dragon's eggs: the dragon gets up and goes after that hero on its next move, and hits twice as hard. */
+  private enrage(by: HeroState) {
+    const dr = this.liveMobs().find(o => MOBS[o.k].nest);
+    if (!dr || by.hp <= 0) return;
+    dr.mad = by.i;
+    dr.speed = MAD_SPEED;
+    this.float(dr.x, dr.y - 16, 'НЕ ТРОЖЬ ЯЙЦА!', '#ff4d6a');
+    this.burst(dr.x, dr.y, '#ff4d6a', 12);
+    this.note(`${by.def.name} ${did(by.def, 'разбил')} яйцо: ${dr.name} идёт к ${by.def.dat}`);
+    this.repick(dr);
+  }
+
+  /** Пахан's blow has landed: it takes `pot` ore from the party into its «общак», as much as the party has. */
+  private steal(m: Mob, h: HeroState) {
+    const n = Math.min(MOBS[m.k].pot ?? 0, this.bank.ore), p = this.spot(h);
+    if (n <= 0) return;
+    this.bank.ore -= n;
+    m.pot = (m.pot ?? 0) + n;
+    if (p) this.float(p.x, p.y - 14, `−${n} руды в общак`, '#ffb070');
+    this.note(`${m.name} ${did(MOBS[m.k], 'забрал')} ${n} руды в общак`);
+  }
+
+  /** Пахан on his bunk: a шестёрка of his standing right next to him takes the disc meant for him, the one nearest the disc. */
+  coverOf(m: Mob, d: Pt): Mob | null {
+    if (!MOBS[m.k].cover) return null;
+    return this.sixes(m).filter(o => this.solid(o) && this.besideMob(m, o))
+      .sort((p, q) => Math.hypot(p.x - d.x, p.y - d.y) - Math.hypot(q.x - d.x, q.y - d.y))[0] ?? null;
+  }
+
+  /**
+   * A disc's blow lands on m: into the fridge's open door twice as hard and past its armour, on Пахан on the шестёрка
+   * covering him; one that hurts the disco ball knocks mirror tiles off it.
+   */
+  private strike(m: Mob, d: Disc, n: number, pierce: boolean, p: number) {
+    const o = m.open, L = Math.hypot(d.x - m.x, d.y - m.y) || 1;
+    if (o && (o.x * (d.x - m.x) + o.y * (d.y - m.y)) / L > FRIDGE_COS) {
+      n *= WEAK_MUL;
+      pierce = true;
+      this.float(m.x, m.y - 22, `в дверцу! ×${WEAK_MUL}`, '#ffe27a');
+    }
+    const to = this.coverOf(m, d) ?? m, hp = to.hp;
+    if (to !== m) this.float(to.x, to.y - 14, 'прикрыла!', '#ffb070');
+    this.hurtMob(to, n, '#fff', pierce, p, d.hero);
+    if (MOBS[to.k].shards && to.hp < hp) this.shatter(to);
+  }
+
+  /** A disc has hurt the disco ball: mirror tiles fall off it onto free floor round it, and lie there like spikes. */
+  private shatter(m: Mob) {
+    const S = this.S, sz = mobSize(m.k), [i0, j0] = cellAt(m.x, m.y, sz), taken = this.occupied(null, false), stands = this.standCells(), foot = this.footprint(i0, j0, sz);
+    const free: Pt[] = [];
+    for (let r = 1; r <= SHARD_REACH; r++) {
+      for (const c of this.around(foot, r)) if (this.cellFree(c.x, c.y, taken) && !stands.has(hazKey(c.x, c.y)) && !S.haz.has(hazKey(c.x, c.y)) && !this.shardAt(c.x, c.y)) free.push(c);
+    }
+    const list = (m.shards ??= []);
+    for (let n = MOBS[m.k].shards ?? 0; n > 0 && free.length; n--) {
+      const c = free.splice(Math.floor(this.fx() * free.length), 1)[0], p = cellCentre(c.x, c.y);
+      list.push(hazKey(c.x, c.y));
+      this.burst(p.x, p.y, '#dff6ff', 6);
+    }
+  }
+
+  /** Whether the disco ball's mirror tiles lie on the cell (i, j). */
+  shardAt(i: number, j: number) {
+    const k = hazKey(i, j);
+    return this.S.mobs.some(o => o.shards?.includes(k));
+  }
+
+  /** What a floor boss's blow on its marked cells deals: its strike, rage on top, less from the gas. */
+  private zoneDmg(m: Mob) {
+    return this.cut(m, m.dmg + this.honed(m) + this.rage());
+  }
+
+  /** Cells under standing blocks. */
+  private blockCells() {
+    return new Set(standing(this.S.blocks).map(b => hazKey(Math.floor(b.x0 / TILE), Math.floor(b.y0 / TILE))));
+  }
+
+  /** The fridge's freezer: three cells out from it toward the point p, a cell wider each side every cell out. */
+  private cone(m: Mob, p: Pt): Pt[] {
+    const S = this.S, sz = mobSize(m.k), [i0, j0] = cellAt(m.x, m.y, sz), dx = p.x - m.x, dy = p.y - m.y, blocks = this.blockCells(), out: Pt[] = [];
+    const across = Math.abs(dx) >= Math.abs(dy), s = Math.sign(across ? dx : dy) || 1;
+    for (let k = 1; k <= 3; k++) for (let w = 1 - k; w < sz + k - 1; w++) {
+      const ahead = s > 0 ? sz - 1 + k : -k, i = across ? i0 + ahead : i0 + w, j = across ? j0 + w : j0 + ahead;
+      if (isFloor(S, i, j) && !blocks.has(hazKey(i, j))) out.push(cellCentre(i, j));
+    }
+    return out;
+  }
+
+  /** The dancefloor's lit cells this turn: a checkerboard, stripes either way or rings round the dancer, as the turn's beat falls. */
+  private pattern(m: Mob): Pt[] {
+    const S = this.S, R = mulberry32(S.spec.seed * 31 + S.turn), kind = Math.floor(R() * 4), par = R() < 0.5 ? 0 : 1;
+    const sz = mobSize(m.k), [i0, j0] = cellAt(m.x, m.y, sz), blocks = this.blockCells(), out: Pt[] = [];
+    for (let j = 0; j < S.gh; j++) for (let i = 0; i < S.gw; i++) {
+      if (!isFloor(S, i, j) || blocks.has(hazKey(i, j)) || S.pits.some(p => inPit(p, i, j))) continue;
+      const ring = Math.max(i0 - i, i - i0 - sz + 1, j0 - j, j - j0 - sz + 1);
+      if (ring <= 0) continue;
+      const lit = kind === 0 ? (i + j) % 2 : kind === 1 ? j % 2 : kind === 2 ? i % 2 : ring % 2;
+      if (lit === par) out.push(cellCentre(i, j));
+    }
+    return out;
+  }
+
+  /** The disco ball's beams: along its rows and columns, out from it to the walls and the blocks. */
+  private beams(m: Mob): Pt[] {
+    const S = this.S, sz = mobSize(m.k), [i0, j0] = cellAt(m.x, m.y, sz), blocks = this.blockCells(), out: Pt[] = [];
+    const ray = (i: number, j: number, di: number, dj: number) => {
+      for (i += di, j += dj; isFloor(S, i, j) && !blocks.has(hazKey(i, j)); i += di, j += dj) out.push(cellCentre(i, j));
+    };
+    for (let a = 0; a < sz; a++) { ray(i0 + a, j0, 0, -1); ray(i0 + a, j0 + sz - 1, 0, 1); ray(i0, j0 + a, -1, 0); ray(i0 + sz - 1, j0 + a, 1, 0); }
+    return out;
+  }
+
+  /** The dragon's belch: a line of fire from its middle through the point p on to the wall or a block. */
+  private fireLine(m: Mob, p: Pt): Pt[] {
+    const S = this.S, sz = mobSize(m.k), [i0, j0] = cellAt(m.x, m.y, sz), blocks = this.blockCells(), L = Math.hypot(p.x - m.x, p.y - m.y) || 1;
+    const ux = (p.x - m.x) / L, uy = (p.y - m.y) / L, seen = new Set<string>(), out: Pt[] = [];
+    for (let t = 0; t < 40 * TILE; t += 4) {
+      const i = Math.floor((m.x + ux * t) / TILE), j = Math.floor((m.y + uy * t) / TILE), k = hazKey(i, j);
+      if (i >= i0 && i < i0 + sz && j >= j0 && j < j0 + sz) continue;
+      if (!isFloor(S, i, j) || blocks.has(k)) break;
+      if (!seen.has(k)) { seen.add(k); out.push(cellCentre(i, j)); }
+    }
+    return out;
+  }
+
+  /**
+   * Where the fallen disco ball rolls: down one of its four lanes to whatever stops it (it never stops on a rune or a
+   * hero's cell, it rolls over them), the lane with the most heroes in it, else the one most toward the nearest hero.
+   * Null when it can't roll anywhere.
+   */
+  private rollPlan(m: Mob, hs: HeroState[]): Intent | null {
+    const sz = mobSize(m.k), [i0, j0] = cellAt(m.x, m.y, sz), taken = this.occupied(m, true), near = this.spot(this.nearestOf(m, hs))!;
+    let best: { way: Pt[]; spots: Pt[]; n: number; to: number } | null = null;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const lane: Pt[] = [{ x: m.x, y: m.y }];
+      for (let i = i0 + di, j = j0 + dj; lane.length < 40 && this.fits(i, j, sz, taken); i += di, j += dj) lane.push(cellCentre(i, j, sz));
+      const way = this.rollWay(m, lane);
+      if (!way) continue;
+      const spots = this.swept(way, sz), n = hs.filter(h => this.underHammer(h, spots)).length, to = di * (near.x - m.x) + dj * (near.y - m.y);
+      if (!best || n > best.n || (n === best.n && to > best.to)) best = { way, spots, n, to };
+    }
+    return best && { t: 'zone', z: 'roll', hero: -1, dmg: this.smashDmg(m), spots: best.spots, way: best.way, to: best.way[best.way.length - 1] };
+  }
+
+  /** How far down its lane the rolling ball gets now: up to whatever has come in its way, short of a rune or a hero's cell. */
+  private rollWay(m: Mob, lane: Pt[]): Pt[] | null {
+    const sz = mobSize(m.k), taken = this.occupied(m, true), stands = this.standCells();
+    let end = 0;
+    for (let k = 1; k < lane.length; k++) {
+      const [i, j] = cellAt(lane[k].x, lane[k].y, sz);
+      if (!this.fits(i, j, sz, taken)) break;
+      if (!this.onStand(i, j, sz, stands)) end = k;
+    }
+    return end ? lane.slice(0, end + 1) : null;
+  }
+
+  /** The cells a body s cells wide covers along a walk, past where it starts. */
+  private swept(way: Pt[], sz: number): Pt[] {
+    const out = new Map<string, Pt>();
+    for (const p of way.slice(1)) {
+      const [i, j] = cellAt(p.x, p.y, sz);
+      for (const c of this.footprint(i, j, sz)) out.set(hazKey(c.x, c.y), cellCentre(c.x, c.y));
+    }
+    return [...out.values()];
+  }
+
+  /**
+   * Where a mob running from the heroes gets in `steps` cells, like a piece on the board (8 ways, no cutting corners, round
+   * whatever a walker goes round): the cell farthest from the nearest hero, short of a rune. Null when nothing in reach
+   * is farther than where it stands.
+   */
+  private fleeWay(m: Mob, steps: number): Pt[] | null {
+    const S = this.S, gw = S.gw, sz = mobSize(m.k), taken = this.occupied(m, true), stands = this.standCells(), [si, sj] = cellAt(m.x, m.y, sz);
+    const hs = this.alive().map(h => this.spot(h)).filter((p): p is Pt => !!p);
+    if (!hs.length) return null;
+    const far = (i: number, j: number) => { const c = cellCentre(i, j, sz); return Math.min(...hs.map(p => Math.hypot(p.x - c.x, p.y - c.y))); };
+    const open = (i: number, j: number) => this.fits(i, j, sz, taken), start = sj * gw + si;
+    const from = new Map<number, number>([[start, -1]]);
+    let edge = [start], best = start, bd = far(si, sj) + 1e-6;
+    for (let s = 0; s < steps; s++) {
+      const next: number[] = [];
+      for (const c of edge) {
+        const ci = c % gw, cj = (c - ci) / gw;
+        for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+          const i = ci + di, j = cj + dj, k = j * gw + i;
+          if ((!di && !dj) || !open(i, j) || from.has(k) || (di && dj && (!open(ci + di, cj) || !open(ci, cj + dj)))) continue;
+          from.set(k, c);
+          next.push(k);
+          const f = far(i, j);
+          if (f > bd && !this.onStand(i, j, sz, stands)) { bd = f; best = k; }
+        }
+      }
+      edge = next;
+    }
+    if (best === start) return null;
+    const way: Pt[] = [];
+    for (let k = best; k >= 0; k = from.get(k)!) way.push(k === start ? { x: m.x, y: m.y } : cellCentre(k % gw, Math.floor(k / gw), sz));
+    return way.reverse();
+  }
+
+  /** The swarm's last rats on their move: they run from the heroes, and bite one right by them only when cornered. */
+  private runOff(m: Mob, hs: HeroState[]): Intent {
+    const near = this.nearestOf(m, hs), way = this.fleeWay(m, this.steps(m));
+    if (way) return { t: 'move', hero: near.i, dmg: 0, flee: true, way, go: wayLen(way), eta: 1 };
+    const by = hs.find(h => this.beside(m, this.spot(h)!));
+    return by ? { t: 'hit', hero: by.i, dmg: this.blow(m), eta: 1 } : { t: 'move', hero: near.i, dmg: 0, flee: true };
+  }
+
+  /** The dancer with a hero right by it: it moonwalks off, `moon` cells; cornered, it fires at whoever it sees as usual. */
+  private backOff(m: Mob, hs: HeroState[], k: number): Intent {
+    const way = this.fleeWay(m, MOBS[m.k].moon ?? 3);
+    return way ? { t: 'move', hero: this.nearestOf(m, hs).i, dmg: 0, flee: true, way, go: wayLen(way), eta: 1 } : this.shoot(m, hs, k);
+  }
+
+  /**
+   * The fridge on a turn without its freezer: right by a hero it bites with its door; seeing one, it opens up and throws
+   * something out of itself at the nearest it sees; else it shuffles up to the nearest.
+   */
+  private snack(m: Mob, hs: HeroState[]): Intent {
+    const by = hs.find(h => this.beside(m, this.spot(h)!));
+    if (by) return this.chase(m, by, this.route(m, this.spot(by)!));
+    const seen = hs.filter(h => this.sees(m, h));
+    if (!seen.length) return this.goAfter(m, hs);
+    const h = this.nearestOf(m, seen), item = (this.S.turn + h.i) % FOOD_TOSS.length;
+    return { t: 'toss', hero: h.i, dmg: this.tossDmg(m, item), item };
+  }
+
+  /** What the fridge's throw of FOOD_TOSS[item] deals: a share of its blow, rage on top, less from the gas; the boxers nothing. */
+  private tossDmg(m: Mob, item: number) {
+    const k = FOOD_TOSS[item].k;
+    return k ? this.cut(m, Math.max(1, Math.round(m.dmg * k)) + this.honed(m) + this.rage()) : 0;
+  }
+
+  /**
+   * The rat swarm down its burrow: on its next move it comes up right by the hole its eyes glow in, on the free spot nearest
+   * a hero, and bites everyone on the cells round it (marked a turn ahead).
+   */
+  private emerging(m: Mob): Intent {
+    const to = this.burrowExit(m);
+    if (!to) return { t: 'emerge', hero: -1, dmg: 0, spots: [] };
+    const sz = mobSize(m.k), spots = this.around(this.footprint(...cellAt(to.x, to.y, sz), sz), 1).filter(c => isFloor(this.S, c.x, c.y)).map(c => cellCentre(c.x, c.y));
+    return { t: 'emerge', hero: -1, dmg: this.zoneDmg(m), spots, to };
+  }
+
+  /** Where the swarm down its burrow can come up: a spot it fits on right by its hole, the nearest to `near` (or to a hero). */
+  private burrowExit(m: Mob, near?: Pt): Pt | null {
+    const S = this.S, pit = S.pits[m.under!], sz = mobSize(m.k), taken = this.occupied(m, true), stands = this.standCells(), out: Pt[] = [];
+    if (!pit) return null;
+    for (const c of this.around(pit.cells.map(([x, y]) => ({ x, y })), 1)) for (let b = 0; b < sz; b++) for (let a = 0; a < sz; a++) {
+      const i = c.x - a, j = c.y - b;
+      if (this.fits(i, j, sz, taken) && !this.onStand(i, j, sz, stands)) out.push(cellCentre(i, j, sz));
+    }
+    if (!near) return this.nearestHero(out);
+    return out.sort((p, q) => Math.hypot(p.x - near.x, p.y - near.y) - Math.hypot(q.x - near.x, q.y - near.y))[0] ?? null;
+  }
+
+  /** The rat swarm goes down the hole nearest the hero it is after: its eyes glow there through the heroes' turn. */
+  private dive(m: Mob, it: Intent) {
+    const S = this.S, d = MOBS[m.k], p = this.spot(this.heroOf(it.hero)) ?? m;
+    const dist = (k: number) => Math.min(...S.pits[k].cells.map(([i, j]) => { const c = cellCentre(i, j); return Math.hypot(c.x - p.x, c.y - p.y); }));
+    const k = S.pits.map((_, k) => k).sort((a, b) => dist(a) - dist(b))[0];
+    if (k === undefined) return;
+    this.burst(m.x, m.y, '#b7a07a', 14);
+    const cs = S.pits[k].cells.map(([i, j]) => cellCentre(i, j));
+    m.under = k;
+    m.x = m.fx = m.tx = cs.reduce((n, c) => n + c.x, 0) / cs.length;
+    m.y = m.fy = m.ty = cs.reduce((n, c) => n + c.y, 0) / cs.length;
+    m.walk = undefined;
+    this.sfx('pit');
+    this.float(m.x, m.y - 10, 'в нору!', '#b7a07a');
+    this.note(`${m.name} ${did(d, 'нырнул')} в нору: в яме светятся глаза`);
+  }
+
+  /** The rat swarm comes up out of its burrow where it meant to (or the nearest spot still free) and bites the heroes on the marked cells by it. */
+  private emerge(m: Mob, it: Intent) {
+    const S = this.S, d = MOBS[m.k], sz = mobSize(m.k);
+    const fit = (p: Pt) => { const [i, j] = cellAt(p.x, p.y, sz); return this.fits(i, j, sz, this.occupied(m, true)) && !this.onStand(i, j, sz, this.standCells()); };
+    const to = it.to && fit(it.to) ? it.to : this.burrowExit(m, it.to);
+    if (!to) { this.float(m.x, m.y - 10, 'шуршит…', '#b7a07a'); this.note(`${m.name} шуршит в норе`); return; }
+    delete m.under;
+    m.x = m.fx = m.tx = to.x;
+    m.y = m.fy = m.ty = to.y;
+    m.flash = 0.12;
+    S.shake = Math.max(S.shake, 0.25);
+    this.sfx('slam');
+    this.float(m.x, m.y - 12, 'ИЗ НОРЫ!', ZONE_COL.bite);
+    this.burst(m.x, m.y, '#b7a07a', 16);
+    const hit = this.alive().filter(h => { const p = this.spot(h); return !!p && this.beside(m, p) && this.underHammer(h, it.spots ?? []); });
+    if (!hit.length) this.note(`${m.name} ${did(d, 'вылез', 'вылезла')} из норы, но никого не ${did(d, 'достал')}`);
+    for (const h of hit) {
+      const blk = this.hurtHero(h, it.dmg, '', m);
+      this.noteBlow(`${m.name} ${did(d, 'вылез', 'вылезла')} из норы и ${did(d, 'укусил')} ${h.def.acc} на ${it.dmg}`, h, blk);
+    }
+    this.tremor(m.x, m.y, 0.6, m);
+  }
+
+  /** The fridge throws food out of itself at a hero it sees, its door left open till its next move: pickles, a frozen chicken, the boxers. */
+  private toss(m: Mob, it: Intent) {
+    const d = MOBS[m.k], h = this.heroOf(it.hero), p = this.spot(h), f = FOOD_TOSS[it.item ?? 0];
+    if (h.hp <= 0 || !p) return;
+    const L = Math.hypot(p.x - m.x, p.y - m.y) || 1;
+    m.open = { x: (p.x - m.x) / L, y: (p.y - m.y) / L };
+    if (!this.sees(m, h)) { this.float(m.x, m.y, 'не видит', '#c7cbe0'); this.note(`${m.name} не ${did(d, 'увидел')} ${h.def.acc}`); return; }
+    this.knock(m, m.x, m.y, p.x, p.y, 0.4);
+    m.flash = 0.12;
+    this.sfx('launch', 0.6);
+    this.float(m.x, m.y - 14, f.name + '!', '#e8f6ff');
+    if (f.k) {
+      const blk = this.hurtHero(h, it.dmg, '', m);
+      this.noteBlow(`${m.name} ${did(d, 'швырнул')} ${f.acc} в ${h.def.acc} на ${it.dmg}`, h, blk);
+    } else {
+      this.float(p.x, p.y - 14, 'семейники на голове!', '#ff9ab8');
+      this.note(`${m.name} ${did(d, 'надел')} ${h.def.dat} на голову ${f.acc}: линии прицела нет`);
+    }
+    if (f.chill) this.chillHero(h);
+    if (f.daze && h.hp > 0) h.daze = 2;
+  }
+
+  /** «Подогрев»: Пахан treats his шестёрки to chifir, each hits harder (up to the act's cap) and holds out longer. */
+  private brew(m: Mob) {
+    const S = this.S, d = MOBS[m.k], a = d.acts?.find(o => o.k === 'brew');
+    if (!a) return;
+    const up = Math.max(1, Math.round((a.amt ?? 2) * S.dmgMul)), most = Math.floor((a.cap ?? 4) / (a.amt ?? 2)), hp = Math.max(1, Math.round(3 * partyScale(S.spec).hp));
+    m.flash = 0.12;
+    this.sfx('herb');
+    this.float(m.x, m.y - 12, 'ПОДОГРЕВ', '#ffb070');
+    for (const o of this.sixes(m)) {
+      if ((o.brew ?? 0) < most) { o.brew = (o.brew ?? 0) + 1; o.dmg += up; }
+      o.hp += hp;
+      o.max += hp;
+      this.float(o.x, o.y - 12, 'чифир!', '#ffb070');
+      this.burst(o.x, o.y, '#c98a3a', 8);
+    }
+    this.note(`${m.name} ${did(d, 'подогрел')} шестёрок чифиром: бьют сильнее и держат больше`);
+  }
+
+  /** The fridge's freezer holds a hero to its cell through its next turn: it throws, but doesn't go over to its discs. */
+  private pinHero(h: HeroState) {
+    if (h.hp <= 0) return;
+    h.pin = 2;
+    const p = this.spot(h);
+    if (p) this.float(p.x, p.y - 16, 'примёрз!', '#7fd8ff');
+  }
+
+  /**
+   * A floor boss's marked cells go off: the freezer freezes whoever stands in it, the dragon's belch sets them on fire, the
+   * dancefloor, the beams and the rolling ball hit them. The rolling ball crushes only those on the cells it really rolls over.
+   */
+  private zoneAct(m: Mob, it: Intent) {
+    const S = this.S, d = MOBS[m.k], z = it.z ?? 'cold', spots = it.spots ?? [], col = ZONE_COL[z];
+    const rolled = z === 'roll' ? this.swept(m.walk ?? [], mobSize(m.k)) : spots;
+    const hit = this.alive().filter(h => this.underHammer(h, spots) && this.underHammer(h, rolled));
+    if (z === 'cold' && spots.length) {
+      // the freezer is behind the door: it stays open till the fridge's next move
+      const c = spots.reduce((o, p) => ({ x: o.x + p.x / spots.length, y: o.y + p.y / spots.length }), { x: 0, y: 0 }), L = Math.hypot(c.x - m.x, c.y - m.y) || 1;
+      m.open = { x: (c.x - m.x) / L, y: (c.y - m.y) / L };
+    }
+    m.flash = 0.12;
+    S.shake = Math.max(S.shake, z === 'roll' ? 0.35 : 0.2);
+    this.sfx(z === 'cold' ? 'freeze' : z === 'fire' ? 'boom' : 'slam');
+    this.float(m.x, m.y - 12, ZONE_CRY[z], col);
+    // a spark or two over the cells, not too many for a phone
+    for (let k = 0; k < spots.length; k += Math.max(1, Math.floor(spots.length / 24))) this.burst(spots[k].x, spots[k].y, col, 2);
+    if (!hit.length) this.note(`${m.name}: ${ZONE_NAME[z]} мимо`);
+    for (const h of hit) {
+      if (z === 'cold') {
+        this.pinHero(h);
+        this.chillHero(h);
+        this.note(`${m.name} ${did(d, 'заморозил')} ${h.def.acc}: ход без перехода к диску`);
+      } else if (z === 'fire') {
+        h.fire = Math.max(h.fire, 2);
+        const p = this.spot(h);
+        if (p) { this.float(p.x, p.y - 8, 'горит!', '#ff7a3d'); this.burst(p.x, p.y, '#ff7a3d', 8); }
+        this.note(`${m.name} ${did(d, 'рыгнул')} огнём: ${h.def.name} горит`);
+      } else {
+        const blk = this.hurtHero(h, it.dmg, '', m);
+        this.noteBlow(`${m.name}: ${ZONE_NAME[z]} по ${h.def.dat} на ${it.dmg}`, h, blk);
+      }
+    }
+    if (z === 'roll') this.tremor(m.x, m.y, 1, m);
   }
 
   // ------------------------------------------------------------ physics
@@ -1915,7 +2521,7 @@ export class Game {
   }
 
   inBlock(x: number, y: number, r: number) {
-    const boxes = standing(this.S.blocks).concat(this.S.rock);
+    const boxes = [...standing(this.S.blocks), ...this.S.rock, ...this.fixtures()];
     return boxes.some(b => Math.hypot(x - Math.max(b.x0, Math.min(x, b.x1)), y - Math.max(b.y0, Math.min(y, b.y1))) < r);
   }
 
@@ -1940,8 +2546,14 @@ export class Game {
       if (!wild && !has(d.hero, 'undies') && pit) {
         d.fall = 0.001; d.vx = d.vy = 0;
         this.sfx('pit');
+        // the rat swarm's eyes glow down this hole: the disc lands on its heads, twice as hard, and costs the hero nothing
+        const rats = d.fan ? null : S.mobs.find(o => o.hp > 0 && o.under !== undefined && S.pits[o.under] === pit);
+        if (rats) {
+          d.hits++;
+          this.float(d.x, d.y - 10, `по макушке! ×${WEAK_MUL}`, '#ffe27a');
+          this.hurtMob(rats, Math.ceil((d.m * v0) / 120) * WEAK_MUL, '#ffe27a', false, 0.8, d.hero);
         // a phantom just melts away down there
-        if (!d.fan) { this.float(d.x, d.y, 'провал', '#c7cbe0'); this.hurtHero(d.hero, 2); }
+        } else if (!d.fan) { this.float(d.x, d.y, 'провал', '#c7cbe0'); this.hurtHero(d.hero, 2); }
         changed = true;
         continue;
       }
@@ -1958,7 +2570,7 @@ export class Game {
         else { this.float(x, y, 'дзынь!', '#bfe9ff'); this.chips('ice', x, y, 0, d, 1, true); this.S.shake = Math.max(this.S.shake, 0.12); this.sfx('shatter'); }
         changed = true;
       }
-      for (const b of S.rock) { const vn = this.bounceBox(d, b, this.keep(d)); if (vn > 0) this.bounced(d, vn, ...this.boxNormal(d, b)); }
+      for (const b of [...S.rock, ...this.fixtures()]) { const vn = this.bounceBox(d, b, this.keep(d)); if (vn > 0) this.bounced(d, vn, ...this.boxNormal(d, b)); }
       if (this.eat(d)) changed = true;
       for (const n of S.nodes) {
         if (n.left <= 0) continue;
@@ -2004,8 +2616,10 @@ export class Game {
         if (d.rico <= 0 && has(h, 'insoles')) this.pop(h, 'insoles');
         if (d.rico > 0) d.rico--;
         let dmg = Math.ceil((d.m * vn) / 120);
+        // the disco ball on its chain turns away a disc flying straight at it: only one off a wall or another enemy hurts it
+        const mirrored = !!MOBS[m.k].mirror && d.bounces === 0 && d.hits === 0;
         // straight from the rune into the enemy, square on: a precise throw hits much harder («Бильярдный мел»: off the walls too)
-        const crit = (d.bounces === 0 || has(h, 'chalk')) && d.hits === 0 && vn >= v * CRIT_COS;
+        const crit = !mirrored && (d.bounces === 0 || has(h, 'chalk')) && d.hits === 0 && vn >= v * CRIT_COS;
         d.hits++;
         if (crit) dmg = Math.ceil(dmg * (has(h, 'glasseye') ? ART.critBig : CRIT));
         if (crit && has(h, 'glasseye')) this.pop(h, 'glasseye');
@@ -2020,9 +2634,12 @@ export class Game {
         t.rico = Math.max(t.rico, d.bounces);
         // the ability goes first: fire on an enemy this very hit kills leaps on to the next one
         if (d.ab) this.abilityHit(d, m);
-        // the guard's door takes a disc from the front: the blow comes through it at half, «ТОЧНО!» and the rest counted first
-        if (this.shielded(m, d.x, d.y)) { dmg = Math.max(1, Math.ceil(dmg * DOOR_MUL)); this.float(m.x, m.y - 14, 'дверь!', '#c7cbe0'); this.sfx('armor'); }
-        this.hurtMob(m, dmg, '#fff', has(h, 'opener'), Math.min(1, vn / 250), h);
+        if (mirrored) { this.float(m.x, m.y - 14, 'зеркало!', '#ffe27a'); this.burst(d.x, d.y, '#fff6c8', 10); this.sfx('armor'); }
+        else {
+          // the guard's door takes a disc from the front: the blow comes through it at half, «ТОЧНО!» and the rest counted first
+          if (this.shielded(m, d.x, d.y)) { dmg = Math.max(1, Math.ceil(dmg * DOOR_MUL)); this.float(m.x, m.y - 14, 'дверь!', '#c7cbe0'); this.sfx('armor'); }
+          this.strike(m, d, dmg, has(h, 'opener'), Math.min(1, vn / 250));
+        }
         if (d.ab && h.def.key === 'electra') this.zap(m, h);
         if (d.ab && h.def.key === 'genius') this.freeze(m);
         if (d.ab && h.def.key === 'bouncer') this.shove(d, m);
@@ -2117,15 +2734,19 @@ export class Game {
    * A disc of the hero's has come to rest: a miss says so, and spikes or lava under it hurt the hero who threw it.
    * A phantom of the card sharp's fan, a disc in a hole and a fallen hero's go unremarked.
    */
-  private land(d: Disc) {
+  private land(d: Disc, still = false) {
     const S = this.S;
     if (d.fall || d.fan || d.hero.hp <= 0) return;
     if (!d.hits) this.float(d.x, d.y, 'мимо', '#c7cbe0');
+    // a hero frozen to its cell doesn't go over to the disc, so nothing under it hurts the hero
+    if (still) return;
+    // the disco ball's mirror tiles cut like spikes
+    const i = Math.floor(d.x / TILE), j = Math.floor(d.y / TILE), haz = S.haz.has(hazKey(i, j));
+    if (!haz && !this.shardAt(i, j)) return;
     // «Надувные труселя»: spikes and lava under the disc don't hurt
-    if (!S.haz.has(hazKey(Math.floor(d.x / 16), Math.floor(d.y / 16)))) return;
     if (has(d.hero, 'undies')) this.pop(d.hero, 'undies');
     else {
-      this.float(d.x, d.y, S.biome.haz === 'lava' ? 'лава!' : 'шипы!', '#ff4d6a');
+      this.float(d.x, d.y, !haz ? 'осколки!' : S.biome.haz === 'lava' ? 'лава!' : 'шипы!', '#ff4d6a');
       this.hurtHero(d.hero, S.biome.hazDmg);
     }
   }
@@ -2133,7 +2754,8 @@ export class Game {
   /**
    * Host: the heroes' turn is over. Every disc still on the table comes to rest where it lies, and each hero goes over to
    * the last disc it threw this turn that is still on the floor: when the last one dropped into a hole, to the one before
-   * it, and so on. Its other discs are cleared away. A hero whose discs all dropped into holes stays where it stood.
+   * it, and so on. Its other discs are cleared away. A hero whose discs all dropped into holes, or frozen to its cell by
+   * the fridge, stays where it stood.
    */
   private follow() {
     const S = this.S, movers: [HeroState, Disc][] = [];
@@ -2145,11 +2767,11 @@ export class Game {
       for (const d of mine) {
         if (d.gone || d.held) continue;
         d.held = true;
-        this.land(d);
-        // the other discs nobody goes over to are cleared away
-        if (d !== to && !d.fall) d.gone = true;
+        this.land(d, !!h.pin);
+        // the other discs nobody goes over to are cleared away, all of them for a hero frozen to its cell
+        if ((d !== to || h.pin) && !d.fall) d.gone = true;
       }
-      if (to) movers.push([h, to]);
+      if (to && !h.pin) movers.push([h, to]);
     }
     if (movers.length) this.regroup(movers);
   }
@@ -2234,6 +2856,8 @@ export class Game {
       S.actor = k;
       S.clock = 0;
       S.attacked = false;
+      // the fridge shuts its door as its move begins
+      delete m.open;
       const burnt = m.burn > 0, gassed = this.inGas(m);
       // fire takes as many HP as it has, through armour, and dies down by one
       if (burnt) {
@@ -2266,8 +2890,12 @@ export class Game {
     m.fx = m.tx = m.x;
     m.fy = m.ty = m.y;
     m.walk = undefined;
-    const foe = it?.foe !== undefined ? this.S.mobs[it.foe] : null;
-    if (m.hp <= 0 || !it || (it.hero < 0 && !foe) || m.speed === 0 || this.frozen(m)) return;
+    if (m.hp <= 0 || !it || this.frozen(m)) return;
+    // the fallen disco ball rolls down its lane as far as it gets now; one running from the heroes runs from where they stand now
+    if (it.t === 'zone' && it.z === 'roll') { this.setWalk(m, this.rollWay(m, it.way ?? [])); return; }
+    if (it.flee) { this.setWalk(m, this.fleeWay(m, MOBS[m.k].flees ? this.steps(m) : MOBS[m.k].moon ?? 3)); return; }
+    const foe = it.foe !== undefined ? this.S.mobs[it.foe] : null;
+    if ((it.t !== 'hit' && it.t !== 'move' && it.t !== 'charge') || (it.hero < 0 && !foe) || m.speed === 0) return;
     // one drawn by a firecracker runs to where it crackled, even when another enemy has set it off on the way; a kissed one
     // goes for the other enemy, a shooter only till it sees it
     const h = this.heroOf(it.hero), p = foe ?? it.bang ?? this.spot(h), aim = !it.bang && isRanged(m.k);
@@ -2275,8 +2903,11 @@ export class Game {
     // the room has changed since the intent was picked: the enemies before it have moved, an icicle may have broken
     const way = this.route(m, p, true, aim);
     if (!way) return;
-    const walk = way.slice(0, this.stopAt(m, way) + 1);
-    if (walk.length < 2) return;
+    this.setWalk(m, way.slice(0, this.stopAt(m, way) + 1));
+  }
+
+  private setWalk(m: Mob, walk: Pt[] | null) {
+    if (!walk || walk.length < 2) return;
     m.walk = walk;
     m.tx = walk[walk.length - 1].x;
     m.ty = walk[walk.length - 1].y;
@@ -2287,6 +2918,9 @@ export class Game {
     const it = m.intent!;
     // frozen stiff, it still takes its turn to stand there; kissed with nobody to go for, to sigh
     if (this.frozen(m) || it.sigh) return false;
+    // an egg not hatching yet, Пахан with no шестёрка left to treat
+    if (m.k === 'egg') return it.eta !== 1;
+    if (it.t === 'brew') return !this.sixes(m).length;
     if (it.foe !== undefined) { const o = this.S.mobs[it.foe]; return !o || o.hp <= 0 || (it.t === 'move' && !m.walk); }
     if (it.t === 'move') return !m.walk;
     if (it.t === 'hit') { const h = this.heroOf(it.hero); return h.hp <= 0 || !this.spot(h); }
@@ -2348,7 +2982,8 @@ export class Game {
     for (const n of S.nodes) if (n.left > 0) mark(...cellAt(n.x, n.y, n.s), n.s);
     for (const p of S.pits) for (const [i, j] of p.cells) mark(i, j);
     if (mobs) for (const o of S.mobs) {
-      if (o === self || o.hp <= 0) continue;
+      // the swarm down a burrow stands nowhere
+      if (o === self || o.hp <= 0 || o.under !== undefined) continue;
       mark(...cellAt(o.tx, o.ty, mobSize(o.k)), mobSize(o.k));
       // a summoning circle is where a mob will rise this turn
       if (o.intent?.t === 'summon') for (const p of o.intent.spots ?? []) mark(...cellAt(p.x, p.y));
@@ -2436,7 +3071,11 @@ export class Game {
       this.note(`${m.name} ${did(d, 'заморожен')} и пропускает ход`);
       return;
     }
-    if (it.t === 'rise') {
+    // the dragon has had its go at whoever broke its egg: it sits back down
+    if (m.mad !== undefined && (it.t === 'hit' || it.t === 'move')) { delete m.mad; m.speed = d.speed; }
+    if (it.t === 'rise' && m.k === 'egg') {
+      if (it.eta === 1) { this.hatch(m); this.sfx('ability'); }
+    } else if (it.t === 'rise') {
       m.rise = (m.rise ?? COFFIN_TURNS) - 1;
       if (m.rise > 0) {
         this.float(m.x, m.y - 10, 'скрип…', '#b7a07a');
@@ -2510,7 +3149,12 @@ export class Game {
       this.float(m.x, m.y - 10, 'фитиль горит', '#ffb070');
       this.sfx('launch', 0.3);
       this.note(`${m.name} ${did(d, 'поджёг', 'подожгла')} фитиль` + (m.walk ? ` и ${did(d, 'пошёл', 'пошла')} к ${this.heroOf(it.hero).def.dat}` : ''));
-    } else if (it.sigh) {
+    } else if (it.t === 'zone') this.zoneAct(m, it);
+    else if (it.t === 'emerge') this.emerge(m, it);
+    else if (it.t === 'dive') this.dive(m, it);
+    else if (it.t === 'toss') this.toss(m, it);
+    else if (it.t === 'brew') this.brew(m);
+    else if (it.sigh) {
       const by = S.heroes.find(h => h.i === m.kiss);
       this.float(m.x, m.y - 10, 'вздыхает…', '#ff9ab8');
       this.note(`${m.name} вздыхает${by ? ' по ' + by.def.dat : ''} и никого не бьёт`);
@@ -2528,9 +3172,12 @@ export class Game {
         // up close the enemy lunges at the hero; a shooter rocks back from its shot
         if (isRanged(m.k)) this.knock(m, m.x, m.y, p.x, p.y, 0.3);
         else this.knock(m, p.x, p.y, m.x, m.y, 0.5);
+        // the fridge shuts its door to bite with it
+        if (!isRanged(m.k)) delete m.open;
         const blk = this.hurtHero(h, it.dmg, '', m); m.flash = 0.12;
-        const how = !isRanged(m.k) ? `${did(d, 'ударил')} ${h.def.acc}` : d.charge ? `${did(d, 'бросил')} бомбу в ${h.def.acc}` : `${did(d, 'выстрелил')} в ${h.def.acc}`;
+        const how = !isRanged(m.k) ? `${did(d, 'ударил')} ${h.def.acc}` : d.charge ? `${did(d, 'бросил')} бомбу в ${h.def.acc}` : `${SHOT[m.k] ?? did(d, 'выстрелил') + ' в'} ${h.def.acc}`;
         this.noteBlow(`${m.name} ${how} на ${it.dmg}`, h, blk);
+        if (d.pot) this.steal(m, h);
         // «Ёж в штанах» pricks whoever strikes up close
         if (!isRanged(m.k) && has(h, 'hedgehog')) {
           this.float(m.x, m.y - 12, 'ёж!', '#c9a86a');
@@ -2539,7 +3186,7 @@ export class Game {
           this.note(`Ёж уколол ${d.acc} на ${ART.hedgehog}` + (m.hp <= 0 ? `, ${did(d, 'пал')}` : ''));
         }
         if (d.chill && h.hp > 0) this.chillHero(h);
-        if (d.fire && h.hp > 0) { h.fire = 1; this.float(p.x, p.y - 8, 'горит!', '#ff7a3d'); }
+        if (d.fire && h.hp > 0) { h.fire = Math.max(h.fire, 1); this.float(p.x, p.y - 8, 'горит!', '#ff7a3d'); }
       } else if (isRanged(m.k)) {
         this.float(m.x, m.y, 'не видит', '#c7cbe0');
         this.note(`${m.name} не ${did(d, 'увидел')} ${h.def.acc}`);
@@ -2588,7 +3235,7 @@ export class Game {
     for (const b of S.bombs) if (--b.left <= 0) { this.float(b.x, b.y - 10, 'пшик', '#c9c2b4'); this.burst(b.x, b.y, '#9a948a', 8); }
     S.bombs = S.bombs.filter(b => b.left > 0);
     for (const h of S.heroes) if (h.hp > 0 && has(h, 'cup')) this.pop(h, 'cup');
-    for (const h of S.heroes) { delete h.cuffing; h.shield = h.hp > 0 && has(h, 'cup') ? ART.cup : 0; h.thrown = false; h.boost = false; h.hand = h.hp > 0 ? this.handOf(h) : 0; if (h.chill > 0) h.chill--; if (h.daze > 0) h.daze--; }
+    for (const h of S.heroes) { delete h.cuffing; h.shield = h.hp > 0 && has(h, 'cup') ? ART.cup : 0; h.thrown = false; h.boost = false; h.hand = h.hp > 0 ? this.handOf(h) : 0; if (h.chill > 0) h.chill--; if (h.daze > 0) h.daze--; if (h.pin && --h.pin <= 0) delete h.pin; }
     S.phase = 'throw';
     this.sfx('yourTurn');
     this.pickActive();
