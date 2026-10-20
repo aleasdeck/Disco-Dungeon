@@ -412,6 +412,14 @@ function drawMobFigure2(c: Ctx, k: MobKind, x: number, y: number, W: string | nu
     ell(c, x + 0.6, y - 18.6, 2.2, 2); fs(c, W || '#d98a6a', 0.8);
     c.beginPath(); c.arc(x, y - 21.5, 5.6, Math.PI, 0); c.closePath(); fs(c, W || lg(c, x - 6, 0, x + 6, 0, '#a8a296', '#5d5852'), 1);
     rr(c, x - 6.5, y - 22.4, 13, 1.6, 0.6); fs(c, W || '#6b665f', 0.7);
+  } else if (k === 'egg') {
+    // the dragon's egg: speckled and warm, with a crack in it
+    ell(c, x, y - 7, 5.2, 7); fs(c, W || rg(c, x - 1.5, y - 9, 7, '#f6e6bd', '#c9874a'), 1.1);
+    if (!W) {
+      for (const [dx, dy, r] of [[-2, -10, 1.1], [2, -6, 0.9], [-1.5, -4, 0.7], [2.5, -11, 0.6]]) { circ(c, x + dx, y + dy, r); c.fillStyle = '#a5532a'; c.fill(); }
+      c.beginPath(); c.moveTo(x - 3.5, y - 11.5); c.lineTo(x - 1.5, y - 10); c.lineTo(x - 2.5, y - 8.5); c.lineTo(x - 0.5, y - 7.5);
+      c.strokeStyle = INK; c.lineWidth = 0.6; c.stroke();
+    }
   } else if (k === 'forgelord') {
     // a giant smith: anvil-broad shoulders, horned helm, a beard of fire and a hammer the size of a hero
     const z = 1.15;
@@ -438,4 +446,6 @@ export const MOB_TOP: Record<MobKind, number> = {
   skel: 33, archer: 27, rat: 21, necro: 40, king: 52, guard: 35, headsman: 42,
   ghoul: 30, ghost: 33, yeti: 38, witch: 43, lich: 56, undertaker: 38, banshee: 38, coffin: 32,
   imp: 27, slime: 30, bomber: 27, golem: 37, forgelord: 56, grinder: 32, smasher: 44,
+  ratswarm: 40, ratswarm2: 27, ratswarm3: 21, pahan: 46, pahan2: 40, six: 31, bunk: 24,
+  fridge: 50, dancer: 52, discoball: 56, discoball2: 46, dragon: 54, dragon2: 56, egg: 16,
 };

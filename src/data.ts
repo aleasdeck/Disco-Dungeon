@@ -229,7 +229,9 @@ export const BIOMES: Biome[] = [
 export type MobKind =
   | 'skel' | 'archer' | 'rat' | 'necro' | 'king' | 'guard' | 'headsman'
   | 'ghoul' | 'ghost' | 'yeti' | 'witch' | 'lich' | 'undertaker' | 'banshee' | 'coffin'
-  | 'imp' | 'slime' | 'bomber' | 'golem' | 'forgelord' | 'grinder' | 'smasher';
+  | 'imp' | 'slime' | 'bomber' | 'golem' | 'forgelord' | 'grinder' | 'smasher'
+  | 'ratswarm' | 'ratswarm2' | 'ratswarm3' | 'pahan' | 'pahan2' | 'six' | 'bunk'
+  | 'fridge' | 'dancer' | 'discoball' | 'discoball2' | 'dragon' | 'dragon2' | 'egg';
 
 /**
  * Something a mob does instead of its usual attack on turns where `turn % every === at`.
@@ -237,9 +239,14 @@ export type MobKind =
  * slam: hits every hero at once (`chill` also chills them); heat: turns tiles in front of the heroes' runes into lava;
  * execute: its strike that turn deals double; scream: every hero throws its next turn without the aiming line, no damage; smash: a 3 × 3 square of cells round
  * the hero it goes after, marked a turn ahead, hits whoever stands in it then.
+ * The floor bosses' own (cells marked a turn ahead, like the hammer's square): dive: the rat swarm goes down a burrow and comes
+ * up by a hole on its next move, biting everyone round it; brew: Пахан's шестёрки hit `amt` harder (up to `cap` more) and
+ * get tougher; cone: the fridge's freezer blows cold three cells ahead; dance: the dancer's floor lights up in a pattern;
+ * lights: the disco ball's beams cross the room along its rows and columns; roll: the fallen ball rolls down a row or
+ * a column; belch: the dragon breathes fire in a line through a hero to the wall.
  */
 export interface MobAct {
-  k: 'summon' | 'heal' | 'slam' | 'heat' | 'execute' | 'scream' | 'smash';
+  k: 'summon' | 'heal' | 'slam' | 'heat' | 'execute' | 'scream' | 'smash' | 'dive' | 'brew' | 'cone' | 'dance' | 'lights' | 'roll' | 'belch';
   every: number;
   at: number;
   n?: number;
@@ -289,6 +296,33 @@ export interface MobDef {
   coffins?: number;
   /** A thing, not a creature (the undertaker's coffin): it neither walks nor strikes, and the bestiary leaves it out. */
   prop?: boolean;
+  /**
+   * Not an enemy at all (Пахан's empty bunk): it stands on its cells as cover, discs bounce off it as off a block,
+   * nothing hurts it, and the fight doesn't wait for it to fall.
+   */
+  fixed?: boolean;
+  /** A boss's later phase: the bestiary shows only the boss it grows out of. */
+  of?: MobKind;
+  /** The boss turns into the next phase once its health is down to this share of the most. */
+  next?: { at: number; k: MobKind };
+  /** Prison rats that run off the rat swarm each time it thins out (fewer for a smaller party). */
+  sheds?: number;
+  /** Пахан: each of its blows that lands takes this much ore from the party into its «общак», paid back twice when it falls. */
+  pot?: number;
+  /** Пахан on its bunk: a шестёрка standing right next to it takes the disc meant for it. */
+  cover?: boolean;
+  /** The disco ball on its chain: a disc that flies straight into it is turned away; only one that has bounced off something hurts it. */
+  mirror?: boolean;
+  /** The disco ball: tiles of mirror that fall off it with each disc that hurts it, lying on the floor like spikes. */
+  shards?: number;
+  /** The fridge: from afar it throws food out of itself at a hero it sees, up close it bites with its door. */
+  toss?: boolean;
+  /** Runs from the heroes instead of going for them, and bites only when cornered (the last three rats of the swarm). */
+  flees?: boolean;
+  /** The dancer: a hero who comes right up to it sends it moonwalking away, `moon` cells. */
+  moon?: number;
+  /** The dragon: dragon eggs round it at the start (fewer for a smaller party); breaking one sends it after whoever broke it. */
+  nest?: number;
   txt: string;
   /** The name in the accusative, for the enemy-turn journal: «подлечила Скелета». */
   acc: string;
@@ -356,6 +390,72 @@ export const MOBS: Record<MobKind, MobDef> = {
     size: 2, name: 'Владыка кузни', acc: 'Владыку кузни', floor: 2, boss: true, hp: 70, r: 15, speed: 12, reach: 44, dmg: 9, armor: 4, fig: 54, rage: true,
     acts: [{ k: 'heat', every: 3, at: 0, n: 2 }],
     txt: 'Босс кузни, броня 4. Каждый третий ход раскаляет пол перед рунами, а раненый впадает в ярость (+3 к удару).',
+  },
+  // the floors' other bosses (thread «Новые боссы этажей»): one of three meets the party, by the run's seed
+  ratswarm: {
+    size: 2, name: 'Крысиная свора', acc: 'Крысиную свору', fem: true, floor: 0, boss: true, hp: 56, r: 15, speed: 10, reach: 40, dmg: 8, armor: 1, fig: 40,
+    acts: [{ k: 'dive', every: 2, at: 1 }], next: { at: 0.66, k: 'ratswarm2' }, sheds: 3,
+    txt: 'Босс казематов: куча крыс, связанных хвостами, броня 1. Через ход ныряет в нору, а вылезает у ямы с глазами и кусает всех вокруг. Диск в яму с глазами бьёт её вдвое. Битая, теряет крыс, мельчает и шустреет.',
+  },
+  ratswarm2: {
+    of: 'ratswarm', name: 'Крысиная свора', acc: 'Крысиную свору', fem: true, floor: 0, boss: true, hp: 56, r: 10, speed: 32, reach: 30, dmg: 7, armor: 1, fig: 26,
+    acts: [{ k: 'dive', every: 2, at: 1 }], next: { at: 0.33, k: 'ratswarm3' }, sheds: 3,
+    txt: 'Поредевшая свора: куча меньше и вдвое шустрее, кусает на 7. Ныряет в нору, как раньше.',
+  },
+  ratswarm3: {
+    of: 'ratswarm', name: 'Крысиная свора', acc: 'Крысиную свору', fem: true, floor: 0, boss: true, hp: 56, r: 7, speed: 64, reach: 26, dmg: 6, armor: 1, fig: 18, flees: true,
+    txt: 'Последние три крысы на одной клетке. Нор больше не роют: удирают от героев со скоростью крысы и кусают, только если загнать в угол.',
+  },
+  pahan: {
+    size: 2, name: 'Пахан', acc: 'Пахана', floor: 0, boss: true, hp: 50, r: 15, speed: 0, reach: 999, dmg: 6, armor: 2, fig: 46, pot: 2, cover: true,
+    acts: [{ k: 'brew', every: 3, at: 0, amt: 2, cap: 4 }, { k: 'summon', every: 2, at: 0, n: 1, kind: 'six', cap: 2 }], next: { at: 0.5, k: 'pahan2' },
+    txt: 'Босс казематов, броня 2. Сидит на шконке и мечет заточку в того, кого видит: каждое попадание уносит 2 руды в общак, а победишь, общак вернётся вдвое. Зовёт шестёрок, греет их чифиром, и шестёрка рядом прикрывает его от дисков. На половине здоровья встаёт и идёт бить сам.',
+  },
+  pahan2: {
+    of: 'pahan', name: 'Пахан', acc: 'Пахана', floor: 0, boss: true, hp: 50, r: 8, speed: 32, reach: 30, dmg: 9, armor: 2, fig: 40, pot: 3,
+    txt: 'Беспредел: Пахан встал со шконки и идёт к ближайшему герою, бьёт вблизи на 9, и каждое попадание уносит 3 руды в общак. Шестёрки больше не прикрывают.',
+  },
+  six: {
+    name: 'Шестёрка', acc: 'Шестёрку', fem: true, floor: 0, hp: 6, r: 7, speed: 34, reach: 30, dmg: 3, fig: 31,
+    txt: 'Скелет на побегушках у Пахана. Бежит к ближайшему герою и бьёт вблизи. Пока стоит вплотную к Пахану, диск по Пахану попадает в неё.',
+  },
+  bunk: {
+    size: 2, name: 'Шконка', acc: 'Шконку', fem: true, floor: 0, hp: 1, r: 15, speed: 0, reach: 0, dmg: 0, fig: 24, prop: true, fixed: true,
+    txt: 'Пустая шконка Пахана: стоит укрытием, диски от неё отскакивают.',
+  },
+  fridge: {
+    size: 2, name: 'Холодильник-людоед', acc: 'Холодильника-людоеда', floor: 1, boss: true, hp: 62, r: 15, speed: 10, reach: 40, dmg: 8, armor: 3, fig: 50, toss: true,
+    acts: [{ k: 'cone', every: 2, at: 0 }],
+    txt: 'Босс склепа, броня 3. Каждый второй ход дует морозилкой на 3 клетки вперёд: кого задело, тот примёрз. Издалека кидается закусью, вблизи кусает дверцей. Пока дверца открыта, диск в неё бьёт вдвое и мимо брони.',
+  },
+  dancer: {
+    size: 2, name: 'Мёртвый танцор диско', acc: 'Мёртвого танцора диско', floor: 1, boss: true, hp: 54, r: 15, speed: 26, reach: 999, dmg: 6, fig: 52, moon: 3,
+    acts: [{ k: 'dance', every: 2, at: 0 }],
+    txt: 'Босс склепа. Каждый второй ход пол загорается узором: кто стоит на горящей клетке, когда грянет бит, получает удар. Мечет пластинку в того, кого видит, а от героя вплотную уходит лунной походкой.',
+  },
+  discoball: {
+    size: 2, name: 'Великий Диско-шар', acc: 'Великого Диско-шара', floor: 2, boss: true, hp: 72, r: 15, speed: 0, reach: 999, dmg: 7, fig: 56, mirror: true, shards: 1,
+    acts: [{ k: 'lights', every: 3, at: 0 }], next: { at: 0.5, k: 'discoball2' },
+    txt: 'Босс кузни. Висит на цепи: прямой удар отражается, ранит только рикошет. С каждым ударом с него сыплются осколки, как шипы. Светит лучом в того, кого видит, а каждый третий ход лучи бьют крест-накрест через всю комнату.',
+  },
+  discoball2: {
+    of: 'discoball', size: 2, name: 'Великий Диско-шар', acc: 'Великого Диско-шара', floor: 2, boss: true, hp: 72, r: 15, speed: 0, reach: 999, dmg: 7, fig: 46, shards: 2,
+    acts: [{ k: 'roll', every: 2, at: 0 }],
+    txt: 'Сорвался с цепи и треснул: ранят и прямые удары. Каждый второй ход катится по ряду или столбцу и давит всех на пути, осколков сыплет вдвое больше.',
+  },
+  dragon: {
+    size: 2, name: 'Дракон Дымыч', acc: 'Дракона Дымыча', floor: 2, boss: true, hp: 66, r: 15, speed: 0, reach: 40, dmg: 9, armor: 3, fig: 54, nest: 3,
+    acts: [{ k: 'belch', every: 2, at: 0 }], next: { at: 0.5, k: 'dragon2' },
+    txt: 'Босс кузни, броня 3. Высиживает яйца: каждый третий ход из одного вылупляется бес-кочегар. Кто разбил яйцо, за тем дракон идёт и бьёт вдвое. Через ход рыгает огнём по прямой до стены. На половине здоровья слезает с яиц.',
+  },
+  dragon2: {
+    of: 'dragon', size: 2, name: 'Дракон Дымыч', acc: 'Дракона Дымыча', floor: 2, boss: true, hp: 66, r: 15, speed: 16, reach: 40, dmg: 9, armor: 3, fig: 56,
+    acts: [{ k: 'belch', every: 2, at: 0 }],
+    txt: 'Слез с яиц: все целые яйца вылупились разом. Ходит и бьёт лапой, через ход рыгает огнём по прямой.',
+  },
+  egg: {
+    name: 'Драконье яйцо', acc: 'Драконье яйцо', floor: 2, hp: 9, r: 6, speed: 0, reach: 0, dmg: 0, fig: 16, prop: true,
+    txt: 'Яйцо Дракона Дымыча. Каждый третий ход одно вылупляется бесом-кочегаром. Кто его разбил, за тем дракон и пойдёт.',
   },
 };
 
@@ -544,7 +644,7 @@ export const ROOM_TYPES: Record<RoomType, { name: string; col: string; min: numb
   camp: { name: 'Костёр', col: '#e8642c', min: 0.5, txt: 'У огня каждый делает одно: отдыхает, перевязывает товарища или копает руду.' },
   forge: { name: 'Кузнец', col: '#5d6488', min: 1, txt: `Прокачка дисков за руду, только здесь. И ещё 0–${FORGE_ORE} руды в подарок, как повезёт.` },
   event: { name: 'Событие', col: '#6b4fa8', min: 0.75, txt: 'Странная встреча и выбор: награда, риск или беда.' },
-  boss: { name: 'Босс этажа', col: '#2a1a3a', min: 3.5, txt: 'Свой босс на каждом этаже, со свитой.' },
+  boss: { name: 'Босс этажа', col: '#2a1a3a', min: 3.5, txt: 'Один из трёх боссов этажа: кто именно, видно на карте.' },
 };
 
 export const COMBAT_ROOMS: RoomType[] = ['fight', 'elite', 'treasure', 'boss'];
