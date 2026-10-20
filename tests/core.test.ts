@@ -632,10 +632,9 @@ describe('run map', () => {
           expect(r.filter(n => n.type === 'elite').length).toBeLessThanOrEqual(ELITES.path);
         }
         expect(layers[0].every(n => n.type === 'fight')).toBe(true);
-        // the rest row: one room more than the row before it, camps and blacksmith's in turn, each room before it leads to one of each
-        expect(layers[REST_ROW]).toHaveLength(layers[REST_ROW - 1].length + 1);
-        expect(layers[REST_ROW].every((n, i) => i === 0 || n.type !== layers[REST_ROW][i - 1].type)).toBe(true);
-        expect(layers[REST_ROW - 1].every(n => n.next.map(id => by.get(id)!.type).sort().join() === 'camp,forge')).toBe(true);
+        // the rest row: a camp and a blacksmith's, and a route comes to just one of them
+        expect(layers[REST_ROW].map(n => n.type).sort()).toEqual(['camp', 'forge']);
+        expect(layers[REST_ROW - 1].every(n => n.next.length === 1)).toBe(true);
         // discs are upgraded only at the blacksmith's, so every entrance has a route through one by the middle of the floor
         expect(layers[0].every(e => routes(layers).some(r => r[0] === e && r.some(n => n.type === 'forge' && FORGE_ROWS.includes(n.l))))).toBe(true);
         expect(layers[LAYERS - 1][0].type).toBe('boss');

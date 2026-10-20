@@ -17,7 +17,7 @@ export interface Run {
 export const FLOORS = 3;
 /** Rows of a floor: the entrance fight, five rows of choices, the rest row and the boss. */
 export const LAYERS = 8;
-/** The row before the boss: camps and blacksmith's in turn, so every route there picks between the two without paths crossing. */
+/** The row before the boss: a camp and a blacksmith's, and a route comes to one of them only, so the party picks it on the way there. */
 export const REST_ROW = LAYERS - 2;
 /**
  * Rows where a floor may hold a blacksmith's before the rest row. Disc upgrades are sold only there, so every entrance
@@ -52,7 +52,7 @@ export function floorOk(layers: MapNode[][]): boolean {
     if (kids.some(k => k.type === n.type && SPECIAL.includes(n.type))) return false;
   }
   if (layers.flat().filter(n => n.type === 'elite').length < ELITES.floor) return false;
-  if (!layers[REST_ROW - 1].every(n => n.next.length === 2)) return false;
+  if (!layers[REST_ROW - 1].every(n => n.next.length === 1)) return false;
   const all = routes(layers);
   if (!layers[0].every(e => all.some(p => p[0] === e && p.some(n => n.type === 'forge' && n.l < REST_ROW)))) return false;
   return all.every(p => {
@@ -64,8 +64,7 @@ export function floorOk(layers: MapNode[][]): boolean {
 /**
  * One floor, built row by row like Slay the Spire's map: random rooms, but every route holds FIGHTS fights, a fork never
  * leads to two rooms of a kind, a special room never comes twice in a row, elites wait for the third row, no two paths
- * cross, and the rest row before the boss is camps and blacksmith's in turn, one room more than the row before it, each
- * room of which leads to the two rest rooms above it: a camp and a blacksmith's.
+ * cross, and the rest row before the boss is a camp and a blacksmith's, each room before it leading to one of them.
  */
 export function genFloor(seed: number, f: number): MapNode[][] {
   const R = makeRng(seed + f * 1013);
@@ -86,11 +85,12 @@ export function genFloor(seed: number, f: number): MapNode[][] {
   ];
   let layers: MapNode[][] = [];
   for (let tries = 0; tries < 500; tries++) {
-    const sizes = Array.from({ length: REST_ROW }, () => R.int(2, 3));
-    sizes.push(sizes[REST_ROW - 1] + 1, 1);
+    const sizes = [...Array.from({ length: REST_ROW }, () => R.int(2, 3)), 2, 1];
     layers = sizes.map((n, l) => Array.from({ length: n }, (_, i): MapNode => ({ id: `${f}-${l}-${i}`, l, i, type: 'fight', next: [] })));
     link(layers, R);
-    layers[REST_ROW - 1].forEach((n, i) => (n.next = [layers[REST_ROW][i].id, layers[REST_ROW][i + 1].id]));
+    // the rooms on the left come to the left rest room, those on the right to the right one, the middle one of three to either
+    const mid = R.int(0, 1), last = layers[REST_ROW - 1].length - 1;
+    layers[REST_ROW - 1].forEach((n, i) => (n.next = [layers[REST_ROW][2 * i < last ? 0 : 2 * i > last ? 1 : mid].id]));
     const by = new Map(layers.flat().map(n => [n.id, n]));
     const parents = (n: MapNode) => layers[n.l - 1]?.filter(p => p.next.includes(n.id)) ?? [];
     // fights so far on the routes into each room: fewest and most
@@ -121,7 +121,7 @@ export function genFloor(seed: number, f: number): MapNode[][] {
     }
     if (stuck) continue;
     const camp = R.next() < 0.5 ? 0 : 1;
-    layers[REST_ROW].forEach(n => (n.type = n.i % 2 === camp ? 'camp' : 'forge'));
+    layers[REST_ROW].forEach(n => (n.type = n.i === camp ? 'camp' : 'forge'));
     layers[LAYERS - 1][0].type = 'boss';
     if (floorOk(layers)) return layers;
   }
