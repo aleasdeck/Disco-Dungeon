@@ -3046,6 +3046,37 @@ describe('heroes go where each of their discs stopped', () => {
   };
   const cell = (g: Game, h: HeroState) => cellAt(g.spot(h)!.x, g.spot(h)!.y);
 
+  it('alone with a party, hands the throw to the next hero with discs once the one in hand has thrown its last and hopped over', () => {
+    const g = arena(), [a, b, c] = g.party;
+    g.select(a.i);
+    g.throwDisc(a, -30, 0);
+    g.update(1 / 60);
+    // the disc still rolls: the hero in hand stays picked
+    expect(g.act).toBe(a.i);
+    follow(g, a);
+    g.update(1 / 60);
+    expect(g.act).toBe(b.i);
+    // a hero the player picks afterwards stays picked, discs or not
+    g.select(a.i);
+    g.update(1 / 60);
+    expect(g.act).toBe(a.i);
+    g.select(b.i);
+    // a hero with no discs left is passed over
+    c.hand = 0;
+    g.throwDisc(b, 0, -30);
+    follow(g, b);
+    g.update(1 / 60);
+    expect(g.act).toBe(b.i);
+    // online every player throws for their own hero: nobody is switched over
+    const o = arena();
+    o.online = true;
+    o.select(o.party[0].i);
+    o.throwDisc(o.party[0], -30, 0);
+    follow(o, o.party[0]);
+    o.update(1 / 60);
+    expect(o.act).toBe(o.party[0].i);
+  });
+
   it('goes over to its disc the moment it stops and throws the next one from there: two discs, two moves', () => {
     const g = arena(), [a, b, c] = g.party;
     for (const [i, j] of [[5, 4], [6, 4]]) expect(isFloor(g.S, i, j)).toBe(true);

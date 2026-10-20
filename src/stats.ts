@@ -1,6 +1,7 @@
-// The player's own statistics, kept in this browser: how many runs, how long, with which hero, and the records.
+// The player's own statistics, kept in this browser: how many runs, how long, with which heroes, and the records.
 // Online every screen counts its own player's hero: the host counts what the heroes do (`Tally` in src/game.ts) and the
-// snapshots carry it, so each player reads their own hero's numbers from the game state.
+// snapshots carry it, so each player reads their own hero's numbers from the game state. In the campaign the player
+// plays the whole party, so every hero of it counts: a run with each, and all they did.
 
 import { newTally, type HeroState, type Tally } from './game';
 import { FLOORS, type Run } from './run';
@@ -11,12 +12,14 @@ export interface HeroStats { runs: number; wins: number; time: number; kills: nu
 /** The run under way (or the last one), and how much of it has been added to the totals already. */
 interface Cur {
   seed: number;
-  hero: string;
+  /** The heroes this player plays in it, by key: online their own, in the campaign the whole party. */
+  heroes: string[];
   time: number;
   rooms: number;
   bosses: number;
   arts: number;
-  tally: Tally;
+  /** Each hero's tally as far as it is in the totals, by key. */
+  tallies: Record<string, Tally>;
   end?: 'win' | 'lose';
 }
 
@@ -53,6 +56,12 @@ function load(): Stats {
   const s = blank();
   try {
     const o = JSON.parse(localStorage.getItem(KEY) || '{}') as Partial<Stats>;
+    // a run counted before the campaign's party had one hero and one tally
+    const cur = o.cur as (Cur & { hero?: string; tally?: Tally }) | null | undefined;
+    if (cur && !cur.heroes) {
+      cur.heroes = cur.hero ? [cur.hero] : [];
+      cur.tallies = cur.hero && cur.tally ? { [cur.hero]: cur.tally } : {};
+    }
     return { ...s, ...o, sum: { ...s.sum, ...o.sum }, best: { ...s.best, ...o.best }, heroes: o.heroes ?? {} };
   } catch {
     return s;
@@ -75,14 +84,17 @@ const heroStats = (key: string) => (stats.heroes[key] ??= { runs: 0, wins: 0, ti
 /** The run being counted, if `run` is it. */
 const counting = (run: Run) => (stats.cur?.seed === run.seed ? stats.cur : null);
 
-/** A run begins with this player's hero (by its key), or goes on after a reload or a rejoin: the same run counts once. */
-export function beginRun(run: Run, key: string, online: boolean) {
-  if (stats.cur?.seed === run.seed && stats.cur.hero === key) return;
+/**
+ * A run begins with this player's heroes (by their keys: online the own one, in the campaign the party), or goes on after
+ * a reload or a rejoin: the same run counts once. Each hero counts a run of its own.
+ */
+export function beginRun(run: Run, keys: string[], online: boolean) {
+  if (stats.cur?.seed === run.seed && stats.cur.heroes.join() === keys.join()) return;
   stats.runs++;
   if (online) stats.online++;
-  heroStats(key).runs++;
+  for (const k of keys) heroStats(k).runs++;
   stats.since ||= Date.now();
-  stats.cur = { seed: run.seed, hero: key, time: 0, rooms: 0, bosses: 0, arts: 0, tally: newTally(run.seed) };
+  stats.cur = { seed: run.seed, heroes: keys, time: 0, rooms: 0, bosses: 0, arts: 0, tallies: {} };
   saveStats();
 }
 
@@ -92,31 +104,35 @@ export function playTime(run: Run, dt: number) {
   if (!c || c.end) return;
   c.time += dt;
   stats.time += dt;
-  heroStats(c.hero).time += dt;
+  for (const k of c.heroes) heroStats(k).time += dt;
 }
 
 /**
- * Add what is new in the run since the last call: the hero's tally, the rooms passed (`choosing`: the party stands between
+ * Add what is new in the run since the last call: the heroes' tallies, the rooms passed (`choosing`: the party stands between
  * rooms, so the last one entered is behind it), the floors' bosses and the trophies.
  */
-export function syncRun(run: Run, hero: HeroState | null, choosing: boolean) {
+export function syncRun(run: Run, heroes: HeroState[], choosing: boolean) {
   const c = counting(run);
   if (!c) return;
-  const t = hero?.def.key === c.hero && hero.tally?.run === c.seed ? hero.tally : null;
-  if (t) {
+  // only the heroes the run began with, and their tallies of this run
+  const mine = heroes.filter(h => c.heroes.includes(h.def.key) && h.tally?.run === c.seed);
+  for (const h of mine) {
+    const key = h.def.key, t = h.tally!, seen = (c.tallies[key] ??= newTally(c.seed));
     for (const k of SUMS) {
-      const d = t[k] - c.tally[k];
+      const d = t[k] - seen[k];
       if (d <= 0) continue;
       stats.sum[k] += d;
-      c.tally[k] = t[k];
-      if (k === 'kills') heroStats(c.hero).kills += d;
+      seen[k] = t[k];
+      if (k === 'kills') heroStats(key).kills += d;
     }
-    c.tally.top = Math.max(c.tally.top, t.top);
-    c.tally.rico = Math.max(c.tally.rico, t.rico);
-    if (t.top > stats.sum.top) { stats.sum.top = t.top; stats.best.topBy = c.hero; }
+    seen.top = Math.max(seen.top, t.top);
+    seen.rico = Math.max(seen.rico, t.rico);
+    if (t.top > stats.sum.top) { stats.sum.top = t.top; stats.best.topBy = key; }
     stats.sum.rico = Math.max(stats.sum.rico, t.rico);
-    stats.best.kills = Math.max(stats.best.kills, c.tally.kills);
-    const arts = hero!.arts?.length ?? 0;
+  }
+  if (mine.length) {
+    stats.best.kills = Math.max(stats.best.kills, Object.values(c.tallies).reduce((n, t) => n + t.kills, 0));
+    const arts = mine.reduce((n, h) => n + (h.arts?.length ?? 0), 0);
     if (arts > c.arts) { stats.arts += arts - c.arts; c.arts = arts; }
   }
   const won = c.end === 'win', entered = run.path.reduce((a, p) => a + p.length, 0);
@@ -130,16 +146,16 @@ export function syncRun(run: Run, hero: HeroState | null, choosing: boolean) {
 }
 
 /** The run is over: won (the last boss is down) or lost (the whole party fell). Counted once, whatever comes again. */
-export function endRun(run: Run, hero: HeroState | null, win: boolean) {
+export function endRun(run: Run, heroes: HeroState[], win: boolean) {
   const c = counting(run);
   if (!c || c.end) return;
   c.end = win ? 'win' : 'lose';
   if (win) {
     stats.wins++;
-    heroStats(c.hero).wins++;
+    for (const k of c.heroes) heroStats(k).wins++;
     if (!stats.best.fast || c.time < stats.best.fast) stats.best.fast = c.time;
   } else stats.losses++;
-  syncRun(run, hero, false);
+  syncRun(run, heroes, false);
   saveStats();
 }
 

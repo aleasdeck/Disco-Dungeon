@@ -612,6 +612,9 @@ i.ico { display: inline-block; font-style: normal; }
 .pick.mine { outline: 3px solid var(--gold); outline-offset: 2px; }
 .pick.taken { filter: grayscale(0.7) brightness(0.6); cursor: default; }
 .hero-lead { margin: 4px 0 14px; color: #b2a38c; }
+/* the campaign's party size: three tabs over the cards, and the picks' order on the cards once there are several */
+.hero-size { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 4px; }
+.pick-n { position: absolute; top: 5px; left: 5px; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--gold); color: #1c120a; font: 700 15px/1 Oswald, sans-serif; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45); }
 .hero-info { min-height: 3em; margin: 0 0 14px; }
 .hero-info b { font: 600 17px Oswald, sans-serif; }
 .players { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
@@ -1012,6 +1015,14 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .camp-who img { width: 30px; height: 30px; clip-path: var(--cut-face); background: var(--c); }
 .camp-who b { font: 600 15px Oswald, sans-serif; color: var(--text); }
 .camp-who.dead img { filter: grayscale(1) brightness(0.6); }
+/* a party by the fire, one player for all: whose pick the window asks for, the heroes still to pick as buttons, and a line
+   with each hero's face once all have picked */
+button.camp-who { padding: 2px 10px 2px 2px; border: 0; background: rgba(0, 0, 0, 0.28); clip-path: var(--cut-card); cursor: pointer; }
+button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
+.camp-for { display: flex; align-items: center; gap: 8px; color: var(--text); }
+.camp-for img { width: 30px; height: 30px; clip-path: var(--cut-face); background: var(--c); }
+.ev-out.camp-out { grid-template-columns: 34px minmax(0, 1fr); column-gap: 10px; align-items: center; padding: 7px 16px 7px 10px; }
+.camp-out img { grid-row: span 2; width: 34px; height: 34px; clip-path: var(--cut-face); background: var(--c); }
 #campLeave { justify-self: end; align-self: flex-end; margin-top: 4px; }
 /* whom to bandage: the question over the teammates' slabs, and a short slab back to the other picks */
 .camp-ask { margin: 0; font: 600 17px/1.2 Oswald, sans-serif; color: var(--muted); letter-spacing: 0.02em; }
@@ -1022,6 +1033,8 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
   .camp-opt:has(> i[data-art]:not(:empty)) { padding-left: 56px; }
   .camp-opt > i[data-art] { left: 8px; width: 40px; height: 40px; }
   .camp-who { font-size: 15px; }
+  .ev-out.camp-out { grid-template-columns: 28px minmax(0, 1fr); padding: 4px 14px 4px 8px; gap: 0 10px; }
+  .camp-out img { width: 28px; height: 28px; }
 }
 @media (orientation: portrait) and (max-width: 700px) {
   #campScreen { align-items: start; }
@@ -1062,6 +1075,14 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .fg-me img { width: 34px; height: 34px; clip-path: var(--cut-face); background: var(--c); }
 .fg-me b { font: 600 18px Oswald, sans-serif; color: var(--c); }
 .fg-me span { font: 16px var(--hand); color: var(--muted); }
+/* alone with a party: a tab for each hero, the open one lit in its colour, «даром» on a tab still owed a free level */
+.fg-team { display: flex; flex-wrap: wrap; gap: 8px; }
+.fg-tab { display: flex; align-items: center; gap: 7px; padding: 4px 12px 4px 4px; border: 0; background: rgba(0, 0, 0, 0.28); clip-path: var(--cut-card); color: var(--muted); font: 600 16px Oswald, sans-serif; cursor: pointer; }
+.fg-tab img { width: 34px; height: 34px; clip-path: var(--cut-face); background: var(--c); }
+.fg-tab.on { background: var(--c); color: #fff; }
+.fg-tab em { font: 600 12px/1 Oswald, sans-serif; font-style: normal; text-transform: uppercase; letter-spacing: 0.04em; color: #7be39a; }
+.fg-tab.on em { color: #e9f7ea; }
+.fg-tab:not(.on):hover { background: rgba(0, 0, 0, 0.4); color: var(--text); }
 .fg-up { padding: 8px 92px 9px 72px; }
 .fg-up > i[data-art] { position: absolute; left: 12px; top: 50%; width: 52px; height: 52px; transform: translateY(-50%) rotate(-6deg); filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45)); }
 .fg-name { display: flex; align-items: center; gap: 10px; }
@@ -1084,6 +1105,8 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
   .art-panel #forgeScreen .ev-panel { padding: 20px 24px; }
   #forgeScreen .fg-mine { gap: 6px; }
   .fg-me { display: none !important; }
+  .fg-tab { padding: 2px 10px 2px 2px; font-size: 14px; }
+  .fg-tab img { width: 26px; height: 26px; }
   #forgeScreen .ev-text { font-size: 15px; }
   /* the name and what the next level gives on one line, so the four slabs and the way out fit the screen's height */
   .fg-up { grid-auto-flow: column; justify-content: start; align-items: center; gap: 14px; padding: 5px 76px 6px 56px; }
@@ -1095,6 +1118,8 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 }
 @media (orientation: portrait) and (max-width: 700px) {
   #forgeScreen { align-items: start; }
+  /* the heroes' tabs keep to one row: the open one with its name, the others only the face */
+  .fg-tab:not(.on) b { display: none; }
   .fg-up { padding-right: 78px; }
   .fg-cost { right: 14px; font-size: 22px; }
 }

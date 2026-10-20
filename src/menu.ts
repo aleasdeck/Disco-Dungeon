@@ -154,15 +154,32 @@ export function renderStats() {
   if (cv && fi >= 0) drawPortrait(cv, { i: fi, def: HEROES[fi] });
 }
 
-// ------------------------------------------------------------ campaign hero
+// ------------------------------------------------------------ campaign party
 
-/** The campaign's hero cards: the picked one is marked, and below them what it does. */
-export function renderHeroSelect(picked: number, onPick: (hero: number) => void) {
+/** The campaign's party size in words: who to pick, and how many are still missing. */
+const SIZE_WORDS = ['', 'одного героя', 'двух героев', 'трёх героев'];
+
+/** Above the cards: what a party of this size is, and how the rooms meet it. */
+const SIZE_LEAD = [
+  '',
+  'Выбери героя: весь забег ты ведёшь его одного. Комнаты подстроены под одиночку: врагов меньше, и они слабее, чем против отряда.',
+  'Выбери двух героев: весь забег ты ведёшь обоих и бросаешь за каждого. Комнаты подстроены под двоих, как в сетевой игре.',
+  'Выбери трёх героев: весь забег ты ведёшь всех троих и бросаешь за каждого. Комнаты подстроены под полный отряд, как в сетевой игре.',
+];
+
+/**
+ * The campaign's screen: how many heroes go (1 to 3, one player plays them all) and the hero cards. The picked ones are
+ * marked, numbered once there are several, and below the cards stands what the last tapped hero (`shown`) does.
+ */
+export function renderHeroSelect(o: { size: number; party: number[]; shown: number; onPick: (hero: number) => void; onSize: (n: number) => void }) {
+  $('heroSize').innerHTML = [1, 2, 3].map(n => `<button class="btn tab${n === o.size ? ' on' : ''}" data-n="${n}" aria-pressed="${n === o.size}">${n} ${plural(n, 'герой', 'героя', 'героев')}</button>`).join('');
+  $('heroSize').querySelectorAll<HTMLButtonElement>('button').forEach(b => b.addEventListener('click', () => o.onSize(Number(b.dataset.n))));
+  $('heroLead').textContent = SIZE_LEAD[o.size];
   pickRows($('heroPicks'), i => {
-    const def = HEROES[i], b = document.createElement('button');
-    b.className = 'pick' + (picked === i ? ' mine' : '');
+    const def = HEROES[i], at = o.party.indexOf(i), b = document.createElement('button');
+    b.className = 'pick' + (at >= 0 ? ' mine' : '');
     b.style.setProperty('--c', def.col);
-    b.setAttribute('aria-pressed', String(picked === i));
+    b.setAttribute('aria-pressed', String(at >= 0));
     const cv = document.createElement('canvas');
     drawPortrait(cv, { i, def });
     b.append(cv);
@@ -170,12 +187,22 @@ export function renderHeroSelect(picked: number, onPick: (hero: number) => void)
     const label = document.createElement('span');
     label.textContent = def.name;
     b.append(label);
-    b.addEventListener('click', () => onPick(i));
+    // in a party the picks are numbered: the first goes first on the strip and by the fire
+    if (at >= 0 && o.size > 1) {
+      const n = document.createElement('b');
+      n.className = 'pick-n';
+      n.textContent = String(at + 1);
+      b.append(n);
+    }
+    b.addEventListener('click', () => o.onPick(i));
     return b;
   });
-  const def = HEROES[picked];
+  const def = HEROES[o.shown];
   $('heroInfo').innerHTML = `<b style="color:${def.col}">${def.name}</b>. ${kindOf(def)}. HP ${def.hp}, урон ${fullHit(def.m, def.pw)}, скорость ${Math.round(def.pw * 100)}%, отскок ${Math.round(def.e * 100)}%. `
     + `Способность «${def.ab}»: ${def.abTxt}`;
+  const left = o.size - o.party.length;
+  $('heroLeft').textContent = left > 0 ? `Выбери ещё ${SIZE_WORDS[left]}` : '';
+  $<HTMLButtonElement>('heroGo').disabled = left > 0;
 }
 
 // ------------------------------------------------------------ settings

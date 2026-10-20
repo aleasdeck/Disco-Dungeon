@@ -1,7 +1,7 @@
 import './style.css';
 import { BOOT_GAGS, COMBAT_ROOMS, HEROES, MAX_PLAYERS, WALL_H, forgeOre } from './data';
 import { Camera } from './camera';
-import { Game, newBank, newParty } from './game';
+import { Game, newBank, newParty, type HeroState } from './game';
 import { Net, type Player } from './net';
 import { applySnapshot, snapshot, type MapState } from './sync';
 import { saveSettings, settings } from './settings';
@@ -53,6 +53,8 @@ let camp: CampState | null = null;
 let campShut = -1;
 /** Client: what this player asked the host to do at the camp, while the answer is on its way. */
 let campAsked: CampPick | undefined;
+/** Alone with a party: the hero whose pick by the fire the camp window asks for (once all have picked, the last of them). */
+let campFor = -1;
 /** The floor boss's trophies the party shares out after the fight; the map waits until they are shared. */
 let loot: LootState | null = null;
 /** The seed of the trophies this player has read and closed: the window stays shut for them. */
@@ -192,8 +194,12 @@ function goOn() {
   if (loot && !loot.done) { if (lootAgreed(loot, atTable())) shareLoot(); else shareMap(); }
 }
 const myHero = () => players.find(p => p.id === net.id)?.hero ?? null;
-/** This screen's own hero: online the player's, alone the one hero of the campaign. */
+/** This screen's own hero: online the player's, alone the first hero of the campaign's party. */
 const meHero = () => (game.online ? game.party.find(h => h.i === myHero()) ?? null : game.party[0] ?? null);
+/** One player plays every hero of the party: the campaign of two or three. The windows between rooms then ask for each hero. */
+const team = () => !game.online && game.party.length > 1;
+/** The heroes this screen's player plays, for the statistics: online their own, in the campaign the whole party. */
+const myHeroes = (): HeroState[] => (game.online ? [meHero()].filter(h => h !== null) : game.party);
 /** The players as the clients see them: without anyone's rejoin key. */
 const pub = () => players.map(({ key: _key, ...p }) => p);
 
@@ -230,8 +236,8 @@ function startRun(picks?: number[]) {
   flushStats();
   run = newRun();
   game.party = newParty(picks, run.seed);
-  const me = meHero();
-  if (me) beginRun(run, me.def.key, mode === 'host');
+  const mine = myHeroes();
+  if (mine.length) beginRun(run, mine.map(h => h.def.key), mode === 'host');
   game.bank = newBank();
   game.pickActiveParty();
   hud.buildAllies();
@@ -252,18 +258,42 @@ function startRun(picks?: number[]) {
   shareMap();
 }
 
-/** The campaign: one hero, picked on its own screen, goes through the whole run. */
+/**
+ * The campaign: the player picks how many heroes go (1 to 3) and which, on its own screen, and plays them all through the
+ * whole run. A tap on a hero takes it into the party or out of it; once the party is full, a new pick pushes the first out.
+ */
 function openHeroSelect() {
-  const pick = (i: number) => { settings.hero = i; saveSettings(); renderHeroSelect(i, pick); };
-  pick(HEROES[settings.hero] ? settings.hero : 0);
+  const size = Math.min(3, Math.max(1, settings.size || 1));
+  let party = settings.party.filter((i, k, a) => HEROES[i] && a.indexOf(i) === k).slice(-size);
+  if (!party.length) party = [0];
+  let shown = party[party.length - 1];
+  const draw = () => {
+    settings.size = size;
+    settings.party = party;
+    settings.hero = party[0] ?? 0;
+    saveSettings();
+    renderHeroSelect({ size, party, shown, onPick, onSize });
+  };
+  const onPick = (i: number) => {
+    shown = i;
+    if (party.includes(i)) { if (size > 1) party = party.filter(o => o !== i); }
+    else party = [...party, i].slice(-size);
+    draw();
+  };
+  // a smaller party keeps the heroes picked last
+  const onSize = (n: number) => {
+    settings.size = n;
+    openHeroSelect();
+  };
+  draw();
   show('heroSelect');
 }
 
-function startCampaign(hero: number) {
+function startCampaign(heroes: number[]) {
   leaveOnline();
   setOnline('solo');
   show(null);
-  startRun([hero]);
+  startRun(heroes);
 }
 
 /** Go into a room on the map. */
@@ -305,6 +335,7 @@ function choose(id: string) {
   } else {
     // the camp: every hero does one thing by the fire in its own window; the map waits behind it for the vote
     camp = { seed: run.seed + depth * 131, did: {} };
+    campFor = -1;
     showMap(false);
     showCamp();
   }
@@ -323,20 +354,41 @@ function showCamp() {
   $('campScreen').hidden = !open;
   liftStrip();
   if (!open) return;
-  const mine = game.online ? myHero() : game.party[0]?.i ?? null, me = game.party.find(h => h.i === mine) ?? null;
-  campView.render(camp!, me, game.party, game.online ? h => players.find(p => p.hero === h.i)?.name ?? h.def.name : undefined, campAsked);
+  const nameOf = game.online ? (h: HeroState) => players.find(p => p.hero === h.i)?.name ?? h.def.name : team() ? (h: HeroState) => h.def.name : undefined;
+  campView.render(camp!, campHero(), game.party, nameOf, campAsked, team());
+}
+
+/**
+ * The hero the camp window speaks for: online and alone this screen's own; for a party the one whose pick it asks for now
+ * (the one tapped, else the first still by the fire), and once all have picked, the last of them.
+ */
+function campHero(): HeroState | null {
+  if (!team()) {
+    const mine = game.online ? myHero() : game.party[0]?.i ?? null;
+    return game.party.find(h => h.i === mine) ?? null;
+  }
+  const left = game.party.filter(h => !camp?.did[h.i]);
+  return left.find(h => h.i === campFor) ?? left[0] ?? game.party.find(h => h.i === campFor) ?? game.party[game.party.length - 1] ?? null;
 }
 
 // alone the pick is done at once; online the host does it and tells everyone
 campView.onPick = pick => {
   if (!camp) return;
-  const me = game.online ? myHero() : game.party[0]?.i ?? null;
+  const me = campHero()?.i ?? null;
   if (me === null) return;
   if (mode === 'client') {
     campAsked = pick;
     showCamp();
     net.send({ t: 'camp', pick });
-  } else campPick(me, pick);
+  } else {
+    campFor = me;
+    campPick(me, pick);
+  }
+};
+campView.onFor = hero => {
+  if (!camp || !team() || camp.did[hero]) return;
+  campFor = hero;
+  showCamp();
 };
 campView.onLeave = () => {
   if (camp) campShut = camp.seed;
@@ -437,14 +489,31 @@ function showLoot() {
   const open = !!loot && !(loot.done && lootShut === loot.seed) && !(loot.from && ev && evShut !== ev.seed);
   $('lootScreen').hidden = !open;
   if (!open) return;
-  const mine = game.online ? myHero() : game.party[0]?.i ?? null, me = game.party.find(h => h.i === mine) ?? null;
-  lootView.render(loot!, me, game.party, lootVotes(), game.online ? h => players.find(p => p.hero === h.i)?.name ?? h.def.name : undefined);
+  const nameOf = game.online ? (h: HeroState) => players.find(p => p.hero === h.i)?.name ?? h.def.name : team() ? (h: HeroState) => h.def.name : undefined;
+  lootView.render(loot!, lootHero(), game.party, lootVotes(), nameOf, team());
 }
 
-// alone a tap takes the trophy; online it points at the one the player wants, and they are shared out once no two want the same
+/**
+ * The hero the trophies' window speaks for: online and alone this screen's own; for a party the first still without a
+ * trophy while they are being picked, and nobody once they are shared out (the window then shows every hero's).
+ */
+function lootHero(): HeroState | null {
+  if (!team()) {
+    const mine = game.online ? myHero() : game.party[0]?.i ?? null;
+    return game.party.find(h => h.i === mine) ?? null;
+  }
+  return loot?.done ? null : game.party.find(h => loot?.picks[h.i] === undefined) ?? null;
+}
+
+// alone a tap takes the trophy; online it points at the one the player wants, and they are shared out once no two want the
+// same; for a party it goes to the hero whose turn it is, and a tap on a trophy another hero took takes it back from them
 lootView.onPick = opt => {
   if (!loot || loot.done) return;
-  const me = game.online ? myHero() : game.party[0]?.i ?? null;
+  if (team()) {
+    const by = game.party.find(h => loot!.picks[h.i] === opt);
+    if (by) { delete loot.picks[by.i]; showLoot(); return; }
+  }
+  const me = lootHero()?.i ?? null;
   if (me === null) return;
   if (mode === 'client') {
     loot = { ...loot, picks: { ...loot.picks, [me]: opt } };
@@ -458,8 +527,8 @@ lootView.onLeave = () => {
   showMap(true);
 };
 
-/** The heroes whose players share the trophies out: online the ones here, alone the lone hero. */
-const lootTable = () => (game.online ? atTable() : game.party.slice(0, 1).map(h => h.i));
+/** The heroes whose players share the trophies out: online the ones here, alone every hero of the party. */
+const lootTable = () => (game.online ? atTable() : game.party.map(h => h.i));
 
 /** Host (or a lone player): a player points at a trophy for their hero. */
 function lootPick(hero: number, opt: number) {
@@ -481,8 +550,17 @@ function shareLoot() {
   shareMap();
 }
 
-/** Online: whose face stands on which trophy, and whom the share-out still waits for. Alone there is nothing to show. */
+/**
+ * Online: whose face stands on which trophy, and whom the share-out still waits for. For a party: the faces of the heroes
+ * on the trophies already picked for them. Alone with one hero there is nothing to show.
+ */
 function lootVotes(): LootVotes | undefined {
+  if (team()) {
+    if (!loot) return undefined;
+    const faces: LootVotes['faces'] = {};
+    for (const h of game.party) if (loot.picks[h.i] !== undefined) (faces[loot.picks[h.i]] ??= []).push({ col: h.def.col, name: h.def.name, me: false, face: faceUrl(h) });
+    return { faces, mine: null, note: '' };
+  }
   const table = mode === 'host' ? atTable() : mode === 'client' ? voters : [];
   if (!loot || table.length < 2) return undefined;
   const me = myHero(), picks = loot.picks;
@@ -568,7 +646,7 @@ game.onRoomEnd = win => {
   const S = game.S, boss = S.spec.type === 'boss';
   const last = boss && run.floor === FLOORS - 1;
   setTimeout(() => {
-    if (!win || last) endRun(run, meHero(), win);
+    if (!win || last) endRun(run, myHeroes(), win);
     if (!win) return showEnd({ title: game.party.length > 1 ? 'Отряд пал' : 'Герой пал', text: `Забег окончен на этаже ${run.floor + 1}, сложность ${S.spec.depth}.`, kind: 'again' });
     if (last) {
       const left = game.alive().map(h => h.def.name).join(', ');
@@ -661,7 +739,7 @@ function openMenu() {
 $('mContinue').addEventListener('click', () => show(null));
 $('mCampaign').addEventListener('click', openHeroSelect);
 $('heroBack').addEventListener('click', openMenu);
-$('heroGo').addEventListener('click', () => startCampaign(settings.hero));
+$('heroGo').addEventListener('click', () => { if (settings.party.length === settings.size) startCampaign(settings.party); });
 $('mOnline').addEventListener('click', () => { $<HTMLInputElement>('lobbyName').value = settings.name; resetLobby(); show('lobby'); });
 $('mCollection').addEventListener('click', () => { renderCollection('heroes'); show('collection'); });
 $('mStats').addEventListener('click', () => { flushStats(); renderStats(); show('statsScreen'); });
@@ -952,7 +1030,7 @@ net.onMsg = (from, m) => {
     const went = choosing && !m.m.choosing;
     ({ run, choosing, votes, voters } = m.m);
     const mine = myHero();
-    if (started && mine !== null) beginRun(run, HEROES[mine].key, true);
+    if (started && mine !== null) beginRun(run, [HEROES[mine].key], true);
     ev = m.m.ev ?? null;
     camp = m.m.camp ?? null;
     loot = m.m.loot ?? null;
@@ -980,7 +1058,7 @@ net.onMsg = (from, m) => {
     if (!shop && hud.atForge) showMap(false);
   } else if (m.t === 'screen') {
     // the host's word that the run is over: the last boss fell, or the whole party did
-    if (started && (m.win || m.lose)) endRun(run, meHero(), !!m.win);
+    if (started && (m.win || m.lose)) endRun(run, myHeroes(), !!m.win);
     screen(m.title, m.text, m.win, m.lose);
   }
   else if (m.t === 'lobbyBack') { started = false; ev = null; showEvent(); camp = null; showCamp(); loot = null; showLoot(); wait(''); hideEnd(); showMap(false); lobbyView(); show('lobby'); }
@@ -1029,7 +1107,7 @@ async function reopen(code: string) {
     applySnapshot(game, s.snap);
     setOnline('host');
     const mine = myHero();
-    if (mine !== null) beginRun(run, HEROES[mine].key, true);
+    if (mine !== null) beginRun(run, [HEROES[mine].key], true);
     game.pickActiveParty();
     hud.buildAllies();
     hud.refresh();
@@ -1094,7 +1172,7 @@ for (const ev of ['pointerdown', 'keydown', 'wheel'] as const) window.addEventLi
 
 /** Put what the run has come to so far into the statistics and write them down. */
 function flushStats() {
-  syncRun(run, meHero(), choosing);
+  syncRun(run, myHeroes(), choosing);
   saveStats();
 }
 

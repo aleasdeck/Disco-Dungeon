@@ -15,8 +15,8 @@ describe('player statistics', () => {
   it('counts a run once, its time, and what the hero did in it', () => {
     const run = newRun(4242), g = new Game();
     g.party = newParty([0], run.seed);
-    beginRun(run, 'bastion', false);
-    beginRun(run, 'bastion', false);
+    beginRun(run, ['bastion'], false);
+    beginRun(run, ['bastion'], false);
     expect(stats.runs).toBe(1);
     expect(stats.heroes.bastion.runs).toBe(1);
     playTime(run, 3);
@@ -26,8 +26,8 @@ describe('player statistics', () => {
     g.throwDisc(h, -30, -40);
     for (const m of g.S.mobs) g.hurtMob(m, 50, '#fff', true, 0.6, h);
     run.path[0].push(run.floors[0][0][0].id);
-    syncRun(run, h, false);
-    syncRun(run, h, false);
+    syncRun(run, [h], false);
+    syncRun(run, [h], false);
     expect(stats.sum.throws).toBe(1);
     expect(stats.sum.kills).toBe(g.S.mobs.length);
     expect(stats.heroes.bastion.kills).toBe(g.S.mobs.length);
@@ -37,7 +37,7 @@ describe('player statistics', () => {
     expect(stats.best.topBy).toBe('bastion');
     // the room the party stands in is passed once it stands between rooms again
     expect(stats.rooms).toBe(0);
-    syncRun(run, h, true);
+    syncRun(run, [h], true);
     expect(stats.rooms).toBe(1);
   });
 
@@ -45,15 +45,15 @@ describe('player statistics', () => {
     const old = newRun(1), run = newRun(4243), g = new Game();
     g.party = newParty([2], old.seed);
     g.party[0].tally!.kills = 9;
-    beginRun(run, g.party[0].def.key, true);
+    beginRun(run, [g.party[0].def.key], true);
     expect(stats.runs).toBe(2);
     expect(stats.online).toBe(1);
     const kills = stats.sum.kills;
-    syncRun(run, g.party[0], true);
+    syncRun(run, g.party, true);
     expect(stats.sum.kills).toBe(kills);
     playTime(run, 5);
-    endRun(run, g.party[0], true);
-    endRun(run, g.party[0], false);
+    endRun(run, g.party, true);
+    endRun(run, g.party, false);
     expect(stats.wins).toBe(1);
     expect(stats.losses).toBe(0);
     expect(stats.best.fast).toBe(5);
@@ -63,6 +63,27 @@ describe('player statistics', () => {
     expect(stats.time).toBe(8);
     // one run each: the favourite is the one played longer
     expect(favourite()).toBe(g.party[0].def.key);
+  });
+
+  it('counts a campaign party once, with a run for each hero and what all of them did', () => {
+    const run = newRun(4245), g = new Game();
+    g.party = newParty([0, 2], run.seed);
+    const keys = g.party.map(h => h.def.key), runs = stats.runs, kills = stats.sum.kills;
+    const was = keys.map(k => stats.heroes[k]?.runs ?? 0);
+    beginRun(run, keys, false);
+    beginRun(run, keys, false);
+    expect(stats.runs).toBe(runs + 1);
+    expect(keys.map(k => stats.heroes[k].runs)).toEqual(was.map(n => n + 1));
+    fightWith(g);
+    const [a, b] = g.party, [m1, m2] = g.S.mobs;
+    g.hurtMob(m1, 99, '#fff', true, 0.6, a);
+    g.hurtMob(m2, 99, '#fff', true, 0.6, b);
+    syncRun(run, g.party, false);
+    expect(stats.sum.kills).toBe(kills + 2);
+    expect(stats.best.kills).toBeGreaterThanOrEqual(2);
+    const wins = keys.map(k => stats.heroes[k].wins);
+    endRun(run, g.party, true);
+    expect(keys.map(k => stats.heroes[k].wins)).toEqual(wins.map(n => n + 1));
   });
 
   it("online, a client reads its own hero's numbers from the host's snapshots", () => {
