@@ -179,8 +179,8 @@ export class Hud {
   /** The enemy whose card is open, and whether a tap pinned it (a hover card goes when the pointer leaves). */
   private card = -1;
   private pinned = false;
-  /** The map room whose window is up (an event, the camp): the strip stays in sight over it and speaks of that room, not the room behind. */
-  private at: { floor: number; type: RoomType } | null = null;
+  /** The map room whose window main.ts put up (an event, the camp). */
+  private win: { floor: number; type: RoomType } | null = null;
   /** The hero (by index) whose card a tap on its face on the strip opened. */
   private peek = -1;
   /** The trophy socket whose hint is up, by its place, and whether a tap pinned it (a hover hint goes with the pointer). */
@@ -206,9 +206,19 @@ export class Hud {
   /** The blacksmith's screen is up on this screen. */
   get atForge() { return this.g.forge > 0 && this.g.forge !== this.forgeLeft; }
 
+  /**
+   * The window up over the room (an event, the camp, the blacksmith's): the strip stays in sight over it and speaks of
+   * that room, not the room behind. The sharpening after an elite is that elite room's own.
+   */
+  private get at() {
+    const S = this.g.S;
+    return this.atForge ? { floor: S.spec.floor, type: this.g.whet ? S.spec.type : 'forge' as RoomType } : this.win;
+  }
+
   leaveForge() {
     this.forgeLeft = this.g.forge;
-    this.forge();
+    // the strip takes off the window's dress with it
+    this.refresh();
   }
 
   constructor(private g: Game) {
@@ -271,15 +281,23 @@ export class Hud {
   /**
    * A map room's window opens (an event, the camp) or closes, with null: over it the strip keeps the party's faces with
    * their health and the ore, names that room instead of the room behind, and a tap on a face opens that hero's card.
+   * The blacksmith's window does the same by itself (refresh).
    */
   setWindow(at: { floor: number; type: RoomType } | null) {
-    if (at?.floor === this.at?.floor && at?.type === this.at?.type) return;
-    this.at = at;
-    document.documentElement.classList.toggle('at-window', !!at);
-    if (!at) this.closeHero();
+    if (at?.floor === this.win?.floor && at?.type === this.win?.type) return;
+    this.win = at;
+    if (this.g.S) this.refresh();
+    else this.liftStrip();
+  }
+
+  /** The strip takes on or leaves the window's dress as a window opens or closes. */
+  private liftStrip() {
+    const up = !!(this.g.S && this.at), root = document.documentElement;
+    if (root.classList.contains('at-window') === up) return;
+    root.classList.toggle('at-window', up);
+    if (!up) this.closeHero();
     this.tipPinned = false;
     this.closeTip();
-    if (this.g.S) this.refresh();
   }
 
   /** The big band across the room for a moment when the turn passes: "Ваш ход", "Ход врагов". */
@@ -321,6 +339,7 @@ export class Hud {
   refresh() {
     const g = this.g, S = g.S;
     fillIcons();
+    this.liftStrip();
     // the floor is laid out after the room's name (style.css): where the strip is narrow the floor gives way, never the room
     $('locName').innerHTML = `<span class="fl">Этаж ${(this.at?.floor ?? S.spec.floor) + 1} · </span><span>${ROOM_TYPES[this.at?.type ?? S.spec.type].name}</span>`;
     // the ore cave counts its turns down: «Ход 2 из 3»

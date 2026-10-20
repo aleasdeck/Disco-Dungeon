@@ -982,9 +982,10 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
   .ev-text { font-size: 17px; }
   .ev-fx { font-size: 16px; }
 }
-/* the top strip stays in sight over the event and the camp (Vladislav asked): the window starts under it and lends it
-   its dim, the strip names the room and drops what belongs to the room behind; a tap on a face opens that hero's card */
-#eventScreen, #campScreen { top: var(--top-h, 0px); }
+/* the top strip stays in sight over the event, the camp and the blacksmith's (Vladislav asked): the window starts under
+   it and lends it its dim, the strip names the room and drops what belongs to the room behind; a tap on a face opens that
+   hero's card */
+#eventScreen, #campScreen, #forgeScreen { top: var(--top-h, 0px); }
 .at-window .hud-top { background: rgba(10, 7, 5, 0.55); backdrop-filter: blur(3px); }
 .at-window :is(.where-sub, .queue, #btnMap, #btnLog) { display: none; }
 .hero-card.hero-peek { position: fixed; z-index: 21; bottom: auto; overflow: auto; }
@@ -994,10 +995,11 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .hero-peek .mc-hp u { font-size: 14px; line-height: 20px; }
 .mc-hp s { position: absolute; top: 0; bottom: 0; background: #8fc6ea; }
 @media (max-height: 520px) and (orientation: landscape) {
-  #eventScreen, #campScreen { padding-top: 6px; }
+  #eventScreen, #campScreen, #forgeScreen { padding-top: 6px; padding-bottom: 6px; }
   .at-window .ev-art { max-width: calc(100dvh - 80px - var(--top-h, 0px)); }
 }
 @media (orientation: portrait) and (max-width: 700px) {
+  #eventScreen, #campScreen, #forgeScreen { padding-top: 6px; }
   /* the queue is gone, so the ore comes up beside the faces and the strip keeps to one row */
   .at-window .hud-top::after { display: none; }
   .at-window .ore-chip { order: 1; margin-top: 0; align-self: center; }
@@ -1103,21 +1105,26 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 
 @media (max-height: 520px) and (orientation: landscape) {
   .art-panel #forgeScreen .ev-panel { padding: 20px 24px; }
-  #forgeScreen .fg-mine { gap: 6px; }
+  #forgeScreen .fg-mine { gap: 4px; }
   .fg-me { display: none !important; }
   .fg-tab { padding: 2px 10px 2px 2px; font-size: 14px; }
   .fg-tab img { width: 26px; height: 26px; }
   #forgeScreen .ev-text { font-size: 15px; }
   /* the name and what the next level gives on one line, so the four slabs and the way out fit the screen's height */
-  .fg-up { grid-auto-flow: column; justify-content: start; align-items: center; gap: 14px; padding: 5px 76px 6px 56px; }
+  .fg-up { grid-auto-flow: column; justify-content: start; align-items: center; gap: 14px; padding: 3px 76px 4px 56px; }
   .fg-up > i[data-art] { left: 8px; width: 36px; height: 36px; }
   .fg-fx { font-size: 15px; }
   #forgeDone { margin-top: 0; }
+  #forgeScreen .ev-body { gap: 6px; }
   .fg-cost { font-size: 20px; right: 14px; }
   .fg-cost .ico { width: 22px; height: 22px; }
 }
 @media (orientation: portrait) and (max-width: 700px) {
   #forgeScreen { align-items: start; }
+  /* under the top strip the four slabs and the way out still fit a phone's height */
+  .art-panel #forgeScreen .ev-panel { padding-top: 20px; padding-bottom: 20px; }
+  #forgeScreen .ev-body { gap: 10px; }
+  #forgeScreen .fg-mine { gap: 6px; }
   /* the heroes' tabs keep to one row: the open one with its name, the others only the face */
   .fg-tab:not(.on) b { display: none; }
   .fg-up { padding-right: 78px; }
