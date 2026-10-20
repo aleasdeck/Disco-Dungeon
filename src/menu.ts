@@ -4,7 +4,7 @@ import { BIOMES, HEROES, MOB_HP_MUL, KINDS, MOBS, fullHit, heroesByKind, kindOf,
 import { drawPortrait, faceUrl, mobIcon } from './ui';
 import { ARTIFACTS } from './artifacts';
 import { artIcon } from './icons';
-import { CASTS } from './room';
+import { BOSS_UP, CASTS } from './room';
 import { saveSettings, settings } from './settings';
 import { favourite, stats } from './stats';
 import { FLOORS, LAYERS } from './run';
@@ -66,10 +66,11 @@ export function renderCollection(tab: 'heroes' | 'mobs' | 'arts') {
     // the undertaker's coffin is a thing, not an enemy of its own
     // a boss's later phases are told on its own card
     (Object.keys(MOBS) as MobKind[]).filter(k => !MOBS[k].prop && !MOBS[k].of).forEach(k => {
-      const d = MOBS[k], card = document.createElement('article');
+      // a boss as a party of three meets it, its extra health and blow (BOSS_UP) included
+      const d = MOBS[k], up = BOSS_UP[k], card = document.createElement('article');
       card.className = 'card';
       card.innerHTML = `<img src="${mobIcon(k)}" alt=""><div><h3>${d.name}</h3><p><b>${FLOOR_NAMES[d.floor]}${d.boss ? ', босс' : CASTS.some(c => c.elite === k) ? ', элита' : ''}.</b> ${d.txt}</p>`
-        + `<dl><dt>HP</dt><dd>${Math.round(d.hp * MOB_HP_MUL)}</dd><dt>Удар</dt><dd>${d.dmg}</dd>${d.armor ? `<dt>Броня</dt><dd>${d.armor}</dd>` : ''}</dl></div>`;
+        + `<dl><dt>HP</dt><dd>${Math.round(d.hp * MOB_HP_MUL * (up?.hp[2] ?? 1))}</dd><dt>Удар</dt><dd>${d.dmg + (up?.dmg[2] ?? 0)}</dd>${d.armor ? `<dt>Броня</dt><dd>${d.armor}</dd>` : ''}</dl></div>`;
       grid.appendChild(card);
     });
   }

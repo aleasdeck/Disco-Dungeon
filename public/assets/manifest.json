@@ -44,6 +44,7 @@
     "fridge": { "file": "mobs/fridge.png", "facing": "left" },
     "fridge_open": { "file": "mobs/fridge_open.png", "facing": "left" },
     "dancer": { "file": "mobs/dancer.png", "facing": "left" },
+    "dancer2": { "file": "mobs/dancer.png", "facing": "left" },
     "discoball": { "file": "mobs/discoball.png", "facing": "left" },
     "discoball2": { "file": "mobs/discoball2.png", "facing": "left" },
     "dragon": { "file": "mobs/dragon.png", "facing": "left" },
