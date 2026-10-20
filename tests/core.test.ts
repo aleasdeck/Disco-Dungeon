@@ -2136,11 +2136,10 @@ describe('hero abilities work through the discs', () => {
     const cd = cli.S.discs[0];
     expect(roll(cli, cd)).toBeGreaterThan(7 * TILE);
     expect(cd.fall).toBe(0);
-    // stopped right over the hole, the disc stays up, and once the turn is over Ricochet hops to the floor beside it
+    // stopped right over the hole, the disc stays up and Ricochet hops to the floor beside it
     const still = lay(true, 0);
     Object.assign(still.d, cellCentre(6, 4), { vx: 0, vy: 0, hits: 1 });
-    endAll(still.g);
-    for (let k = 0; k < 100 && still.g.S.phase === 'throw'; k++) still.g.update(1 / 60);
+    still.g.update(0.02);
     expect(still.d.fall).toBe(0);
     const at = still.g.spot(still.h)!;
     expect(pitAt(still.g.S.pits, at.x, at.y)).toBeUndefined();
@@ -3217,7 +3216,7 @@ describe('enemy walking', () => {
   }, 20_000);
 });
 
-describe('heroes go where their last disc stopped', () => {
+describe('heroes go where each of their discs stopped', () => {
   /** A floor 0 fight with one archer in the far corner, the floor otherwise bare, every hero on its rune. */
   const arena = () => {
     const g = new Game();
@@ -3237,14 +3236,14 @@ describe('heroes go where their last disc stopped', () => {
     for (let k = 0; k < 100 && g.S.phase === 'throw'; k++) g.update(1 / 60);
     expect(g.S.phase).toBe('resolve');
   };
-  /** Play on until the hero's discs have stopped. */
+  /** Play on until the hero's disc has stopped and the hero has hopped over to it. */
   const follow = (g: Game, h: HeroState) => {
     for (let k = 0; k < 3000 && g.waits(h); k++) g.update(1 / 60);
     expect(g.waits(h)).toBe(false);
   };
   const cell = (g: Game, h: HeroState) => cellAt(g.spot(h)!.x, g.spot(h)!.y);
 
-  it('alone with a party, hands the throw to the next hero with discs once the one in hand has thrown its last and it stopped', () => {
+  it('alone with a party, hands the throw to the next hero with discs once the one in hand has thrown its last and hopped over', () => {
     const g = arena(), [a, b, c] = g.party;
     g.select(a.i);
     g.throwDisc(a, -30, 0);
@@ -3275,73 +3274,60 @@ describe('heroes go where their last disc stopped', () => {
     expect(o.act).toBe(o.party[0].i);
   });
 
-  it('throws every disc of the turn from where it stands, and its own discs lying on the table can be played off', () => {
-    const g = arena(), [a] = g.party, r = g.S.pads[a.pad!];
-    a.discs = 2;
-    a.hand = 2;
-    // the first disc goes off towards the middle of the room and stops there
-    const c = { x: g.S.Wx / 2, y: g.S.Wy / 2 }, L = Math.hypot(c.x - r.x, c.y - r.y), ux = (c.x - r.x) / L, uy = (c.y - r.y) / L;
-    g.throwDisc(a, ux * 30, uy * 30);
-    // the hero may throw again while it rolls, and stays put when it stops
-    expect(g.canThrow(a)).toBe(true);
-    follow(g, a);
-    const first = g.S.discs[0];
-    expect(first.gone).toBe(false);
-    expect(g.spot(a)).toEqual(r);
-    expect(a.from).toBe(null);
-    expect(g.canThrow(a)).toBe(true);
-    // the second leaves from the same cell, straight at the first one lying there, and knocks it on
-    const was = { x: first.x, y: first.y };
-    g.throwDisc(a, first.x - r.x, first.y - r.y);
-    const d = g.S.discs[1];
-    expect(Math.hypot(d.x - r.x, d.y - r.y)).toBeLessThan(8);
-    expect(g.predict(a, first.x - r.x, first.y - r.y).path[0]).toEqual([d.x, d.y]);
-    follow(g, a);
-    expect(Math.hypot(first.x - was.x, first.y - was.y)).toBeGreaterThan(4);
-    expect(g.spot(a)).toEqual(r);
-    expect(a.hand).toBe(0);
-  });
-
-  it('starts the next turn on the cell holding most of its last disc, and throws from there', () => {
+  it('goes over to its disc the moment it stops and throws the next one from there: two discs, two moves', () => {
     const g = arena(), [a, b, c] = g.party;
-    for (const [i, j] of [[5, 4], [6, 4], [3, 5]]) expect(isFloor(g.S, i, j)).toBe(true);
-    // a's first disc is forgotten, its last one lies mostly on (5, 4) and a little on (6, 4)
-    g.S.discs = [lying(g, a, cellCentre(3, 5).x, cellCentre(3, 5).y), lying(g, b, cellCentre(3, 5).x + 2, cellCentre(3, 5).y), lying(g, a, 94, 72)];
-    // nobody moves while the turn lasts
+    for (const [i, j] of [[5, 4], [6, 4]]) expect(isFloor(g.S, i, j)).toBe(true);
+    a.discs = 2;
+    a.hand = 1;
+    // a's first disc has just stopped, mostly on (5, 4) and a little on (6, 4): the second waits in hand
+    g.S.discs = [lying(g, a, 94, 72)];
+    expect(g.canThrow(a)).toBe(false);
+    g.throwDisc(a, -30, 0);
+    expect(g.S.discs).toHaveLength(1);
     g.update(1 / 60);
-    expect(g.spot(a)).toEqual(g.S.pads[a.pad!]);
-    expect(g.spot(b)).toEqual(g.S.pads[b.pad!]);
-    settle(g);
     expect(cell(g, a)).toEqual([5, 4]);
     expect(g.spot(a)).toEqual(cellCentre(5, 4));
-    expect(cell(g, b)).toEqual([3, 5]);
-    // a hero who threw nothing stays where it stood
+    // the heroes who threw nothing stay where they stood
+    expect(g.spot(b)).toEqual(g.S.pads[b.pad!]);
     expect(g.spot(c)).toEqual(g.S.pads[c.pad!]);
-    // the figure hops over for a moment
+    // the figure hops over for a moment, and throws nothing on the way
     g.update(0.2);
     const mid = g.figureAt(a)!, from = g.S.pads[a.pad!];
     expect(mid.lift).toBeGreaterThan(3);
     expect(Math.hypot(mid.x - from.x, mid.y - from.y)).toBeGreaterThan(1);
     expect(Math.hypot(mid.x - 88, mid.y - 72)).toBeGreaterThan(1);
-    // a hero that lands picks its last disc up; the earlier one was cleared away as the turn ended
-    g.update(0.4);
+    expect(g.canThrow(a)).toBe(false);
+    // it lands and picks the disc up, still in the heroes' turn, and the second disc leaves from the new cell
+    g.update(0.3);
     expect(g.figureAt(a)).toEqual({ ...cellCentre(5, 4), lift: 0 });
-    expect(g.S.discs.map(d => d.gone)).toEqual([true, true, true]);
+    expect(g.S.discs[0].gone).toBe(true);
+    expect(g.S.phase).toBe('throw');
+    expect(g.canThrow(a)).toBe(true);
+    g.throwDisc(a, 0, 30);
+    const d = g.S.discs[1];
+    expect(Math.hypot(d.x - cellCentre(5, 4).x, d.y - cellCentre(5, 4).y)).toBeLessThan(8);
+    expect(g.predict(a, 0, 30).path[0]).toEqual([d.x, d.y]);
+    // and once that one stops the hero moves again, onto the cell holding most of it
+    expect(g.canThrow(a)).toBe(false);
+    follow(g, a);
+    expect(d.gone).toBe(true);
+    expect(cell(g, a)).toEqual(g.cover(d)[0].slice(0, 2));
+    expect(cell(g, a)).not.toEqual([5, 4]);
+    expect(a.hand).toBe(0);
+    expect(g.S.turn).toBe(1);
+    // the next turn starts there
+    const there = g.spot(a);
+    settle(g);
     for (let k = 0; k < 2000 && g.S.phase !== 'throw'; k++) g.update(1 / 60);
     expect(g.S.turn).toBe(2);
-    expect(g.figureAt(a)).toEqual({ ...cellCentre(5, 4), lift: 0 });
-    expect(g.spot(a)).toEqual(cellCentre(5, 4));
-    // the next throw leaves from the new cell
-    g.throwDisc(a, -30, 0);
-    const d = g.S.discs[g.S.discs.length - 1];
-    expect(Math.hypot(d.x - cellCentre(5, 4).x, d.y - cellCentre(5, 4).y)).toBeLessThan(8);
-    expect(g.predict(a, -30, 0).path[0]).toEqual([d.x, d.y]);
+    expect(g.spot(a)).toEqual(there);
+    expect(g.figureAt(a)).toEqual({ ...there!, lift: 0 });
   });
 
-  it('two heroes after one cell: the one whose disc covers more of it gets it, the other the cell next most of its disc lies on', () => {
+  it('two heroes after one cell at the same moment: the one whose disc covers more of it gets it, the other the cell next most of its disc lies on', () => {
     const g = arena(), [a, b] = g.party;
     g.S.discs = [lying(g, b, 93, 72), lying(g, a, 88, 72)];
-    settle(g);
+    g.update(1 / 60);
     expect(cell(g, a)).toEqual([5, 4]);
     expect(cell(g, b)).toEqual([6, 4]);
   });
@@ -3350,7 +3336,7 @@ describe('heroes go where their last disc stopped', () => {
     const g = arena(), [a, b] = g.party;
     b.at = cellCentre(5, 4);
     g.S.discs = [lying(g, a, 88, 72)];
-    settle(g);
+    g.update(1 / 60);
     expect(g.spot(b)).toEqual(cellCentre(5, 4));
     expect(cell(g, a)).not.toEqual([5, 4]);
     expect(Math.max(...cell(g, a).map((v, k) => Math.abs(v - [5, 4][k])))).toBe(1);
@@ -3367,24 +3353,19 @@ describe('heroes go where their last disc stopped', () => {
     expect(cell(g, b)).toEqual([9, 3]);
   });
 
-  it('a hero whose last disc fell into a pit stays where it stood, wherever its earlier disc lies', () => {
-    const g = arena(), [a, b] = g.party;
+  it('a hero whose disc fell into a pit stays where it stood, and throws its next one from there', () => {
+    const g = arena(), [a] = g.party;
     a.at = cellCentre(5, 4);
     a.discs = 2;
     a.hand = 1;
-    // the first disc dropping into a hole moves nobody, and the next one leaves from the same cell
-    g.S.discs = [lying(g, a, 120, 60, 0.3)];
+    g.S.discs = [lying(g, a, 120, 60, 0.001)];
     g.update(1 / 60);
     expect(g.spot(a)).toEqual(cellCentre(5, 4));
-    g.throwDisc(a, 0, 30);
-    expect(Math.hypot(g.S.discs[1].x - cellCentre(5, 4).x, g.S.discs[1].y - cellCentre(5, 4).y)).toBeLessThan(8);
-    // the last one in the hole: a stays, though its earlier disc lies on the floor; b's way to its own disc is not in the way
-    const r = g.S.pads[a.pad!];
-    g.S.discs = [lying(g, a, 60, 60), lying(g, b, r.x, r.y), lying(g, a, 120, 60, 0.3)];
-    settle(g);
-    expect(g.spot(a)).toEqual(cellCentre(5, 4));
     expect(a.from).toBe(null);
-    expect(g.spot(b)).toEqual(r);
+    expect(g.canThrow(a)).toBe(true);
+    g.throwDisc(a, 0, 30);
+    const d = g.S.discs[1];
+    expect(Math.hypot(d.x - cellCentre(5, 4).x, d.y - cellCentre(5, 4).y)).toBeLessThan(8);
   });
 
   it('walkers go after the hero where it now stands, and never stop on a hero', () => {
@@ -3417,7 +3398,7 @@ describe('heroes go where their last disc stopped', () => {
     expect(client.spot(client.heroOf(a.i))).toEqual(cellCentre(5, 4));
   });
 
-  it('online, a client throws one disc after another from the same cell, and its hero moves only once the turn is over', () => {
+  it('online, a client throws its next disc only once the host has moved its hero over, and from the new cell', () => {
     const host = arena(), [, b] = host.party, cli = new Game(), sent: Action[] = [];
     host.online = true;
     cli.online = true;
@@ -3425,28 +3406,51 @@ describe('heroes go where their last disc stopped', () => {
     cli.canControl = h => h.i === b.i;
     const sync = () => applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
     b.discs = 2;
-    b.hand = 2;
+    b.hand = 1;
+    host.S.discs = [lying(host, b, 94, 72)];
     sync();
-    const cb = cli.heroOf(b.i), r = host.S.pads[b.pad!];
+    const cb = cli.heroOf(b.i);
+    // the disc lies still on the client's screen, but the host hasn't moved the hero yet
+    expect(cli.canThrow(cb)).toBe(false);
     cli.throwDisc(cb, -30, 0);
+    host.update(1 / 60);
+    sync();
+    expect(cli.spot(cb)).toEqual(cellCentre(5, 4));
+    expect(cli.canThrow(cb)).toBe(false);
+    cli.throwDisc(cb, -30, 0);
+    expect(sent).toEqual([]);
+    host.update(0.5);
+    sync();
     expect(cli.canThrow(cb)).toBe(true);
+    cli.throwDisc(cb, -30, 0);
+    expect(sent).toEqual([{ k: 'throw', h: b.i, dx: -30, dy: 0 }]);
+    // till the host's word on that throw comes, the client sends no other from the old cell
+    expect(cli.canThrow(cb)).toBe(false);
     host.perform(sent[0]);
+    const d = host.S.discs[host.S.discs.length - 1];
+    expect(d.hero).toBe(b);
+    expect(Math.hypot(d.x - cellCentre(5, 4).x, d.y - cellCentre(5, 4).y)).toBeLessThan(8);
     sync();
-    expect(cli.canThrow(cb)).toBe(true);
-    cli.throwDisc(cb, 0, -30);
-    expect(sent).toHaveLength(2);
-    host.perform(sent[1]);
-    expect(host.S.discs).toHaveLength(2);
-    for (const d of host.S.discs) expect(Math.hypot(d.x - r.x, d.y - r.y)).toBeLessThan(8);
-    for (let k = 0; k < 600 && host.moving(); k++) host.update(1 / 60);
-    sync();
-    expect(cli.spot(cb)).toEqual(r);
     expect(cb.hand).toBe(0);
-    const last = host.S.discs[1];
-    settle(host);
-    sync();
-    expect(cli.spot(cb)).not.toEqual(r);
-    expect(Math.hypot(cli.spot(cb)!.x - last.x, cli.spot(cb)!.y - last.y)).toBeLessThan(1.5 * TILE);
+    expect(cli.waits(cb)).toBe(true);
+  });
+
+  it('online, a throw the host took no notice of holds the client\'s next one back only for a moment', () => {
+    const host = arena(), [, b] = host.party, cli = new Game(), sent: Action[] = [];
+    let ms = 0;
+    host.online = true;
+    cli.online = true;
+    cli.clock = () => ms;
+    cli.send = x => sent.push(x);
+    cli.canControl = h => h.i === b.i;
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
+    const cb = cli.heroOf(b.i);
+    cli.throwDisc(cb, -30, 0);
+    expect(sent).toHaveLength(1);
+    ms = 1000;
+    expect(cli.canThrow(cb)).toBe(false);
+    ms = 2000;
+    expect(cli.canThrow(cb)).toBe(true);
   });
 });
 
