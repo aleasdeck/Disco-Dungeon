@@ -475,7 +475,7 @@ export class Hud {
     const brittle = `; урон от дисков и умений героев +${Math.round(frostVuln(m.frost) * 100)}%`;
     if (g.frozen(m)) out.push({ k: 'chill', t: 'Заморожен: пропустит ход' + brittle });
     else if (m.frost) out.push({ k: 'slow', t: `Замедлен: в свой ход пройдёт не больше ${FROST_STEPS === 1 ? 'клетки' : FROST_STEPS + ' клеток'}` + brittle });
-    if (m.kiss !== undefined) out.push({ k: 'kiss', t: 'Поцелуй Вешалки: в свой ход бьёт ближайшего другого врага, а не героев' });
+    if (m.kiss !== undefined) out.push({ k: 'kiss', n: m.kissLeft, t: `Поцелуй Вешалки: бьёт ближайшего другого врага, а не героев, ещё ${turns(m.kissLeft ?? 1)}` });
     const mate = g.cuffedTo(m);
     if (mate && mate.hp > 0) out.push({ k: 'cuffs', n: g.S.cuffs!.left, t: `В наручниках, в паре: ${MOBS[mate.k].name}. Урон по одному достаётся и другому, ещё ${turns(g.S.cuffs!.left)}` });
     if (isRanged(m.k)) out.push({ k: 'bow', t: 'Дальний бой: стреляет только в того, кого видит' });

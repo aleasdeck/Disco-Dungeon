@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, CUFF_TURNS, FOOD_HEAL, FOOD_PER_DISC, CLEAN_ORE, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, KINDS, RAGE_FROM, SHOVE_DMG, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, CUFF_TURNS, FOOD_HEAL, FOOD_PER_DISC, CLEAN_ORE, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, KISS_TURNS, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, KINDS, RAGE_FROM, SHOVE_DMG, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
 import { ART, FOOD_FLY, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { CASTS, CAVE, MOB_CAP, mobPool, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob, type ResNode } from '../src/room';
@@ -2896,9 +2896,31 @@ describe('the heroes past the first three', () => {
     expect(hp - near.hp).toBe(kissed.dmg);
     expect(far.hp).toBe(fh);
     expect(h.hp).toBe(99);
-    // the kiss is gone after its move: it goes for the hero again
+    // the kiss holds for KISS_TURNS enemy turns: next turn it goes for an enemy again, then for the hero
+    expect(kissed.kiss).toBe(h.i);
+    expect(kissed.kissLeft).toBe(KISS_TURNS - 1);
+    expect(kissed.intent).toMatchObject({ hero: -1 });
+    expect(g.incoming(h)).toBe(0);
+    for (let k = 1; k < KISS_TURNS; k++) turn(g);
     expect(kissed.kiss).toBeUndefined();
+    expect(kissed.kissLeft).toBeUndefined();
     expect(kissed.intent!.hero).toBe(h.i);
+  });
+
+  it('the model: a kiss on one still kissed starts its turns afresh', () => {
+    const g = arena([at('model')], [['skel', 2, 2], ['golem', 7, 1]]), h = g.party[0], [kissed] = g.S.mobs;
+    h.hp = h.max = 99;
+    corner(g, h);
+    g.S.discs = []; into(g, h, kissed, true); g.step(1 / 120);
+    expect(kissed.kissLeft).toBe(KISS_TURNS);
+    turn(g);
+    expect(kissed.kissLeft).toBe(KISS_TURNS - 1);
+    corner(g, h);
+    expect(kissed.intent).toMatchObject({ hero: -1, foe: 1 });
+    g.S.floats = [];
+    g.S.discs = []; into(g, h, kissed, true); g.step(1 / 120);
+    expect(kissed.kissLeft).toBe(KISS_TURNS);
+    expect(g.S.floats.some(f => f.txt === 'чмок!')).toBe(true);
   });
 
   it('the model: a kissed enemy walks to the other enemy, the other\'s armour counts, a shooter shoots one it sees', () => {
@@ -2947,10 +2969,12 @@ describe('the heroes past the first three', () => {
     host.loadRoom({ seed: 21, depth: 2, floor: 0, type: 'fight' });
     host.S.cuffs = { a: 0, b: 1, left: 2 };
     host.S.mobs[0].kiss = at('model');
+    host.S.mobs[0].kissLeft = 2;
     cli.send = () => {};
     applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
     expect(cli.S.cuffs).toEqual({ a: 0, b: 1, left: 2 });
     expect(cli.S.mobs[0].kiss).toBe(at('model'));
+    expect(cli.S.mobs[0].kissLeft).toBe(2);
     expect(cli.cuffedTo(cli.S.mobs[1])).toBe(cli.S.mobs[0]);
   });
 
