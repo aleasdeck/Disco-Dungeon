@@ -4,7 +4,7 @@
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CLEAN_ORE, CRIT, CRIT_COS, CUFF_TURNS, E_MAX, ELITE_UPS, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, RAGE_FROM, RAGE_FROM_BOSS, SHOVE_DMG, TILE, UPS, UP_COST, ZAP, ZAP_REACH, frostVuln, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type StatKey } from './data';
 import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { mulberry32 } from './rng';
-import { has, type ArtKey } from './artifacts';
+import { has, type ArtKey, type Kept } from './artifacts';
 import type { Sfx } from './audio/sfx';
 import { CASTS, caveTurns, cellAt, cellCentre, generate, hazKey, inPit, isFloor, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec } from './room';
 
@@ -55,6 +55,8 @@ export interface HeroState {
   free?: number;
   /** The cop's «Наручники»: the enemies (by index) his discs have hit this turn, the first two; the second hit cuffs them. */
   cuffing?: number[];
+  /** Online: the boss's trophies kept for the hero while its player was away at the share-out, to pick one from once back. */
+  kept?: Kept | null;
 }
 
 /**

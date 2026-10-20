@@ -8,7 +8,7 @@ import { ELITES, FIGHTS, FLOORS, FORGE_ROWS, LAYERS, REST_ROW, agreed, floorOk, 
 import { makeRng } from '../src/rng';
 import { EVENTS, applyFx, canPick, eventDef, eventOf, fxParts, rolled } from '../src/events';
 import { CAMP_HEAL, DIG_MAX, campDo, campLeave, canCamp, digOre, type CampState } from '../src/camp';
-import { ARTIFACTS, BELLY, OFFER, lootAgreed, newLoot, rollOffer, settleLoot } from '../src/artifacts';
+import { ARTIFACTS, BELLY, OFFER, lootAgreed, newLoot, rollOffer, settleLoot, takeKept } from '../src/artifacts';
 
 /** Put every living hero on its own rune, as players do before the fight. */
 const placeAll = (g: Game) => g.alive().forEach((h, k) => g.movePad(h, k));
@@ -909,13 +909,56 @@ describe('boss trophies', () => {
     expect(Object.values(loot.done!)).not.toContain(loot.offer[2]);
   });
 
-  it('shares all three among a trio, and a hero whose player dropped out gets what is left', () => {
+  it('shares all three among a trio, and keeps what is left for a hero whose player dropped out', () => {
     const party = newParty([0, 1, 2]), loot = newLoot(79, 0, party), table = [0, 2];
     loot.picks[0] = 2;
     loot.picks[2] = 0;
     expect(lootAgreed(loot, table)).toBe(true);
     settleLoot(loot, party, table);
-    expect(party.map(h => h.arts![0])).toEqual([loot.offer[2], loot.offer[1], loot.offer[0]]);
+    expect([party[0].arts, party[1].arts ?? [], party[2].arts]).toEqual([[loot.offer[2]], [], [loot.offer[0]]]);
+    expect(party[1].kept).toEqual({ seed: 79, floor: 0, offer: [loot.offer[1]] });
+    // back at the table, the player takes it
+    expect(takeKept(party, 1, loot.offer[1])).toBe(true);
+    expect(party[1].arts).toEqual([loot.offer[1]]);
+    expect(party[1].kept).toBeNull();
+  });
+
+  it('lets a fallen hero whose player was away pick their own once back, from what the others left', () => {
+    const party = newParty([0, 2]), loot = newLoot(81, 0, party);
+    party[1].hp = 0;
+    loot.picks[0] = 1;
+    // the fallen hero's player dropped out: the one here takes theirs, two stay on the pile
+    expect(lootAgreed(loot, [0])).toBe(true);
+    settleLoot(loot, party, [0]);
+    expect(party[0].arts).toEqual([loot.offer[1]]);
+    expect(party[1].arts ?? []).toEqual([]);
+    expect(party[1].kept!.offer).toEqual([loot.offer[0], loot.offer[2]]);
+    // the kept ones are offered to nobody else meanwhile
+    for (let s = 0; s < 30; s++) for (const k of party[1].kept!.offer) expect(rollOffer(s, party)).not.toContain(k);
+    // one the others took isn't theirs to take
+    expect(takeKept(party, party[1].i, loot.offer[1])).toBe(false);
+    expect(takeKept(party, party[1].i, loot.offer[2])).toBe(true);
+    expect(party[1].arts).toEqual([loot.offer[2]]);
+    expect(party[1].kept).toBeNull();
+  });
+
+  it('two heroes away from one share-out pick from one pile; away again, the old pile pays out its first', () => {
+    const party = newParty([0, 1, 2]), loot = newLoot(82, 0, party);
+    loot.offer = ['tea', 'cup', 'sock'];
+    loot.picks[0] = 0;
+    settleLoot(loot, party, [0]);
+    expect(party[1].kept!.offer).toEqual(['cup', 'sock']);
+    expect(party[2].kept!.offer).toEqual(['cup', 'sock']);
+    expect(takeKept(party, 2, 'sock')).toBe(true);
+    expect(party[1].kept!.offer).toEqual(['cup']);
+    // the next boss falls while hero 1's player is still away
+    const next = newLoot(83, 1, party);
+    expect(next.offer).not.toContain('cup');
+    next.picks[0] = 0;
+    next.picks[2] = 1;
+    settleLoot(next, party, [0, 2]);
+    expect(party[1].arts).toEqual(['cup']);
+    expect(party[1].kept).toEqual({ seed: 83, floor: 1, offer: [next.offer[2]] });
   });
 
   it('adds the beer belly\'s health at once', () => {
