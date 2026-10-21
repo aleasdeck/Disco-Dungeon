@@ -10,11 +10,13 @@ export const PHOTO = 1024;
 /** One place in the photo: its hero, or the one its player is looking at (drawn pale), and online who stands there. */
 export interface PhotoSeat { hero: number | null; look: number | null; name?: string; host?: boolean; ready?: boolean }
 
-/**
- * The backdrops: a picture and the square cut from it. Until the photo's own backdrops are drawn they are three squares
- * of the menu's cardboard diorama.
- */
-const BACKDROPS = [{ key: 'menu_bg', x: 256 }, { key: 'menu_bg', x: 0 }, { key: 'menu_bg', x: 512 }];
+/** The backdrops, square rooms with an empty floor in the middle, and how strongly each one's light tints the heroes. */
+const BACKDROPS = [
+  { key: 'photo_disco', tint: 0.7 },
+  { key: 'photo_bar', tint: 0.7 },
+  { key: 'photo_camp', tint: 0.7 },
+  { key: 'photo_throne', tint: 0.3 },
+];
 export const BACKDROP_COUNT = BACKDROPS.length;
 
 /** Where each hero stands (its feet) and how big, by party size: in a trio the middle one stands further back. */
@@ -70,13 +72,13 @@ function artOf(i: number, look: 'left' | 'right') {
  * white by `tint` and dimmed by half that, so the figures take the room's colour instead of looking pasted on.
  */
 const lights = new Map<HTMLImageElement, [number, number, number]>();
-function lightOf(bg: HTMLImageElement, x: number) {
+function lightOf(bg: HTMLImageElement) {
   let l = lights.get(bg);
   if (!l) {
     const cv = document.createElement('canvas');
     cv.width = cv.height = 16;
     const c = cv.getContext('2d', { willReadFrequently: true })!;
-    c.drawImage(bg, x, 0, bg.naturalHeight, bg.naturalHeight, 0, 0, 16, 16);
+    c.drawImage(bg, 0, 0, 16, 16);
     const a = c.getImageData(0, 0, 16, 16).data, sum = [0, 0, 0];
     for (let k = 0; k < a.length; k += 4) for (let j = 0; j < 3; j++) sum[j] += a[k + j];
     const top = Math.max(...sum, 1);
@@ -85,8 +87,12 @@ function lightOf(bg: HTMLImageElement, x: number) {
   }
   return l;
 }
-function tinted(art: HTMLCanvasElement, light: [number, number, number], tint: number) {
-  const cv = document.createElement('canvas');
+/** A hero's picture in a backdrop's light, made once for each pair. */
+const lit = new Map<string, HTMLCanvasElement>();
+function tinted(art: HTMLCanvasElement, id: string, light: [number, number, number], tint: number) {
+  let cv = lit.get(id);
+  if (cv) return cv;
+  cv = document.createElement('canvas');
   cv.width = art.width;
   cv.height = art.height;
   const c = cv.getContext('2d')!, dim = 1 - tint / 2;
@@ -97,6 +103,7 @@ function tinted(art: HTMLCanvasElement, light: [number, number, number], tint: n
   // multiplying fills the empty corners too; the picture's own outline cuts them away again
   c.globalCompositeOperation = 'destination-in';
   c.drawImage(art, 0, 0);
+  lit.set(id, cv);
   return cv;
 }
 
@@ -156,20 +163,21 @@ const NOTES: Record<number, { x: number; y: number; rot: number; bend: number; d
  * Draw the photo: the backdrop, the party standing on its floor, a warm flash and dark corners, the film camera's date,
  * and with `names` each player's name with an arrow to their hero. Drawn only when something changes: no animation.
  */
-export function drawPhoto(cv: HTMLCanvasElement, seats: PhotoSeat[], o: { bg: number; names: boolean; tint?: number }) {
+export function drawPhoto(cv: HTMLCanvasElement, seats: PhotoSeat[], o: { bg: number; names: boolean }) {
   const c = cv.getContext('2d')!, b = BACKDROPS[((o.bg % BACKDROP_COUNT) + BACKDROP_COUNT) % BACKDROP_COUNT], bg = uiArt.get(b.key);
   c.fillStyle = '#1a120d';
   c.fillRect(0, 0, PHOTO, PHOTO);
-  if (bg) c.drawImage(bg, b.x, 0, bg.naturalHeight, bg.naturalHeight, 0, 0, PHOTO, PHOTO);
+  if (bg) c.drawImage(bg, 0, 0, PHOTO, PHOTO);
   const n = Math.max(1, Math.min(3, seats.length)), spots = SPOTS[n];
   // the back row first, so the front figures stand over it
   const order = spots.map((_, k) => k).sort((a, b) => spots[a].y - spots[b].y);
   for (const k of order) {
-    const s = seats[k], p = spots[k], i = s.hero ?? s.look;
+    // a client can draw the lobby a moment before the host's list of players comes: the places are empty till then
+    const s = seats[k] ?? { hero: null, look: null }, p = spots[k], i = s.hero ?? s.look;
     // the ones at the sides turn to the middle, as people do on a group photo
     const look = n === 1 || k === 1 ? null : k === 0 ? 'right' : 'left';
     let art = i !== null ? artOf(i, look ?? sprites.get(HEROES[i].key)?.facing ?? 'right') : null;
-    if (art && bg && o.tint) art = tinted(art, lightOf(bg, b.x), o.tint);
+    if (art && bg && i !== null) art = tinted(art, `${i}${look}${b.key}`, lightOf(bg), b.tint);
     if (art && i !== null) {
       const h = tallOf(i, p.s), w = (art.width / art.height) * h, feet = p.y + 14 * p.s;
       c.save();
