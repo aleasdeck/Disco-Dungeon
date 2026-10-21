@@ -104,6 +104,7 @@ interface Beat {
   /** Its moment is over: it comes down (or never goes up) and the next beat's turn comes. */
   gone: () => boolean;
   ring?: () => Box | null;
+  point?: Line['point'];
   pull?: Line['pull'];
   /** Pressed on, if it is a line to tap. */
   heard?: boolean;
@@ -183,7 +184,7 @@ export class Tutor {
       ring: () => { const l = lady(); return l ? this.worldBox(l, 0, 26, MOB_TOP[l.k]) : null; },
     };
     this.beats = [
-      { text: () => WARM_LINES.rune, kind: 'do', ready: () => S().phase === 'place', gone: () => h().pad !== null || S().phase !== 'place', ring: () => this.worldBox(S().pads[0], 0, 34, 20) },
+      { text: () => WARM_LINES.rune, kind: 'do', ready: () => S().phase === 'place', gone: () => h().pad !== null || S().phase !== 'place', point: () => this.floorBox(S().pads[0], 18) },
       { text: () => WARM_LINES.go, kind: 'do', ready: () => S().phase === 'place' && h().pad !== null, gone: () => S().phase !== 'place', ring: () => this.domBox('turnBtn') },
       {
         text: () => WARM_LINES.pull, kind: 'do', ready: () => S().phase === 'throw' && S().turn === 1, gone: () => h().hand === 0 || S().turn > 1,
@@ -202,7 +203,7 @@ export class Tutor {
         text: () => WARM_LINES.crystal, kind: 'do', ready: () => S().phase === 'throw' && S().turn > 1 && h().hand > 0 && !g.moving(),
         gone: () => h().sparks >= g.abCost(h()) || !crystal() || !live(), ring: () => { const n = crystal(); return n ? this.worldBox(n, 0, 30, 30) : null; },
       },
-      { text: () => WARM_LINES.ability, kind: 'do', ready: () => g.canUseAbility(h()) && !g.moving(), gone: () => h().boost || h().sparks < g.abCost(h()) || !live(), ring: () => this.domBox('abBtn') },
+      { text: () => WARM_LINES.ability, kind: 'do', ready: () => g.canUseAbility(h()) && !g.moving(), gone: () => h().boost || h().sparks < g.abCost(h()) || !live(), point: () => this.domBox('abBtn') },
       wall,
     ];
     this.at = 0;
@@ -267,7 +268,7 @@ export class Tutor {
     if (moved && this.coach.line) this.coach.hush();
     const b = beats[this.at];
     if (!b || (this.coach.line && this.coach.line === this.shown) || !b.ready()) return;
-    this.shown = { text: b.text(), by: BASTION, kind: b.kind, ring: b.ring, pull: b.pull };
+    this.shown = { text: b.text(), by: BASTION, kind: b.kind, ring: b.ring, point: b.point, pull: b.pull };
     b.said = true;
     this.coach.say(this.shown);
   }
@@ -349,6 +350,12 @@ export class Tutor {
     const foot = this.screen(p.x, p.y, z), head = this.screen(p.x, p.y, z + top), k = this.cam.zoom;
     const ww = Math.max(26, w * k), y0 = Math.min(foot[1], head[1]) - 4, y1 = Math.max(foot[1], head[1]) + w * k * 0.25;
     return { x: foot[0] - ww / 2, y: y0, w: ww, h: Math.max(18, y1 - y0) };
+  }
+
+  /** A box round something flat on the floor (a rune), as wide as it is in the world and half as deep, the way it lies on screen. */
+  private floorBox(p: { x: number; y: number }, w: number): Box {
+    const c = this.screen(p.x, p.y, 0), ww = w * this.cam.zoom;
+    return { x: c[0] - ww / 2, y: c[1] - ww / 4, w: ww, h: ww / 2 };
   }
 
   /** A box round a piece of the HUD, by id or round everything a selector picks; null while none of it is on screen. */
