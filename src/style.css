@@ -1339,12 +1339,13 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .coach-chalk .chalk.dash { stroke-dasharray: 7 8; stroke-width: 3.6; }
 .coach-chalk .chalk-t { fill: rgba(250, 246, 232, 0.95); font: 700 16px var(--hand); filter: url(#chalkRough); }
 .coach-line {
-  position: absolute; --fw: 74px; pointer-events: auto; cursor: default;
+  /* --fw is the face sticker's size; --fx where the words start, clear of the sticker that sticks out over the paper's corner */
+  position: absolute; --fw: 74px; --fx: calc(var(--fw) * 0.78 + 14px); pointer-events: auto; cursor: default;
   filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.45)) drop-shadow(0 10px 18px rgba(0, 0, 0, 0.5));
 }
-.coach-line.big { --fw: 92px; }
+.coach-line.big { --fw: 92px; --fx: calc(var(--fw) * 0.78 + 8px); }
 .coach-paper {
-  position: relative; padding: 18px 16px 14px calc(var(--fw) * 0.78); color: #1c1007; font: 700 17px/1.06 var(--hand);
+  position: relative; padding: 18px 16px 14px var(--fx); color: #1c1007; font: 700 17px/1.06 var(--hand);
   /* light, so the dark ink reads on a phone in the dark room: a cardboard flute and a little shade towards the bottom */
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 45%, rgba(110, 72, 32, 0.12)),
@@ -1356,7 +1357,7 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .coach-paper p { margin: 0; }
 .coach-paper q { quotes: '«' '»'; font: 600 0.95em/1 Oswald, sans-serif; letter-spacing: 0.02em; text-transform: uppercase; color: #9e1f12; }
 .coach-name {
-  position: absolute; left: calc(var(--fw) * 0.78); top: -12px; z-index: 2; padding: 3px 10px 2px; transform: rotate(-3deg);
+  position: absolute; left: var(--fx); top: -12px; z-index: 2; padding: 3px 10px 2px; transform: rotate(-3deg);
   font: 600 13px/1.2 Oswald, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; color: #fff8e8;
   background: var(--c) var(--ui-board) 0 0 / 160px; background-blend-mode: overlay; clip-path: polygon(0 8%, 100% 0, 96% 100%, 3% 92%);
 }
