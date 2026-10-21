@@ -1,5 +1,5 @@
-// The hero's own lines (thread «Обучение от лица героя»): a scrap of kraft paper hanging under the top strip with the
-// speaker's face stuck on its corner, and a chalk ring or a «тяни» arrow on what the line is about. The chalk is drawn
+// The hero's own lines (thread «Обучение от лица героя»): a scrap of light paper hanging under the top strip with the
+// speaker's face stuck on its corner, and chalk arrows at what the line is about, or the «тяни» arrow. The chalk is drawn
 // once and stands still: it is drawn again only when what it points at has moved on screen, never animated.
 
 import type { HeroDef } from './data';
@@ -15,9 +15,7 @@ export interface Line {
   by: HeroDef;
   /** 'tap' goes on a tap («дальше»), 'do' stays until the thing it asks for is done (whoever shows it takes it down). */
   kind: 'tap' | 'do';
-  /** What the chalk rings, worked out afresh while the line is up; null while it isn't on screen. */
-  ring?: () => Box | null;
-  /** What a few chalk arrows point at from the open side of the screen, in place of a ring (the rune, the trick's button). */
+  /** What a few chalk arrows point at from the open side of the screen, worked out afresh while the line is up; null while it isn't on screen. */
   point?: () => Box | null;
   /** The pull: from the hero's feet, away from `to`, where the disc should fly; a dashed line goes from the feet to `to`. */
   pull?: () => { foot: [number, number]; to: [number, number] } | null;
@@ -33,16 +31,8 @@ const ROUGH = '<defs><filter id="chalkRough" x="-20%" y="-20%" width="140%" heig
 
 const f1 = (v: number) => v.toFixed(1);
 
-/** A hand-drawn chalk loop round a box, closed a little past where it began; kept on screen, so a corner button gets a whole ring. */
-function ring(r: Box, pad: number) {
-  const m = 6, x0 = Math.max(m + pad, r.x), y0 = Math.max(m + pad, r.y), x1 = Math.min(innerWidth - m - pad, r.x + r.w), y1 = Math.min(innerHeight - m - pad, r.y + r.h);
-  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, rx = (x1 - x0) / 2 + pad, ry = (y1 - y0) / 2 + pad * 0.8, pts: string[] = [];
-  for (let k = 0; k <= 34; k++) {
-    const a = -2.2 + (k / 30) * Math.PI * 2, wob = 1 + 0.035 * Math.sin(k * 1.7) + (k > 30 ? 0.06 : 0);
-    pts.push(`${f1(cx + Math.cos(a) * rx * wob)} ${f1(cy + Math.sin(a) * ry * wob)}`);
-  }
-  return `<path class="chalk" d="M${pts.join(' L')}"/>`;
-}
+/** How long the pointing arrows are, and so how much room a target needs round it for them. */
+const arrowLen = (phone: boolean) => (phone ? 54 : 66);
 
 /** A chalk arrow from a to b, bowed a little, its head at b. */
 function arrow(a: [number, number], b: [number, number], bow: number, dash = false) {
@@ -55,28 +45,38 @@ function arrow(a: [number, number], b: [number, number], bow: number, dash = fal
 
 /**
  * Two or three chalk arrows coming at a box from the side of the screen that has room for them (towards the screen's
- * middle first), their heads just off its edge; none starts off screen, under the line's paper or over another button.
+ * middle first), their heads just off its edge; none starts off screen, under the line's paper or over another button,
+ * none ends on another button, and they would rather start over the open field than across the rest of the HUD.
  */
 function arrows(r: Box, paper: DOMRect | null, phone: boolean) {
-  const cx = r.x + r.w / 2, cy = r.y + r.h / 2, hw = r.w / 2 + 6, hh = r.h / 2 + 6, len = phone ? 54 : 66, m = 14;
+  const cx = r.x + r.w / 2, cy = r.y + r.h / 2, hw = r.w / 2 + 6, hh = r.h / 2 + 6, len = arrowLen(phone), m = 14;
   const toMid = Math.atan2(innerHeight / 2 - cy, innerWidth / 2 - cx), fan = [-0.75, 0, 0.75], d2r = Math.PI / 180;
-  const make = (a: number, k: number) => {
+  const at = (x: number, y: number) => document.elementFromPoint(x, y);
+  // a button's label it would cross out; any other piece of the HUD only when there is no room over the field
+  const onBtn = (x: number, y: number) => !!at(x, y)?.closest('button');
+  const onHud = (x: number, y: number) => { const e = at(x, y); return !!e && e.id !== 'stage' && e !== document.body; };
+  const make = (a: number, k: number, field: boolean) => {
     const ux = Math.cos(a), uy = Math.sin(a), R = 1 / Math.hypot(ux / hw, uy / hh), L = len * [0.9, 1.12, 0.96][k];
     const end: [number, number] = [cx + ux * (R + 4), cy + uy * (R + 4)], start: [number, number] = [cx + ux * (R + 4 + L), cy + uy * (R + 4 + L)];
     const off = start[0] < m || start[0] > innerWidth - m || start[1] < m || start[1] > innerHeight - m;
     const under = !!paper && start[0] > paper.left - 6 && start[0] < paper.right + 6 && start[1] > paper.top - 6 && start[1] < paper.bottom + 6;
-    // nor across another button, whose label it would cross out
-    const mid = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2], onBtn = (x: number, y: number) => !!document.elementFromPoint(x, y)?.closest('button');
-    return off || under || onBtn(start[0], start[1]) || onBtn(mid[0], mid[1]) ? null : arrow(start, end, [0.1, -0.05, 0.08][k]);
+    if (off || under) return null;
+    const mid: [number, number] = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
+    const bad = field ? onHud : onBtn;
+    return bad(...start) || bad(...mid) || onBtn(...end) ? null : arrow(start, end, [0.1, -0.05, 0.08][k]);
   };
   // the fan is turned away from the middle a little at a time until most of it fits
-  let best: string[] = [];
-  for (const turn of [0, 15, -15, 30, -30, 45, -45, 60, -60, 90, -90]) {
-    const got = fan.map((f, k) => make(toMid + f + turn * d2r, k)).filter((a): a is string => a !== null);
-    if (got.length > best.length) best = got;
-    if (best.length === fan.length) break;
-  }
-  return best.join('');
+  const fit = (field: boolean) => {
+    let best: string[] = [];
+    for (const turn of [0, 15, -15, 30, -30, 45, -45, 60, -60, 90, -90, 120, -120]) {
+      const got = fan.map((f, k) => make(toMid + f + turn * d2r, k, field)).filter((a): a is string => a !== null);
+      if (got.length > best.length) best = got;
+      if (best.length === fan.length) break;
+    }
+    return best;
+  };
+  const clear = fit(true);
+  return (clear.length ? clear : fit(false)).join('');
 }
 
 const word = (x: number, y: number, t: string, rot: number) => `<text class="chalk-t" x="${f1(x)}" y="${f1(y)}" transform="rotate(${rot} ${f1(x)} ${f1(y)})">${t}</text>`;
@@ -187,7 +187,11 @@ export class Coach {
     el.style.width = w + 'px';
     el.style.left = (phone ? 26 : (W - w) / 2) + 'px';
     el.classList.toggle('big', !phone);
-    const top = line.at === 'mid' ? Math.max(this.top(), H * 0.42 - el.offsetHeight / 2) : this.top();
+    let top = line.at === 'mid' ? Math.max(this.top(), H * 0.42 - el.offsetHeight / 2) : this.top();
+    // a target up in the top strip right above the paper (the queue, the faces, the ore) gets room under it for the
+    // arrows, the paper hanging that much lower
+    const pt = line.point?.(), left = phone ? 26 : (W - w) / 2;
+    if (pt && pt.y < top && pt.x < left + w && pt.x + pt.w > left) top = Math.max(top, pt.y + pt.h + arrowLen(phone) * 1.2 + 16);
     el.style.top = Math.round(top) + 'px';
     this.chalk(phone);
   }
@@ -197,11 +201,6 @@ export class Coach {
     const line = this.line;
     if (!line) return;
     let svg = '', hole: [number, number, number] | null = null;
-    const r = line.ring?.();
-    if (r) {
-      svg += ring(r, phone ? 6 : 10);
-      hole = [r.x + r.w / 2, r.y + r.h / 2, Math.max(r.w, r.h) / 2 + 26];
-    }
     const pt = line.point?.();
     if (pt) {
       svg += arrows(pt, this.wrap?.getBoundingClientRect() ?? null, phone);

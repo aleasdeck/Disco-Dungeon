@@ -103,7 +103,6 @@ interface Beat {
   ready: () => boolean;
   /** Its moment is over: it comes down (or never goes up) and the next beat's turn comes. */
   gone: () => boolean;
-  ring?: () => Box | null;
   point?: Line['point'];
   pull?: Line['pull'];
   /** Pressed on, if it is a line to tap. */
@@ -116,6 +115,8 @@ interface Beat {
 const LOOK = 100;
 /** A hint goes down on its own after this long, if it isn't tapped away. */
 const HINT_UP = 15000;
+/** Laid out on screen; offsetParent won't do, it is null for a fixed button too (the turn button on a phone). */
+const onScreen = (el: HTMLElement) => !el.hidden && el.getClientRects().length > 0;
 
 export class Tutor {
   coach = new Coach();
@@ -142,7 +143,7 @@ export class Tutor {
       let y = 70;
       for (const id of ['#hudTop', '#queue', '#bossBar', '.ore-chip']) {
         const el = document.querySelector<HTMLElement>(id);
-        if (el && !el.hidden && el.offsetParent) y = Math.max(y, el.getBoundingClientRect().bottom);
+        if (el && onScreen(el)) y = Math.max(y, el.getBoundingClientRect().bottom);
       }
       return y + 18;
     };
@@ -181,11 +182,11 @@ export class Tutor {
     const wall: Beat = {
       text: () => WARM_LINES.wall, kind: 'tap', gone: () => !lady() || (!!wall.said && (h().hand === 0 || S().phase !== 'throw')),
       ready: () => { const l = lady(), p = g.spot(h()); return S().phase === 'throw' && h().hand > 0 && !h().boost && !g.moving() && !!l && !!p && !g.clearShot(p, l); },
-      ring: () => { const l = lady(); return l ? this.worldBox(l, 0, 26, MOB_TOP[l.k]) : null; },
+      point: () => { const l = lady(); return l ? this.worldBox(l, 0, 26, MOB_TOP[l.k]) : null; },
     };
     this.beats = [
       { text: () => WARM_LINES.rune, kind: 'do', ready: () => S().phase === 'place', gone: () => h().pad !== null || S().phase !== 'place', point: () => this.floorBox(S().pads[0], 18) },
-      { text: () => WARM_LINES.go, kind: 'do', ready: () => S().phase === 'place' && h().pad !== null, gone: () => S().phase !== 'place', ring: () => this.domBox('turnBtn') },
+      { text: () => WARM_LINES.go, kind: 'do', ready: () => S().phase === 'place' && h().pad !== null, gone: () => S().phase !== 'place', point: () => this.domBox('turnBtn') },
       {
         text: () => WARM_LINES.pull, kind: 'do', ready: () => S().phase === 'throw' && S().turn === 1, gone: () => h().hand === 0 || S().turn > 1,
         pull: () => {
@@ -195,13 +196,13 @@ export class Tutor {
       },
       // how the first throw went is known once it has come to rest
       { text: () => (dealt() ? WARM_LINES.hit : WARM_LINES.miss), kind: 'tap', ready: thrown, gone: () => S().turn > 1 || S().phase !== 'throw' },
-      { text: () => WARM_LINES.queue, kind: 'tap', ready: thrown, gone: () => S().turn > 1 || S().phase !== 'throw', ring: () => this.domBox(null, '#queue li') },
-      { text: () => WARM_LINES.end, kind: 'do', ready: thrown, gone: () => S().turn > 1 || S().phase !== 'throw' || g.ended(h()), ring: () => this.domBox('turnBtn') },
+      { text: () => WARM_LINES.queue, kind: 'tap', ready: thrown, gone: () => S().turn > 1 || S().phase !== 'throw', point: () => this.domBox(null, '#queue li') },
+      { text: () => WARM_LINES.end, kind: 'do', ready: thrown, gone: () => S().turn > 1 || S().phase !== 'throw' || g.ended(h()), point: () => this.domBox('turnBtn') },
       // the boxer's spring lands: if it never does by the next turn (the boxer down, or out of its sight), the line is let go
-      { text: () => WARM_LINES.ouch, kind: 'tap', ready: () => h().hp < h().max, gone: () => S().turn > 2 || (S().turn === 2 && S().phase === 'throw' && h().hp >= h().max), ring: () => this.domBox('fHpWrap') },
+      { text: () => WARM_LINES.ouch, kind: 'tap', ready: () => h().hp < h().max, gone: () => S().turn > 2 || (S().turn === 2 && S().phase === 'throw' && h().hp >= h().max), point: () => this.domBox('fHpWrap') },
       {
         text: () => WARM_LINES.crystal, kind: 'do', ready: () => S().phase === 'throw' && S().turn > 1 && h().hand > 0 && !g.moving(),
-        gone: () => h().sparks >= g.abCost(h()) || !crystal() || !live(), ring: () => { const n = crystal(); return n ? this.worldBox(n, 0, 30, 30) : null; },
+        gone: () => h().sparks >= g.abCost(h()) || !crystal() || !live(), point: () => { const n = crystal(); return n ? this.worldBox(n, 0, 30, 30) : null; },
       },
       { text: () => WARM_LINES.ability, kind: 'do', ready: () => g.canUseAbility(h()) && !g.moving(), gone: () => h().boost || h().sparks < g.abCost(h()) || !live(), point: () => this.domBox('abBtn') },
       wall,
@@ -259,7 +260,7 @@ export class Tutor {
     // the hero was spared a fall: that comes first, whatever beat is up
     if (g.spared) {
       g.spared = false;
-      this.coach.say({ text: WARM_LINES.nodie, by: BASTION, kind: 'tap', ring: () => this.domBox('fHpWrap') });
+      this.coach.say({ text: WARM_LINES.nodie, by: BASTION, kind: 'tap', point: () => this.domBox('fHpWrap') });
       return;
     }
     if (this.coach.line?.text === WARM_LINES.nodie) return;
@@ -268,7 +269,7 @@ export class Tutor {
     if (moved && this.coach.line) this.coach.hush();
     const b = beats[this.at];
     if (!b || (this.coach.line && this.coach.line === this.shown) || !b.ready()) return;
-    this.shown = { text: b.text(), by: BASTION, kind: b.kind, ring: b.ring, point: b.point, pull: b.pull };
+    this.shown = { text: b.text(), by: BASTION, kind: b.kind, point: b.point, pull: b.pull };
     b.said = true;
     this.coach.say(this.shown);
   }
@@ -286,25 +287,25 @@ export class Tutor {
     if (S.spec.tut) return;
     for (const [id, when] of this.whens(where)) {
       if (heard.seen.includes(id)) continue;
-      const ring = when();
-      if (ring === false) continue;
+      const point = when();
+      if (point === false) continue;
       heard.seen.push(id);
       saveHeard();
       this.hint = { id, t, where };
-      this.coach.say({ text: HINT_LINES[id], by: BASTION, kind: 'tap', ring: ring === true ? undefined : ring, at: where === 'map' ? 'mid' : 'top' });
+      this.coach.say({ text: HINT_LINES[id], by: BASTION, kind: 'tap', point: point === true ? undefined : point, at: where === 'map' ? 'mid' : 'top' });
       return;
     }
   }
 
   /**
-   * When each hint comes up: false while it doesn't, true when it does, or what its chalk rings when it does. In a fight
+   * When each hint comes up: false while it doesn't, true when it does, or what its chalk arrows point at when it does. In a fight
    * the hints about the room wait for the fight to start, those about the hero for the player's own hero.
    */
   private whens(where: Where): [HintId, () => false | true | (() => Box | null)][] {
     // the hero on screen: online the player's own, in the campaign whichever of the party is picked
     const g = this.g, S = g.S, me = g.online ? this.me() : g.hero, room = where === 'room' && S.phase !== 'over';
     const fight = room && S.phase !== 'place', said = (re: RegExp) => room && S.floats.some(f => re.test(f.txt));
-    const ring = (id: string) => () => this.domBox(id);
+    const at = (id: string) => () => this.domBox(id);
     const mine = (k: 'fire' | 'chill' | 'daze' | 'pin') => fight && !!me && me.hp > 0 && (me[k] ?? 0) > 0;
     return [
       ['map', () => where === 'map'],
@@ -318,18 +319,18 @@ export class Tutor {
       ['cave', () => room && S.spec.type === 'treasure'],
       ['smoke', () => room && !!S.spec.smoke],
       ['strobe', () => room && !!S.spec.strobe],
-      ['party', () => (fight && S.phase === 'throw' && !g.online && g.party.length > 1 ? ring('allies') : false)],
+      ['party', () => (fight && S.phase === 'throw' && !g.online && g.party.length > 1 ? at('allies') : false)],
       ['crit', () => said(/^ТОЧНО!$/)],
       ['pit', () => said(/^провал$/)],
       ['spikes', () => said(/^(шипы|лава|осколки)!$/)],
       ['ore', () => (said(/^\+\d+ руда$/) ? () => this.domBox(null, '.ore-chip') : false)],
       ['clink', () => said(/^ЗВОН/)],
-      ['fire', () => (mine('fire') ? ring('fStatus') : false)],
-      ['chill', () => (mine('chill') ? ring('fStatus') : false)],
-      ['daze', () => (mine('daze') ? ring('fStatus') : false)],
-      ['pin', () => (mine('pin') ? ring('fStatus') : false)],
+      ['fire', () => (mine('fire') ? at('fStatus') : false)],
+      ['chill', () => (mine('chill') ? at('fStatus') : false)],
+      ['daze', () => (mine('daze') ? at('fStatus') : false)],
+      ['pin', () => (mine('pin') ? at('fStatus') : false)],
       ['fallen', () => fight && g.alive().length > 0 && g.party.some(h => h.hp <= 0)],
-      ['rage', () => (fight && S.phase === 'throw' && g.rage() > 0 ? ring('hRage') : false)],
+      ['rage', () => (fight && S.phase === 'throw' && g.rage() > 0 ? at('hRage') : false)],
       ['herbs', () => {
         const herb = S.nodes.find(n => n.k === 'herb' && n.left > 0);
         if (!fight || S.phase !== 'throw' || !me || me.hp <= 0 || me.hp > me.max * 0.6 || !herb) return false;
@@ -363,7 +364,7 @@ export class Tutor {
     const els = id ? [document.getElementById(id)] : [...document.querySelectorAll<HTMLElement>(sel!)];
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const el of els) {
-      if (!el || el.hidden || !el.offsetParent) continue;
+      if (!el || !onScreen(el)) continue;
       const r = el.getBoundingClientRect();
       if (!r.width || !r.height) continue;
       x0 = Math.min(x0, r.left); y0 = Math.min(y0, r.top); x1 = Math.max(x1, r.right); y1 = Math.max(y1, r.bottom);
