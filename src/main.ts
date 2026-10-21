@@ -790,6 +790,10 @@ $('helpClose').addEventListener('click', () => { $('help').hidden = true; });
 
 // ------------------------------------------------------------ menu
 
+/** v<major.minor>.<build>, put in by vite.config.ts at the build. */
+declare const __VERSION__: string;
+$('menuVer').textContent = __VERSION__;
+
 function openMenu() {
   $('mContinue').hidden = mode !== 'solo';
   show('menu');
