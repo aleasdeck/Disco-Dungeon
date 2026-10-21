@@ -562,7 +562,7 @@ i.ico { display: inline-block; font-style: normal; }
 .panel h2 { margin: 0; font: 700 24px Oswald, sans-serif; letter-spacing: 0.02em; color: var(--gold); }
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .panel-btns { display: flex; gap: 8px; }
-.end-panel, .help-panel { width: min(460px, 100%); text-align: center; }
+.end-panel { width: min(460px, 100%); text-align: center; }
 /* anything moving on the HUD stands still under a full-screen menu or map: every step of it is a frame for the phone to
    make, and under a blurred backdrop the whole screen is blurred again for it (its pulses stop there by themselves: they
    beat with the room's redraws) */
@@ -687,9 +687,31 @@ i.ico { display: inline-block; font-style: normal; }
   .st-heroes em { grid-column: 2 / -1; font-size: 14px; line-height: 1.1; }
 }
 .end-panel p { color: var(--muted); margin: 10px 0 16px; }
-.help-panel ul { text-align: left; padding-left: 18px; margin: 12px 0 16px; color: var(--muted); }
-.help-panel li { margin: 6px 0; }
-.help-panel b { color: var(--text); }
+/* «Как играть»: a tab of short rules at a time; the rules scroll, the tabs and «Понятно» stay put */
+.help-panel { width: min(600px, 100%); max-height: calc(100dvh - 32px); display: flex; flex-direction: column; gap: 10px; text-align: center; }
+.help-tabs { flex-wrap: wrap; }
+.help-tabs .tab { padding-inline: 12px; }
+.help-body { flex: 1 1 auto; min-height: 0; overflow: auto; text-align: left; color: var(--muted); }
+.help-body ul { padding-left: 18px; margin: 0; }
+.help-body li { margin: 0 0 7px; }
+.help-body b { color: var(--text); }
+.help-body h3 { margin: 4px 0 6px; font: 600 16px Oswald, sans-serif; color: var(--gold); }
+.help-st { list-style: none; padding: 0 !important; margin-bottom: 10px !important; }
+.help-st li { display: flex; align-items: center; gap: 10px; }
+.help-st > li > .ico { flex: none; width: 30px; height: 30px; padding: 3px; background: rgba(18, 12, 9, 0.7); clip-path: var(--cut-gem); }
+.help-inl { display: inline-block; width: 20px; height: 20px; vertical-align: -5px; }
+/* a phone held upright: the five tabs keep to one row under the title */
+@media (orientation: portrait) and (max-width: 520px) {
+  #help .help-tabs { gap: 5px; }
+  #help .help-tabs .tab { padding: 5px 8px; font-size: 13px; }
+}
+/* a phone on its side: the title, tabs and button squeeze so the rules get the height */
+@media (max-height: 520px) and (orientation: landscape) {
+  #help .help-panel { gap: 6px; padding-top: 20px; padding-bottom: 18px; }
+  #help h2 { font-size: 20px; }
+  #help .help-tabs .tab { padding: 4px 10px; font-size: 13px; }
+  #help #helpClose { padding: 6px 28px; font-size: 15px; }
+}
 
 .map-panel { width: min(440px, 100%); padding: 12px 14px; display: flex; flex-direction: column; max-height: calc(100dvh - 32px); }
 .map-panel .panel-head { flex-wrap: nowrap; }

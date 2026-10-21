@@ -846,6 +846,13 @@ $('forgeDone').addEventListener('click', () => {
 $('btnMap').addEventListener('click', () => showMap(true));
 $('mapClose').addEventListener('click', () => showMap(false));
 $('helpClose').addEventListener('click', () => { $('help').hidden = true; });
+/** «Как играть» in tabs: the one picked shows, the window keeps it for the next time it opens. */
+function helpTab(tab: string) {
+  document.querySelectorAll<HTMLButtonElement>('#help .tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  document.querySelectorAll<HTMLElement>('#help .help-body > [data-tab]').forEach(el => (el.hidden = el.dataset.tab !== tab));
+  $('help').querySelector('.help-body')!.scrollTop = 0;
+}
+document.querySelectorAll<HTMLButtonElement>('#help .tab').forEach(b => b.addEventListener('click', () => helpTab(b.dataset.tab!)));
 
 // ------------------------------------------------------------ menu
 
@@ -920,7 +927,7 @@ const syncSettings = bindSettings(() => { applyQuality(); sizeCanvas(); });
 $('btnMenu').addEventListener('click', () => show('pause'));
 $('pResume').addEventListener('click', () => show(null));
 $('pSettings').addEventListener('click', () => openSettings('pause'));
-$('pHelp').addEventListener('click', () => { show(null); $('help').hidden = false; });
+$('pHelp').addEventListener('click', () => { show(null); $('help').hidden = false; $('help').querySelector('.help-body')!.scrollTop = 0; });
 $('pMenu').addEventListener('click', () => {
   // the campaign waits behind the menu as it is, the map or a window between rooms included, until «Продолжить»
   if (mode === 'solo') { keepRun(performance.now(), true); openMenu(); return; }
