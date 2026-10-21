@@ -17,6 +17,8 @@ export interface Line {
   kind: 'tap' | 'do';
   /** What the chalk rings, worked out afresh while the line is up; null while it isn't on screen. */
   ring?: () => Box | null;
+  /** What a few chalk arrows point at from the open side of the screen, in place of a ring (the rune, the trick's button). */
+  point?: () => Box | null;
   /** The pull: from the hero's feet, away from `to`, where the disc should fly; a dashed line goes from the feet to `to`. */
   pull?: () => { foot: [number, number]; to: [number, number] } | null;
   /** Buttons under the words, the first the main one; the line stays up until one is pressed. */
@@ -49,6 +51,32 @@ function arrow(a: [number, number], b: [number, number], bow: number, dash = fal
   const h1 = [b[0] - Math.cos(ang - 0.5) * L, b[1] - Math.sin(ang - 0.5) * L], h2 = [b[0] - Math.cos(ang + 0.5) * L, b[1] - Math.sin(ang + 0.5) * L];
   const p = (q: number[]) => q.map(f1).join(' ');
   return `<path class="chalk${dash ? ' dash' : ''}" d="M${p(a)} Q${p(c)} ${p(b)}"/><path class="chalk" d="M${p(h1)} L${p(b)} L${p(h2)}"/>`;
+}
+
+/**
+ * Two or three chalk arrows coming at a box from the side of the screen that has room for them (towards the screen's
+ * middle first), their heads just off its edge; none starts off screen, under the line's paper or over another button.
+ */
+function arrows(r: Box, paper: DOMRect | null, phone: boolean) {
+  const cx = r.x + r.w / 2, cy = r.y + r.h / 2, hw = r.w / 2 + 6, hh = r.h / 2 + 6, len = phone ? 54 : 66, m = 14;
+  const toMid = Math.atan2(innerHeight / 2 - cy, innerWidth / 2 - cx), fan = [-0.75, 0, 0.75], d2r = Math.PI / 180;
+  const make = (a: number, k: number) => {
+    const ux = Math.cos(a), uy = Math.sin(a), R = 1 / Math.hypot(ux / hw, uy / hh), L = len * [0.9, 1.12, 0.96][k];
+    const end: [number, number] = [cx + ux * (R + 4), cy + uy * (R + 4)], start: [number, number] = [cx + ux * (R + 4 + L), cy + uy * (R + 4 + L)];
+    const off = start[0] < m || start[0] > innerWidth - m || start[1] < m || start[1] > innerHeight - m;
+    const under = !!paper && start[0] > paper.left - 6 && start[0] < paper.right + 6 && start[1] > paper.top - 6 && start[1] < paper.bottom + 6;
+    // nor across another button, whose label it would cross out
+    const mid = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2], onBtn = (x: number, y: number) => !!document.elementFromPoint(x, y)?.closest('button');
+    return off || under || onBtn(start[0], start[1]) || onBtn(mid[0], mid[1]) ? null : arrow(start, end, [0.1, -0.05, 0.08][k]);
+  };
+  // the fan is turned away from the middle a little at a time until most of it fits
+  let best: string[] = [];
+  for (const turn of [0, 15, -15, 30, -30, 45, -45, 60, -60, 90, -90]) {
+    const got = fan.map((f, k) => make(toMid + f + turn * d2r, k)).filter((a): a is string => a !== null);
+    if (got.length > best.length) best = got;
+    if (best.length === fan.length) break;
+  }
+  return best.join('');
 }
 
 const word = (x: number, y: number, t: string, rot: number) => `<text class="chalk-t" x="${f1(x)}" y="${f1(y)}" transform="rotate(${rot} ${f1(x)} ${f1(y)})">${t}</text>`;
@@ -173,6 +201,11 @@ export class Coach {
     if (r) {
       svg += ring(r, phone ? 6 : 10);
       hole = [r.x + r.w / 2, r.y + r.h / 2, Math.max(r.w, r.h) / 2 + 26];
+    }
+    const pt = line.point?.();
+    if (pt) {
+      svg += arrows(pt, this.wrap?.getBoundingClientRect() ?? null, phone);
+      hole = [pt.x + pt.w / 2, pt.y + pt.h / 2, Math.max(pt.w, pt.h) / 2 + 70];
     }
     const pl = line.pull?.();
     if (pl) {

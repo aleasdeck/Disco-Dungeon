@@ -46,12 +46,15 @@ describe('the warm-up room', () => {
     expect(g.clearShot(rune, lady)).toBe(false);
     const plain = g.S.mobs.find(m => m.k === 'dummy')!;
     expect(g.clearShot(rune, plain)).toBe(true);
-    let banks = 0;
-    for (let a = 0; a < 360; a++) {
-      const r = g.predict(h, Math.cos((a * Math.PI) / 180) * 60, Math.sin((a * Math.PI) / 180) * 60, 2);
-      if (r.hit === lady) banks++;
-    }
-    expect(banks).toBeGreaterThan(4);
+    const banks = () => {
+      let n = 0;
+      for (let a = 0; a < 360; a++) if (g.predict(h, Math.cos((a * Math.PI) / 180) * 60, Math.sin((a * Math.PI) / 180) * 60, 2).hit === lady) n++;
+      return n;
+    };
+    // the plain dummy standing on its slant leaves a narrow way round; once it is down (the first throw's job), a wide one
+    expect(banks()).toBeGreaterThan(0);
+    plain.hp = 0;
+    expect(banks()).toBeGreaterThan(10);
   });
 
   it('has two dummies that just stand there and a boxer that punches the hero it sees, softly', () => {

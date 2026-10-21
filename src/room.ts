@@ -608,10 +608,11 @@ export const dmgBonus = (f: number, t: number) => (f > 0 ? f + 1 : 0) + (t >= 3 
 
 /**
  * The warm-up room, where the hero shows a newcomer the ropes on three dummies, by hand: one rune, the plain dummy
- * straight ahead of it, the boxer off to the side where it sees most of the room, a spark crystal on the other side,
- * and the lady dummy in a far corner behind a column, so only a disc off a wall reaches her.
+ * off it on a slant (on a phone a straight-ahead one stands behind the hero's own figure, and the arrow to it with it),
+ * the boxer on the other side where it sees the cells round the plain dummy, a spark crystal near the rune, and the
+ * lady dummy in a far corner behind a column, so only a disc off a wall reaches her.
  */
-export const WARM = { gw: 10, gh: 8, rune: [8, 3], dummy: [4, 3], boxer: [3, 1], lady: [1, 5], column: [[3, 5], [3, 4]], crystal: [6, 6] } as const;
+export const WARM = { gw: 10, gh: 8, rune: [8, 3], dummy: [5, 5], boxer: [4, 1], lady: [1, 5], column: [[3, 5], [3, 4]], crystal: [7, 1] } as const;
 
 function warmRoom(): Layout {
   const { gw, gh } = WARM, floor = new Uint8Array(gw * gh).fill(1);
