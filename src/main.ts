@@ -264,6 +264,9 @@ function startRun(picks?: number[]) {
   showLoot();
   // a quiet room behind the map so the screen is never empty
   game.loadRoom({ seed: run.seed, depth: 1, floor: 0, type: 'fight' });
+  // a room keeps the heroes away from the room before, so a new run would greet whoever took the hero of a player
+  // who had dropped out of the last game as «нет связи»: it starts with the table as it is now
+  seatAway();
   controls.fit();
   hideEnd();
   showMap(true);
@@ -987,6 +990,8 @@ function readyUp(id: string, on: boolean) {
 
 function backToLobby() {
   started = false;
+  // a player who dropped out of the run and isn't back can't press «Готов»: they'd hold the start up, so they are let go
+  players = players.filter(p => net.has(p.id));
   // a new run asks everyone for their «Готов» again
   for (const p of players) p.ready = false;
   ev = null;
@@ -1149,6 +1154,8 @@ function welcome(id: string, name: string, key: string) {
     setTimeout(() => net.kick(id), 300);
     return;
   } else players.push({ id, name, hero: null, key });
+  // one who dropped out mid-run and is back once it ended still has «Связь потеряна» over the game: the lobby takes its place
+  if (!started) net.sendTo(id, { t: 'lobbyBack' });
   net.broadcast({ t: 'lobby', players: pub() });
   lobbyView();
 }
