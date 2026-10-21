@@ -11,6 +11,7 @@ import { GRAFFITI_FONTS, envArt, sprites } from '../assets';
 import { knockPose, topplePose, type Knock, type Pose } from '../fx';
 import { hl } from '../hl';
 import { has } from '../artifacts';
+import { intro, bossKind } from '../intro';
 
 export interface Aim { hero: HeroState; dx: number; dy: number }
 /** A hero dragged to another rune: pointer position in screen pixels and the rune under it. */
@@ -426,7 +427,9 @@ export class SceneRenderer {
     if (this.bgCss !== bgCss) { c.canvas.style.background = bgCss; this.bgCss = bgCss; }
 
     let sx = 0, sy = 0;
-    if (S.shake > 0 && !reduce) { sx = (Math.random() - 0.5) * 6; sy = (Math.random() - 0.5) * 4; }
+    this.introAt();
+    const shake = Math.max(S.shake > 0 ? 1 : 0, this.introShake());
+    if (shake > 0 && !reduce) { sx = (Math.random() - 0.5) * 6 * shake; sy = (Math.random() - 0.5) * 4 * shake; }
     const z = cam.zoom;
     c.setTransform(dpr * z, 0, 0, dpr * z, dpr * (cam.panX + sx), dpr * (cam.panY + sy));
     // round ends on every stroke: everything that sets the line cap sets it round, so this is how a frame looked anyway
@@ -437,6 +440,7 @@ export class SceneRenderer {
     this.pickDecor();
     this.drawUnder(c, view, sx !== 0 || sy !== 0);
     this.drawGround();
+    this.drawIntroFloor();
     this.drawAimLine(aim);
     this.drawHammer();
     this.drawEyes();
@@ -459,6 +463,7 @@ export class SceneRenderer {
     for (const p of S.sparks) if (p.k) items.push([cam.depth(p.x, p.y) + 0.5, () => this.drawChip(p)]);
     this.wallItems(items);
     this.decorItems(items);
+    this.introItems(items);
     items.sort((a, b) => a[0] - b[0]).forEach(i => i[1]());
 
     this.drawOmens();
@@ -466,6 +471,7 @@ export class SceneRenderer {
     if (S.spec.smoke && S.phase !== 'over') this.drawSmoke(view);
     this.drawAimPull(aim);
     this.drawFx();
+    this.drawIntroOver();
 
   }
 
@@ -2090,16 +2096,30 @@ export class SceneRenderer {
     // the guard's door turned away from the viewer stands behind the figure, turned to it in front
     const door = !!MOBS[m.k].shield && m.hp > 0, lift = y - y0 - m.hop;
     if (door) this.drawDoor(at, m.r, tgt, lift, alpha, false);
+    // the boss making its entrance (intro.ts) is drawn the way the entrance has it now; the others rock as it lands
+    const iv = m === this.ib ? this.introLook(m, x, y) : null;
+    if (!iv && this.ib && !pose && m.hp > 0) pose = this.introShock(m);
+    let face = this.faceRight(m.x, m.y, tgt.x, tgt.y), ix = x, iy = y;
+    if (iv) {
+      if (iv.pose) pose = iv.pose;
+      alpha *= iv.alpha ?? 1;
+      if (iv.face !== undefined) face = iv.face;
+      ix += iv.dx ?? 0; iy += iv.dy ?? 0;
+      if (iv.clip) { c.save(); c.beginPath(); c.rect(ix - 200, iy + 4 - 400, 400, 400); c.clip(); }
+    }
+    const key = iv?.key ?? (m.open && sprites.has(m.k + '_open') ? m.k + '_open' : m.k);
     drawMiniature(c, {
       // the fridge with its door open has a picture of its own; Пахан's empty bunk is no enemy: a grey stand and no health
-      key: m.open && sprites.has(m.k + '_open') ? m.k + '_open' : m.k, x, y, baseR: m.r, baseCol: fixed ? '#77736c' : ENEMY_BASE, fig: MOBS[m.k].fig,
-      faceRight: this.faceRight(m.x, m.y, tgt.x, tgt.y), flash: m.flash > 0, hop: m.hop,
+      key, x: ix, y: iy, baseR: m.r, baseCol: fixed ? '#77736c' : ENEMY_BASE, fig: MOBS[key as keyof typeof MOBS]?.fig ?? MOBS[m.k].fig,
+      faceRight: face, flash: m.flash > 0, hop: m.hop + (iv?.hop ?? 0),
       alpha,
-      hp: m.hp > 0 && !fixed ? { now: m.hp, max: m.max } : undefined,
+      hp: m.hp > 0 && !fixed && !iv?.bare ? { now: m.hp, max: m.max } : undefined,
       pose,
       light: S.biome.light,
       placeholder: (cc, fx, fy, fl) => drawMobFigure(cc, m.k, fx, fy, fl),
     });
+    if (iv?.clip) c.restore();
+    if (iv) return;
     if (m.hp <= 0) return;
     if (door) this.drawDoor(at, m.r, tgt, lift, alpha, true);
     if (m.frost) this.drawFrost(m, x, y - m.hop);
@@ -2588,5 +2608,342 @@ export class SceneRenderer {
       c.restore();
     }
     c.globalAlpha = 1;
+  }
+
+  // ------------------------------------------------------------ the boss's entrance (intro.ts)
+
+  /** The boss making its entrance this frame, if one is under way. */
+  private ib: Mob | null = null;
+  /** Where the dancer moonwalks in from and where the king's carpet runs to, worked out once per entrance. */
+  private introWay: { of: object; dx: number; dy: number; len: number } | null = null;
+  private introPuffImg: HTMLCanvasElement | null = null;
+
+  private introAt() {
+    const it = intro.now, S = this.g.S;
+    this.ib = it ? S.mobs.find(m => MOBS[m.k].boss && m.hp > 0 && bossKind(m.k) === it.k) ?? null : null;
+    if (it && this.ib && this.introWay?.of !== it) this.introWay = { of: it, ...this.freeWay(this.ib, it.k === 'king' ? 5 : 3) };
+  }
+
+  /** Seconds since the entrance began, and the boss's own kind; null when there is none. */
+  private iu(): { u: number; k: string; end: number } | null {
+    const it = intro.now;
+    // before the entrance begins the room stands as it is before the boss comes
+    return it && this.ib && it.len ? { u: Math.max(0, it.t), k: it.k, end: it.end } : null;
+  }
+
+  /** When the boss lands in its entrance, and how hard: the others rock and the board shakes. */
+  private static LAND: Record<string, [number, number]> = {
+    king: [1.45, 1], ratswarm: [1.4, 0.5], pahan: [0.95, 0.7], lich: [0.55, 0.45], fridge: [1.75, 0.6], forgelord: [1.05, 1], discoball: [1.75, 0.5],
+  };
+
+  private introShake() {
+    const iu = this.iu(), l = iu && SceneRenderer.LAND[iu.k];
+    if (!iu || !l) return 0;
+    const v = iu.u - l[0];
+    return v >= 0 && v < 0.28 ? l[1] * (1 - v / 0.28) : 0;
+  }
+
+  /** Another enemy near the boss rocks on its stand when the boss lands. */
+  private introShock(m: Mob): Pose | undefined {
+    const iu = this.iu(), l = iu && SceneRenderer.LAND[iu.k], b = this.ib;
+    if (!iu || !l || !b || iu.u < l[0]) return undefined;
+    const dx = m.x - b.x, dy = m.y - b.y, d = Math.hypot(dx, dy) || 1, p = l[1] * Math.max(0, 1 - d / 120);
+    if (p <= 0.05) return undefined;
+    // the wave runs out from the boss: the farther, the later it comes
+    return knockPose({ t: iu.u - l[0] - d / 260, x: dx / d, y: dy / d, p: p * 0.8 }, ...this.onScreen(m.x, m.y, dx / d, dy / d), m.r);
+  }
+
+  /** The direction with the most free floor next to the boss's cells, and how many cells of it there are, up to `max`. */
+  private freeWay(m: Mob, max: number) {
+    const S = this.g.S, half = mobSize(m.k) * TILE / 2;
+    const free = (x: number, y: number) => floorAt(S, x, y) && !pitAt(S.pits, x, y) && S.blocks.every(b => x < b.x0 || x > b.x1 || y < b.y0 || y > b.y1)
+      && S.mobs.every(o => o === m || Math.hypot(o.x - x, o.y - y) > o.r + 4);
+    let best = { dx: 1, dy: 0, len: 0 };
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      let n = 0;
+      while (n < max && free(m.x + dx * (half + TILE * (n + 0.5)), m.y + dy * (half + TILE * (n + 0.5)))) n++;
+      // ties go to the side that runs across the screen, where a slide is seen best
+      const across = Math.abs(this.onScreen(m.x, m.y, dx, dy)[0]);
+      if (n > best.len || (n === best.len && across > Math.abs(this.onScreen(m.x, m.y, best.dx, best.dy)[0]))) best = { dx, dy, len: n };
+    }
+    return best;
+  }
+
+  /**
+   * How the boss is drawn this frame of its entrance: how see-through, how high off the table, how it leans or squashes,
+   * off its cell by how much (screen units), which picture, cut off at the floor (coming up through it).
+   */
+  private introLook(m: Mob, x: number, y: number): { alpha?: number; hop?: number; pose?: Pose; key?: string; dx?: number; dy?: number; face?: boolean; clip?: boolean; bare?: boolean } | null {
+    const iu = this.iu();
+    if (!iu) return null;
+    const { u, k } = iu, clamp = (v: number) => Math.min(1, Math.max(0, v));
+    // dropping from above, faster and faster, from height H between t0 and t1; not in the room before t0
+    const drop = (t0: number, t1: number, H: number) => (u < t0 ? { alpha: 0 } : u < t1 ? { hop: H * (1 - ((u - t0) / (t1 - t0)) ** 2) } : null);
+    // the squash of landing, settling with a wobble
+    const squash = (t: number, a: number, f = 13, d = 6): Pose => ({ rot: 0, px: 0, py: 0, sy: 1 - a * Math.exp(-d * (u - t)) * Math.cos(f * (u - t)) });
+    const knock = (t: number, dx: number, dy: number, p: number) => (u >= t ? knockPose({ t: u - t, x: dx, y: dy, p }, ...this.onScreen(m.x, m.y, dx, dy), m.r) : undefined);
+    switch (k) {
+      case 'king': return drop(1.0, 1.45, 190) ?? { pose: squash(1.45, 0.2) };
+      case 'forgelord': return drop(0.6, 1.05, 200) ?? { pose: squash(1.05, 0.16) };
+      case 'ratswarm': {
+        // the heap knots itself together as the rats arrive
+        const sw = clamp((u - 0.9) / 0.5);
+        return sw < 1 ? { pose: { rot: 0, px: 0, py: 0, sy: Math.max(0.01, sw) }, alpha: Math.min(1, sw * 3) } : { pose: squash(1.4, 0.12) };
+      }
+      case 'pahan': {
+        // standing, he jumps down onto his empty bunk and lands sitting on it, the springs bouncing him
+        if (u < 0.95) {
+          this.introBunk(m, x, y);
+          return u < 0.5 ? { alpha: 0 } : { key: 'pahan2', hop: 170 * (1 - ((u - 0.5) / 0.45) ** 2), bare: true };
+        }
+        return { pose: squash(0.95, 0.3, 17, 2.6) };
+      }
+      case 'lich': {
+        const v = clamp((u - 0.55) / 1.15), e = 1 - (1 - v) ** 2;
+        return { hop: -(MOBS[m.k].fig + BASE_TH + 6) * (1 - e), clip: v < 1, pose: v >= 1 ? squash(1.7, 0.06) : undefined };
+      }
+      case 'fridge': {
+        const open = u >= 0.45 && u < 1.75;
+        return { key: open ? 'fridge_open' : undefined, pose: u >= 1.75 ? knock(1.75, 0.7, 0.7, 0.9) : knock(0.45, -0.7, 0.7, 0.5) };
+      }
+      case 'dancer': {
+        // the moonwalk: he glides in backwards from the free side, bobbing, and turns to strike his pose
+        const w = this.introWay!, D = w.len * TILE + 8, v = clamp((u - 0.2) / 1.4), e = 1 - (1 - v) ** 3;
+        const [ox, oy] = this.onScreen(m.x, m.y, w.dx * D * (1 - e), w.dy * D * (1 - e));
+        if (u < 1.65) return { dx: ox, dy: oy, hop: v < 1 ? Math.abs(Math.sin(u * 13)) * 1.6 : 0, face: this.onScreen(m.x, m.y, w.dx, w.dy)[0] > 0, alpha: clamp((u - 0.2) / 0.2) };
+        return { pose: squash(1.65, -0.12, 16, 5) };
+      }
+      case 'discoball': {
+        const v = clamp((u - 0.2) / 1.55), e = 1 - (1 - v) ** 3;
+        return { hop: 220 * (1 - e), pose: v < 1 ? { rot: 0.1 * Math.sin(u * 5) * (1 - e), px: 0, py: 0, sy: 1 } : squash(1.75, 0.08) };
+      }
+      case 'dragon': return { alpha: clamp((u - 0.75) / 0.35) };
+    }
+    return null;
+  }
+
+  /** Пахан's bunk, standing empty until he lands on it. */
+  private introBunk(m: Mob, x: number, y: number) {
+    drawMiniature(this.c, {
+      key: 'bunk', x, y, baseR: m.r, baseCol: '#77736c', fig: MOBS.bunk.fig, faceRight: !this.faceRight(m.x, m.y, this.g.S.Wx / 2, this.g.S.Wy / 2), flash: false, hop: 0, alpha: 1,
+      light: this.g.S.biome.light, placeholder: (cc, fx, fy, fl) => drawMobFigure(cc, 'bunk', fx, fy, fl),
+    });
+  }
+
+  /** What an entrance lays on the floor under the figures: a carpet, a lit dance floor, frost, a glowing forge floor, light spots. */
+  private drawIntroFloor() {
+    const iu = this.iu(), m = this.ib;
+    if (!iu || !m) return;
+    const { c, P } = this, { u, k, end } = iu, out = Math.min(1, Math.max(0, (end - 0.3 - u) / 0.8)), half = mobSize(m.k) * TILE / 2;
+    const quad = (x0: number, y0: number, x1: number, y1: number) => { c.moveTo(...P(x0, y0)); c.lineTo(...P(x1, y0)); c.lineTo(...P(x1, y1)); c.lineTo(...P(x0, y1)); c.closePath(); };
+    const ring = (t: number, col: string) => {
+      // the shock of the landing running out over the floor
+      const v = (u - t) / 0.7;
+      if (v < 0 || v > 1) return;
+      c.beginPath();
+      for (let a = 0; a <= 48; a++) { const r = half + 8 + v * 70, q = P(m.x + Math.cos((a / 48) * Math.PI * 2) * r, m.y + Math.sin((a / 48) * Math.PI * 2) * r); if (a) c.lineTo(...q); else c.moveTo(...q); }
+      c.strokeStyle = `rgba(${col},${0.7 * (1 - v)})`; c.lineWidth = 3 * (1 - v) + 1; c.stroke();
+    };
+    c.save();
+    c.globalAlpha = out;
+    if (k === 'king') {
+      // the red carpet rolls out from the far end up to his cell, gold along its edges, the roll going before it
+      const w = this.introWay!, L = Math.max(2, w.len) * TILE, v = Math.min(1, Math.max(0, (u - 0.1) / 0.8)), e = 1 - (1 - v) ** 2;
+      const nx = -w.dy, ny = w.dx, W = 6.5, a0 = half + L, a1 = half + L * (1 - e);
+      const pt = (a: number, s: number) => P(m.x + w.dx * a + nx * s, m.y + w.dy * a + ny * s);
+      if (v > 0) {
+        pth(c, [pt(a0, -W), pt(a0, W), pt(a1, W), pt(a1, -W)]); c.fillStyle = '#a5232f'; c.fill();
+        for (const s of [-W + 1, W - 1]) { c.beginPath(); c.moveTo(...pt(a0, s)); c.lineTo(...pt(a1, s)); c.strokeStyle = '#e8b64a'; c.lineWidth = 1.4; c.stroke(); }
+        if (v < 1) { pth(c, [pt(a1 + 1.5, -W - 0.5), pt(a1 + 1.5, W + 0.5), pt(a1 - 2.5, W + 0.5), pt(a1 - 2.5, -W - 0.5)]); c.fillStyle = '#6e1820'; c.fill(); }
+      }
+      ring(1.45, '255,220,140');
+    } else if (k === 'dancer') {
+      // the dance floor round him lights up cell by cell in waves of colour
+      const ci = Math.floor(m.x / TILE), cj = Math.floor(m.y / TILE), cols = ['255,79,180', '80,220,255', '255,226,90', '140,255,120'], S = this.g.S;
+      const on = Math.min(1, u / 0.3);
+      for (let j = cj - 4; j <= cj + 3; j++) for (let i = ci - 4; i <= ci + 3; i++) {
+        if (!isFloor(S, i, j)) continue;
+        const d = Math.max(Math.abs(i + 0.5 - m.x / TILE), Math.abs(j + 0.5 - m.y / TILE));
+        if (d > 4) continue;
+        const ph = Math.floor(u * 6 - d * 0.7), lit = (i + j + ph) % 2 === 0;
+        if (!lit) continue;
+        c.beginPath(); quad(i * TILE + 1, j * TILE + 1, i * TILE + TILE - 1, j * TILE + TILE - 1);
+        c.fillStyle = `rgba(${cols[((i * 3 + j + ph) % 4 + 4) % 4]},${0.42 * on * (1 - d / 5)})`; c.fill();
+      }
+    } else if (k === 'forgelord') {
+      // the cells round his landing glow red hotter and hotter, flare white-hot as he lands and cool off
+      const pre = Math.min(1, u / 1.05), flare = u >= 1.05 ? Math.max(0, 1 - (u - 1.05) / 0.9) : 0;
+      const a = u < 1.05 ? 0.25 + 0.35 * pre * (0.8 + 0.2 * Math.sin(u * 18)) : 0.6 * flare;
+      if (a > 0) {
+        c.beginPath();
+        for (let j = -2; j < 2; j++) for (let i = -2; i < 2; i++) { const x0 = m.x + i * TILE * 1.5 + 1, y0 = m.y + j * TILE * 1.5 + 1; quad(x0, y0, x0 + TILE * 1.5 - 2, y0 + TILE * 1.5 - 2); }
+        c.fillStyle = u < 1.05 ? `rgba(255,40,20,${a})` : `rgba(255,${150 + 80 * flare},70,${a})`; c.fill();
+        c.strokeStyle = `rgba(255,90,50,${Math.min(1, a * 1.6)})`; c.lineWidth = 1.6; c.stroke();
+      }
+      ring(1.05, '255,150,60');
+    } else if (k === 'lich') {
+      // frost spreads over the floor from where he will come up, cracks running out through it
+      const v = Math.min(1, u / 0.9), R = half + 6 + v * 34;
+      c.beginPath();
+      for (let a = 0; a <= 36; a++) { const ang = (a / 36) * Math.PI * 2, r = R * (0.86 + 0.14 * hr(a % 36, 7)), q = P(m.x + Math.cos(ang) * r, m.y + Math.sin(ang) * r); if (a) c.lineTo(...q); else c.moveTo(...q); }
+      c.fillStyle = 'rgba(200,238,255,.32)'; c.fill();
+      c.strokeStyle = 'rgba(235,250,255,.7)'; c.lineWidth = 0.8;
+      for (let n = 0; n < 9; n++) {
+        const ang = (n / 9) * Math.PI * 2 + hr(n, 3), len = R * (0.6 + 0.4 * hr(n, 5));
+        c.beginPath(); c.moveTo(...P(m.x + Math.cos(ang) * half * 0.6, m.y + Math.sin(ang) * half * 0.6));
+        for (let s = 1; s <= 3; s++) { const r = (len * s) / 3, wob = (hr(n, s) - 0.5) * 0.5; c.lineTo(...P(m.x + Math.cos(ang + wob) * r, m.y + Math.sin(ang + wob) * r)); }
+        c.stroke();
+      }
+    } else if (k === 'discoball') {
+      // the mirror ball's light spots wheel round the floor once it hangs low enough
+      const on = Math.min(1, Math.max(0, (u - 0.9) / 0.5));
+      if (on > 0) for (let n = 0; n < 26; n++) {
+        const r = half + 10 + 58 * hr(n, 11), ang = hr(n, 12) * Math.PI * 2 + u * (0.9 + 0.3 * hr(n, 13)), x = m.x + Math.cos(ang) * r, yy = m.y + Math.sin(ang) * r;
+        if (!floorAt(this.g.S, x, yy)) continue;
+        const [sx, sy] = P(x, yy);
+        ell(c, sx, sy, 2.2, 1.1); c.fillStyle = `rgba(${n % 3 ? '255,255,255' : n % 2 ? '255,170,230' : '160,230,255'},${0.75 * on})`; c.fill();
+      }
+    }
+    c.restore();
+  }
+
+  /** The entrance's figures that stand on the floor among the others: the rats running in to knot into the swarm. */
+  private introItems(items: [number, () => void][]) {
+    const iu = this.iu(), m = this.ib;
+    if (!iu || !m || iu.k !== 'ratswarm') return;
+    const { u } = iu, S = this.g.S, N = 12, [bx] = this.P(m.x, m.y);
+    for (let k = 0; k < N; k++) {
+      const a0 = (k / N) * Math.PI * 2 + 0.3, st = 0.05 * (k % 5), v = Math.min(1, Math.max(0, (u - st) / 1.0));
+      if (v >= 1) continue;
+      const R0 = 90 + (k % 3) * 18, wx = m.x + Math.cos(a0) * R0 * (1 - v), wy = m.y + Math.sin(a0) * R0 * (1 - v);
+      items.push([this.cam.depth(wx, wy), () => {
+        const [rx, ry] = this.P(wx, wy);
+        drawMiniature(this.c, {
+          key: 'rat', x: rx, y: ry, baseR: MOBS.rat.r, baseCol: ENEMY_BASE, fig: MOBS.rat.fig, faceRight: rx < bx, flash: false,
+          hop: Math.abs(Math.sin(u * 22 + k)) * 2.5, alpha: v > 0.85 ? (1 - v) / 0.15 : 1, light: S.biome.light,
+          placeholder: (cc, fx, fy, fl) => drawMobFigure(cc, 'rat', fx, fy, fl),
+        });
+      }]);
+    }
+  }
+
+  /** A soft grey puff of smoke, dust or steam. */
+  private introPuff() {
+    if (this.introPuffImg) return this.introPuffImg;
+    const cv = document.createElement('canvas'), W = 96, H = 64, x = cv.getContext('2d')!;
+    cv.width = W; cv.height = H;
+    const lumps: [number, number, number][] = [[30, 38, 18], [52, 28, 22], [72, 40, 16], [50, 44, 18]];
+    x.beginPath();
+    for (const [a, b, r] of lumps) { x.moveTo(a + r, b); x.arc(a, b, r, 0, Math.PI * 2); }
+    x.lineWidth = 5; x.strokeStyle = '#6f675e'; x.stroke();
+    x.fillStyle = '#bdb4a8'; x.fill();
+    x.fillStyle = 'rgba(245,240,232,.7)';
+    for (const [a, b, r] of lumps) { x.beginPath(); x.arc(a - r * 0.3, b - r * 0.35, r * 0.38, 0, Math.PI * 2); x.fill(); }
+    return (this.introPuffImg = cv);
+  }
+
+  /** What an entrance throws up over the figures: dust, ice, sparks, steam, smoke, food, the light inside the fridge, the chain. */
+  private drawIntroOver() {
+    const iu = this.iu(), m = this.ib;
+    if (!iu || !m) return;
+    const { c, P } = this, { u, k } = iu, [x, y] = P(m.x, m.y), top = y - BASE_TH - MOB_TOP[m.k], im = this.introPuff();
+    const puff = (px: number, py: number, w: number, a: number) => { c.globalAlpha = a; c.drawImage(im, px - w / 2, py - w / 3, w, (w * 2) / 3); };
+    const dust = (t: number, n = 9, spread = 1) => {
+      const v = (u - t) / 0.7;
+      if (v < 0 || v > 1) return;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + 0.4, r = (m.r * 1.3 + v * 26 * spread), [px, py] = P(m.x + Math.cos(a) * r, m.y + Math.sin(a) * r, 3 + v * 6);
+        puff(px, py, (10 + 8 * v) * spread, 0.75 * (1 - v));
+      }
+    };
+    // bits flying off: up and out from the boss, falling back, `col` coloured
+    const bits = (t: number, n: number, col: string, size: number, speed = 1) => {
+      const v = u - t;
+      if (v < 0 || v > 0.9) return;
+      c.globalAlpha = Math.max(0, 1 - v / 0.9);
+      c.fillStyle = col;
+      for (let i = 0; i < n; i++) {
+        const a = hr(i, 21) * Math.PI * 2, sp = (40 + 50 * hr(i, 22)) * speed, up = 70 + 60 * hr(i, 23);
+        const [px, py] = P(m.x + Math.cos(a) * sp * v, m.y + Math.sin(a) * sp * v, Math.max(0, up * v - 160 * v * v) + 6);
+        c.beginPath(); c.moveTo(px, py - size); c.lineTo(px + size * 0.6, py); c.lineTo(px, py + size); c.lineTo(px - size * 0.6, py); c.closePath(); c.fill();
+      }
+    };
+    c.save();
+    switch (k) {
+      case 'king': dust(1.45, 10, 1.2); break;
+      case 'ratswarm': dust(1.4, 7, 0.8); break;
+      case 'pahan': dust(0.95, 8); break;
+      case 'forgelord': {
+        dust(1.05, 10, 1.2);
+        bits(1.05, 18, '#ffb347', 1.6, 1.3);
+        bits(1.08, 10, '#fff1a8', 1.2, 1.1);
+        // steam from his ears, three puffs rising
+        for (let n = 0; n < 3; n++) {
+          const v = (u - 1.3 - n * 0.32) / 0.9;
+          if (v < 0 || v > 1) continue;
+          for (const side of [-1, 1]) puff(x + side * (6 + v * 6), top + 6 - v * 18, 9 + v * 8, 0.8 * (1 - v));
+        }
+        break;
+      }
+      case 'lich': bits(0.55, 16, '#dff6ff', 1.8); bits(0.6, 8, '#9fd8f5', 1.3); break;
+      case 'fridge': {
+        if (u >= 0.45 && u < 1.75) {
+          // the light inside, cold white
+          const a = Math.min(1, (u - 0.45) / 0.15) * Math.min(1, (1.75 - u) / 0.2), cy = (y + top) / 2, gr = c.createRadialGradient(x, cy, 2, x, cy, 46);
+          gr.addColorStop(0, `rgba(230,250,255,${0.7 * a})`); gr.addColorStop(1, 'rgba(200,240,255,0)');
+          c.globalCompositeOperation = 'lighter'; c.fillStyle = gr; c.fillRect(x - 46, cy - 46, 92, 92); c.globalCompositeOperation = 'source-over';
+        }
+        // food flies out of the open door, lands and bounces, and is gone
+        const w = this.introWay!;
+        ['sausage', 'drumstick', 'cutlet'].forEach((dish, n) => {
+          const t0 = 0.6 + n * 0.17, v = (u - t0) / 0.6, food = env('food_' + dish);
+          if (v < 0 || v > 2.2 || !food) return;
+          const spread = (n - 1) * 0.7, dx = w.dx - w.dy * spread, dy = w.dy + w.dx * spread, L = Math.hypot(dx, dy), D = 26 + 12 * n;
+          const f = Math.min(1, v), bounce = v > 1 ? Math.abs(Math.sin((v - 1) * Math.PI * 1.6)) * 5 * Math.exp(-(v - 1) * 2) : 0;
+          const fx = m.x + (dx / L) * D * f, fy = m.y + (dy / L) * D * f, h = 22 * Math.sin(Math.PI * f) * (1 - f * 0.3) + 10 * (1 - f) + bounce;
+          const [gx, gy] = P(fx, fy), [sx, sy] = P(fx, fy, h);
+          c.globalAlpha = Math.min(1, (2.2 - v) / 0.4);
+          ell(c, gx, gy, FOOD_W * 0.4, FOOD_W * 0.2); c.fillStyle = 'rgba(15,8,4,.3)'; c.fill();
+          this.standee(food, sx, sy + FOOD_W * FOOD_RIM, FOOD_W);
+        });
+        break;
+      }
+      case 'dancer': {
+        // a glint or two as he strikes his pose
+        const v = (u - 1.65) / 0.6;
+        if (v >= 0 && v < 1) for (let n = 0; n < 4; n++) {
+          const sx = x + (hr(n, 31) - 0.5) * 40, sy = top + (hr(n, 32) - 0.2) * 30, r = 4 * Math.sin(Math.PI * Math.min(1, v * 1.4 - n * 0.1));
+          if (r <= 0) continue;
+          c.globalAlpha = 1; c.fillStyle = '#fff6c2';
+          c.beginPath(); c.moveTo(sx, sy - r); c.lineTo(sx + r * 0.25, sy - r * 0.25); c.lineTo(sx + r, sy); c.lineTo(sx + r * 0.25, sy + r * 0.25); c.lineTo(sx, sy + r); c.lineTo(sx - r * 0.25, sy + r * 0.25); c.lineTo(sx - r, sy); c.lineTo(sx - r * 0.25, sy - r * 0.25); c.closePath(); c.fill();
+        }
+        break;
+      }
+      case 'discoball': {
+        // the chain it is let down on, from above the screen
+        const v = Math.min(1, Math.max(0, (u - 0.2) / 1.55)), e = 1 - (1 - v) ** 3, ty = y - 220 * (1 - e) - BASE_TH - MOB_TOP[m.k] + 6;
+        c.globalAlpha = 1; c.strokeStyle = '#2a2622'; c.lineWidth = 1.6; c.setLineDash([2.2, 1.2]);
+        c.beginPath(); c.moveTo(x, ty - 500); c.lineTo(x, ty); c.stroke(); c.setLineDash([]);
+        dust(1.75, 7, 0.8);
+        break;
+      }
+      case 'dragon': {
+        // a cloud of smoke he shows through, and later the smoke ring he blows
+        const v = Math.max(0, u - 0.2);
+        if (v < 2.2) for (let n = 0; n < 11; n++) {
+          const a0 = n * 2.39, r0 = 6 + (n % 3) * 5, w = Math.min(1, v / 0.4), fade = Math.max(0, 1 - Math.max(0, v - 0.9) / 1.3);
+          const px = x + Math.cos(a0) * (r0 + v * 14), py = y - 14 - Math.sin(a0) * (r0 * 0.6 + v * 6) - v * 10 * (n % 2);
+          puff(px, py, (16 + (n % 4) * 5) * w * (1 + v * 0.35), 0.85 * fade);
+        }
+        const r = (u - 1.75) / 0.85;
+        if (r >= 0 && r < 1) {
+          const sp = sprites.get(m.k), mouthX = x + (sp?.facing === 'left' ? -1 : 1) * 6;
+          c.globalAlpha = 0.85 * (1 - r); c.strokeStyle = '#d8d2c8'; c.lineWidth = 2.6 * (1 - r) + 0.8;
+          ell(c, mouthX, top + 4 - r * 26, 3 + r * 9, 1.6 + r * 4); c.stroke();
+        }
+        break;
+      }
+    }
+    c.restore();
   }
 }

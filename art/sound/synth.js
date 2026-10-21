@@ -535,3 +535,10 @@ export function conga(mix, out, t, vel = 1, { f = 220, dec = 0.16, slap = false 
   perc(ng.gain, t, vel * (slap ? 0.55 : 0.15), slap ? 0.03 : 0.012);
   nz.connect(bp).connect(ng).connect(out);
 }
+
+/** A crash cymbal: a long bright hiss. */
+export function crash(mix, out, t, vel = 1, { dec = 1.8 } = {}) {
+  const ctx = mix.ctx, nz = noise(ctx, t, dec + 0.2), hp = filt(ctx, 'highpass', 5000), g = gain(ctx, 0);
+  nz.connect(hp).connect(g).connect(out);
+  perc(g.gain, t, vel * 0.5, dec, 0.002);
+}

@@ -510,6 +510,63 @@ i.ico { display: inline-block; font-style: normal; }
   100% { transform: translateX(16px); }
 }
 
+/* the boss's entrance (thread «Появление босса», intro.ts / introview.ts): black bars close in over the HUD while the boss
+   comes in on the field, then the room dims and its title card slides in, a red band with its name, nickname and
+   picture, and its line on a scrap of paper. Every motion here plays once; sizes follow a 390-wide phone (--s) */
+.boss-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 12;
+  overflow: hidden;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  --s: min(calc(100vw / 390), calc(100vh / 600), 1.5px);
+  --lb: clamp(34px, 9vh, 84px);
+}
+.bi-dim { position: absolute; inset: 0; background: rgba(12, 7, 5, 0.6); opacity: 0; transition: opacity 0.3s; }
+.boss-intro.titled .bi-dim { opacity: 1; }
+.bi-lb { position: absolute; left: 0; right: 0; height: var(--lb); background: #120c09; transform: translateY(-101%); transition: transform 0.38s cubic-bezier(0.3, 0.7, 0.2, 1); }
+.bi-lb.top { top: 0; }
+.bi-lb.bot { bottom: 0; height: calc(var(--lb) + var(--safe-b)); transform: translateY(101%); display: flex; align-items: flex-end; justify-content: center; padding-bottom: calc(10px + var(--safe-b)); }
+.boss-intro.cine .bi-lb { transform: none; }
+.bi-skip { font: 500 12px/1 Oswald, sans-serif; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(243, 230, 200, 0.45); }
+.bi-card { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding-bottom: calc(40 * var(--s)); pointer-events: none; }
+.bi-tc { position: relative; flex: none; width: calc(100% + 60px); height: calc(200 * var(--s)); transform: rotate(-5deg); animation: bi-tc 0.42s cubic-bezier(0.25, 1.4, 0.5, 1) both; }
+.bi-band {
+  position: absolute; inset: 0;
+  background: var(--grain) 0 0 / 160px, repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.025) 0 3px, transparent 3px 9px), linear-gradient(170deg, #9a2a36, #6d1c26);
+  background-blend-mode: overlay, normal, normal;
+  clip-path: polygon(0 6%, 9% 0, 23% 4%, 41% 1%, 58% 5%, 77% 0, 100% 4%, 100% 95%, 84% 100%, 63% 96%, 44% 100%, 26% 95%, 8% 100%, 0 96%);
+}
+.bi-in { position: relative; width: calc(390 * var(--s)); max-width: 100vw; height: 100%; margin: 0 auto; }
+.bi-lbl, .bi-name, .bi-epi { position: absolute; z-index: 1; }
+.bi-lbl { left: calc(44 * var(--s)); top: calc(30 * var(--s)); font: 600 calc(12 * var(--s))/1 Oswald, sans-serif; letter-spacing: 0.22em; text-transform: uppercase; color: #e3a92b; }
+.bi-name { left: calc(42 * var(--s)); top: calc(50 * var(--s)); width: calc(232 * var(--s)); font: 700 calc(46 * var(--s))/0.92 Oswald, sans-serif; text-transform: uppercase; color: #f3e6c8;
+  text-shadow: 0 3px 0 #3a0d14, 2px 1px 0 #3a0d14, -2px 1px 0 #3a0d14, 0 -2px 0 #3a0d14, 0 0 10px rgba(58, 13, 20, 0.8); }
+.bi-name.long { font-size: calc(34 * var(--s)); }
+.bi-epi { left: calc(44 * var(--s)); bottom: calc(30 * var(--s)); width: calc(230 * var(--s)); font: 700 calc(16 * var(--s))/1 var(--hand); color: #dfbe8c; text-shadow: 0 2px 0 #3a0d14, 1.5px 0 0 #3a0d14, -1.5px 0 0 #3a0d14, 0 0 8px rgba(58, 13, 20, 0.9); }
+.bi-art { position: absolute; right: calc(12 * var(--s)); bottom: calc(6 * var(--s)); height: calc(290 * var(--s)); max-width: calc(200 * var(--s)); object-fit: contain; object-position: 100% 100%; filter: drop-shadow(0 6px 0 rgba(0, 0, 0, 0.35)); animation: bi-art 0.5s 0.12s cubic-bezier(0.25, 1.5, 0.5, 1) both; }
+.bi-q {
+  flex: none; margin: calc(22 * var(--s)) 0 0; width: calc(324 * var(--s)); max-width: calc(100vw - 32px);
+  background: #f0e5cc; color: #2a1d14; font: 700 calc(19 * var(--s))/1.05 var(--hand); padding: calc(14 * var(--s)) calc(16 * var(--s)) calc(16 * var(--s));
+  transform: translateX(calc(-13 * var(--s))) rotate(1.5deg);
+  clip-path: polygon(0 3%, 6% 0, 100% 2%, 99% 97%, 92% 100%, 2% 98%);
+  animation: bi-q 0.4s 0.3s cubic-bezier(0.3, 1.5, 0.5, 1) both;
+}
+.boss-intro.out .bi-tc, .boss-intro.out .bi-q { animation: bi-gone 0.24s ease-in both; }
+.boss-intro.out .bi-dim { opacity: 0; }
+@keyframes bi-tc { from { transform: rotate(-5deg) translateX(-115%); } to { transform: rotate(-5deg); } }
+@keyframes bi-art { from { transform: translateX(80px) scale(0.85); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes bi-q { from { transform: translateX(calc(-13 * var(--s))) rotate(1.5deg) translateY(30px); opacity: 0; } to { transform: translateX(calc(-13 * var(--s))) rotate(1.5deg); opacity: 1; } }
+@keyframes bi-gone { to { opacity: 0; transform: translateY(-14px) scale(0.96); } }
+/* while it plays the HUD steps out from under the bars */
+html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi-hide 0.3s both; pointer-events: none !important; }
+@keyframes bi-hide { to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .bi-tc, .bi-art, .bi-q, .boss-intro.out .bi-tc, .boss-intro.out .bi-q { animation-duration: 0.01s; animation-delay: 0s; }
+}
+
 /* while the enemies move, the screen edges glow red and the hero frame steps back */
 .turn-glow {
   position: fixed;

@@ -305,7 +305,9 @@
     "calm": { "file": "music/lounge.mp3", "loop": 108.67924528301887 },
     "fight0": { "file": "music/bfunk.mp3", "loop": 64 },
     "fight1": { "file": "music/march.mp3", "loop": 66.20689655172414 },
-    "fight2": { "file": "music/chase.mp3", "loop": 60.95238095238095 }
+    "fight2": { "file": "music/chase.mp3", "loop": 60.95238095238095 },
+    "boss": { "file": "music/boss.mp3", "loop": 60 },
+    "bossRage": { "file": "music/boss_rage.mp3", "loop": 60 }
   },
   "events": {
     "bar": "events/bar.webp",

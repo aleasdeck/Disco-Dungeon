@@ -6,7 +6,9 @@ import { adsr, bass, bell, brass, clap, cowbell, filt, gain, guitar, hat, kick, 
 export type Sfx =
   | 'click' | 'launch' | 'wall' | 'clink' | 'hit' | 'crit' | 'kill' | 'armor' | 'ore' | 'sparks' | 'herb' | 'ice' | 'shatter'
   | 'pit' | 'hurt' | 'ability' | 'enemyTurn' | 'yourTurn' | 'step' | 'slam' | 'win' | 'lose' | 'zap' | 'eat' | 'gas' | 'boom' | 'freeze'
-  | 'shove' | 'cuff' | 'kiss';
+  | 'shove' | 'cuff' | 'kiss'
+  // the bosses' entrances (intro.ts)
+  | 'thud' | 'boing' | 'fanfare' | 'squeak' | 'door' | 'chain' | 'cough' | 'puff' | 'steam';
 
 type Play = (b: Band, o: AudioNode, t: number, p: number) => void;
 
@@ -148,6 +150,59 @@ const SOUNDS: Record<Sfx, Play> = {
     tone(b, o, t + 0.12, 'sine', 1300, 900, 0.05, 0.25);
     ['E6', 'B6'].forEach((m, i) => bell(b, o, t + 0.14 + i * 0.05, note(m), 0.3, { dec: 0.4 }));
   },
+  // a heavy figure landing on the table: a deep thump and the board rattling under it
+  thud: (b, o, t, p) => {
+    kick(b, o, t, 0.6 + 0.4 * p, { f0: 110, f1: 36, dec: 0.5 });
+    hiss(b, o, t, 0.18, 0.25 + 0.2 * p, { type: 'lowpass', f: 700, q: 0.7 });
+    for (let k = 0; k < 3; k++) tone(b, o, t + 0.05 + k * 0.045, 'triangle', 240 - k * 30, 180, 0.03, 0.12 * p);
+  },
+  // a bed spring: a twang wobbling round its note
+  boing: (b, o, t, p) => {
+    const ctx = b.ctx, s = osc(ctx, 'triangle', 150, t, t + 0.5), g = gain(ctx, 0);
+    for (let k = 1; k <= 10; k++) s.frequency.linearRampToValueAtTime(150 + (k % 2 ? 90 : -40) * Math.exp(-k * 0.25), t + k * 0.04);
+    perc(g.gain, t, 0.6 * (0.5 + 0.5 * p), 0.42, 0.004);
+    s.connect(g).connect(o);
+  },
+  // the trumpets: a royal call in D
+  fanfare: (b, o, t) => {
+    for (const [dt, m, len] of [[0, 'D4', 0.12], [0.14, 'D4', 0.12], [0.28, 'D4', 0.12], [0.42, 'A4', 0.5]] as [number, string, number][]) {
+      brass(b, o, t + dt, note(m), len, 0.9);
+      brass(b, o, t + dt, note(m, 12), len, 0.5);
+    }
+    for (const m of ['D3', 'F#3', 'A3']) brass(b, o, t + 0.42, note(m), 0.5, 0.6);
+  },
+  // a rat's squeak: a thin whistle up and down, two of them
+  squeak: (b, o, t, p) => {
+    tone(b, o, t, 'sine', 2600 + 500 * p, 3400, 0.06, 0.25);
+    tone(b, o, t + 0.07, 'sine', 3300, 2500 + 400 * p, 0.08, 0.22);
+  },
+  // the fridge door: a soft clunk opening it, a slam and a rattle of jars shutting it
+  door: (b, o, t, p) => {
+    kick(b, o, t, 0.4 + 0.6 * p, { f0: 160, f1: 60, dec: 0.18 });
+    hiss(b, o, t, 0.06, 0.25 + 0.3 * p, { f: 1600, q: 1.5 });
+    if (p > 0.7) for (let k = 0; k < 3; k++) bell(b, o, t + 0.06 + k * 0.04, note('E6', k * 3), 0.25, { ratio: 2.76, dec: 0.15 });
+  },
+  // a chain paying out: quick metal clinks
+  chain: (b, o, t, p) => {
+    for (let k = 0; k < 6; k++) cowbell(b, o, t + k * 0.06 + (k % 2) * 0.015, 0.25 + 0.25 * p, { f: 1500 + (k % 3) * 220 });
+  },
+  // a smoker's cough: three rough bursts of breath, the last the biggest
+  cough: (b, o, t) => {
+    for (const [dt, v] of [[0, 0.6], [0.16, 0.7], [0.34, 1]]) {
+      hiss(b, o, t + dt, 0.12, 0.5 * v, { f: 900, q: 1.2 });
+      tone(b, o, t + dt, 'sawtooth', 160, 110, 0.1, 0.12 * v);
+    }
+  },
+  // a puff of smoke: a soft breath of noise
+  puff: (b, o, t, p) => hiss(b, o, t, 0.45, 0.35 + 0.25 * p, { type: 'lowpass', f: 900, q: 0.5 }),
+  // steam from a kettle, or the forge lord's ears: a hiss that rises
+  steam: (b, o, t, p) => {
+    const ctx = b.ctx, s = noise(ctx, t, 0.6), f = filt(ctx, 'bandpass', 3500, 2), g = gain(ctx, 0);
+    f.frequency.setValueAtTime(2500, t);
+    f.frequency.linearRampToValueAtTime(6500, t + 0.5);
+    adsr(g.gain, t, 0.4, { a: 0.05, d: 0.2, s: 0.7, r: 0.15, peak: 0.25 + 0.25 * p });
+    s.connect(f).connect(g).connect(o);
+  },
   lose: (b, o, t) => {
     scratch(b, o, t, true);
     syndrum(b, o, t + 0.3, 0.8, { f0: 600, f1: 60, dec: 1 });
@@ -160,10 +215,11 @@ const TRIM: Record<Sfx, number> = {
   click: 3.7, launch: -6.0, wall: 4.0, clink: -0.7, hit: -2.0, crit: -3.2, kill: -1.6, armor: 0.5, ore: 4.4, sparks: 2.6, herb: 10.5,
   ice: 6.3, shatter: 4.6, pit: -7.0, hurt: -7.7, ability: -4.3, enemyTurn: -5.4, yourTurn: 3.9, step: -0.4, slam: -4.3, win: -2.3, lose: -1.9,
   zap: 0, eat: 6, gas: 2, boom: -3, freeze: 4, shove: -3, cuff: 3, kiss: 4,
+  thud: 0, boing: 2, fanfare: -4, squeak: 0, door: 0, chain: 2, cough: 3, puff: 2, steam: 2,
 };
 
 /** How long each sound lasts, about: the trim node is let go after it. */
-const LONG: Partial<Record<Sfx, number>> = { win: 2.5, lose: 2, slam: 1.4, ability: 1, kill: 0.9, enemyTurn: 1 };
+const LONG: Partial<Record<Sfx, number>> = { win: 2.5, lose: 2, slam: 1.4, ability: 1, kill: 0.9, enemyTurn: 1, fanfare: 1.2 };
 
 /** Play one sound at time t through its trim. */
 export function playSfx(b: Band, out: AudioNode, ev: Sfx, t: number, p = 0.7) {
