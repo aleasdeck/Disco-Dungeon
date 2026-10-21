@@ -1602,6 +1602,15 @@ describe('online play', () => {
     expect(plain(back)).toBe(plain(host));
   });
 
+  it('keeps a scratch taken in a saved room, so the room pays no ore «Без царапины» after the game comes back', () => {
+    const g = new Game();
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    g.S.hurt = true;
+    const back = new Game();
+    applySnapshot(back, JSON.parse(JSON.stringify(snapshot(g))));
+    expect(back.S.hurt).toBe(true);
+  });
+
   it('shows every player the same enemy moving', () => {
     const { host, cli } = pair();
     host.startFight(host.heroOf(0));

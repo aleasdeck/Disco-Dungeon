@@ -13,7 +13,7 @@ import { MapView, type MapParty, type MapVotes } from './mapview';
 import { SceneRenderer } from './draw/scene';
 import { loadAll } from './assets';
 import { sound, type Track } from './sound';
-import { clearSeat, keepKey, keyFor, loadHost, loadSeat, newKey, saveHost, saveSeat, type Ending, type HostSave } from './resume';
+import { CAMPAIGN, clearCampaign, clearSeat, keepKey, keyFor, loadCampaign, loadHost, loadSeat, newKey, saveCampaign, saveHost, saveSeat, type Ending, type HostSave } from './resume';
 import { FLOORS, LAYERS, agreed, depthOf, newRun, nodeById, reachable, roomSeed, type Run, type Votes } from './run';
 import { applyFx, canPick, eventDef, eventOf, rolled, type EventState } from './events';
 import { EventView, type EventVotes } from './eventview';
@@ -21,7 +21,7 @@ import { campDo, campLeave, type CampPick, type CampState } from './camp';
 import { CampView } from './campview';
 import { lootAgreed, newLoot, settleLoot, takeKept, type ArtKey, type LootState } from './artifacts';
 import { LootView, type LootVotes } from './lootview';
-import { beginRun, endRun, playTime, saveStats, syncRun } from './stats';
+import { beginRun, endRun, playTime, resumeRun, runCount, saveStats, syncRun } from './stats';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -37,6 +37,8 @@ const lootView = new LootView();
 const scene = new SceneRenderer();
 
 let run: Run = newRun();
+/** The run is over: the last boss fell, or the whole party did. A campaign then has nothing left to go on with. */
+let runOver = false;
 /** True while the party stands between rooms and must pick the next one. */
 let choosing = true;
 /** Online: the room each player points at (the host keeps the count, clients get a copy). */
@@ -261,6 +263,8 @@ function startRun(picks?: number[]) {
   showMap(true);
   screen('');
   shareMap();
+  runOver = false;
+  keepRun(performance.now(), true);
 }
 
 /**
@@ -705,7 +709,11 @@ game.onRoomEnd = win => {
   const S = game.S, boss = S.spec.type === 'boss';
   const last = boss && run.floor === FLOORS - 1;
   setTimeout(() => {
-    if (!win || last) endRun(run, myHeroes(), win);
+    if (!win || last) {
+      endRun(run, myHeroes(), win);
+      runOver = true;
+      if (mode === 'solo') clearCampaign();
+    }
     if (!win) return showEnd({ title: game.party.length > 1 ? 'Отряд пал' : 'Герой пал', text: `Забег окончен на этаже ${run.floor + 1}, сложность ${S.spec.depth}.`, kind: 'again' });
     if (last) {
       const left = game.alive().map(h => h.def.name).join(', ');
@@ -794,16 +802,24 @@ $('helpClose').addEventListener('click', () => { $('help').hidden = true; });
 declare const __VERSION__: string;
 $('menuVer').textContent = __VERSION__;
 
+/** A campaign to go on with: the one on screen, or after the game was closed (or played online) the one this browser kept. */
+const unfinished = () => (mode === 'solo' ? !runOver : !!loadCampaign());
+
 function openMenu() {
-  $('mContinue').hidden = mode !== 'solo';
+  $('mContinue').hidden = !unfinished();
   show('menu');
 }
 
-$('mContinue').addEventListener('click', () => show(null));
+$('mContinue').addEventListener('click', () => (mode === 'solo' ? show(null) : resumeCampaign()));
 $('mCampaign').addEventListener('click', openHeroSelect);
 $('heroBack').addEventListener('click', openMenu);
-$('heroGo').addEventListener('click', () => { if (settings.party.length === settings.size) startCampaign(settings.party); });
-$('mOnline').addEventListener('click', () => { $<HTMLInputElement>('lobbyName').value = settings.name; resetLobby(); show('lobby'); });
+$('heroGo').addEventListener('click', () => {
+  if (settings.party.length !== settings.size) return;
+  // the run under way would be gone
+  if (unfinished() && !confirm('Начать новый забег? Начатый забег пропадёт.')) return;
+  startCampaign(settings.party);
+});
+$('mOnline').addEventListener('click', () => { shelveCampaign(); $<HTMLInputElement>('lobbyName').value = settings.name; resetLobby(); show('lobby'); });
 $('mCollection').addEventListener('click', () => { renderCollection('heroes'); show('collection'); });
 $('mStats').addEventListener('click', () => { flushStats(); renderStats(); show('statsScreen'); });
 $('statsBack').addEventListener('click', openMenu);
@@ -825,6 +841,8 @@ $('pResume').addEventListener('click', () => show(null));
 $('pSettings').addEventListener('click', () => openSettings('pause'));
 $('pHelp').addEventListener('click', () => { show(null); $('help').hidden = false; });
 $('pMenu').addEventListener('click', () => {
+  // the campaign waits behind the menu as it is, the map or a window between rooms included, until «Продолжить»
+  if (mode === 'solo') { keepRun(performance.now(), true); openMenu(); return; }
   if (game.online && !confirm('Выйти из сетевой игры?')) return;
   leaveOnline();
   showMap(false);
@@ -1217,6 +1235,89 @@ async function reopen(code: string) {
   else if (game.cleared() || game.S.phase === 'over' || !game.alive().length) game.onRoomEnd(game.alive().length > 0);
 }
 
+// ------------------------------------------------------------ campaign save
+
+let runAt = -Infinity;
+
+/** The campaign is kept in this browser every second or so, and as the page goes away, so a run closed mid-way goes on later. */
+function keepRun(now: number, force = false) {
+  if (mode !== 'solo' || runOver || (!force && now - runAt < 1000)) return;
+  runAt = now;
+  saveCampaign({
+    v: CAMPAIGN, run, choosing, ev, camp, campFor, loot, shut: { ev: evShut, camp: campShut, loot: lootShut }, ending,
+    forgeLeft: game.forge > 0 && !hud.atForge, act: game.act, mined: game.mined, clean: game.clean,
+    // what only flashes by is left out, so a room standing still isn't written again every second
+    snap: { ...snapshot(game), floats: [], sparks: [], shake: 0 },
+    count: runCount(run),
+  });
+}
+
+/** The campaign this browser kept goes on where it was left: on the map, in a window between rooms, or mid-fight. */
+function resumeCampaign() {
+  const s = loadCampaign();
+  if (!s) { openMenu(); return; }
+  leaveOnline();
+  setOnline('solo');
+  try {
+    run = s.run;
+    choosing = s.choosing;
+    votes = {};
+    ev = s.ev;
+    evShut = s.shut.ev;
+    camp = s.camp;
+    campShut = s.shut.camp;
+    campFor = s.campFor;
+    loot = s.loot;
+    lootShut = s.shut.loot;
+    game.act = s.act;
+    // the room is built afresh from its spec, then everything in it put back as it was, the heroes as new
+    game.party = [];
+    game.showRoom(s.snap.spec);
+    applySnapshot(game, s.snap);
+    game.mined = s.mined;
+    game.clean = s.clean;
+  } catch (e) {
+    // a save the game can no longer read (a much older make): it is let go, so it doesn't fail every time
+    console.error(e);
+    clearCampaign();
+    setOnline('menu');
+    game.party = newParty();
+    game.loadRoom({ seed: Math.floor(Math.random() * 1e6), depth: 1, floor: 0, type: 'fight' });
+    hud.buildAllies();
+    controls.fit();
+    openMenu();
+    alert('Не удалось продолжить сохранённый забег.');
+    return;
+  }
+  runOver = false;
+  resumeRun(run, game.party.map(h => h.def.key), s.count);
+  show(null);
+  hud.leaveForge(s.forgeLeft);
+  hud.buildAllies();
+  hud.refresh();
+  controls.fit();
+  hideEnd();
+  showMap(false);
+  showEvent();
+  showCamp();
+  showLoot();
+  if (s.ending) showEnd(s.ending);
+  // the map opens once the window between rooms is closed, as it did before
+  else if (choosing) { if (['eventScreen', 'campScreen', 'lootScreen'].every(id => $(id).hidden)) showMap(true); }
+  // the fight was just over, its result not up yet
+  else if (game.S.phase === 'over' && !loot && !(ev && !ev.done)) game.onRoomEnd(game.alive().length > 0);
+}
+
+/** Off to play online: the campaign under way waits in this browser's save for «Продолжить». */
+function shelveCampaign() {
+  if (mode !== 'solo') return;
+  keepRun(performance.now(), true);
+  setOnline('menu');
+  leaveOnline();
+  showMap(false);
+  hideEnd();
+}
+
 /** The main menu and its screens; the settings count among them when opened from the main menu, not from a game. */
 const MENU_SCREENS = ['menu', 'heroSelect', 'lobby', 'collection', 'statsScreen'];
 const inMenu = () => MENU_SCREENS.some(id => !$(id).hidden) || (settingsFrom === 'menu' && !$('settingsScreen').hidden);
@@ -1302,6 +1403,7 @@ function frame(now: number) {
   sound.muffle(t?.startsWith('fight') === true && game.S.phase === 'enemy');
   shareState(now);
   keepSeat(now);
+  keepRun(now);
   countStats(now, raw);
   const camKey = `${cam.panX},${cam.panY},${cam.zoom},${cam.rot}`;
   const changed = stale || camKey !== drawnCam || game.S !== drawnRoom || busy();
@@ -1335,9 +1437,9 @@ game.loadRoom({ seed: Math.floor(Math.random() * 1e6), depth: 1, floor: 0, type:
 controls.fit();
 window.addEventListener('resize', resize);
 // closing the tab tells the others right away instead of after the heartbeat timeout
-window.addEventListener('pagehide', () => { flushStats(); if (net.active) net.close(); });
+window.addEventListener('pagehide', () => { keepRun(performance.now(), true); flushStats(); if (net.active) net.close(); });
 // a phone may kill a page in the background without a pagehide
-document.addEventListener('visibilitychange', () => { if (document.hidden) flushStats(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { keepRun(performance.now(), true); flushStats(); } });
 
 // ------------------------------------------------------------ start
 

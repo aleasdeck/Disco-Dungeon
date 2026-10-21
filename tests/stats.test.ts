@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Game, newParty, type Action } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { FLOORS, newRun } from '../src/run';
-import { beginRun, endRun, favourite, playTime, stats, syncRun } from '../src/stats';
+import { beginRun, endRun, favourite, playTime, resumeRun, runCount, stats, syncRun } from '../src/stats';
 
 /** A room with the party's heroes on their runes and the fight on. */
 function fightWith(g: Game) {
@@ -84,6 +84,36 @@ describe('player statistics', () => {
     const wins = keys.map(k => stats.heroes[k].wins);
     endRun(run, g.party, true);
     expect(keys.map(k => stats.heroes[k].wins)).toEqual(wins.map(n => n + 1));
+  });
+
+  it('goes on counting a saved campaign as the same run, even after an online game was counted', () => {
+    const run = newRun(4246), g = new Game();
+    g.party = newParty([1], run.seed);
+    const keys = [g.party[0].def.key];
+    beginRun(run, keys, false);
+    fightWith(g);
+    const h = g.party[0];
+    g.throwDisc(h, -30, -40);
+    syncRun(run, g.party, false);
+    // the campaign's save: the game and how far the statistics had counted it
+    const save = JSON.parse(JSON.stringify({ snap: snapshot(g), count: runCount(run) }));
+    const runs = stats.runs, throws = stats.sum.throws, kills = stats.sum.kills;
+    // the game comes back the same visit: nothing new to count yet
+    resumeRun(run, keys, save.count);
+    expect(stats.runs).toBe(runs);
+    // an online game is counted, then the campaign goes on from its save
+    beginRun(newRun(4247), ['bastion'], true);
+    const back = new Game();
+    applySnapshot(back, save.snap);
+    resumeRun(run, keys, save.count);
+    expect(stats.runs).toBe(runs + 1);
+    expect(stats.cur?.seed).toBe(run.seed);
+    // what was counted before the save isn't counted again, what the run does on is
+    syncRun(run, back.party, false);
+    expect(stats.sum.throws).toBe(throws);
+    back.hurtMob(back.S.mobs[0], 99, '#fff', true, 0.6, back.party[0]);
+    syncRun(run, back.party, false);
+    expect(stats.sum.kills).toBe(kills + 1);
   });
 
   it("online, a client reads its own hero's numbers from the host's snapshots", () => {
