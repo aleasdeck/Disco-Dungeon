@@ -10,6 +10,8 @@ import { favourite, stats } from './stats';
 import { FLOORS, LAYERS } from './run';
 import { sound } from './sound';
 import type { Player } from './net';
+import { uiArt } from './assets';
+import { BACKDROP_COUNT, drawPhoto, savePhoto, type PhotoSeat } from './photo';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -22,17 +24,6 @@ export function show(screen: Screen | null) {
 }
 
 const FLOOR_NAMES = BIOMES.map(b => b.name);
-
-/** Heroes as the pick screens show them: a row for each kind, its name on a tab at the row's start, then its heroes' cards. */
-function pickRows(box: HTMLElement, card: (i: number) => HTMLElement) {
-  box.innerHTML = '';
-  heroesByKind().forEach((list, r) => {
-    const tab = document.createElement('b');
-    tab.className = 'pick-role';
-    tab.textContent = KINDS[r].row;
-    box.append(tab, ...list.map(card));
-  });
-}
 
 // ------------------------------------------------------------ collection
 
@@ -161,50 +152,153 @@ export function renderStats() {
 /** The campaign's party size in words: who to pick, and how many are still missing. */
 const SIZE_WORDS = ['', 'одного героя', 'двух героев', 'трёх героев'];
 
-/** Above the cards: what a party of this size is, and how the rooms meet it. */
-const SIZE_LEAD = [
-  '',
-  'Выбери героя: весь забег ты ведёшь его одного. Комнаты подстроены под одиночку: врагов меньше, и они слабее, чем против отряда.',
-  'Выбери двух героев: весь забег ты ведёшь обоих и бросаешь за каждого. Комнаты подстроены под двоих, как в сетевой игре.',
-  'Выбери трёх героев: весь забег ты ведёшь всех троих и бросаешь за каждого. Комнаты подстроены под полный отряд, как в сетевой игре.',
-];
+// ------------------------------------------------------------ the pick screens: the party photo, the heroes, the card
+
+const icon = (key: string) => uiArt.get(key)?.src ?? '';
+/** Mice can point at a hero to read it without taking it; fingers take it with a tap. */
+const canPoint = () => matchMedia('(hover: hover)').matches;
+
+/** The card beside the photo: whose the hero is, its name and kind, its numbers, its ability whole. */
+function heroCard(box: HTMLElement, i: number) {
+  const d = HEROES[i];
+  box.style.setProperty('--c', d.col);
+  // the name and the numbers on one line, so the ability fits whole without scrolling
+  box.innerHTML = `<div class="pc-top"><h3>${d.name}<em>${kindOf(d)}</em></h3>`
+    + `<ul class="pc-stats"><li title="Здоровье"><img src="${icon('ico_hp')}" alt="Здоровье">${d.hp}</li>`
+    + `<li title="Урон"><img src="${icon('up_dmg')}" alt="Урон">${fullHit(d.m, d.pw)}</li>`
+    + `<li title="Скорость"><img src="${icon('up_speed')}" alt="Скорость">${Math.round(d.pw * 100)}%</li>`
+    + `<li title="Отскок"><img src="${icon('up_bounce')}" alt="Отскок">${Math.round(d.e * 100)}%</li></ul></div>`
+    + `<div class="pc-ab"><div class="pc-abname"><span class="pc-gem" style="--ab:${d.abCol}"><img src="${icon('ab_' + d.key)}" alt=""></span><b>«${d.ab}»</b></div>`
+    + `<p>${d.abTxt}</p><p class="pc-more">${d.abMore}</p></div>`;
+  fitCard(box);
+}
 
 /**
- * The campaign's screen: how many heroes go (1 to 3, one player plays them all) and the hero cards. The picked ones are
- * marked, numbered once there are several, and below the cards stands what the last tapped hero (`shown`) does.
+ * The card never scrolls: when a long ability doesn't fit the card's place (a small phone), its words shrink step by
+ * step until it does. Again after the screen turns or the window changes size.
+ */
+function fitCard(box: HTMLElement) {
+  requestAnimationFrame(() => {
+    let k = 1;
+    box.style.setProperty('--fit', '1');
+    while (box.clientHeight && box.scrollHeight > box.clientHeight + 1 && k > 0.66) {
+      k -= 0.03;
+      box.style.setProperty('--fit', k.toFixed(2));
+    }
+  });
+}
+window.addEventListener('resize', () => document.querySelectorAll<HTMLElement>('.pick-card').forEach(fitCard));
+
+/** A small photo (a phone's) lifts over the screen at full size on a tap; the next tap anywhere, or Esc, puts it back. */
+function zoomable(print: HTMLElement) {
+  print.onclick = () => {
+    if (print.classList.contains('zoomed') || print.clientWidth >= 360) return;
+    print.classList.add('zoomed');
+    const back = (e: Event) => {
+      if (e instanceof KeyboardEvent && e.key !== 'Escape') return;
+      e.stopPropagation();
+      e.preventDefault();
+      print.classList.remove('zoomed');
+      window.removeEventListener('click', back, true);
+      window.removeEventListener('keydown', back, true);
+    };
+    setTimeout(() => {
+      window.addEventListener('click', back, true);
+      window.addEventListener('keydown', back, true);
+    });
+  };
+}
+
+/**
+ * All twelve heroes on one row, kind after kind with a gap between the kinds. `mark` says how a hero's face is marked:
+ * picked by me, taken by someone else, looked at by someone, with a number or a player's letter on it.
+ */
+function heroRow(box: HTMLElement, o: {
+  mark: (i: number) => { cls?: string; badge?: string; label?: string };
+  onTap: (i: number) => void;
+  onPeek: (i: number) => void;
+  shown: number;
+}) {
+  // on a phone the row scrolls: it stays where it was, and the face being read is kept in sight
+  const left = box.scrollLeft;
+  box.innerHTML = '';
+  heroesByKind().forEach((list, r) => {
+    // each kind on its own piece of cardboard, its name over its faces
+    const group = document.createElement('div'), faces = document.createElement('div');
+    group.className = 'pick-kind';
+    group.innerHTML = `<span class="pk-name">${KINDS[r].row}</span>`;
+    faces.className = 'pk-faces';
+    group.append(faces);
+    for (const i of list) {
+      const def = HEROES[i], m = o.mark(i), b = document.createElement('button');
+      b.className = 'pick' + (m.cls ? ' ' + m.cls : '');
+      b.style.setProperty('--c', def.col);
+      b.dataset.i = String(i);
+      b.setAttribute('aria-label', def.name + (m.label ? `, ${m.label}` : ''));
+      b.setAttribute('aria-pressed', String(!!m.cls?.includes('mine')));
+      b.innerHTML = `<img src="${faceUrl({ i, def })}" alt=""><span>${def.name}</span>${m.badge ? `<b class="pick-n">${m.badge}</b>` : ''}`;
+      b.addEventListener('click', () => o.onTap(i));
+      if (canPoint()) {
+        b.addEventListener('mouseenter', () => o.onPeek(i));
+        b.addEventListener('mouseleave', () => o.onPeek(-1));
+      }
+      faces.append(b);
+    }
+    box.append(group);
+  });
+  box.scrollLeft = left;
+  // after layout: the screen may only now be coming up
+  requestAnimationFrame(() => {
+    const t = box.querySelector<HTMLElement>(`[data-i="${o.shown}"]`);
+    if (!t || box.scrollWidth <= box.clientWidth) return;
+    const x0 = t.getBoundingClientRect().left - box.getBoundingClientRect().left + box.scrollLeft, x1 = x0 + t.offsetWidth;
+    if (x0 < box.scrollLeft) box.scrollLeft = x0 - 8;
+    else if (x1 > box.scrollLeft + box.clientWidth) box.scrollLeft = x1 - box.clientWidth + 8;
+  });
+}
+
+/** The face under the mouse on the campaign screen, and the backdrop of its photo (a new one each time it opens). */
+let campPeek = -1;
+let campBg = Math.floor(Math.random() * BACKDROP_COUNT);
+
+/**
+ * The campaign's screen: how many heroes go (1 to 3, one player plays them all), the party's photo, the twelve heroes on
+ * one row and the card of the hero last tapped (`shown`) or under the mouse. The next free place in the photo shows the
+ * hero under the mouse pale, as a try-on.
  */
 export function renderHeroSelect(o: { size: number; party: number[]; shown: number; onPick: (hero: number) => void; onSize: (n: number) => void }) {
   $('heroSize').innerHTML = [1, 2, 3].map(n => `<button class="btn tab${n === o.size ? ' on' : ''}" data-n="${n}" aria-pressed="${n === o.size}">${n} ${plural(n, 'герой', 'героя', 'героев')}</button>`).join('');
   $('heroSize').querySelectorAll<HTMLButtonElement>('button').forEach(b => b.addEventListener('click', () => o.onSize(Number(b.dataset.n))));
-  $('heroLead').textContent = SIZE_LEAD[o.size];
-  pickRows($('heroPicks'), i => {
-    const def = HEROES[i], at = o.party.indexOf(i), b = document.createElement('button');
-    b.className = 'pick' + (at >= 0 ? ' mine' : '');
-    b.style.setProperty('--c', def.col);
-    b.setAttribute('aria-pressed', String(at >= 0));
-    const cv = document.createElement('canvas');
-    drawPortrait(cv, { i, def });
-    b.append(cv);
-    // only the name: the row's tab already says what kind the hero is
-    const label = document.createElement('span');
-    label.textContent = def.name;
-    b.append(label);
-    // in a party the picks are numbered: the first goes first on the strip and by the fire
-    if (at >= 0 && o.size > 1) {
-      const n = document.createElement('b');
-      n.className = 'pick-n';
-      n.textContent = String(at + 1);
-      b.append(n);
-    }
-    b.addEventListener('click', () => o.onPick(i));
-    return b;
+  campPeek = -1;
+  const photo = $<HTMLCanvasElement>('heroPhoto');
+  photo.parentElement!.classList.remove('zoomed');
+  zoomable(photo.parentElement!);
+  const paint = () => {
+    const i = campPeek >= 0 ? campPeek : o.shown;
+    heroCard($('heroInfo'), i);
+    const tryOn = campPeek >= 0 && !o.party.includes(campPeek) ? campPeek : null;
+    const seats: PhotoSeat[] = Array.from({ length: o.size }, (_, k) => ({ hero: o.party[k] ?? null, look: k === o.party.length ? tryOn : null }));
+    drawPhoto(photo, seats, { bg: campBg, names: false });
+    photo.setAttribute('aria-label', 'Фото отряда: ' + (o.party.map(h => HEROES[h].name).join(', ') || 'пока никого'));
+  };
+  heroRow($('heroPicks'), {
+    mark: i => {
+      const at = o.party.indexOf(i);
+      return at < 0 ? {} : { cls: 'mine', badge: o.size > 1 ? String(at + 1) : '', label: 'в отряде' };
+    },
+    onTap: i => o.onPick(i),
+    onPeek: i => { campPeek = i; paint(); },
+    shown: o.shown,
   });
-  const def = HEROES[o.shown];
-  $('heroInfo').innerHTML = `<b style="color:${def.col}">${def.name}</b>. ${kindOf(def)}. HP ${def.hp}, урон ${fullHit(def.m, def.pw)}, скорость ${Math.round(def.pw * 100)}%, отскок ${Math.round(def.e * 100)}%. `
-    + `Способность «${def.ab}»: ${def.abTxt}`;
+  $('heroBg').onclick = () => { campBg++; paint(); };
+  $('heroSave').onclick = () => savePhoto(photo);
+  paint();
   const left = o.size - o.party.length;
+  // no line under the screen for it: the button itself says how many heroes are still missing
   $('heroLeft').textContent = left > 0 ? `Выбери ещё ${SIZE_WORDS[left]}` : '';
-  $<HTMLButtonElement>('heroGo').disabled = left > 0;
+  const go = $<HTMLButtonElement>('heroGo');
+  go.disabled = left > 0;
+  go.textContent = left > 0 ? `Ещё ${left} ${plural(left, 'герой', 'героя', 'героев')}` : 'В путь';
 }
 
 // ------------------------------------------------------------ settings
@@ -237,32 +331,74 @@ export function lobbyStatus(text: string) {
 /** The host may start once every player has a hero and everyone but the host has pressed «Готов». */
 export const startable = (players: Player[]) => players.every(p => p.hero !== null && (p.id === 'host' || p.ready));
 
-/** Draw the room part of the lobby: code, hero cards to pick, the players, and the start button (host) or «Готов» (the rest). */
-export function renderLobby(o: { code: string; players: Player[]; me: string; host: boolean; onPick: (hero: number | null) => void }) {
+/** The face under the mouse in the lobby, and the hero whose card is open when nothing is under it. */
+let lobbyPeek = -1;
+let lobbyShown = -1;
+
+/**
+ * Draw the room part of the lobby: the party's photo with every player's name written on it, the twelve heroes on one row
+ * (a taken one shows its player's letter and can only be read), the card, and the start button (host) or «Готов» (the
+ * rest). A player still choosing stands pale in the photo as the hero they point at.
+ */
+export function renderLobby(o: {
+  code: string; players: Player[]; me: string; host: boolean; bg: number;
+  onPick: (hero: number | null) => void; onLook: (hero: number | null) => void; onBg: () => void;
+}) {
   $('lobbyStart').hidden = true;
   $('lobbyRoom').hidden = false;
+  $('lobbyRoom').closest('.panel')!.classList.add('pick-panel');
   $('lobbyRoomCode').textContent = o.code;
   const me = o.players.find(p => p.id === o.me), mine = me?.hero ?? null;
-  pickRows($('lobbyHeroes'), i => {
-    const def = HEROES[i], by = o.players.find(p => p.hero === i), b = document.createElement('button');
-    b.className = 'pick' + (mine === i ? ' mine' : by ? ' taken' : '');
-    b.style.setProperty('--c', def.col);
-    b.disabled = !!by && by.id !== o.me;
-    b.setAttribute('aria-pressed', String(mine === i));
-    const cv = document.createElement('canvas');
-    drawPortrait(cv, { i, def });
-    b.append(cv);
-    const label = document.createElement('span');
-    label.innerHTML = `${def.name}<em>${by ? (by.id === o.me ? 'ты' : by.name) : 'свободен'}</em>`;
-    b.append(label);
-    b.addEventListener('click', () => o.onPick(mine === i ? null : i));
-    return b;
+  const ownerOf = (i: number) => o.players.find(p => p.hero === i);
+  if (lobbyShown < 0) lobbyShown = mine ?? Math.max(0, HEROES.findIndex((_, i) => !ownerOf(i)));
+  const photo = $<HTMLCanvasElement>('lobbyPhoto');
+  zoomable(photo.parentElement!);
+  const paint = () => {
+    const i = lobbyPeek >= 0 ? lobbyPeek : lobbyShown;
+    heroCard($('lobbyInfo'), i);
+    const seats: PhotoSeat[] = o.players.map(p => ({
+      hero: p.hero,
+      look: p.hero !== null ? null : p.id === o.me && lobbyPeek >= 0 && !ownerOf(lobbyPeek) ? lobbyPeek : p.look ?? null,
+      name: p.name, host: p.id === 'host', ready: !!p.ready,
+    }));
+    drawPhoto(photo, seats, { bg: o.bg, names: true });
+    photo.setAttribute('aria-label', 'Фото отряда: ' + o.players.map(p => `${p.name}: ${p.hero !== null ? HEROES[p.hero].name : 'выбирает'}`).join(', '));
+  };
+  let sent: number | null = null, timer = 0;
+  heroRow($('lobbyHeroes'), {
+    mark: i => {
+      const by = ownerOf(i);
+      if (by) return by.id === o.me ? { cls: 'mine', badge: '', label: 'твой' } : { cls: 'taken', badge: escapeHtml(by.name.slice(0, 1).toUpperCase()), label: `взял ${by.name}` };
+      const eye = o.players.find(p => p.hero === null && p.id !== o.me && p.look === i);
+      return eye ? { cls: 'eyed', badge: escapeHtml(eye.name.slice(0, 1).toUpperCase()) + '?', label: `смотрит ${eye.name}` } : {};
+    },
+    onTap: i => {
+      lobbyShown = i;
+      const by = ownerOf(i);
+      if (by && by.id !== o.me) { paint(); return; }
+      o.onPick(mine === i ? null : i);
+    },
+    onPeek: i => {
+      lobbyPeek = i;
+      paint();
+      // the others see the hero I point at only while I have none; a pause first, so a sweep of the mouse sends one word
+      if (mine !== null) return;
+      const want = i >= 0 && !ownerOf(i) ? i : null;
+      clearTimeout(timer);
+      timer = window.setTimeout(() => { if (want !== sent) { sent = want; o.onLook(want); } }, 160);
+    },
+    shown: lobbyShown,
   });
+  $('lobbyBg').hidden = !o.host;
+  $('lobbyBg').onclick = () => o.onBg();
+  $('lobbySave').onclick = () => savePhoto(photo);
+  paint();
+  // the same as the photo in words, for screen readers
   $('lobbyPlayers').innerHTML = o.players.map(p => {
     const def = p.hero !== null ? HEROES[p.hero] : null;
     // the host has no «Готов» of its own: it starts the game when the rest are ready
     const ready = p.id === 'host' ? '' : p.ready ? '<span class="rdy on">готов</span>' : '<span class="rdy">не готов</span>';
-    return `<li><i style="--c:${def?.col ?? '#3a2d22'}"></i><b>${escapeHtml(p.name)}</b>${p.id === 'host' ? ' · хозяин' : ''}${p.id === o.me ? ' · ты' : ''}<span class="muted">${def ? def.name : 'выбирает героя'}</span>${ready}</li>`;
+    return `<li><b>${escapeHtml(p.name)}</b>${p.id === 'host' ? ' · хозяин' : ''}${p.id === o.me ? ' · ты' : ''}<span class="muted">${def ? def.name : 'выбирает героя'}</span>${ready}</li>`;
   }).join('');
   const go = startable(o.players), waiting = o.players.filter(p => p.id !== 'host' && !p.ready);
   $('lobbyStartBtn').hidden = !o.host;
@@ -284,6 +420,10 @@ export function renderLobby(o: { code: string; players: Player[]; me: string; ho
 export function resetLobby() {
   $('lobbyStart').hidden = false;
   $('lobbyRoom').hidden = true;
+  $('lobbyRoom').closest('.panel')!.classList.remove('pick-panel');
+  lobbyPeek = -1;
+  lobbyShown = -1;
+  $('lobbyPhoto').parentElement!.classList.remove('zoomed');
   lobbyStatus('');
 }
 

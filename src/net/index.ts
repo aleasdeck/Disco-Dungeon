@@ -13,7 +13,7 @@ import { hostRoom, joinRoom, RoomError, type Accept, type HostedRoom, type JoinR
  * `key` is the player's secret for rejoining after a drop; only the host keeps it. `ready`: the player pressed
  * «Готов» in the lobby (the host has no such flag: pressing «Начать» is its word).
  */
-export interface Player { id: string; name: string; hero: number | null; key?: string; ready?: boolean }
+export interface Player { id: string; name: string; hero: number | null; key?: string; ready?: boolean; look?: number | null }
 
 export type Msg =
   /** A player's first word on every link: which browser it is, so a link made anew after a drop keeps its place. */
@@ -21,8 +21,10 @@ export type Msg =
   | { t: 'hello'; name: string; key: string }
   /** The host turns a player away (the room is full, or the game started without them). */
   | { t: 'deny'; text: string }
-  | { t: 'lobby'; players: Player[] }
+  | { t: 'lobby'; players: Player[]; bg?: number }
   | { t: 'pick'; hero: number | null }
+  /** A player still without a hero points at one in the lobby: the others see it pale in the party photo. */
+  | { t: 'look'; hero: number | null }
   /** A player in the lobby says they are ready to start, or takes it back. */
   | { t: 'ready'; on: boolean }
   | { t: 'start'; players: Player[] }

@@ -154,13 +154,19 @@
   </section>
 
   <section id="heroSelect" class="overlay solid" hidden>
-    <div class="panel lobby-panel">
-      <div class="panel-head"><h2>Кампания</h2><button class="btn" id="heroBack"><i data-art="m_back" aria-hidden="true"></i>Назад</button></div>
-      <div id="heroSize" class="hero-size" role="group" aria-label="Размер отряда"></div>
-      <p id="heroLead" class="hero-lead"></p>
-      <div id="heroPicks" class="pick-heroes"></div>
-      <p id="heroInfo" class="hero-info"></p>
-      <div class="lobby-foot"><span id="heroLeft"></span><button class="btn big" id="heroGo">В путь</button></div>
+    <div class="panel pick-panel">
+      <div class="panel-head"><h2>Кампания</h2><div id="heroSize" class="hero-size" role="group" aria-label="Размер отряда"></div><button class="btn" id="heroBack"><i data-art="m_back" aria-hidden="true"></i>Назад</button></div>
+      <div class="pick-body">
+        <div class="pick-pic">
+          <div class="pick-print"><canvas id="heroPhoto" width="1024" height="1024" role="img" aria-label="Фото отряда"></canvas></div>
+          <div class="pick-tools"><button class="btn" id="heroBg" title="Другой фон"><i aria-hidden="true">⇄</i>Фон</button><button class="btn" id="heroSave" title="Сохранить фото"><i aria-hidden="true">⤓</i>Фото</button></div>
+        </div>
+        <div class="pick-side">
+          <div id="heroPicks" class="pick-row" role="group" aria-label="Герои"></div>
+          <article id="heroInfo" class="pick-card"></article>
+          <div class="lobby-foot pick-go"><span id="heroLeft" class="sr-only"></span><button class="btn big" id="heroGo">В путь</button></div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -183,12 +189,19 @@
         </div>
       </div>
       <div id="lobbyRoom" class="lobby-room" hidden>
-        <div class="room-code">Код комнаты <b id="lobbyRoomCode"></b> <button class="btn sm" id="lobbyCopy"><i data-art="m_link" aria-hidden="true"></i>Скопировать ссылку</button></div>
-        <h3>Выбери героя</h3>
-        <div id="lobbyHeroes" class="pick-heroes"></div>
-        <h3>Игроки</h3>
-        <ul id="lobbyPlayers" class="players"></ul>
-        <div class="lobby-foot"><span id="lobbyHint"></span><button class="btn big" id="lobbyStartBtn" hidden>Начать</button><button class="btn big" id="lobbyReadyBtn" hidden>Готов</button></div>
+        <div class="pick-body">
+          <div class="pick-pic">
+            <div class="pick-print"><canvas id="lobbyPhoto" width="1024" height="1024" role="img" aria-label="Фото отряда"></canvas></div>
+            <div class="pick-tools"><button class="btn" id="lobbyBg" title="Другой фон"><i aria-hidden="true">⇄</i>Фон</button><button class="btn" id="lobbySave" title="Сохранить фото"><i aria-hidden="true">⤓</i>Фото</button></div>
+          </div>
+          <div class="pick-side">
+            <div class="room-code">Код комнаты <b id="lobbyRoomCode"></b> <button class="btn sm" id="lobbyCopy"><i data-art="m_link" aria-hidden="true"></i>Скопировать ссылку</button></div>
+            <div id="lobbyHeroes" class="pick-row" role="group" aria-label="Герои"></div>
+            <article id="lobbyInfo" class="pick-card"></article>
+            <ul id="lobbyPlayers" class="players sr-only"></ul>
+            <div class="lobby-foot pick-go"><span id="lobbyHint" class="sr-only"></span><button class="btn big" id="lobbyStartBtn" hidden>Начать</button><button class="btn big" id="lobbyReadyBtn" hidden>Готов</button></div>
+          </div>
+        </div>
       </div>
       <p id="lobbyStatus" class="lobby-status" role="status"></p>
     </div>
