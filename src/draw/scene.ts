@@ -15,6 +15,8 @@ import { intro, bossKind } from '../intro';
 import { SAY_TIME, justOpened, trinketDef } from '../trinkets';
 
 export interface Aim { hero: HeroState; dx: number; dy: number }
+/** A piece of the room kept as a picture (SceneRenderer.keep): the picture, what it shows, what the last frame asked for, where it lies, the brush it leaves. */
+interface Kept { cv: HTMLCanvasElement | null; key: string; seen: string; x: number; y: number; w: number; h: number; fill: string | CanvasGradient | CanvasPattern; stroke: string | CanvasGradient | CanvasPattern; lw: number }
 /** A hero dragged to another rune: pointer position in screen pixels and the rune under it. */
 export interface Carry { hero: HeroState; x: number; y: number; pad: number | null; moved: boolean }
 
@@ -162,6 +164,8 @@ export class SceneRenderer {
   private cam!: Camera;
   private g!: Game;
   private t = 0;
+  /** Frames drawn so far: what is worked out once a frame is kept by it. */
+  private frame = 0;
   private carry: Carry | null = null;
   private aim: Aim | null = null;
   private bgCss = '';
@@ -425,6 +429,7 @@ export class SceneRenderer {
     this.carry = carry?.moved ? carry : null;
     this.aim = aim;
     this.c = c; this.cam = cam; this.g = g; this.t = t;
+    this.frame++;
     const S = g.S, { w, h, dpr } = view;
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     // the backdrop gradient and the vignette live in CSS: full-screen gradients every frame are what made phones crawl
@@ -544,6 +549,57 @@ export class SceneRenderer {
     this.drawOver();
   }
 
+  /**
+   * A piece of the room that stands still, drawn into a picture of its own once and stamped on the next frames while
+   * `key` (what it is drawn from; the camera is added here) stays the same, the way the floor is kept. Asked for with
+   * another key than in the frame before (the camera moving, the table shaking), it is drawn straight, and kept once it
+   * holds still. The picture lies on whole device pixels, so it comes out as the piece drawn straight, and hands on the
+   * brush the piece leaves behind. `box` is the world box the piece can cover: x0, y0, x1, y1 and how high.
+   */
+  private keep<T extends object>(kept: WeakMap<T, Kept>, o: T, key: string, box: number[], draw: () => void) {
+    const c = this.c, cam = this.cam, m = c.getTransform();
+    key = `${m.a},${m.b},${m.c},${m.d},${m.e},${m.f},${cam.rot},${cam.cx},${cam.cy}|${key}`;
+    let k = kept.get(o);
+    if (!k) kept.set(o, (k = { cv: null, key: '', seen: '', x: 0, y: 0, w: 0, h: 0, fill: '', stroke: '', lw: 1 }));
+    if (key !== k.seen) {
+      k.seen = key;
+      draw();
+      return;
+    }
+    if (key !== k.key) {
+      const [x0, y0, x1, y1, top] = box;
+      let L = Infinity, T = Infinity, R = -Infinity, B = -Infinity;
+      for (const [x, y] of [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]) {
+        for (const h of [0, top]) {
+          const [ix, iy] = this.P(x, y, h), X = m.a * ix + m.c * iy + m.e, Y = m.b * ix + m.d * iy + m.f;
+          L = Math.min(L, X); R = Math.max(R, X); T = Math.min(T, Y); B = Math.max(B, Y);
+        }
+      }
+      const ox = Math.floor(L) - 4, oy = Math.floor(T) - 4, w = Math.ceil(R) + 4 - ox, h = Math.ceil(B) + 4 - oy;
+      // the picture only ever grows: a new size every time the camera turns would be a new canvas every time
+      const cv = (k.cv ??= document.createElement('canvas')), f = cv.getContext('2d')!;
+      if (cv.width < w || cv.height < h) { cv.width = Math.max(cv.width, w); cv.height = Math.max(cv.height, h); }
+      f.setTransform(1, 0, 0, 1, 0, 0);
+      f.clearRect(0, 0, w, h);
+      f.setTransform(m.a, m.b, m.c, m.d, m.e - ox, m.f - oy);
+      f.lineJoin = c.lineJoin;
+      f.lineCap = c.lineCap;
+      f.lineWidth = c.lineWidth;
+      f.fillStyle = c.fillStyle;
+      f.strokeStyle = c.strokeStyle;
+      this.c = f;
+      try { draw(); } finally { this.c = c; }
+      Object.assign(k, { key, x: ox, y: oy, w, h, fill: f.fillStyle, stroke: f.strokeStyle, lw: f.lineWidth });
+    }
+    c.save();
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.drawImage(k.cv!, 0, 0, k.w, k.h, k.x, k.y, k.w, k.h);
+    c.restore();
+    c.fillStyle = k.fill;
+    c.strokeStyle = k.stroke;
+    c.lineWidth = k.lw;
+  }
+
   /** Base colour of a vertical face whose outward normal is n; faces turned left catch the light. */
   private shade(n: Vec, cols: [string, string]) {
     const side = this.cam.sideways(n[0], n[1]);
@@ -583,7 +639,19 @@ export class SceneRenderer {
     }
   }
 
+  /** The pieces of wall as last drawn, a picture for each (see keep()). */
+  private keptWalls = new WeakMap<Edge, Kept>();
+
+  /** A piece of wall, kept as a picture while the camera holds still; its torch flickers, so the torch is drawn over it every frame. */
   private drawWall(e: Edge) {
+    const [ax, ay] = e.a, [bx, by] = e.b;
+    this.keep(this.keptWalls, e, `${envArt.size}|${fontsReady()}|${this.bk}`, [Math.min(ax, bx) - 2, Math.min(ay, by) - 2, Math.max(ax, bx) + 2, Math.max(ay, by) + 2, WALL_H + 6], () => this.wallStraight(e));
+    // a torch on every fourth piece of wall
+    if ((e.nx !== 0 ? e.j : e.i) % 4 === 2) this.drawTorch(...this.P((ax + bx) / 2, (ay + by) / 2, 19), ax + ay);
+  }
+
+  /** A piece of wall but its torch: the bricks, the chalk on them, the cap, and a banner or shackles now and then. */
+  private wallStraight(e: Edge) {
     const { c, P } = this;
     const B = this.g.S.biome, H = WALL_H;
     const [ax, ay] = e.a, [bx, by] = e.b;
@@ -606,11 +674,10 @@ export class SceneRenderer {
     if (!e.contA) { c.moveTo(...A); c.lineTo(...P(ax, ay, H + 4)); }
     if (!e.contB) { c.moveTo(...Bp); c.lineTo(...P(bx, by, H + 4)); }
     c.stroke();
-    // a torch on every fourth piece of wall, a banner now and then
+    // a banner now and then (every fourth piece has a torch instead, drawn by drawWall)
     const k = along ? e.j : e.i;
     const [mx, my] = P((ax + bx) / 2, (ay + by) / 2, 31);
-    if (k % 4 === 2) this.drawTorch(...P((ax + bx) / 2, (ay + by) / 2, 19), ax + ay);
-    else if (k % 4 === 0 && (e.i + e.j) % 3 === 0 && env('banner')) this.onWall(env('banner')!, at, u0 + TILE / 2, H - 1, 11);
+    if (k % 4 === 0 && (e.i + e.j) % 3 === 0 && env('banner')) this.onWall(env('banner')!, at, u0 + TILE / 2, H - 1, 11);
     else if (k % 4 === 1 && this.bk === 'prison' && hr(e.i, e.j, 77) < 0.5 && env('shackles')) this.onWall(env('shackles')!, at, u0 + TILE / 2, H - 7, 6.5);
     else if (k % 4 === 0 && (e.i + e.j) % 3 === 0) {
       // rod, then a ragged cloth with a sun badge and a darker fold down one side
@@ -1322,7 +1389,23 @@ export class SceneRenderer {
     return (this.rockArt = { I, r: { ...ROCK, gold } });
   }
 
+  /** The ore veins as last drawn, a picture for each (see keep()). */
+  private keptRocks = new WeakMap<ResNode, Kept>();
+  /** All the veins' cells and charges, which every vein is drawn from (they grow into each other), worked out once a frame. */
+  private veins = { frame: -1, key: '' };
+
+  /**
+   * An ore vein, kept as a picture while it stands still: a vein is built in code side by side and nugget by nugget,
+   * and the ore cave spent two thirds of every frame on its veins.
+   */
   private drawRock(n: ResNode) {
+    const S = this.g.S, z = n.s ?? 1, x0 = Math.round((n.x - 8 * z) / TILE) * TILE, y0 = Math.round((n.y - 8 * z) / TILE) * TILE, M = 6;
+    if (this.veins.frame !== this.frame) this.veins = { frame: this.frame, key: S.nodes.map(o => (o.k === 'ore' ? `${o.x},${o.y},${o.s ?? 1},${o.left},${o.ch}` : '')).join(' ') };
+    // its cells and a margin round them for the bulges and the nuggets, from the floor up to well over its highest stone
+    this.keep(this.keptRocks, n, `${n.hit > 0 ? 1 : 0}|${envArt.size}|${this.veins.key}`, [x0 - M, y0 - M, x0 + z * TILE + M, y0 + z * TILE + M, 32], () => this.rockStraight(n));
+  }
+
+  private rockStraight(n: ResNode) {
     const { r } = this.rockLook(), cells = this.rockCells(), z = n.s ?? 1, i0 = Math.round((n.x - 8 * z) / TILE), j0 = Math.round((n.y - 8 * z) / TILE);
     const own: [number, number][] = [];
     for (let a = 0; a < z; a++) for (let b = 0; b < z; b++) own.push([i0 + a, j0 + b]);
@@ -1793,15 +1876,9 @@ export class SceneRenderer {
     c.save();
     c.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
     c.font = '700 18px Hand, Caveat, cursive';
-    // the words in lines no wider than the bubble's measure
-    const MAXW = Math.min(220, view.w * 0.6), lines: string[] = [];
-    for (const w of line.split(' ')) {
-      const last = lines[lines.length - 1];
-      if (last !== undefined && c.measureText(last + ' ' + w).width <= MAXW) lines[lines.length - 1] = last + ' ' + w;
-      else lines.push(w);
-    }
+    const MAXW = Math.min(220, view.w * 0.6), { lines, w: textW } = this.sayLines(line, MAXW);
     const LH = 19, PADX = 11, PADY = 7, TAIL = 11;
-    const bw = Math.max(...lines.map(l => c.measureText(l).width)) + PADX * 2, bh = lines.length * LH + PADY * 2;
+    const bw = textW + PADX * 2, bh = lines.length * LH + PADY * 2;
     // over the head, kept on the screen; the tail still points at the hero
     const bx = Math.max(6, Math.min(view.w - bw - 6, hx - bw / 2)), by = Math.max(6, hy - TAIL - bh);
     c.globalAlpha = fade;
@@ -1826,7 +1903,7 @@ export class SceneRenderer {
     // a line this screen has just opened gets a gold tag on the bubble's corner
     if (justOpened(tr.k, h.def.key)) {
       c.font = '600 11px Oswald, sans-serif';
-      const tag = 'В КОЛЛЕКЦИИ', tw = c.measureText(tag).width + 12, gx = bx + bw - tw + 4, gy = by - 9;
+      const tag = 'В КОЛЛЕКЦИИ', tw = (this.tagW ??= c.measureText(tag).width) + 12, gx = bx + bw - tw + 4, gy = by - 9;
       rr(c, gx, gy, tw, 16, 4);
       c.fillStyle = '#ffd34d'; c.fill();
       c.lineWidth = 1.5; c.stroke();
@@ -1835,6 +1912,27 @@ export class SceneRenderer {
     }
     c.restore();
   }
+
+  /**
+   * The bubble's words in lines no wider than its measure, and the widest line's width: worked out once for each line and
+   * measure (measuring text every frame costs the phone), in the bubble's font, which the caller has set.
+   */
+  private sayLines(line: string, maxW: number) {
+    const key = `${maxW}|${fontsReady()}|${line}`;
+    if (this.said?.key !== key) {
+      const c = this.c, lines: string[] = [];
+      for (const w of line.split(' ')) {
+        const last = lines[lines.length - 1];
+        if (last !== undefined && c.measureText(last + ' ' + w).width <= maxW) lines[lines.length - 1] = last + ' ' + w;
+        else lines.push(w);
+      }
+      this.said = { key, lines, w: Math.max(...lines.map(l => c.measureText(l).width)) };
+    }
+    return this.said;
+  }
+  private said: { key: string; lines: string[]; w: number } | null = null;
+  /** The width of the «В КОЛЛЕКЦИИ» tag's word. */
+  private tagW: number | undefined;
 
   /** A dish of the cook's: in flight it arcs from where the disc bounced, then sits on the floor with a little shadow. */
   private drawFood(f: Food) {
