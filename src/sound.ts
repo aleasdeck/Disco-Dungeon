@@ -146,8 +146,9 @@ class Sound {
     const ctx = this.ctx, p = this.playing;
     if (!ctx || !p?.src.buffer || ctx.state !== 'running' || settings.music <= 0) return false;
     const now = ctx.currentTime, buf = p.src.buffer, sr = buf.sampleRate, pos = ((now - p.at) % p.loop + p.loop) % p.loop;
-    // the tune stops under the hand: its own fade would be heard
+    // the tune stops under the hand: its own fade would be heard; whatever is wanted next starts afresh
     this.playing = null;
+    this.want = null;
     this.resumeAt.set(p.track, pos);
     p.gain.gain.cancelScheduledValues(now);
     p.gain.gain.setTargetAtTime(0, now, 0.004);
