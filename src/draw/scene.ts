@@ -858,19 +858,11 @@ export class SceneRenderer {
     }
     c.fillStyle = 'rgba(15,8,4,.35)';
     c.fill();
+    // only faint stains on the floor: the drawn bones and cracks looked poor
     for (const dc of S.decals) {
-      if (this.decor.has(dc)) continue;
+      if (dc.k !== 0 || this.decor.has(dc)) continue;
       const [dx, dy] = P(dc.x, dc.y);
-      if (dc.k === 0) { ell(c, dx, dy, 7, 3); c.fillStyle = 'rgba(25,15,10,.22)'; c.fill(); }
-      else if (dc.k === 1) { c.strokeStyle = INK; c.lineWidth = 0.9; c.beginPath(); c.moveTo(dx - 5, dy); c.lineTo(dx - 1, dy + 1.5); c.lineTo(dx + 1, dy - 1); c.lineTo(dx + 5, dy + 0.5); c.stroke(); }
-      else {
-        // a cartoon bone: knobs first, then the shaft over them, one inked outline each
-        c.save(); c.translate(dx, dy); c.rotate(dc.a + this.cam.rot); c.scale(1.2, 1.2);
-        for (const [bx, by] of [[-4, -1], [-4, 1], [4, -1], [4, 1]]) { circ(c, bx, by, 1.3); fs(c, '#efe6cc', 0.8); }
-        rr(c, -4, -0.9, 8, 1.8, 0.9); c.fillStyle = '#efe6cc'; c.fill();
-        c.strokeStyle = INK; c.lineWidth = 0.8; c.beginPath(); c.moveTo(-3, -0.9); c.lineTo(3, -0.9); c.moveTo(-3, 0.9); c.lineTo(3, 0.9); c.stroke();
-        c.restore();
-      }
+      ell(c, dx, dy, 7, 3); c.fillStyle = 'rgba(25,15,10,.22)'; c.fill();
     }
     // a spent resource leaves only a flat scatter of chips on its cell, not something to bounce off
     for (const n of S.nodes) {
