@@ -152,14 +152,6 @@ export function renderStats() {
 /** The campaign's party size in words: who to pick, and how many are still missing. */
 const SIZE_WORDS = ['', 'одного героя', 'двух героев', 'трёх героев'];
 
-/** Under the photo once the party is full: what a party of this size is, and how the rooms meet it. */
-const SIZE_LEAD = [
-  '',
-  'Один герой: врагов меньше, и они слабее, чем против отряда.',
-  'Двое: ты бросаешь за обоих, комнаты как в сетевой игре на двоих.',
-  'Трое: полный отряд, ты бросаешь за всех.',
-];
-
 // ------------------------------------------------------------ the pick screens: the party photo, the heroes, the card
 
 const icon = (key: string) => uiArt.get(key)?.src ?? '';
@@ -167,16 +159,54 @@ const icon = (key: string) => uiArt.get(key)?.src ?? '';
 const canPoint = () => matchMedia('(hover: hover)').matches;
 
 /** The card beside the photo: whose the hero is, its name and kind, its numbers, its ability whole. */
-function heroCard(box: HTMLElement, i: number, whose: string) {
+function heroCard(box: HTMLElement, i: number) {
   const d = HEROES[i];
   box.style.setProperty('--c', d.col);
-  box.innerHTML = `<small class="pc-whose">${whose}</small><h3>${d.name}<em>${kindOf(d)}</em></h3>`
+  // the name and the numbers on one line, so the ability fits whole without scrolling
+  box.innerHTML = `<div class="pc-top"><h3>${d.name}<em>${kindOf(d)}</em></h3>`
     + `<ul class="pc-stats"><li title="Здоровье"><img src="${icon('ico_hp')}" alt="Здоровье">${d.hp}</li>`
     + `<li title="Урон"><img src="${icon('up_dmg')}" alt="Урон">${fullHit(d.m, d.pw)}</li>`
     + `<li title="Скорость"><img src="${icon('up_speed')}" alt="Скорость">${Math.round(d.pw * 100)}%</li>`
-    + `<li title="Отскок"><img src="${icon('up_bounce')}" alt="Отскок">${Math.round(d.e * 100)}%</li></ul>`
+    + `<li title="Отскок"><img src="${icon('up_bounce')}" alt="Отскок">${Math.round(d.e * 100)}%</li></ul></div>`
     + `<div class="pc-ab"><div class="pc-abname"><span class="pc-gem" style="--ab:${d.abCol}"><img src="${icon('ab_' + d.key)}" alt=""></span><b>«${d.ab}»</b></div>`
     + `<p>${d.abTxt}</p><p class="pc-more">${d.abMore}</p></div>`;
+  fitCard(box);
+}
+
+/**
+ * The card never scrolls: when a long ability doesn't fit the card's place (a small phone), its words shrink step by
+ * step until it does. Again after the screen turns or the window changes size.
+ */
+function fitCard(box: HTMLElement) {
+  requestAnimationFrame(() => {
+    let k = 1;
+    box.style.setProperty('--fit', '1');
+    while (box.clientHeight && box.scrollHeight > box.clientHeight + 1 && k > 0.66) {
+      k -= 0.03;
+      box.style.setProperty('--fit', k.toFixed(2));
+    }
+  });
+}
+window.addEventListener('resize', () => document.querySelectorAll<HTMLElement>('.pick-card').forEach(fitCard));
+
+/** A small photo (a phone's) lifts over the screen at full size on a tap; the next tap anywhere, or Esc, puts it back. */
+function zoomable(print: HTMLElement) {
+  print.onclick = () => {
+    if (print.classList.contains('zoomed') || print.clientWidth >= 360) return;
+    print.classList.add('zoomed');
+    const back = (e: Event) => {
+      if (e instanceof KeyboardEvent && e.key !== 'Escape') return;
+      e.stopPropagation();
+      e.preventDefault();
+      print.classList.remove('zoomed');
+      window.removeEventListener('click', back, true);
+      window.removeEventListener('keydown', back, true);
+    };
+    setTimeout(() => {
+      window.addEventListener('click', back, true);
+      window.addEventListener('keydown', back, true);
+    });
+  };
 }
 
 /**
@@ -241,9 +271,11 @@ export function renderHeroSelect(o: { size: number; party: number[]; shown: numb
   $('heroSize').querySelectorAll<HTMLButtonElement>('button').forEach(b => b.addEventListener('click', () => o.onSize(Number(b.dataset.n))));
   campPeek = -1;
   const photo = $<HTMLCanvasElement>('heroPhoto');
+  photo.parentElement!.classList.remove('zoomed');
+  zoomable(photo.parentElement!);
   const paint = () => {
-    const i = campPeek >= 0 ? campPeek : o.shown, at = o.party.indexOf(i);
-    heroCard($('heroInfo'), i, at < 0 ? 'Примерка' : o.size > 1 ? `${at + 1}-й в отряде` : 'В отряде');
+    const i = campPeek >= 0 ? campPeek : o.shown;
+    heroCard($('heroInfo'), i);
     const tryOn = campPeek >= 0 && !o.party.includes(campPeek) ? campPeek : null;
     const seats: PhotoSeat[] = Array.from({ length: o.size }, (_, k) => ({ hero: o.party[k] ?? null, look: k === o.party.length ? tryOn : null }));
     drawPhoto(photo, seats, { bg: campBg, names: false });
@@ -262,8 +294,11 @@ export function renderHeroSelect(o: { size: number; party: number[]; shown: numb
   $('heroSave').onclick = () => savePhoto(photo);
   paint();
   const left = o.size - o.party.length;
-  $('heroLeft').textContent = left > 0 ? `Выбери ещё ${SIZE_WORDS[left]}` : SIZE_LEAD[o.size];
-  $<HTMLButtonElement>('heroGo').disabled = left > 0;
+  // no line under the screen for it: the button itself says how many heroes are still missing
+  $('heroLeft').textContent = left > 0 ? `Выбери ещё ${SIZE_WORDS[left]}` : '';
+  const go = $<HTMLButtonElement>('heroGo');
+  go.disabled = left > 0;
+  go.textContent = left > 0 ? `Ещё ${left} ${plural(left, 'герой', 'героя', 'героев')}` : 'В путь';
 }
 
 // ------------------------------------------------------------ settings
@@ -317,9 +352,10 @@ export function renderLobby(o: {
   const ownerOf = (i: number) => o.players.find(p => p.hero === i);
   if (lobbyShown < 0) lobbyShown = mine ?? Math.max(0, HEROES.findIndex((_, i) => !ownerOf(i)));
   const photo = $<HTMLCanvasElement>('lobbyPhoto');
+  zoomable(photo.parentElement!);
   const paint = () => {
-    const i = lobbyPeek >= 0 ? lobbyPeek : lobbyShown, by = ownerOf(i);
-    heroCard($('lobbyInfo'), i, !by ? 'Свободен' : by.id === o.me ? 'Твой герой' : `Герой: ${escapeHtml(by.name)}`);
+    const i = lobbyPeek >= 0 ? lobbyPeek : lobbyShown;
+    heroCard($('lobbyInfo'), i);
     const seats: PhotoSeat[] = o.players.map(p => ({
       hero: p.hero,
       look: p.hero !== null ? null : p.id === o.me && lobbyPeek >= 0 && !ownerOf(lobbyPeek) ? lobbyPeek : p.look ?? null,
@@ -387,6 +423,7 @@ export function resetLobby() {
   $('lobbyRoom').closest('.panel')!.classList.remove('pick-panel');
   lobbyPeek = -1;
   lobbyShown = -1;
+  $('lobbyPhoto').parentElement!.classList.remove('zoomed');
   lobbyStatus('');
 }
 
