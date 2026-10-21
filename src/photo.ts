@@ -65,6 +65,41 @@ function artOf(i: number, look: 'left' | 'right') {
   return cv;
 }
 
+/**
+ * The light of a backdrop on the heroes standing in it: its average colour brought up to full brightness, mixed into
+ * white by `tint` and dimmed by half that, so the figures take the room's colour instead of looking pasted on.
+ */
+const lights = new Map<HTMLImageElement, [number, number, number]>();
+function lightOf(bg: HTMLImageElement, x: number) {
+  let l = lights.get(bg);
+  if (!l) {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 16;
+    const c = cv.getContext('2d', { willReadFrequently: true })!;
+    c.drawImage(bg, x, 0, bg.naturalHeight, bg.naturalHeight, 0, 0, 16, 16);
+    const a = c.getImageData(0, 0, 16, 16).data, sum = [0, 0, 0];
+    for (let k = 0; k < a.length; k += 4) for (let j = 0; j < 3; j++) sum[j] += a[k + j];
+    const top = Math.max(...sum, 1);
+    l = [sum[0] / top, sum[1] / top, sum[2] / top];
+    lights.set(bg, l);
+  }
+  return l;
+}
+function tinted(art: HTMLCanvasElement, light: [number, number, number], tint: number) {
+  const cv = document.createElement('canvas');
+  cv.width = art.width;
+  cv.height = art.height;
+  const c = cv.getContext('2d')!, dim = 1 - tint / 2;
+  c.drawImage(art, 0, 0);
+  c.globalCompositeOperation = 'multiply';
+  c.fillStyle = `rgb(${light.map(v => Math.round(255 * (1 - tint + tint * v) * dim)).join(',')})`;
+  c.fillRect(0, 0, cv.width, cv.height);
+  // multiplying fills the empty corners too; the picture's own outline cuts them away again
+  c.globalCompositeOperation = 'destination-in';
+  c.drawImage(art, 0, 0);
+  return cv;
+}
+
 /** A hero's height in the photo at a spot's scale: the fat ones stand shorter, the thin ones taller, as on the table. */
 const tallOf = (i: number, s: number) => TALL * s * (heroFig(HEROES[i]) / HERO_FIG);
 
@@ -121,7 +156,7 @@ const NOTES: Record<number, { x: number; y: number; rot: number; bend: number; d
  * Draw the photo: the backdrop, the party standing on its floor, a warm flash and dark corners, the film camera's date,
  * and with `names` each player's name with an arrow to their hero. Drawn only when something changes: no animation.
  */
-export function drawPhoto(cv: HTMLCanvasElement, seats: PhotoSeat[], o: { bg: number; names: boolean }) {
+export function drawPhoto(cv: HTMLCanvasElement, seats: PhotoSeat[], o: { bg: number; names: boolean; tint?: number }) {
   const c = cv.getContext('2d')!, b = BACKDROPS[((o.bg % BACKDROP_COUNT) + BACKDROP_COUNT) % BACKDROP_COUNT], bg = uiArt.get(b.key);
   c.fillStyle = '#1a120d';
   c.fillRect(0, 0, PHOTO, PHOTO);
@@ -133,7 +168,8 @@ export function drawPhoto(cv: HTMLCanvasElement, seats: PhotoSeat[], o: { bg: nu
     const s = seats[k], p = spots[k], i = s.hero ?? s.look;
     // the ones at the sides turn to the middle, as people do on a group photo
     const look = n === 1 || k === 1 ? null : k === 0 ? 'right' : 'left';
-    const art = i !== null ? artOf(i, look ?? sprites.get(HEROES[i].key)?.facing ?? 'right') : null;
+    let art = i !== null ? artOf(i, look ?? sprites.get(HEROES[i].key)?.facing ?? 'right') : null;
+    if (art && bg && o.tint) art = tinted(art, lightOf(bg, b.x), o.tint);
     if (art && i !== null) {
       const h = tallOf(i, p.s), w = (art.width / art.height) * h, feet = p.y + 14 * p.s;
       c.save();
