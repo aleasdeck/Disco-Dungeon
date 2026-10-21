@@ -12,6 +12,7 @@ import { hl } from './hl';
 import { MapView, type MapParty, type MapVotes } from './mapview';
 import { SceneRenderer } from './draw/scene';
 import { loadAll } from './assets';
+import { BACKDROP_COUNT } from './photo';
 import { sound, type Track } from './sound';
 import { CAMPAIGN, clearCampaign, clearSeat, keepKey, keyFor, loadCampaign, loadHost, loadSeat, newKey, saveCampaign, saveHost, saveSeat, type Ending, type HostSave } from './resume';
 import { FLOORS, LAYERS, agreed, depthOf, newRun, nodeById, reachable, roomSeed, type Run, type Votes } from './run';
@@ -169,6 +170,8 @@ const net = new Net();
 /** Online: the lobby, and once the game starts, who plays which hero. */
 let players: Player[] = [];
 let started = false;
+/** Online: the backdrop of the lobby's party photo; the host picks it, everyone sees the same. */
+let photoBg = 0;
 /** Host: something changed since the last snapshot. */
 let dirty = false, lastSnap = 0, lastSave = 0;
 /** This browser's secret for taking its seat back after a drop. */
@@ -962,12 +965,33 @@ function leaveOnline() {
 
 function lobbyView() {
   renderLobby({
-    code: net.code, players, me: net.id, host: mode === 'host',
+    code: net.code, players, me: net.id, host: mode === 'host', bg: photoBg,
     onPick: hero => {
       if (mode === 'host') { pick('host', hero); return; }
       net.send({ t: 'pick', hero });
     },
+    onLook: hero => {
+      if (mode === 'host') { look('host', hero); return; }
+      net.send({ t: 'look', hero });
+    },
+    onBg: () => {
+      if (mode !== 'host') return;
+      photoBg++;
+      net.broadcast({ t: 'lobby', players: pub(), bg: photoBg });
+      lobbyView();
+    },
   });
+}
+
+/** Host: a player still without a hero points at one; the others see it pale in the party photo. */
+function look(id: string, hero: number | null) {
+  const p = players.find(o => o.id === id);
+  if (!p || started || p.hero !== null) return;
+  const h = hero !== null && HEROES[hero] && !players.some(o => o.hero === hero) ? hero : null;
+  if ((p.look ?? null) === h) return;
+  p.look = h;
+  net.broadcast({ t: 'lobby', players: pub(), bg: photoBg });
+  lobbyView();
 }
 
 /** Host: a player picks a hero, if it is free; one who changes their hero has to press «Готов» again. */
@@ -977,7 +1001,8 @@ function pick(id: string, hero: number | null) {
   if (hero !== null && players.some(o => o.hero === hero && o.id !== id)) return;
   if (p.hero !== hero) p.ready = false;
   p.hero = hero;
-  net.broadcast({ t: 'lobby', players: pub() });
+  p.look = null;
+  net.broadcast({ t: 'lobby', players: pub(), bg: photoBg });
   lobbyView();
 }
 
@@ -986,7 +1011,7 @@ function readyUp(id: string, on: boolean) {
   const p = players.find(o => o.id === id);
   if (!p || started || p.id === 'host') return;
   p.ready = on && p.hero !== null;
-  net.broadcast({ t: 'lobby', players: pub() });
+  net.broadcast({ t: 'lobby', players: pub(), bg: photoBg });
   lobbyView();
 }
 
@@ -1003,7 +1028,7 @@ function backToLobby() {
   hideEnd();
   showMap(false);
   net.broadcast({ t: 'lobbyBack' });
-  net.broadcast({ t: 'lobby', players: pub() });
+  net.broadcast({ t: 'lobby', players: pub(), bg: photoBg });
   lobbyView();
   show('lobby');
 }
@@ -1024,6 +1049,7 @@ $('lobbyHost').addEventListener('click', async () => {
   lobbyStatus('');
   players = [{ id: 'host', name: playerName(), hero: null }];
   started = false;
+  photoBg = Math.floor(Math.random() * BACKDROP_COUNT);
   setOnline('host');
   myKey = newKey();
   saveSeat({ code: net.code, key: myKey, host: true });
@@ -1158,14 +1184,14 @@ function welcome(id: string, name: string, key: string) {
   } else players.push({ id, name, hero: null, key });
   // one who dropped out mid-run and is back once it ended still has «Связь потеряна» over the game: the lobby takes its place
   if (!started) net.sendTo(id, { t: 'lobbyBack' });
-  net.broadcast({ t: 'lobby', players: pub() });
+  net.broadcast({ t: 'lobby', players: pub(), bg: photoBg });
   lobbyView();
 }
 
 net.onLeave = id => {
   if (!started) {
     players = players.filter(p => p.id !== id);
-    net.broadcast({ t: 'lobby', players: pub() });
+    net.broadcast({ t: 'lobby', players: pub(), bg: photoBg });
     lobbyView();
     return;
   }
@@ -1186,6 +1212,7 @@ net.onMsg = (from, m) => {
   if (mode === 'host') {
     if (m.t === 'hello') welcome(from, m.name, m.key);
     else if (m.t === 'pick') pick(from, m.hero);
+    else if (m.t === 'look') look(from, m.hero);
     else if (m.t === 'ready') readyUp(from, m.on);
     else if (m.t === 'vote' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) vote(h, m.id); }
     else if (m.t === 'evote' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) evVote(h, m.opt); }
@@ -1196,7 +1223,7 @@ net.onMsg = (from, m) => {
     return;
   }
   answered = true;
-  if (m.t === 'lobby') { players = m.players; lobbyView(); }
+  if (m.t === 'lobby') { players = m.players; if (m.bg !== undefined) photoBg = m.bg; lobbyView(); }
   else if (m.t === 'deny') lost(m.text);
   else if (m.t === 'bye') lost('Хозяин комнаты закрыл игру.');
   else if (m.t === 'start') {
@@ -1313,7 +1340,7 @@ async function reopen(code: string) {
     setTimeout(() => {
       if (mode !== 'host' || started || players.every(p => net.has(p.id))) return;
       players = players.filter(p => net.has(p.id));
-      net.broadcast({ t: 'lobby', players: pub() });
+      net.broadcast({ t: 'lobby', players: pub(), bg: photoBg });
       lobbyView();
     }, 15_000);
     lobbyView();
