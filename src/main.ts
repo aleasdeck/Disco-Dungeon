@@ -1,5 +1,5 @@
 import './style.css';
-import { AB_COST, BOOT_GAGS, COMBAT_ROOMS, HEROES, MAX_PLAYERS, WALL_H, forgeOre } from './data';
+import { AB_COST, BOOT_GAGS, COMBAT_ROOMS, HEROES, MAX_PLAYERS, WALL_H, forgeOre, type MobKind } from './data';
 import { Camera } from './camera';
 import { Game, newBank, newParty, type HeroState } from './game';
 import { Net, type Player } from './net';
@@ -7,7 +7,7 @@ import { applySnapshot, snapshot, type MapState } from './sync';
 import { saveSettings, settings } from './settings';
 import { bindSettings, lobbyStatus, renderCollection, renderHeroSelect, renderLobby, renderStats, resetLobby, show, startable } from './menu';
 import { Input } from './input';
-import { Hud, faceUrl } from './ui';
+import { Hud, faceUrl, mobFace } from './ui';
 import { hl } from './hl';
 import { MapView, type MapParty, type MapVotes } from './mapview';
 import { SceneRenderer } from './draw/scene';
@@ -846,6 +846,13 @@ $('forgeDone').addEventListener('click', () => {
 $('btnMap').addEventListener('click', () => showMap(true));
 $('mapClose').addEventListener('click', () => showMap(false));
 $('helpClose').addEventListener('click', () => { $('help').hidden = true; });
+/** «Как играть» in tabs: the one picked shows, the window keeps it for the next time it opens. */
+function helpTab(tab: string) {
+  document.querySelectorAll<HTMLButtonElement>('#help .tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  document.querySelectorAll<HTMLElement>('#help .help-body > [data-tab]').forEach(el => (el.hidden = el.dataset.tab !== tab));
+  $('help').querySelector('.help-body')!.scrollTop = 0;
+}
+document.querySelectorAll<HTMLButtonElement>('#help .tab').forEach(b => b.addEventListener('click', () => helpTab(b.dataset.tab!)));
 
 // ------------------------------------------------------------ menu
 
@@ -920,7 +927,13 @@ const syncSettings = bindSettings(() => { applyQuality(); sizeCanvas(); });
 $('btnMenu').addEventListener('click', () => show('pause'));
 $('pResume').addEventListener('click', () => show(null));
 $('pSettings').addEventListener('click', () => openSettings('pause'));
-$('pHelp').addEventListener('click', () => { show(null); $('help').hidden = false; });
+$('pHelp').addEventListener('click', () => {
+  show(null);
+  // the enemy types go by the faces the enemy queue shows, cut from the figures once their pictures are in
+  document.querySelectorAll<HTMLElement>('#help [data-face]').forEach(el => { el.innerHTML = `<img src="${mobFace(el.dataset.face as MobKind)}" alt="">`; });
+  $('help').hidden = false;
+  $('help').querySelector('.help-body')!.scrollTop = 0;
+});
 $('pMenu').addEventListener('click', () => {
   // the campaign waits behind the menu as it is, the map or a window between rooms included, until «Продолжить»
   if (mode === 'solo') { keepRun(performance.now(), true); openMenu(); return; }
