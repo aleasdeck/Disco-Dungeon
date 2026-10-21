@@ -1540,6 +1540,18 @@ function pulse(t: number) {
   }
 }
 
+/**
+ * The disco ball over the main menu's name swings on its chain, 6° and back every 4 s, turned from here with the other
+ * pulses at most 20 times a second (see style.css); with the motion turned off in the system it hangs still.
+ */
+const logo = document.querySelector<HTMLElement>('.logo-art')!, LOGO_SWING = 6, LOGO_PERIOD = 4;
+let swungAt = -Infinity;
+function swing(t: number) {
+  if (stillMotion || $('menu').hidden || Math.abs(t - swungAt) < IDLE_GAP / 1000) return;
+  swungAt = t;
+  logo.style.transform = `rotate(${(LOGO_SWING * (0.5 - 0.5 * Math.cos((2 * Math.PI * t) / LOGO_PERIOD))).toFixed(2)}deg)`;
+}
+
 function applyQuality() {
   dprCap = settings.quality === 'low' ? 1 : 2;
 }
@@ -1575,6 +1587,7 @@ function frame(now: number) {
   keepSeat(now);
   keepRun(now);
   countStats(now, raw);
+  swing(T);
   const camKey = `${cam.panX},${cam.panY},${cam.zoom},${cam.rot}`;
   const changed = stale || camKey !== drawnCam || game.S !== drawnRoom || busy();
   const covered = document.querySelector('.overlay:not([hidden])') !== null;
