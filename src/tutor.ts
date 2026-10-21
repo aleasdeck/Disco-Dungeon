@@ -86,7 +86,7 @@ export const heard: Heard = load();
 export function saveHeard() {
   try { localStorage.setItem(KEY, JSON.stringify(heard)); } catch { /* private mode: lasts for this visit */ }
 }
-/** «Показать всё заново»: the warm-up is offered again and every hint comes back. */
+/** «Показывать подсказки» turned back on: the warm-up is offered again and every hint comes back. */
 export function hearAgain() {
   heard.warm = false;
   heard.seen = [];
