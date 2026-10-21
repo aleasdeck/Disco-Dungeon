@@ -219,8 +219,9 @@ export class Hud {
     return this.atForge ? { floor: S.spec.floor, type: this.g.whet ? S.spec.type : 'forge' as RoomType } : this.win;
   }
 
-  leaveForge() {
-    this.forgeLeft = this.g.forge;
+  /** This screen is done at the blacksmith's; `false` (a saved campaign coming back) has his window up again. */
+  leaveForge(left = true) {
+    this.forgeLeft = left ? this.g.forge : 0;
     // the strip takes off the window's dress with it
     this.refresh();
   }

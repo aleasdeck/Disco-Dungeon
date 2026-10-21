@@ -49,6 +49,8 @@ export interface Snapshot {
   bank: Bank & { sparks?: number };
   /** Hazard tiles change mid-fight: lava from slimes and the forge boss. */
   haz: string[];
+  /** Some hero has lost health in the room (no ore «Без царапины»); older saves have none. */
+  hurt?: boolean;
   /** Depth of the blacksmith's the party is at, 0 elsewhere: everyone upgrades their own hero's discs there. */
   forge?: number;
   /** Ore the blacksmith handed the party there, for his window's scene. */
@@ -77,6 +79,7 @@ export function snapshot(g: Game): Snapshot {
     sparks: S.sparks.filter(p => p.b === undefined),
     bank: g.bank,
     haz: [...S.haz],
+    hurt: S.hurt,
     forge: g.forge,
     gift: g.gift,
     whet: g.whet,
@@ -137,6 +140,7 @@ export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boo
   S.cuffs = s.cuffs ? { ...s.cuffs } : null;
   Object.assign(g.bank, bank);
   if (s.haz) S.haz = new Set(s.haz);
+  S.hurt = s.hurt;
   g.forge = s.forge ?? 0;
   g.gift = s.gift ?? 0;
   g.whet = !!s.whet;

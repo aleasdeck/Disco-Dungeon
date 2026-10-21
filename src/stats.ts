@@ -10,7 +10,7 @@ import { FLOORS, type Run } from './run';
 export interface HeroStats { runs: number; wins: number; time: number; kills: number }
 
 /** The run under way (or the last one), and how much of it has been added to the totals already. */
-interface Cur {
+export interface Cur {
   seed: number;
   /** The heroes this player plays in it, by key: online their own, in the campaign the whole party. */
   heroes: string[];
@@ -95,6 +95,20 @@ export function beginRun(run: Run, keys: string[], online: boolean) {
   for (const k of keys) heroStats(k).runs++;
   stats.since ||= Date.now();
   stats.cur = { seed: run.seed, heroes: keys, time: 0, rooms: 0, bosses: 0, arts: 0, tallies: {} };
+  saveStats();
+}
+
+/** How far `run` has been counted, if it is the run being counted: a campaign's save keeps it along. */
+export const runCount = (run: Run): Cur | null => counting(run);
+
+/**
+ * A saved campaign goes on after the game was closed: the same run, not a new one. If an online game has been counted
+ * since, the run takes over the count again from how far its save had it.
+ */
+export function resumeRun(run: Run, keys: string[], count: Cur | null | undefined) {
+  if (stats.cur?.seed === run.seed && stats.cur.heroes.join() === keys.join()) return;
+  if (count?.seed !== run.seed) return beginRun(run, keys, false);
+  stats.cur = count;
   saveStats();
 }
 
