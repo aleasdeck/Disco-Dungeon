@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -43,13 +44,33 @@ function serviceWorker(assets: Record<string, [string, number]>): Plugin {
   };
 }
 
+/**
+ * The game's version as the main menu shows it: major.minor from the VERSION file, set by hand, then the build number,
+ * how many commits main has had since that file last changed. Every merge counts one up by itself, and a new major.minor
+ * starts again from the bare «v0.2». Needs the whole history (the workflow checks out with fetch-depth 0); a shallow
+ * clone or no git gives the version without the number.
+ */
+function version(): string {
+  const base = readFileSync(resolve('VERSION'), 'utf8').trim();
+  const git = (...args: string[]) => execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  try {
+    if (git('rev-parse', '--is-shallow-repository') === 'true') throw new Error('shallow clone');
+    const since = git('log', '-1', '--format=%H', '--', 'VERSION');
+    const n = since ? Number(git('rev-list', '--count', `${since}..HEAD`)) : 0;
+    return n ? `v${base}.${n}` : `v${base}`;
+  } catch (e) {
+    console.warn(`version: v${base} without a build number (${(e as Error).message})`);
+    return `v${base}`;
+  }
+}
+
 // Relative base so the build works at https://<user>.github.io/<repo>/ whatever the repo is called.
 export default defineConfig(({ command }) => {
   const assets = command === 'build' ? assetInfo() : {};
   return {
     base: './',
     build: { target: 'es2022' },
-    define: { __ASSETS__: JSON.stringify(assets) },
+    define: { __ASSETS__: JSON.stringify(assets), __VERSION__: JSON.stringify(version()) },
     plugins: [serviceWorker(assets)],
   };
 });

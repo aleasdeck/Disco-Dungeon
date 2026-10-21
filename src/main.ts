@@ -798,6 +798,10 @@ $('helpClose').addEventListener('click', () => { $('help').hidden = true; });
 
 // ------------------------------------------------------------ menu
 
+/** v<major.minor>.<build>, put in by vite.config.ts at the build. */
+declare const __VERSION__: string;
+$('menuVer').textContent = __VERSION__;
+
 /** A campaign to go on with: the one on screen, or after the game was closed (or played online) the one this browser kept. */
 const unfinished = () => (mode === 'solo' ? !runOver : !!loadCampaign());
 
