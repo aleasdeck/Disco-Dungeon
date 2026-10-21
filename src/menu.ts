@@ -193,9 +193,12 @@ function heroRow(box: HTMLElement, o: {
   const left = box.scrollLeft;
   box.innerHTML = '';
   heroesByKind().forEach((list, r) => {
-    const group = document.createElement('div');
+    // each kind on its own piece of cardboard, its name over its faces
+    const group = document.createElement('div'), faces = document.createElement('div');
     group.className = 'pick-kind';
-    group.title = KINDS[r].row;
+    group.innerHTML = `<span class="pk-name">${KINDS[r].row}</span>`;
+    faces.className = 'pk-faces';
+    group.append(faces);
     for (const i of list) {
       const def = HEROES[i], m = o.mark(i), b = document.createElement('button');
       b.className = 'pick' + (m.cls ? ' ' + m.cls : '');
@@ -209,7 +212,7 @@ function heroRow(box: HTMLElement, o: {
         b.addEventListener('mouseenter', () => o.onPeek(i));
         b.addEventListener('mouseleave', () => o.onPeek(-1));
       }
-      group.append(b);
+      faces.append(b);
     }
     box.append(group);
   });

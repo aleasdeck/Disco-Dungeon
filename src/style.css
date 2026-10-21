@@ -1445,7 +1445,9 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .pick-side .room-code { margin: 0; }
 /* the twelve on one row, kind after kind; on a narrow screen the row scrolls sideways */
 .pick-row { --tile: 44px; display: flex; gap: 12px; overflow-x: auto; scrollbar-width: thin; padding: 4px 2px 6px; flex: none; }
-.pick-kind { display: flex; gap: 5px; flex: 1 1 auto; }
+.pick-kind { display: flex; flex-direction: column; gap: 3px; flex: 1 1 auto; padding: 4px 7px 7px; background: rgba(0, 0, 0, 0.28); clip-path: var(--cut-card); }
+.pk-name { font: 600 11px/1 Oswald, sans-serif; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.pk-faces { display: flex; gap: 5px; }
 .pick-row .pick { flex: 1 1 0; min-width: var(--tile); max-width: 86px; border: 0; border-radius: 0; clip-path: var(--cut-tile); transition: translate 0.12s; }
 .pick-row .pick img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; object-position: top; }
 .pick-row .pick span { display: none; }
@@ -1496,7 +1498,9 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
   .pick-side .room-code { gap: 6px; font-size: 14px; }
   .pick-side .room-code b { font-size: 20px; }
   .pick-row { gap: 8px; padding: 3px 0 5px; }
-  .pick-kind { gap: 4px; flex: none; }
+  .pick-kind { flex: none; padding: 3px 5px 5px; }
+  .pk-faces { gap: 4px; }
+  .pk-name { font-size: 10px; }
   .pick-row .pick { flex: none; width: 46px; min-width: 0; }
   .pick-card { flex: 1 1 auto; gap: 6px; position: relative; }
   .pick-card > .pc-whose { position: absolute; top: 9px; right: 2px; font-size: 11px; }
@@ -1533,7 +1537,9 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
   .pick-panel .lobby-status { grid-column: 2; grid-row: 4; }
   .pick-panel .lobby-status:empty { display: none; }
   .pick-row { --tile: 34px; gap: 8px; padding: 2px 0 4px; }
-  .pick-kind { gap: 3px; }
+  .pick-kind { gap: 2px; padding: 3px 4px 4px; }
+  .pk-faces { gap: 3px; }
+  .pk-name { font-size: 9px; }
   .pick-row .pick-n { min-width: 16px; height: 16px; font-size: 10px; top: 2px; left: 2px; }
   .pick-card h3 { font-size: 20px; }
   .pc-whose { display: none; }

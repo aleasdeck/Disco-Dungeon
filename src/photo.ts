@@ -110,21 +110,35 @@ function tinted(art: HTMLCanvasElement, id: string, light: [number, number, numb
 /** A hero's height in the photo at a spot's scale: the fat ones stand shorter, the thin ones taller, as on the table. */
 const tallOf = (i: number, s: number) => TALL * s * (heroFig(HEROES[i]) / HERO_FIG);
 
-/** Words written on the print with a white marker, a dark edge round them so they read on any part of the picture. */
-function marker(c: CanvasRenderingContext2D, text: string, x: number, y: number, size: number, rot: number, col = '#fbf6ea') {
+/**
+ * Words written on the print with a marker, a dark edge round them so they read on any part of the picture: one colour,
+ * or pieces of different colours on one line.
+ */
+function marker(c: CanvasRenderingContext2D, text: string | [string, string][], x: number, y: number, size: number, rot: number, col = '#fbf6ea') {
+  const parts: [string, string][] = typeof text === 'string' ? [[text, col]] : text;
   c.save();
   c.translate(x, y);
   c.rotate((rot * Math.PI) / 180);
   c.font = `700 ${size}px Hand`;
-  c.textAlign = 'center';
+  c.textAlign = 'left';
   c.textBaseline = 'middle';
   c.lineJoin = 'round';
   c.lineWidth = 10;
   c.strokeStyle = 'rgba(18,10,6,.82)';
-  c.strokeText(text, 0, 0);
-  c.fillStyle = col;
-  c.fillText(text, 0, 0);
+  let at = -parts.reduce((w, [t]) => w + c.measureText(t).width, 0) / 2;
+  for (const [t, cl] of parts) {
+    c.strokeText(t, at, 0);
+    c.fillStyle = cl;
+    c.fillText(t, at, 0);
+    at += c.measureText(t).width;
+  }
   c.restore();
+}
+
+/** A hero's colour brought towards white, so its name reads in marker on the dark print (as on the hero's card). */
+function light(hex: string) {
+  const v = parseInt(hex.slice(1), 16);
+  return `rgb(${[v >> 16, (v >> 8) & 255, v & 255].map(x => Math.round(x * 0.62 + 255 * 0.38)).join(',')})`;
 }
 
 /** A hand-drawn arrow: one bent stroke from the words to the figure and two strokes of a head. */
@@ -236,9 +250,11 @@ export function drawPhoto(cv: HTMLCanvasElement, seats: PhotoSeat[], o: { bg: nu
     const m = NOTES[n][k], p = spots[k], i = s.hero ?? s.look;
     const head = i !== null ? p.y + 14 * p.s - tallOf(i, p.s) : p.y - 230 * p.s;
     marker(c, (s.host ? '♛ ' : '') + (s.name ?? ''), m.x, m.y, 68, m.rot);
-    const sub = s.hero === null ? 'выбирает…' : s.ready ? 'готов ✓' : s.host ? '' : 'думает…';
-    if (sub) marker(c, sub, m.x + 6, m.y + 62, 48, m.rot, s.ready ? '#9ff08a' : '#f6e7b8');
-    arrow(c, m.x + m.dx, m.y + (sub ? 98 : 44), p.x - m.dx * 0.7, head - 18, m.bend);
+    // under the name its hero, a green tick once its player is ready; or that the player is still choosing
+    const sub: [string, string][] = s.hero === null ? [['выбирает…', '#f6e7b8']] : [[HEROES[s.hero].name, light(HEROES[s.hero].col)]];
+    if (s.hero !== null && s.ready) sub.push([' ✓', '#9ff08a']);
+    marker(c, sub, m.x + 6, m.y + 62, 50, m.rot);
+    arrow(c, m.x + m.dx, m.y + 100, p.x - m.dx * 0.7, head - 18, m.bend);
   });
 }
 
