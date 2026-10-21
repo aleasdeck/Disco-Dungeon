@@ -7,6 +7,8 @@ import { artIcon } from './icons';
 import { BOSS_UP, CASTS } from './room';
 import { saveSettings, settings } from './settings';
 import { favourite, stats } from './stats';
+import { TRINKETS, opened, type TrinketDef } from './trinkets';
+import { envArt } from './assets';
 import { FLOORS, LAYERS } from './run';
 import { sound } from './sound';
 import type { Player } from './net';
@@ -27,7 +29,7 @@ const FLOOR_NAMES = BIOMES.map(b => b.name);
 
 // ------------------------------------------------------------ collection
 
-export function renderCollection(tab: 'heroes' | 'mobs' | 'arts') {
+export function renderCollection(tab: 'heroes' | 'mobs' | 'arts' | 'trinkets') {
   document.querySelectorAll<HTMLButtonElement>('#collection .tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   const grid = $('colGrid');
   grid.innerHTML = '';
@@ -45,6 +47,8 @@ export function renderCollection(tab: 'heroes' | 'mobs' | 'arts') {
       card.firstElementChild!.replaceWith(cv);
       grid.appendChild(card);
     });
+  } else if (tab === 'trinkets') {
+    renderTrinkets(grid);
   } else if (tab === 'arts') {
     // the floor bosses' trophies: what each does, and its joke
     for (const a of ARTIFACTS) {
@@ -65,6 +69,48 @@ export function renderCollection(tab: 'heroes' | 'mobs' | 'arts') {
       grid.appendChild(card);
     });
   }
+}
+
+/**
+ * The trinkets found here and the heroes' lines about them: a line is open once its hero has picked the trinket up on this
+ * device. A trinket nobody has picked up yet is a dark shape with only its floor told.
+ */
+function renderTrinkets(grid: HTMLElement) {
+  const list = TRINKETS.filter(t => t.drawn), order = heroesByKind().flat();
+  const all = list.length * order.length, open = list.reduce((n, t) => n + order.filter(i => opened(t.key, HEROES[i].key)).length, 0);
+  const head = document.createElement('p');
+  head.className = 'tr-head';
+  head.innerHTML = `Открыто фраз: <b>${open}</b> из ${all}. Прокати диск по безделушке в комнате, и герой скажет о ней своё. Каждый герой — свою фразу.`;
+  grid.append(head);
+  const pic = (t: TrinketDef, found: boolean) => `<span class="tr-pic${found ? '' : ' dark'}">${envArt.get(t.art) ? `<img src="${envArt.get(t.art)!.src}" alt="">` : ''}</span>`;
+  const card = (t: TrinketDef) => {
+    const got = order.filter(i => opened(t.key, HEROES[i].key)), found = got.length > 0, el = document.createElement('article');
+    el.className = 'card tr-card';
+    const lines = order.map(i => {
+      const def = HEROES[i], on = opened(t.key, def.key);
+      return `<li class="${on ? 'on' : 'off'}" style="--c:${def.col}"><img src="${faceUrl({ i, def })}" alt="${def.name}">`
+        + (on ? `<b>${def.name}</b><q>${t.lines[def.key]}</q>` : `<span>???</span>`) + '</li>';
+    }).join('');
+    el.innerHTML = pic(t, found) + `<div><h3>${found ? t.name : '???'} <small>${got.length} из ${order.length}</small></h3>`
+      + `<p><b>${FLOOR_NAMES[t.floor]}.</b> ${found ? t.txt : 'Ещё не попадалась.'}</p></div>${found ? `<ul class="tr-lines">${lines}</ul>` : ''}`;
+    return el;
+  };
+  // tiles: the picture, the name and how many lines are open; one tapped opens its card under them, the first found to begin with
+  const box = document.createElement('div');
+  box.className = 'tr-open';
+  const tiles = document.createElement('div');
+  tiles.className = 'tr-tiles';
+  const pickT = (t: TrinketDef) => { box.replaceChildren(card(t)); tiles.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.k === t.key)); };
+  for (const t of list) {
+    const n = order.filter(i => opened(t.key, HEROES[i].key)).length, b = document.createElement('button');
+    b.className = 'tr-tile';
+    b.dataset.k = t.key;
+    b.innerHTML = pic(t, n > 0) + `<b>${n ? t.name : '???'}</b><small>${n} из ${order.length}</small>`;
+    b.addEventListener('click', () => pickT(t));
+    tiles.append(b);
+  }
+  grid.append(tiles, box);
+  pickT(list.find(t => order.some(i => opened(t.key, HEROES[i].key))) ?? list[0]);
 }
 
 // ------------------------------------------------------------ statistics

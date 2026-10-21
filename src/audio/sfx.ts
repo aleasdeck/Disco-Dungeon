@@ -6,7 +6,7 @@ import { adsr, bass, bell, brass, clap, cowbell, filt, gain, guitar, hat, kick, 
 export type Sfx =
   | 'click' | 'launch' | 'wall' | 'clink' | 'hit' | 'crit' | 'kill' | 'armor' | 'ore' | 'sparks' | 'herb' | 'ice' | 'shatter'
   | 'pit' | 'hurt' | 'ability' | 'enemyTurn' | 'yourTurn' | 'step' | 'slam' | 'win' | 'lose' | 'zap' | 'eat' | 'gas' | 'boom' | 'freeze'
-  | 'shove' | 'cuff' | 'kiss'
+  | 'shove' | 'cuff' | 'kiss' | 'grab'
   // the bosses' entrances (intro.ts)
   | 'thud' | 'boing' | 'fanfare' | 'squeak' | 'door' | 'chain' | 'cough' | 'puff' | 'steam';
 
@@ -203,6 +203,11 @@ const SOUNDS: Record<Sfx, Play> = {
     adsr(g.gain, t, 0.4, { a: 0.05, d: 0.2, s: 0.7, r: 0.15, peak: 0.25 + 0.25 * p });
     s.connect(f).connect(g).connect(o);
   },
+  // a trinket pocketed: a pop and three quick xylophone notes going up
+  grab: (b, o, t) => {
+    tone(b, o, t, 'sine', 300, 900, 0.05, 0.45);
+    ['G5', 'C6', 'E6'].forEach((m, i) => xylo(b, o, t + 0.05 + i * 0.065, note(m), 0.55, { dec: 0.22 }));
+  },
   lose: (b, o, t) => {
     scratch(b, o, t, true);
     syndrum(b, o, t + 0.3, 0.8, { f0: 600, f1: 60, dec: 1 });
@@ -214,7 +219,7 @@ const SOUNDS: Record<Sfx, Play> = {
 const TRIM: Record<Sfx, number> = {
   click: 3.7, launch: -6.0, wall: 4.0, clink: -0.7, hit: -2.0, crit: -3.2, kill: -1.6, armor: 0.5, ore: 4.4, sparks: 2.6, herb: 10.5,
   ice: 6.3, shatter: 4.6, pit: -7.0, hurt: -7.7, ability: -4.3, enemyTurn: -5.4, yourTurn: 3.9, step: -0.4, slam: -4.3, win: -2.3, lose: -1.9,
-  zap: 0, eat: 6, gas: 2, boom: -3, freeze: 4, shove: -3, cuff: 3, kiss: 4,
+  zap: 0, eat: 6, gas: 2, boom: -3, freeze: 4, shove: -3, cuff: 3, kiss: 4, grab: 2,
   thud: 0, boing: 2, fanfare: -4, squeak: 0, door: 0, chain: 2, cough: 3, puff: 2, steam: 2,
 };
 

@@ -694,6 +694,38 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .card dd { margin: 0; color: #f0e5d0; }
 .col-art-ico { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 10px; border: 1.5px solid var(--ink); background: #1d1611; }
 .col-art-ico > .ico, .col-art-ico > .art { width: 56px; height: 56px; border: 0; background: none; border-radius: 0; }
+/* the trinkets: what is open of the heroes' lines about each */
+.tr-head { grid-column: 1 / -1; margin: 0; color: #d6cfbd; font-size: 14px; }
+.tr-head b { color: var(--gold); font: 600 16px Oswald, sans-serif; }
+.col-grid:has(.tr-card) { grid-template-columns: 1fr; }
+.tr-card { grid-template-columns: 84px minmax(0, 1fr); }
+.tr-card h3 small { margin-left: 6px; font: 500 14px Oswald, sans-serif; color: var(--muted); }
+.tr-pic { display: grid; place-items: center; width: 84px; height: 84px; background: #2a2019; clip-path: var(--cut-tile); }
+.card .tr-pic img, .tr-pic img { width: 64px; height: 64px; object-fit: contain; border: 0; background: none; clip-path: none; }
+.tr-pic.dark img { filter: brightness(0) opacity(0.55); }
+.tr-lines { grid-column: 1 / -1; list-style: none; margin: 2px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 4px 14px; }
+.tr-lines li { display: grid; grid-template-columns: 30px minmax(0, 1fr); column-gap: 8px; align-items: center; min-height: 32px; font-size: 13px; }
+.card .tr-lines li img { grid-row: span 2; width: 30px; height: 30px; border: 0; background: var(--c); clip-path: var(--cut-face, none); }
+.tr-lines li b { font: 600 13px Oswald, sans-serif; color: var(--c); line-height: 1.1; }
+.tr-lines li q { font: 700 17px/1.1 Hand, cursive; color: #f0e5d0; quotes: '«' '»'; }
+.tr-lines li.off img { filter: grayscale(1) brightness(0.5); }
+.tr-lines li.off span { grid-row: span 2; color: #6f6150; font: 600 14px Oswald, sans-serif; letter-spacing: 2px; }
+.tr-tiles { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+.tr-tile { display: grid; justify-items: center; gap: 2px; padding: 8px 4px; background: #3b2d22 var(--grain) 0 0 / 160px; background-blend-mode: overlay; border: 0; clip-path: var(--cut-card); color: inherit; cursor: pointer; }
+.tr-tile.on { box-shadow: inset 0 0 0 3px var(--gold-1); background-color: #4a3826; }
+.tr-tile .tr-pic { width: 72px; height: 72px; }
+.tr-tile .tr-pic img { width: 56px; height: 56px; }
+.tr-tile b { font: 600 14px Oswald, sans-serif; text-align: center; }
+.tr-tile small { color: var(--muted); font-size: 12px; }
+.tr-open { grid-column: 1 / -1; }
+/* on a phone the tiles are one strip swiped sideways, so the opened card stays right under the finger */
+@media (max-width: 600px) {
+  .tr-tiles { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 96px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; padding-bottom: 4px; }
+  .tr-tile { scroll-snap-align: start; }
+  .tr-tile .tr-pic { width: 64px; height: 64px; }
+  .tr-tile .tr-pic img { width: 50px; height: 50px; }
+  .tr-tile b { font-size: 13px; }
+}
 
 /* ---------- statistics: three big numbers, the favourite hero, every hero's runs, the totals and the records */
 .stats-panel { width: min(720px, 100%); }

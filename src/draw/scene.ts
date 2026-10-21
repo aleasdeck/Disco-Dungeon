@@ -4,7 +4,7 @@
 import { WALL_WORDS, FAN_R, GAS_R, GAS_TURNS, HERO_BASE, HERO_FIG, INK, ENEMY_BASE, MOBS, WALL_H, TILE, heroFig, mobSize, type NodeKind } from '../data';
 import { KX, KY, type Camera, type Vec } from '../camera';
 import { ART, FOOD_FLY, SHIELD_COS, ZAP_T, ZONE_COL, type Bomb, type Disc, type Food, type Game, type Gas, type HeroState, type Spark, type Zap } from '../game';
-import { cellAt, floorAt, hazKey, inPit, isFloor, pitAt, type Block, type Decal, type Edge, type Mob, type Pit, type ResNode } from '../room';
+import { cellAt, floorAt, hazKey, inPit, isFloor, pitAt, type Block, type Edge, type Mob, type Pit, type ResNode, type Trinket } from '../room';
 import { BASE_TH, MOB_TOP, drawHeroFigure, drawMiniature, drawMobFigure, heroLook } from './figures';
 import { circ, ell, fs, mix, pth, rr, type Ctx, type Pt } from './util';
 import { GRAFFITI_FONTS, envArt, sprites } from '../assets';
@@ -12,6 +12,7 @@ import { knockPose, topplePose, type Knock, type Pose } from '../fx';
 import { hl } from '../hl';
 import { has } from '../artifacts';
 import { intro, bossKind } from '../intro';
+import { SAY_TIME, justOpened, trinketDef } from '../trinkets';
 
 export interface Aim { hero: HeroState; dx: number; dy: number }
 /** A hero dragged to another rune: pointer position in screen pixels and the rune under it. */
@@ -98,6 +99,11 @@ const FOOD_RIM = 0.28;
 
 /** How wide a firecracker stands, in iso units. */
 const BOMB_W = 7;
+/**
+ * A trinket's picture covers the same area whatever its shape, about half a cell (a bucket stands 9 wide), so a lying hot
+ * water bag is as easy to spot as an upright kettlebell; never wider than TRINKET_MAX, to stay inside its cell.
+ */
+const TRINKET_K = 10.6, TRINKET_MAX = 12;
 /** The gas: its green, its ink, and how many puffs drift over a cloud. */
 const GAS_COL = '#a9d65a', GAS_INK = '#4f6b1e', PUFFS = 8;
 
@@ -437,7 +443,6 @@ export class SceneRenderer {
     c.lineJoin = 'round';
     c.lineCap = 'round';
 
-    this.pickDecor();
     this.drawUnder(c, view, sx !== 0 || sy !== 0);
     this.drawGround();
     this.drawIntroFloor();
@@ -462,8 +467,9 @@ export class SceneRenderer {
     for (const b of S.bombs) items.push([cam.depth(b.x, b.y) - 0.5, () => this.drawBomb(b)]);
     for (const p of S.sparks) if (p.k) items.push([cam.depth(p.x, p.y) + 0.5, () => this.drawChip(p)]);
     this.wallItems(items);
-    this.decorItems(items);
     this.introItems(items);
+    const tr = S.trinket;
+    if (tr && tr.by === undefined) items.push([cam.depth(tr.x, tr.y), () => this.drawTrinket(tr)]);
     items.sort((a, b) => a[0] - b[0]).forEach(i => i[1]());
 
     this.drawOmens();
@@ -472,6 +478,7 @@ export class SceneRenderer {
     this.drawAimPull(aim);
     this.drawFx();
     this.drawIntroOver();
+    this.drawSay(view);
 
   }
 
@@ -494,12 +501,10 @@ export class SceneRenderer {
     const S = this.g.S, cam = this.cam, c = this.c;
     if (S.biome.haz === 'lava' && S.haz.size && !this.lavaTex()) return null;
     if (!this.rooms.has(S)) this.rooms.set(S, ++this.roomsMet);
-    const decals = S.decals;
     return [
       c.canvas.width, c.canvas.height, dpr, cam.zoom, cam.panX, cam.panY, cam.rot, cam.cx, cam.cy, this.rooms.get(S), envArt.size, S.pits.length,
       [...S.haz].join(' '), S.ice.join(''),
       S.blocks.map(b => `${b.x0},${b.y0},${b.x1},${b.y1},${b.ice ? 1 : 0}`).join(' '),
-      [...this.decor].map(([d, k]) => decals.indexOf(d) + k).join(' '),
       S.nodes.map(n => `${n.k},${n.x},${n.y},${n.s ?? 1},${n.left > 0 ? 1 : 0}`).join(' '),
       S.mobs.map(o => (o.hp > 0 ? `${o.k},${o.tx},${o.ty},${o.under ?? ''}` : '')).join(' '),
       S.mobs.map(o => o.shards?.join(';') ?? '').join(' '),
@@ -566,28 +571,6 @@ export class SceneRenderer {
       if (!e.contA) { c.moveTo(...A); c.lineTo(...P(...e.a, -9)); }
       if (!e.contB) { c.moveTo(...Bp); c.lineTo(...P(...e.b, -9)); }
       c.stroke();
-    }
-  }
-
-  /** Gag props replace a couple of floor decals that sit clear of runes, enemies and resources. */
-  private decor = new Map<Decal, string>();
-  private pickDecor() {
-    const S = this.g.S, bk = this.bk;
-    this.decor.clear();
-    const want: [number, string][] = bk === 'prison' ? [[0, 'bucket'], [2, 'bones_bra']] : bk === 'forge' ? [[0, 'anvil'], [2, 'bones_bra']] : [[2, 'bones_bra']];
-    for (const [k, key] of want) {
-      if (!env(key)) continue;
-      const dc = S.decals.find(d => d.k === k && !this.decor.has(d)
-        && [...S.pads, ...S.mobs, ...S.nodes].every(o => Math.hypot(o.x - d.x, o.y - d.y) > 14)
-        && S.blocks.every(b => d.x < b.x0 - 6 || d.x > b.x1 + 6 || d.y < b.y0 - 6 || d.y > b.y1 + 6));
-      if (dc) this.decor.set(dc, key);
-    }
-  }
-
-  private decorItems(items: [number, () => void][]) {
-    for (const [d, key] of this.decor) {
-      const im = env(key)!;
-      items.push([this.cam.depth(d.x, d.y), () => { const [x, y] = this.P(d.x, d.y); this.standee(im, x, y + 2, key === 'bones_bra' ? 13 : 14); }]);
     }
   }
 
@@ -866,7 +849,7 @@ export class SceneRenderer {
     c.fill();
     // only faint stains on the floor: the drawn bones and cracks looked poor
     for (const dc of S.decals) {
-      if (dc.k !== 0 || this.decor.has(dc)) continue;
+      if (dc.k !== 0) continue;
       const [dx, dy] = P(dc.x, dc.y);
       ell(c, dx, dy, 7, 3); c.fillStyle = 'rgba(25,15,10,.22)'; c.fill();
     }
@@ -1784,6 +1767,73 @@ export class SceneRenderer {
       this.standee((k < art.pieces && env(`${art.key}_${k}`)) || im, x + art.sx, y + art.sy, art.w, n.hit > 0);
     } else this.drawNodeShape(n, left, n.hit > 0);
     if (f) c.restore();
+  }
+
+  /** The room's trinket, small in the middle of its cell with a little shadow. */
+  private drawTrinket(tr: Trinket) {
+    const { c, P } = this, def = trinketDef(tr.k), im = def && env(def.art);
+    if (!im) return;
+    const [x, y] = P(tr.x, tr.y);
+    const w = Math.min(TRINKET_MAX, TRINKET_K * Math.sqrt(im.width / im.height));
+    ell(c, x, y + 0.5, w * 0.5, w * 0.24); c.fillStyle = 'rgba(15,8,4,.35)'; c.fill();
+    this.standee(im, x, y + 1.5, w);
+  }
+
+  /**
+   * The line the hero says on picking up a trinket: a cartoon speech bubble over its head for a few seconds, drawn at a
+   * size of its own in screen pixels, so it reads the same however far the camera is zoomed out.
+   */
+  private drawSay(view: { w: number; h: number; dpr: number }) {
+    const g = this.g, tr = g.S.trinket;
+    if (!tr || tr.by === undefined || tr.t >= SAY_TIME) return;
+    const h = g.heroOf(tr.by), p = h && g.figureAt(h), line = h && trinketDef(tr.k)?.lines[h.def.key];
+    if (!h || !p || !line) return;
+    const { c, cam } = this, [ix, iy] = this.P(p.x, p.y), [hx, hy] = cam.isoToScreen(ix, iy - BASE_TH - heroFig(h.def) - 3);
+    const pop = Math.min(1, tr.t / 0.18), fade = Math.min(1, (SAY_TIME - tr.t) / 0.4);
+    c.save();
+    c.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    c.font = '700 18px Hand, Caveat, cursive';
+    // the words in lines no wider than the bubble's measure
+    const MAXW = Math.min(220, view.w * 0.6), lines: string[] = [];
+    for (const w of line.split(' ')) {
+      const last = lines[lines.length - 1];
+      if (last !== undefined && c.measureText(last + ' ' + w).width <= MAXW) lines[lines.length - 1] = last + ' ' + w;
+      else lines.push(w);
+    }
+    const LH = 19, PADX = 11, PADY = 7, TAIL = 11;
+    const bw = Math.max(...lines.map(l => c.measureText(l).width)) + PADX * 2, bh = lines.length * LH + PADY * 2;
+    // over the head, kept on the screen; the tail still points at the hero
+    const bx = Math.max(6, Math.min(view.w - bw - 6, hx - bw / 2)), by = Math.max(6, hy - TAIL - bh);
+    c.globalAlpha = fade;
+    c.translate(hx, by + bh);
+    c.scale(0.7 + 0.3 * pop, 0.7 + 0.3 * pop);
+    c.translate(-hx, -(by + bh));
+    const tx = Math.max(bx + 14, Math.min(bx + bw - 14, hx));
+    rr(c, bx, by, bw, bh, 12);
+    c.moveTo(tx - 7, by + bh - 1);
+    c.lineTo(hx, Math.min(hy, by + bh + TAIL));
+    c.lineTo(tx + 7, by + bh - 1);
+    c.fillStyle = '#fffaf0';
+    c.strokeStyle = INK;
+    c.lineWidth = 2.5;
+    c.lineJoin = 'round';
+    c.stroke();
+    c.fill();
+    c.fillStyle = '#2a1d16';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    lines.forEach((l, k) => c.fillText(l, bx + bw / 2, by + PADY + LH * (k + 0.5) + 1));
+    // a line this screen has just opened gets a gold tag on the bubble's corner
+    if (justOpened(tr.k, h.def.key)) {
+      c.font = '600 11px Oswald, sans-serif';
+      const tag = 'В КОЛЛЕКЦИИ', tw = c.measureText(tag).width + 12, gx = bx + bw - tw + 4, gy = by - 9;
+      rr(c, gx, gy, tw, 16, 4);
+      c.fillStyle = '#ffd34d'; c.fill();
+      c.lineWidth = 1.5; c.stroke();
+      c.fillStyle = '#3a2410';
+      c.fillText(tag, gx + tw / 2, gy + 8.5);
+    }
+    c.restore();
   }
 
   /** A dish of the cook's: in flight it arcs from where the disc bounced, then sits on the floor with a little shadow. */

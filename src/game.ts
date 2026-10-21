@@ -6,6 +6,7 @@ import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { mulberry32 } from './rng';
 import { has, type ArtKey, type Kept } from './artifacts';
 import type { Sfx } from './audio/sfx';
+import { TRINKET_R } from './trinkets';
 import { CASTS, caveTurns, cellAt, cellCentre, generate, hazKey, inPit, isFloor, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec, type Zone } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
@@ -51,6 +52,8 @@ export interface HeroState {
   lucky?: boolean;
   /** How many times each of its trophies has gone off this run: the snapshots carry the counts, and the trophy's token by the portrait flashes on every screen. */
   pops?: Record<string, number>;
+  /** The trinkets it has picked up this run, by key (src/trinkets.ts): the host lists them, every screen opens its own heroes' lines. */
+  found?: string[];
   /** What the hero has done this run, for the player's statistics; saves from before them have none. */
   tally?: Tally;
   /** Stat levels an elite owes the hero: the next one costs no ore (the sharpening window right after it, or the next blacksmith's). */
@@ -1364,6 +1367,19 @@ export class Game {
     return ate;
   }
 
+  /** The trinket a disc rolls over: into the thrower's pocket, and the hero says a line about it (src/draw/scene.ts). */
+  private grab(d: Disc) {
+    const tr = this.S.trinket, h = d.hero;
+    if (!tr || tr.by !== undefined || Math.hypot(tr.x - d.x, tr.y - d.y) > d.r + TRINKET_R) return false;
+    tr.by = h.i;
+    tr.t = 0;
+    this.burst(tr.x, tr.y, '#ffd34d', 10);
+    this.sfx('grab');
+    // the host keeps the list; the snapshots bring it to every screen
+    if (!this.send) (h.found ??= []).push(tr.k);
+    return true;
+  }
+
   /** Host: apply an action a player sent, as long as it names a hero in the party. */
   perform(a: Action) {
     const h = this.S.heroes.find(o => o.i === a.h);
@@ -2656,6 +2672,7 @@ export class Game {
       }
       for (const b of [...S.rock, ...this.fixtures()]) { const vn = this.bounceBox(d, b, this.keep(d)); if (vn > 0) this.bounced(d, vn, ...this.boxNormal(d, b)); }
       if (this.eat(d)) changed = true;
+      if (this.grab(d)) changed = true;
       for (const n of S.nodes) {
         if (n.left <= 0) continue;
         // a resource soaks up most of the disc's run: collecting costs the throw
@@ -3521,6 +3538,7 @@ export class Game {
     for (const z of S.zaps) z.t += dt;
     for (const g of S.gas) g.t += dt;
     S.zaps = S.zaps.filter(z => z.t < ZAP_T);
+    if (S.trinket?.by !== undefined) S.trinket.t += dt;
     for (const f of S.floats) f.t += dt;
     S.floats = S.floats.filter(f => f.t < 1.6);
   }

@@ -3,7 +3,7 @@
 
 import { AB_COST, HEROES } from './data';
 import type { Bank, Bomb, Cue, Cuffs, Disc, Float, Food, Game, Gas, HeroState, Phase, Spark, State } from './game';
-import type { Mob, RoomSpec } from './room';
+import type { Mob, RoomSpec, Trinket } from './room';
 import type { CampState } from './camp';
 import type { LootState } from './artifacts';
 import type { EventState } from './events';
@@ -42,6 +42,8 @@ export interface Snapshot {
   gas?: Gas[];
   /** The cop's handcuffs; older saves have none. */
   cuffs?: Cuffs | null;
+  /** The room's trinket, taken or not; older saves have none, and the room keeps the one it was built with. */
+  trinket?: Trinket | null;
   floats: Float[];
   /** Only the sparks every screen can't make itself: the ones the discs' hits throw, each screen throws on its own. */
   sparks: Spark[];
@@ -75,6 +77,7 @@ export function snapshot(g: Game): Snapshot {
     bombs: S.bombs,
     gas: S.gas,
     cuffs: S.cuffs,
+    trinket: S.trinket,
     floats: S.floats,
     sparks: S.sparks.filter(p => p.b === undefined),
     bank: g.bank,
@@ -138,6 +141,7 @@ export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boo
   S.bombs = (s.bombs ?? []).map(b => ({ ...b }));
   S.gas = (s.gas ?? []).map(o => ({ ...o }));
   S.cuffs = s.cuffs ? { ...s.cuffs } : null;
+  if (s.trinket !== undefined) S.trinket = s.trinket && { ...s.trinket };
   Object.assign(g.bank, bank);
   if (s.haz) S.haz = new Set(s.haz);
   S.hurt = s.hurt;
