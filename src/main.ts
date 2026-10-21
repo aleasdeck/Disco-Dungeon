@@ -1,5 +1,5 @@
 import './style.css';
-import { BOOT_GAGS, COMBAT_ROOMS, HEROES, MAX_PLAYERS, WALL_H, forgeOre } from './data';
+import { AB_COST, BOOT_GAGS, COMBAT_ROOMS, HEROES, MAX_PLAYERS, WALL_H, forgeOre } from './data';
 import { Camera } from './camera';
 import { Game, newBank, newParty, type HeroState } from './game';
 import { Net, type Player } from './net';
@@ -22,6 +22,7 @@ import { CampView } from './campview';
 import { lootAgreed, newLoot, settleLoot, takeKept, type ArtKey, type LootState } from './artifacts';
 import { LootView, type LootVotes } from './lootview';
 import { beginRun, endRun, playTime, resumeRun, runCount, saveStats, syncRun } from './stats';
+import { BASTION_I, Tutor, hearAgain, heard, saveHeard } from './tutor';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -35,6 +36,7 @@ const evView = new EventView();
 const campView = new CampView();
 const lootView = new LootView();
 const scene = new SceneRenderer();
+const tutor = new Tutor(game, cam);
 
 let run: Run = newRun();
 /** The run is over: the last boss fell, or the whole party did. A campaign then has nothing left to go on with. */
@@ -75,11 +77,15 @@ let view = { w: 0, h: 0, dpr: 1 };
  * most of the bottom (the hero frame on a narrow screen) is kept clear too; one in a corner only covers a corner of the room.
  */
 function playRect() {
-  const m = 10, top = (document.querySelector('header')?.getBoundingClientRect().bottom ?? 50) + m;
+  // the warm-up keeps a strip under the top bar clear for Бастион's lines
+  const m = 10, top = (document.querySelector('header')?.getBoundingClientRect().bottom ?? 50) + m + (game.S.spec.tut ? WARM_GAP : 0);
   const fr = document.getElementById('frame')?.getBoundingClientRect();
   const bottom = fr && fr.height && fr.width > view.w / 2 ? Math.max(0, view.h - fr.top) + m : m;
   return { x: m, y: top, w: Math.max(120, view.w - 2 * m), h: Math.max(120, view.h - top - bottom) };
 }
+
+/** Room kept clear under the top bar in the warm-up, for the hero's lines (a few lines of handwriting). */
+const WARM_GAP = 130;
 
 let anim: { from: number; to: number; t: number; cx: number; cy: number } | null = null;
 
@@ -304,6 +310,43 @@ function startCampaign(heroes: number[]) {
   show(null);
   startRun(heroes);
 }
+
+/**
+ * The warm-up before the first campaign: Бастион alone in the dummies' room, offering to show the ropes. Nothing of it is
+ * kept or counted; won (or turned down), the run of the party picked begins.
+ */
+function startWarmup(heroes: number[]) {
+  leaveOnline();
+  setOnline('solo');
+  show(null);
+  flushStats();
+  // a run of its own that is never begun, so no statistics count the warm-up, and nothing to go on with in the menu
+  run = newRun();
+  runOver = true;
+  game.party = newParty([BASTION_I], run.seed);
+  game.bank = newBank();
+  game.pickActiveParty();
+  hud.buildAllies();
+  choosing = false;
+  votes = {};
+  ev = null;
+  showEvent();
+  camp = null;
+  showCamp();
+  loot = null;
+  showLoot();
+  game.loadRoom({ seed: run.seed, depth: 1, floor: 0, type: 'fight', tut: true });
+  // a crystal's touch short of the hero's trick, so the warm-up gets to it
+  game.party[0].sparks = AB_COST - 1;
+  controls.fit();
+  hideEnd();
+  showMap(false);
+  screen('');
+  warmFor = heroes;
+  tutor.offer(() => startCampaign(heroes));
+}
+/** The party picked for the campaign the warm-up leads into. */
+let warmFor: number[] = [];
 
 /** Go into a room on the map. */
 function choose(id: string) {
@@ -699,7 +742,13 @@ function mapVotes(): MapVotes | undefined {
   return { pips, mine: me !== null ? votes[me] ?? null : null, note };
 }
 
-game.onChange = () => { hud.refresh(); dirty = true; stale = true; };
+game.onChange = () => {
+  hud.refresh();
+  // the warm-up has no run map to look at
+  $('btnMap').hidden = game.S.spec.tut === true;
+  dirty = true;
+  stale = true;
+};
 game.onSound = (ev, p) => sound.play(ev, p);
 // online every party head says whose hero it is
 hud.nameOf = i => (game.online ? players.find(p => p.hero === i)?.name ?? null : null);
@@ -707,6 +756,8 @@ hud.me = meHero;
 hl.changed = () => { dirty = true; };
 game.onRoomEnd = win => {
   const S = game.S, boss = S.spec.type === 'boss';
+  // the warm-up is won (nobody falls there): Бастион sends the player on into the run
+  if (S.spec.tut) { setTimeout(() => tutor.won(() => startCampaign(warmFor)), 900); return; }
   const last = boss && run.floor === FLOORS - 1;
   setTimeout(() => {
     if (!win || last) {
@@ -817,7 +868,8 @@ $('heroGo').addEventListener('click', () => {
   if (settings.party.length !== settings.size) return;
   // the run under way would be gone
   if (unfinished() && !confirm('Начать новый забег? Начатый забег пропадёт.')) return;
-  startCampaign(settings.party);
+  if (tutor.offers) startWarmup(settings.party);
+  else startCampaign(settings.party);
 });
 $('mOnline').addEventListener('click', () => { shelveCampaign(); $<HTMLInputElement>('lobbyName').value = settings.name; resetLobby(); show('lobby'); });
 $('mCollection').addEventListener('click', () => { renderCollection('heroes'); show('collection'); });
@@ -828,8 +880,37 @@ let settingsFrom: 'menu' | 'pause' = 'menu';
 function openSettings(from: typeof settingsFrom) {
   settingsFrom = from;
   syncSettings();
+  $<HTMLInputElement>('setTips').checked = !heard.off;
+  $('setTipsAgain').textContent = 'Показать всё заново';
   show('settingsScreen');
 }
+// the hero's hints: on or off, and all of them (the warm-up too) once more from the start
+$('setTips').addEventListener('change', () => {
+  heard.off = !$<HTMLInputElement>('setTips').checked;
+  saveHeard();
+});
+$('setTipsAgain').addEventListener('click', () => {
+  hearAgain();
+  heard.off = false;
+  saveHeard();
+  $<HTMLInputElement>('setTips').checked = true;
+  $('setTipsAgain').textContent = 'Покажет заново';
+});
+
+/** Where the player is, for the hero's lines: a menu over the game, or a card over the room, puts them away for the while. */
+tutor.where = () => {
+  const open = (id: string) => !$(id).hidden;
+  if (open('boot') || inMenu() || open('pause') || open('settingsScreen') || open('help') || open('waitScreen')) return 'menu';
+  if (open('roomEnd')) return 'end';
+  if (open('lootScreen')) return 'loot';
+  if (open('eventScreen')) return 'event';
+  if (open('campScreen')) return 'camp';
+  if (open('forgeScreen')) return game.whet ? 'whet' : 'forge';
+  if (open('mapScreen')) return 'map';
+  if (open('mobCard') || open('heroPeek') || open('ups') || open('logPanel')) return 'menu';
+  return 'room';
+};
+tutor.me = meHero;
 $('mSettings').addEventListener('click', () => openSettings('menu'));
 document.querySelectorAll<HTMLButtonElement>('#collection .tab').forEach(b => b.addEventListener('click', () => renderCollection(b.dataset.tab as 'heroes' | 'mobs' | 'arts')));
 $('colBack').addEventListener('click', openMenu);
@@ -1398,6 +1479,7 @@ function frame(now: number) {
     if (anim.t >= 1) anim = null;
   }
   game.update(dt);
+  tutor.look();
   const t = track();
   sound.music(t);
   sound.muffle(t?.startsWith('fight') === true && game.S.phase === 'enemy');
