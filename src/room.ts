@@ -4,6 +4,7 @@ import type { Knock } from './fx';
 import { BIOMES, MOB_HP_MUL, MOBS, NODES, TILE, isRanged, mobSize, type Biome, type MobKind, type NodeKind, type RoomType } from './data';
 import { makeRng } from './rng';
 import { LAYERS } from './run';
+import { TRINKET_CHANCE, trinketsOf } from './trinkets';
 
 export interface RoomSpec {
   seed: number;
@@ -85,6 +86,8 @@ export const ICICLE_HP = { small: 3, big: 11 };
 /** Blocks discs still bounce off: everything but shattered icicles. */
 export const standing = (blocks: Block[]) => blocks.filter(b => !b.ice || b.hp! > 0);
 export interface Decal { x: number; y: number; k: number; a: number }
+/** A trinket lying in the room (src/trinkets.ts), in the middle of its cell; `by` the hero who took it, `t` seconds since then. */
+export interface Trinket { k: string; x: number; y: number; by?: number; t: number }
 
 export interface ResNode {
   k: NodeKind;
@@ -232,6 +235,8 @@ export interface Layout {
   pits: Pit[];
   blocks: Block[];
   decals: Decal[];
+  /** The room's trinket, if it has one: a fight now and then. */
+  trinket: Trinket | null;
   nodes: ResNode[];
   mobs: Mob[];
   haz: Set<string>;
@@ -624,7 +629,7 @@ function warmRoom(): Layout {
     gw, gh, shape: 'rect', floor, edges, rock, Wx: gw * TILE, Wy: gh * TILE, biome: BIOMES[0],
     pads: [at(WARM.rune)], pits: [],
     blocks: WARM.column.map(([i, j], k) => ({ x0: i * TILE, y0: j * TILE, x1: (i + 1) * TILE, y1: (j + 1) * TILE, v: k + 2 })),
-    decals: [{ x: 40, y: 100, k: 0, a: 0.6 }, { x: 118, y: 52, k: 2, a: 2.1 }],
+    decals: [{ x: 40, y: 100, k: 0, a: 0.6 }, { x: 118, y: 52, k: 2, a: 2.1 }], trinket: null,
     nodes: [{ k: 'spk', ...NODES.spk, x: crystal.x, y: crystal.y, left: NODES.spk.ch, hit: 0 }],
     mobs: [mob('dummy', WARM.dummy), mob('dummy_boxer', WARM.boxer), mob('dummy_lady', WARM.lady)],
     haz: new Set(), ice: new Uint8Array(gw * gh), hpMul: 1, dmgAdd: 0, dmgMul: 1,
@@ -930,5 +935,17 @@ export function generate(spec: RoomSpec): Layout {
   }
   // its own stream, so freezing the floor doesn't reshuffle anything above
   const ice = biome.iceMu !== undefined ? freeze(gw, gh, floor, makeRng(spec.seed * 31 + spec.depth + 7919)) : new Uint8Array(gw * gh);
-  return { gw, gh, shape, floor, edges, rock, Wx, Wy, biome, pads, pits, blocks, decals, nodes, mobs, haz, ice, hpMul, dmgAdd, dmgMul };
+  // a trinket now and then, on a cell nothing else stands on, a step off the runes; its own stream too
+  let trinket: Trinket | null = null;
+  const TR = makeRng(spec.seed * 53 + spec.depth + 104729), lot = trinketsOf(f);
+  if (type !== 'camp' && type !== 'forge' && type !== 'event' && lot.length && TR.next() < TRINKET_CHANCE) {
+    const k = TR.pick(lot).key;
+    for (let tr = 0; tr < 200 && !trinket; tr++) {
+      const i = TR.int(0, gw - 1), j = TR.int(0, gh - 1), c = cellCentre(i, j);
+      if (!isFloor(geo, i, j) || taken.has(hazKey(i, j)) || haz.has(hazKey(i, j)) || pitAt(pits, c.x, c.y) || !clearOfRock(geo, c.x, c.y, 4)) continue;
+      if (pads.some(p => Math.hypot(p.x - c.x, p.y - c.y) < 1.5 * TILE) || objs.some(o => Math.hypot(o.x - c.x, o.y - c.y) < o.r + 6)) continue;
+      trinket = { k, x: c.x, y: c.y, t: 0 };
+    }
+  }
+  return { gw, gh, shape, floor, edges, rock, Wx, Wy, biome, pads, pits, blocks, decals, trinket, nodes, mobs, haz, ice, hpMul, dmgAdd, dmgMul };
 }

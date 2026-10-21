@@ -26,6 +26,7 @@ import { beginRun, endRun, playTime, resumeRun, runCount, saveStats, syncRun } f
 import { BASTION_I, Tutor, hearAgain, heard, saveHeard } from './tutor';
 import { ENTRANCES, SCRATCH_BEAT, bossKind, intro } from './intro';
 import { cardOut, closeIntro, openIntro, showCard } from './introview';
+import { collect } from './trinkets';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -921,7 +922,7 @@ tutor.where = () => {
 };
 tutor.me = meHero;
 $('mSettings').addEventListener('click', () => openSettings('menu'));
-document.querySelectorAll<HTMLButtonElement>('#collection .tab').forEach(b => b.addEventListener('click', () => renderCollection(b.dataset.tab as 'heroes' | 'mobs' | 'arts')));
+document.querySelectorAll<HTMLButtonElement>('#collection .tab').forEach(b => b.addEventListener('click', () => renderCollection(b.dataset.tab as 'heroes' | 'mobs' | 'arts' | 'trinkets')));
 $('colBack').addEventListener('click', openMenu);
 $('setBack').addEventListener('click', () => (settingsFrom === 'pause' ? show('pause') : openMenu()));
 const syncSettings = bindSettings(() => { applyQuality(); sizeCanvas(); });
@@ -1511,6 +1512,8 @@ function flushStats() {
 /** The run's time goes on while it is on screen and the player is at it; its numbers are written down every couple of seconds. */
 function countStats(now: number, raw: number) {
   if (mode !== 'solo' && !(started && (mode === 'host' || mode === 'client'))) return;
+  // a trinket's line opens in the collection as soon as the snapshot says the hero picked it up
+  collect(myHeroes());
   if (!document.hidden && now - touchedAt < AWAY_MS && !inMenu()) playTime(run, Math.min(raw, 1));
   // a client's discs still rolling may run ahead of the host's count for a moment: the numbers wait until they stop
   if (now - statsAt < 2000 || game.moving()) return;
