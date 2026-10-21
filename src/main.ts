@@ -888,20 +888,14 @@ function openSettings(from: typeof settingsFrom) {
   settingsFrom = from;
   syncSettings();
   $<HTMLInputElement>('setTips').checked = !heard.off;
-  $('setTipsAgain').textContent = 'Показать всё заново';
   show('settingsScreen');
 }
-// the hero's hints: on or off, and all of them (the warm-up too) once more from the start
+// the hero's hints on or off; turned back on, they all come once more from the start, the warm-up too
 $('setTips').addEventListener('change', () => {
-  heard.off = !$<HTMLInputElement>('setTips').checked;
+  const on = $<HTMLInputElement>('setTips').checked;
+  if (on) hearAgain();
+  heard.off = !on;
   saveHeard();
-});
-$('setTipsAgain').addEventListener('click', () => {
-  hearAgain();
-  heard.off = false;
-  saveHeard();
-  $<HTMLInputElement>('setTips').checked = true;
-  $('setTipsAgain').textContent = 'Покажет заново';
 });
 
 /** Where the player is, for the hero's lines: a menu over the game, or a card over the room, puts them away for the while. */
