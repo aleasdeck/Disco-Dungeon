@@ -663,6 +663,106 @@ function chase(mix, t0, S = Synth) {
   });
 }
 
+// ---------------------------------------------------------------------------------------------
+// 8. Boss disco: C minor at 128, organ stabs, a choir of the damned, orchestra hits and a lead that sneers.
+//    `rage` is the second half of the fight: the same loop with sixteenth hats, the choir all the way and the hook an octave up.
+
+const BOSS_CH = {
+  Cm: { r: 'C2', pad: ['G3', 'C4', 'Eb4'], arp: ['C4', 'Eb4', 'G4', 'C5'] },
+  Ab: { r: 'Ab1', pad: ['Ab3', 'C4', 'Eb4'], arp: ['Ab3', 'C4', 'Eb4', 'Ab4'] },
+  G: { r: 'G1', pad: ['G3', 'B3', 'D4'], arp: ['G3', 'B3', 'D4', 'G4'] },
+  Fm: { r: 'F1', pad: ['Ab3', 'C4', 'F4'], arp: ['F3', 'Ab3', 'C4', 'F4'] },
+  Bb: { r: 'Bb1', pad: ['Bb3', 'D4', 'F4'], arp: ['Bb3', 'D4', 'F4', 'Bb4'] },
+  Gm: { r: 'G1', pad: ['Bb3', 'D4', 'G4'], arp: ['G3', 'Bb3', 'D4', 'G4'] },
+  Db: { r: 'Db2', pad: ['Ab3', 'Db4', 'F4'], arp: ['Db4', 'F4', 'Ab4', 'Db5'] },
+};
+// A the riff and the hits, B the choir and the hook, C the organ alone and the build, D everything
+const BOSS_BARS = [
+  'Cm', 'Cm', 'Ab', 'G', 'Cm', 'Cm', 'Db', 'G',
+  'Ab', 'Bb', 'Gm', 'Cm', 'Ab', 'Bb', 'G', 'G',
+  'Cm', 'Cm', 'Cm', 'Cm', 'Fm', 'Fm', 'G', 'G',
+  'Cm', 'Cm', 'Ab', 'G', 'Cm', 'Cm', 'Db', 'G',
+];
+/** The hook, over bars 8–15 and 24–31. */
+const BOSS_HOOK = [
+  [[0, 'C5', 3], [3, 'Eb5', 3], [6, 'G5', 2], [8, 'F#5', 2], [10, 'G5', 2], [12, 'Bb5', 2], [14, 'Ab5', 2]],
+  [[0, 'G5', 8], [8, 'Eb5', 4], [12, 'D5', 4]],
+  [[0, 'C6', 3], [3, 'Bb5', 3], [6, 'Ab5', 2], [8, 'G5', 4], [12, 'F5', 2], [14, 'Eb5', 2]],
+  [[0, 'D5', 6], [6, 'B4', 2], [8, 'D5', 4], [12, 'G5', 4]],
+];
+/** The bass riff: root, octave, the flat seventh and a push. [step, interval, len16, vel] */
+const BOSS_RIFF = [[0, 0, 1.5, 1], [2, 12, 0.7, 0.75], [3, 0, 0.7, 0.85], [4, 0, 1, 0.9], [6, 12, 0.7, 0.75], [7, 10, 0.7, 0.8], [8, 0, 1.5, 0.95], [10, 12, 0.7, 0.75], [11, 0, 0.7, 0.85], [12, 3, 1, 0.9], [14, 12, 0.7, 0.8], [15, 1, 0.7, 0.85]];
+
+function boss(mix, t0, S = Synth, { rage = false } = {}) {
+  const bpm = mix.bpm, s16 = 60 / bpm / 4, T = clock(bpm, 0, t0), R = rng(53);
+  const hum = () => 0.92 + R() * 0.16;
+  const kickC = mix.channel('kick', { vol: 1 });
+  const clapC = mix.channel('clap', { vol: 1.9, rev: 0.35 });
+  const snC = mix.channel('snare', { vol: 0.65, rev: 0.3 });
+  const hatC = mix.channel('hat', { vol: 0.9, pan: 0.2, lp: 10000 });
+  const shC = mix.channel('shaker', { vol: 0.45, pan: -0.3 });
+  const crC = mix.channel('crash', { vol: 0.5, rev: 0.3 });
+  const bassC = mix.channel('bass', { vol: 0.5 });
+  const subC = mix.channel('sub', { vol: 0.18 });
+  const orgC = mix.channel('organ', { vol: 0.22, pan: -0.2, rev: 0.3, duck: 0.3 });
+  const chC = mix.channel('choir', { vol: 0.14, rev: 0.6, duck: 0.25 });
+  const hitC = mix.channel('hit', { vol: 0.7, rev: 0.45 });
+  const leadC = mix.channel('lead', { vol: 0.45, rev: 0.3, dly: 0.18 });
+  const hpC = mix.channel('harpsi', { vol: 0.5, pan: 0.35, rev: 0.25 });
+  const bellC = mix.channel('bell', { vol: 0.5, rev: 0.6 });
+  const tomC = mix.channel('tom', { vol: 0.55, rev: 0.35 });
+  const synC = mix.channel('syn', { vol: 0.3, rev: 0.4, dly: 0.2 });
+  const strC = mix.channel('str', { vol: 0.4, rev: 0.45, hp: 180, duck: 0.3 });
+
+  BOSS_BARS.forEach((name, bar) => {
+    const c = BOSS_CH[name], r = n(c.r), sec = 'ABCD'[bar >> 3], k = bar % 8;
+    const brk = sec === 'C' && k < 4;
+    // drums
+    if (!brk) for (const st of [0, 4, 8, 12]) { S.kick(mix, kickC, T(bar, st), 1, { f0: 165, f1: 46, dec: 0.4 }); mix.pump(T(bar, st)); }
+    if (brk) for (const st of [0, 8]) S.kick(mix, kickC, T(bar, st), 0.8, { f0: 120, f1: 40, dec: 0.6 });
+    if (!brk) for (const st of [4, 12]) { S.clap(mix, clapC, T(bar, st), 1, { tail: 0.24 }); S.snare(mix, snC, T(bar, st), 0.85, { f: 185 }); }
+    for (let st = 0; st < 16; st++) {
+      if (st % 4 === 2) S.hat(mix, hatC, T(bar, st), 0.75, { open: true, dec: 0.17 });
+      else if (rage || st % 2 === 0) S.hat(mix, hatC, T(bar, st), (st % 2 ? 0.22 : 0.32) * hum());
+    }
+    if (sec === 'B' || sec === 'D' || rage) for (let st = 0; st < 16; st++) S.shaker(mix, shC, T(bar, st), (st % 2 ? 0.4 : 0.6) * hum());
+    if (k === 0 && sec !== 'C') S.crash(mix, crC, T(bar, 0), 0.9);
+    // the build out of the breakdown
+    if (sec === 'C' && k === 6) for (let st = 0; st < 16; st += 2) S.snare(mix, snC, T(bar, st), 0.25 + 0.025 * st, { dec: 0.1 });
+    if (sec === 'C' && k === 7) for (let st = 0; st < 16; st++) S.snare(mix, snC, T(bar, st), 0.3 + 0.035 * st, { dec: 0.08 });
+    // bass: the riff, long notes under the breakdown
+    if (brk) S.bass(mix, bassC, T(bar, 0), mtof(r), 15 * s16, 0.8, { cut: 240, env: 500, q: 3 });
+    else for (const [st, iv, len, v] of BOSS_RIFF) S.bass(mix, bassC, T(bar, st), mtof(r + iv), len * s16, v * hum(), { cut: 330, env: 1900, q: 6 });
+    if (!brk) for (const st of [0, 4, 8, 12]) S.bass(mix, subC, T(bar, st), mtof(r), 2 * s16, 0.8, { cut: 200, env: 300, q: 1 });
+    // organ: offbeat stabs in A and D, the chords held alone in the breakdown
+    if (sec === 'A' || sec === 'D') for (const st of [2, 6, 10, 14]) for (const m of c.pad) S.organ(mix, orgC, T(bar, st), mtof(n(m) + 12), 1.1 * s16, 0.8 * hum(), { click: 0.25 });
+    if (sec === 'C') for (const m of c.pad) S.organ(mix, orgC, T(bar, 0), mtof(n(m)), 16 * s16 - 0.03, 0.7);
+    // the choir of the damned in B and C, all the way through in the rage
+    if (sec === 'B' || sec === 'C' || rage) for (const m of c.pad) S.choir(mix, chC, T(bar, 0), mtof(n(m) - 12), 16 * s16 - 0.05, sec === 'A' || sec === 'D' ? 0.45 : 0.6, { vowel: 'aa' });
+    if (sec === 'B') for (const m of c.pad) S.strings(mix, strC, T(bar, 0), mtof(n(m) + 12), 16 * s16 - 0.05, 0.3);
+    // orchestra hits: DAM on the one, da-DAM at the end of every phrase
+    const hit = (st, v) => { for (const m of c.pad) { S.brass(mix, hitC, T(bar, st), mtof(n(m) + 12), 1.5 * s16, v); S.strings(mix, hitC, T(bar, st), mtof(n(m)), 1.5 * s16, v * 0.5, { a: 0.005, r: 0.3, cut: 5000 }); } };
+    if ((sec === 'A' || sec === 'D') && k % 2 === 0) hit(0, 0.9);
+    if (k === 7 && sec !== 'C') { hit(0, 0.85); hit(3, 0.85); hit(6, 0.95); }
+    // a bell tolls at the top of each section
+    if (k === 0) S.bell(mix, bellC, T(bar, 0), mtof(n('C4')), 2, 0.9, { ratio: 2.76, dec: 2.6 });
+    // the hook
+    if (sec === 'B' || sec === 'D') line(T, s16, bar, BOSS_HOOK[k % 4], (t, f, len, v) => {
+      S.lead(mix, leadC, t, f, len * 0.92, 0.85 * v, { cut: 2400 });
+      if (rage) S.lead(mix, leadC, t, f * 2, len * 0.92, 0.4 * v, { cut: 3600 });
+    });
+    // harpsichord through the build, and in the rage over A
+    if ((sec === 'C' && k >= 4) || (rage && sec === 'A')) {
+      const ord = [0, 1, 2, 3, 2, 1, 0, 1, 2, 3, 2, 1, 0, 1, 2, 3];
+      for (let st = 0; st < 16; st++) S.harpsi(mix, hpC, T(bar, st), mtof(n(c.arp[ord[st]])), s16, (st % 4 === 0 ? 1 : 0.7) * 0.7 * hum());
+    }
+    // fills
+    if (k === 7 && sec !== 'C') for (const [st, f] of [[12, 240], [13, 200], [14, 160], [15, 120]]) S.tom(mix, tomC, T(bar, st), 0.9, { f });
+    if (sec === 'C' && k === 3) S.syndrum(mix, synC, T(bar, 12), 0.7, { f0: 900, f1: 110, dec: 0.6 });
+    if (rage && k % 2 === 1) S.syndrum(mix, synC, T(bar, 14), 0.5, { f0: 1100, f1: 160, dec: 0.3 });
+  });
+}
+
 export const SONGS = {
   funk: { title: 'Фанк-диско 70-х', bpm: 118, bars: 24, play: funk },
   monster: { title: 'Монстр-диско', bpm: 112, bars: 24, play: monster },
@@ -671,4 +771,6 @@ export const SONGS = {
   bfunk: { title: 'Боевой фанк', bpm: 120, bars: 32, play: bfunk },
   march: { title: 'Подземный марш', bpm: 116, bars: 32, play: march },
   chase: { title: 'Погоня', bpm: 126, bars: 32, play: chase },
+  boss: { title: 'Босс-диско', bpm: 128, bars: 32, play: boss },
+  boss_rage: { title: 'Босс-диско, вторая фаза', bpm: 128, bars: 32, play: (mix, t0, S) => boss(mix, t0, S, { rage: true }) },
 };

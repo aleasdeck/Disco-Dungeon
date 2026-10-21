@@ -1,5 +1,5 @@
 import './style.css';
-import { AB_COST, BOOT_GAGS, COMBAT_ROOMS, HEROES, MAX_PLAYERS, WALL_H, forgeOre, type MobKind } from './data';
+import { AB_COST, BOOT_GAGS, COMBAT_ROOMS, HEROES, MAX_PLAYERS, MOBS, WALL_H, forgeOre, type MobKind } from './data';
 import { Camera } from './camera';
 import { Game, newBank, newParty, type HeroState } from './game';
 import { Net, type Player } from './net';
@@ -23,6 +23,8 @@ import { lootAgreed, newLoot, settleLoot, takeKept, type ArtKey, type LootState 
 import { LootView, type LootVotes } from './lootview';
 import { beginRun, endRun, playTime, resumeRun, runCount, saveStats, syncRun } from './stats';
 import { BASTION_I, Tutor, hearAgain, heard, saveHeard } from './tutor';
+import { ENTRANCES, SCRATCH_BEAT, bossKind, intro } from './intro';
+import { cardOut, closeIntro, openIntro, showCard } from './introview';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -904,7 +906,7 @@ $('setTips').addEventListener('change', () => {
 /** Where the player is, for the hero's lines: a menu over the game, or a card over the room, puts them away for the while. */
 tutor.where = () => {
   const open = (id: string) => !$(id).hidden;
-  if (open('boot') || inMenu() || open('pause') || open('settingsScreen') || open('help') || open('waitScreen')) return 'menu';
+  if (intro.now || open('boot') || inMenu() || open('pause') || open('settingsScreen') || open('help') || open('waitScreen')) return 'menu';
   if (open('roomEnd')) return 'end';
   if (open('lootScreen')) return 'loot';
   if (open('eventScreen')) return 'event';
@@ -1422,9 +1424,49 @@ function track(): Track | null {
   if (!booted) return null;
   if (inMenu()) return 'menu';
   const S = game.S;
-  if (mode !== 'menu' && !choosing && COMBAT_ROOMS.includes(S.spec.type) && S.phase !== 'over') return `fight${Math.min(2, S.spec.floor)}`;
+  if (mode !== 'menu' && !choosing && COMBAT_ROOMS.includes(S.spec.type) && S.phase !== 'over') {
+    if (S.spec.type !== 'boss') return `fight${Math.min(2, S.spec.floor)}`;
+    // the record is scratched when the boss comes in, and its theme strikes up with its card; from half its health on
+    // the theme's second phase takes over
+    if (intro.now && !intro.shown) return null;
+    const b = game.liveMobs().find(m => MOBS[m.k].boss);
+    return b && b.hp <= b.max / 2 ? 'bossRage' : 'boss';
+  }
   return 'calm';
 }
+
+// ------------------------------------------------------------ the boss's entrance
+
+/** Rooms whose boss has made its entrance on this screen: once a room, and a reload doesn't bring it back. */
+const INTRO_SEEN = 'discodungeon.bossIntro';
+let introRoom = '';
+const introSeen = (): string[] => { try { return JSON.parse(sessionStorage.getItem(INTRO_SEEN) ?? '[]'); } catch { return []; } };
+
+/**
+ * The boss's entrance plays on each screen for itself as the party comes into the boss's room, while the placement
+ * waits (intro.ts); a tap skips it, and so does the fight starting without this screen (a player's while the host
+ * started it).
+ */
+function bossIntro() {
+  const S = game.S, key = `${S.spec.seed}:${S.spec.floor}:${S.spec.depth}`;
+  if (intro.now) {
+    if (S.phase !== 'place' || key !== introRoom || inMenu() || mode === 'menu') intro.skip();
+    return;
+  }
+  if (key === introRoom || S.spec.type !== 'boss' || S.spec.tut || S.phase !== 'place' || S.turn !== 1 || mode === 'menu' || choosing || inMenu()) return;
+  introRoom = key;
+  const b = game.liveMobs().find(m => MOBS[m.k].boss), seen = introSeen();
+  if (!b || !ENTRANCES[bossKind(b.k)] || seen.includes(key)) return;
+  try { sessionStorage.setItem(INTRO_SEEN, JSON.stringify([...seen, key].slice(-12))); } catch { /* a private window: it may play again after a reload */ }
+  // the record playing is scratched first, and the boss comes in after it
+  intro.start(bossKind(b.k), S.spec.seed, sound.scratch() ? SCRATCH_BEAT : 0);
+  openIntro(() => intro.skip());
+  sound.prepare('boss', 'bossRage');
+}
+intro.on.sfx = (ev, p) => sound.play(ev, p);
+intro.on.card = it => showCard(it, game.S.spec.floor);
+intro.on.cardOut = cardOut;
+intro.on.done = closeIntro;
 
 // ------------------------------------------------------------ statistics
 
@@ -1493,10 +1535,12 @@ function frame(now: number) {
     if (anim.t >= 1) anim = null;
   }
   game.update(dt);
+  bossIntro();
+  intro.update(dt);
   tutor.look();
   const t = track();
   sound.music(t);
-  sound.muffle(t?.startsWith('fight') === true && game.S.phase === 'enemy');
+  sound.muffle((t?.startsWith('fight') === true || t?.startsWith('boss') === true) && game.S.phase === 'enemy');
   shareState(now);
   keepSeat(now);
   keepRun(now);
@@ -1519,7 +1563,7 @@ function frame(now: number) {
 
 /** Something on the field moves, fades or follows a finger right now. */
 function busy() {
-  if (anim || moving || input.aim || input.carry) return true;
+  if (anim || moving || input.aim || input.carry || intro.now) return true;
   const S = game.S;
   return S.phase === 'resolve' || S.phase === 'enemy' || S.shake > 0 || S.sparks.length > 0 || S.floats.length > 0 || game.moving()
     || S.mobs.some(m => m.flash > 0 || m.born > 0 || m.knock || (m.dead > 0 && m.dead <= 1))

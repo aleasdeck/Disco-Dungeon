@@ -2,7 +2,6 @@
 import { Mix } from './synth.js';
 import * as Synth from './synth.js';
 import { SONGS } from './music.js';
-import { PACKS, EVENTS, SCENE } from './sfx.js';
 function wav(chs, sr) {
   const n = chs[0].length, buf = new ArrayBuffer(44 + n * 4), v = new DataView(buf);
   const w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
@@ -39,23 +38,6 @@ window.renderSong = async (name, { tail = 4 } = {}) => {
   let peak = 0;
   for (let k = 0; k < N; k++) { il[2 * k] = a[k]; il[2 * k + 1] = b[k]; peak = Math.max(peak, Math.abs(a[k]), Math.abs(b[k])); }
   return { data: b64(il.buffer), peak, L, ms: performance.now() - t0 };
-};
-
-/** Each sound of each set rendered alone: its peak and loudness while it sounds (RMS over the loudest 100 ms). */
-window.fxLevels = async () => {
-  const sr = 44100, res = {};
-  for (const [pk, pack] of Object.entries(PACKS)) for (const [ev] of EVENTS) {
-    const ctx = new OfflineAudioContext(1, sr * 3, sr), lfos = {};
-    const c = { ctx, lfo: (n, r, d) => lfos[n] ??= (() => { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = r; g.gain.value = d; o.connect(g); o.start(0); return g; })() };
-    try { pack.fx[ev](c, ctx.destination, 0.05, 0.8); } catch (e) { res[pk + '.' + ev] = 'ERR ' + e.message; continue; }
-    const x = (await ctx.startRendering()).getChannelData(0);
-    let peak = 0, best = 0, last = 0;
-    const W = 4410;
-    for (let i = 0; i < x.length; i++) { const a = Math.abs(x[i]); peak = Math.max(peak, a); if (a > 0.001) last = i; }
-    for (let i = 0; i + W < x.length; i += 441) { let e = 0; for (let k = i; k < i + W; k++) e += x[k] * x[k]; best = Math.max(best, e / W); }
-    res[pk + '.' + ev] = [peak.toFixed(2), (10 * Math.log10(best + 1e-12)).toFixed(1), (last / sr).toFixed(2)];
-  }
-  return res;
 };
 
 /** A stretch of bars of one pass, for checking the parts: no loop, only the named channels. */
