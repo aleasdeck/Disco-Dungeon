@@ -312,7 +312,7 @@ export function renderLobby(o: {
   $('lobbyRoomCode').textContent = o.code;
   const me = o.players.find(p => p.id === o.me), mine = me?.hero ?? null;
   const ownerOf = (i: number) => o.players.find(p => p.hero === i);
-  if (lobbyShown < 0) lobbyShown = mine ?? 0;
+  if (lobbyShown < 0) lobbyShown = mine ?? Math.max(0, HEROES.findIndex((_, i) => !ownerOf(i)));
   const photo = $<HTMLCanvasElement>('lobbyPhoto');
   const paint = () => {
     const i = lobbyPeek >= 0 ? lobbyPeek : lobbyShown, by = ownerOf(i);
