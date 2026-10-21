@@ -346,7 +346,8 @@ export class Hud {
     fillIcons();
     this.liftStrip();
     // the floor is laid out after the room's name (style.css): where the strip is narrow the floor gives way, never the room
-    $('locName').innerHTML = `<span class="fl">Этаж ${(this.at?.floor ?? S.spec.floor) + 1} · </span><span>${ROOM_TYPES[this.at?.type ?? S.spec.type].name}</span>`;
+    $('locName').innerHTML = S.spec.tut && !this.at ? '<span>Разминка</span>'
+      : `<span class="fl">Этаж ${(this.at?.floor ?? S.spec.floor) + 1} · </span><span>${ROOM_TYPES[this.at?.type ?? S.spec.type].name}</span>`;
     // the ore cave counts its turns down: «Ход 2 из 3»
     const max = g.turnsMax(), last = max > 0 && S.turn >= max;
     $('hTurn').textContent = S.phase === 'place' ? 'Расстановка' : max ? `Ход ${S.turn} из ${max}` : `Ход ${S.turn}`;
@@ -430,7 +431,7 @@ export class Hud {
    */
   private intent(m: Mob): { badge: string; txt: string } {
     const g = this.g, it = m.intent;
-    if (!it) return { badge: '', txt: 'Ничего не делает' };
+    if (!it || it.t === 'idle') return { badge: '', txt: MOBS[m.k].dummy ? 'Стоит столбом и ждёт, когда стукнут' : 'Ничего не делает' };
     // frozen stiff, whatever it meant to do
     if (g.frozen(m) && !g.acted(m)) return { badge: `<span class="ib sp">${icon('chill')}</span>`, txt: `${MOBS[m.k].fem ? 'Заморожена' : 'Заморожен'}: пропустит ход` };
     const tgt = it.hero >= 0 ? g.heroOf(it.hero) : null, far = isRanged(m.k), bomb = !!MOBS[m.k].charge;

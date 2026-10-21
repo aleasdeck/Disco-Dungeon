@@ -18,6 +18,8 @@ export interface RoomSpec {
   strobe?: boolean;
   /** The boss room's boss, when not the one its seed picks (bossOf): a test or the bot may name it. */
   boss?: MobKind;
+  /** The warm-up room of the hero's lesson, built by hand (warmRoom): the same for any seed. */
+  tut?: boolean;
 }
 
 export interface Pad { x: number; y: number }
@@ -105,10 +107,11 @@ export type Zone = 'cold' | 'dance' | 'beam' | 'roll' | 'fire';
  * hit/move/charge aim at one hero; slam hits every hero (hero = -1); heal names the mob it mends;
  * summon and heat carry the spots that light up on the floor a turn ahead. The floor bosses': zone marks the cells its
  * blow falls on (`z` what it does there), emerge the cells round where the rat swarm comes up out of its burrow; dive
- * sends the swarm down one, toss is the fridge throwing food at a hero, brew Пахан treating its шестёрки.
+ * sends the swarm down one, toss is the fridge throwing food at a hero, brew Пахан treating its шестёрки. idle is a dummy
+ * of the warm-up room standing there.
  */
 export interface Intent {
-  t: 'hit' | 'move' | 'charge' | 'slam' | 'heal' | 'summon' | 'heat' | 'scream' | 'smash' | 'rise' | 'zone' | 'emerge' | 'dive' | 'toss' | 'brew';
+  t: 'hit' | 'move' | 'charge' | 'slam' | 'heal' | 'summon' | 'heat' | 'scream' | 'smash' | 'rise' | 'zone' | 'emerge' | 'dive' | 'toss' | 'brew' | 'idle';
   hero: number;
   dmg: number;
   chill?: boolean;
@@ -603,7 +606,32 @@ export const LATER_HP = 1.2;
 /** Extra damage per hit: two on the second floor and one more on each floor after it, and one more in the last rooms before the boss. */
 export const dmgBonus = (f: number, t: number) => (f > 0 ? f + 1 : 0) + (t >= 3 ? 1 : 0);
 
+/**
+ * The warm-up room, where the hero shows a newcomer the ropes on three dummies, by hand: one rune, the plain dummy
+ * straight ahead of it, the boxer off to the side where it sees most of the room, a spark crystal on the other side,
+ * and the lady dummy in a far corner behind a column, so only a disc off a wall reaches her.
+ */
+export const WARM = { gw: 10, gh: 8, rune: [8, 3], dummy: [4, 3], boxer: [3, 1], lady: [1, 5], column: [[3, 5], [3, 4]], crystal: [6, 6] } as const;
+
+function warmRoom(): Layout {
+  const { gw, gh } = WARM, floor = new Uint8Array(gw * gh).fill(1);
+  const { edges, rock } = buildEdges(gw, gh, floor);
+  const at = (c: readonly [number, number] | readonly number[]) => cellCentre(c[0], c[1]);
+  const mob = (k: MobKind, c: readonly number[]) => { const p = at(c); return newMob(k, p.x, p.y); };
+  const crystal = at(WARM.crystal);
+  return {
+    gw, gh, shape: 'rect', floor, edges, rock, Wx: gw * TILE, Wy: gh * TILE, biome: BIOMES[0],
+    pads: [at(WARM.rune)], pits: [],
+    blocks: WARM.column.map(([i, j], k) => ({ x0: i * TILE, y0: j * TILE, x1: (i + 1) * TILE, y1: (j + 1) * TILE, v: k + 2 })),
+    decals: [{ x: 40, y: 100, k: 0, a: 0.6 }, { x: 118, y: 52, k: 2, a: 2.1 }],
+    nodes: [{ k: 'spk', ...NODES.spk, x: crystal.x, y: crystal.y, left: NODES.spk.ch, hit: 0 }],
+    mobs: [mob('dummy', WARM.dummy), mob('dummy_boxer', WARM.boxer), mob('dummy_lady', WARM.lady)],
+    haz: new Set(), ice: new Uint8Array(gw * gh), hpMul: 1, dmgAdd: 0, dmgMul: 1,
+  };
+}
+
 export function generate(spec: RoomSpec): Layout {
+  if (spec.tut) return warmRoom();
   const R = makeRng(spec.seed * 31 + spec.depth);
   const { int: ri, pick } = R;
   const type = spec.type, f = spec.floor;

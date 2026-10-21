@@ -231,7 +231,8 @@ export type MobKind =
   | 'ghoul' | 'ghost' | 'yeti' | 'witch' | 'lich' | 'undertaker' | 'banshee' | 'coffin'
   | 'imp' | 'slime' | 'bomber' | 'golem' | 'forgelord' | 'grinder' | 'smasher'
   | 'ratswarm' | 'ratswarm2' | 'ratswarm3' | 'pahan' | 'pahan2' | 'six' | 'bunk'
-  | 'fridge' | 'dancer' | 'dancer2' | 'discoball' | 'discoball2' | 'dragon' | 'dragon2' | 'egg';
+  | 'fridge' | 'dancer' | 'dancer2' | 'discoball' | 'discoball2' | 'dragon' | 'dragon2' | 'egg'
+  | 'dummy' | 'dummy_lady' | 'dummy_boxer';
 
 /**
  * Something a mob does instead of its usual attack on turns where `turn % every === at`.
@@ -303,6 +304,8 @@ export interface MobDef {
   fixed?: boolean;
   /** A boss's later phase: the bestiary shows only the boss it grows out of. */
   of?: MobKind;
+  /** A dummy of the warm-up room: it never walks, and the bestiary leaves it out; one with no blow of its own just stands there. */
+  dummy?: boolean;
   /** The boss turns into the next phase once its health is down to this share of the most. */
   next?: { at: number; k: MobKind };
   /** Prison rats that run off the rat swarm each time it thins out (fewer for a smaller party). */
@@ -461,6 +464,19 @@ export const MOBS: Record<MobKind, MobDef> = {
   egg: {
     name: 'Драконье яйцо', acc: 'Драконье яйцо', floor: 2, hp: 9, r: 6, speed: 0, reach: 0, dmg: 0, fig: 16, prop: true,
     txt: 'Яйцо Дракона Дымыча. Каждый третий ход одно вылупляется бесом-кочегаром. Кто его разбил, за тем дракон и пойдёт.',
+  },
+  // the warm-up room's dummies (thread «Обучение от лица героя»): two stand and take it, the boxer punches back a little
+  dummy: {
+    name: 'Манекен', acc: 'Манекен', floor: 0, hp: 6, r: 7, speed: 0, reach: 0, dmg: 0, fig: 31, dummy: true,
+    txt: 'Магазинный манекен в семейных трусах. Стоит столбом и ждёт, когда его стукнут.',
+  },
+  dummy_lady: {
+    name: 'Манекенша', acc: 'Манекеншу', fem: true, floor: 0, hp: 5, r: 7, speed: 0, reach: 0, dmg: 0, fig: 31, dummy: true,
+    txt: 'Манекен в парике и боа. Стоит столбом, зато прячется за колонну.',
+  },
+  dummy_boxer: {
+    name: 'Боксёр', acc: 'Боксёра', floor: 0, hp: 9, r: 7, speed: 0, reach: 999, dmg: 2, fig: 31, dummy: true,
+    txt: 'Портновский манекен с перчаткой на пружине. С места не сходит, но бьёт того, кого видит.',
   },
 };
 

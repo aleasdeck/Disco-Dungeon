@@ -65,7 +65,7 @@ export function renderCollection(tab: 'heroes' | 'mobs' | 'arts') {
   } else {
     // the undertaker's coffin is a thing, not an enemy of its own
     // a boss's later phases are told on its own card
-    (Object.keys(MOBS) as MobKind[]).filter(k => !MOBS[k].prop && !MOBS[k].of).forEach(k => {
+    (Object.keys(MOBS) as MobKind[]).filter(k => !MOBS[k].prop && !MOBS[k].of && !MOBS[k].dummy).forEach(k => {
       // a boss as a party of three meets it, its extra health and blow (BOSS_UP) included
       const d = MOBS[k], up = BOSS_UP[k], card = document.createElement('article');
       card.className = 'card';

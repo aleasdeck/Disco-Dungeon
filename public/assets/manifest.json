@@ -48,7 +48,10 @@
     "discoball": { "file": "mobs/discoball.png", "facing": "left" },
     "discoball2": { "file": "mobs/discoball2.png", "facing": "left" },
     "dragon": { "file": "mobs/dragon.png", "facing": "left" },
-    "dragon2": { "file": "mobs/dragon2.png", "facing": "left" }
+    "dragon2": { "file": "mobs/dragon2.png", "facing": "left" },
+    "dummy": { "file": "mobs/dummy.png", "facing": "left" },
+    "dummy_lady": { "file": "mobs/dummy_lady.png", "facing": "left" },
+    "dummy_boxer": { "file": "mobs/dummy_boxer.png", "facing": "left" }
   },
   "env": {
     "anvil": "env/anvil.webp",

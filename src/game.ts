@@ -277,7 +277,7 @@ export const ZONE_COL: Record<Zone | 'bite', string> = { bite: '#ff3a2a', cold: 
 /** The cry over a floor boss as it turns into its next phase. */
 const PHASE_CRY: Partial<Record<MobKind, string>> = { ratswarm2: 'свора редеет!', ratswarm3: 'разбегаются!', pahan2: 'БЕСПРЕДЕЛ!', dancer2: 'ЛИХОРАДКА!', discoball2: 'сорвался!', dragon2: 'слез с яиц!' };
 /** How the journal tells a shooter's shot when it isn't an arrow: Пахан's shiv, the dancer's record, the disco ball's beam. */
-const SHOT: Partial<Record<MobKind, string>> = { pahan: 'метнул заточку в', dancer: 'запустил пластинкой в', dancer2: 'запустил пластинкой в', discoball: 'ударил лучом в', discoball2: 'ударил лучом в' };
+const SHOT: Partial<Record<MobKind, string>> = { pahan: 'метнул заточку в', dancer: 'запустил пластинкой в', dancer2: 'запустил пластинкой в', discoball: 'ударил лучом в', discoball2: 'ударил лучом в', dummy_boxer: 'выбросил кулак на пружине в' };
 
 /**
  * The fridge's snacks («Закусь»), by `Intent.item`: what it throws, the share of its blow each deals, and what else it does:
@@ -409,6 +409,8 @@ export class Game {
   mined = 0;
   /** Host: ore the room paid for nobody losing any health in it («Без царапины»), for the room's result. */
   clean = 0;
+  /** A blow in the warm-up room that would have laid the hero down left it standing: the hero says so (tutor.ts). */
+  spared = false;
   private acc = 0;
   /** A blow the cop's cuffs are passing on to the other enemy in them: it isn't passed back. */
   private linked = false;
@@ -1380,6 +1382,8 @@ export class Game {
   /** Turn from which the enemies grow angrier every turn. */
   rageFrom() {
     // «Ромашковый чай» in anyone's bag calms the whole room down for a while
+    // the warm-up's dummies never get angry
+    if (this.S.spec.tut) return Infinity;
     return (this.S.spec.type === 'boss' ? RAGE_FROM_BOSS : RAGE_FROM) + (this.S.heroes.some(h => has(h, 'tea')) ? ART.tea : 0);
   }
 
@@ -1426,7 +1430,7 @@ export class Game {
     if (m.k === 'egg') return it?.eta ? { name: SPECIAL.hatch, turns: Math.max(0, it.eta - 1) } : null;
     if (!d.acts && !d.charge && m.under === undefined) return null;
     // the move picked for this turn, unless it is made already or has come to nothing (the one to heal has fallen)
-    if (it && it.t !== 'hit' && it.t !== 'move' && it.t !== 'toss' && !this.acted(m) && !this.idle(m) && !this.frozen(m)) return { name: specialName(it.t, it.chill, it.z), turns: 0 };
+    if (it && it.t !== 'hit' && it.t !== 'move' && it.t !== 'toss' && it.t !== 'idle' && !this.acted(m) && !this.idle(m) && !this.frozen(m)) return { name: specialName(it.t, it.chill, it.z), turns: 0 };
     // the headsman's execution is a strike of its own: this turn's counts while it is still to land
     if (it && this.executes(m) && !this.acted(m) && !this.frozen(m)) return { name: SPECIAL.execute, turns: 0 };
     for (let k = 1; k <= 6; k++) {
@@ -1473,6 +1477,8 @@ export class Game {
    */
   private intentFor(m: Mob, hs: HeroState[], taken: Pt[], i: number): Intent {
     const S = this.S;
+    // a dummy of the warm-up room with no blow of its own just stands there
+    if (MOBS[m.k].dummy && !MOBS[m.k].dmg) return { t: 'idle', hero: -1, dmg: 0 };
     if (m.k === 'coffin') return this.rising(m);
     // still kissed from a turn before, it goes for another enemy again
     if (m.kiss !== undefined) return this.charm(m);
@@ -1971,6 +1977,8 @@ export class Game {
     if (dmg > 0) S.hurt = true;
     // «Счастливый носок»: once a room a deadly blow leaves the hero standing on 1
     if (h.hp <= 0 && dmg > 0 && has(h, 'sock') && !h.lucky) { h.hp = 1; h.lucky = true; this.float(p.x, p.y - 14, 'носок спас!', '#ffe27a'); this.pop(h, 'sock'); }
+    // nobody falls in the warm-up
+    if (h.hp <= 0 && S.spec.tut) { h.hp = 1; this.spared = true; }
     const t = tallyOf(h);
     t.hurt += Math.min(dmg, had);
     if (h.hp <= 0) t.falls++;
@@ -2994,6 +3002,7 @@ export class Game {
   /** An enemy with nothing to do on its move: walled off, or the one it was after has already fallen. */
   private idle(m: Mob) {
     const it = m.intent!;
+    if (it.t === 'idle') return true;
     // frozen stiff, it still takes its turn to stand there; kissed with nobody to go for, to sigh
     if (this.frozen(m) || it.sigh) return false;
     // an egg not hatching yet, Пахан with no шестёрка left to treat

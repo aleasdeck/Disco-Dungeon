@@ -448,4 +448,5 @@ export const MOB_TOP: Record<MobKind, number> = {
   imp: 27, slime: 30, bomber: 27, golem: 37, forgelord: 56, grinder: 32, smasher: 44,
   ratswarm: 40, ratswarm2: 27, ratswarm3: 21, pahan: 46, pahan2: 40, six: 31, bunk: 24,
   fridge: 50, dancer: 52, dancer2: 52, discoball: 56, discoball2: 46, dragon: 54, dragon2: 56, egg: 16,
+  dummy: 33, dummy_lady: 33, dummy_boxer: 33,
 };
