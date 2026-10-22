@@ -5,7 +5,8 @@
 import { AB_COST, CRIT, E_MAX, ENEMY_BASE, FROST_STEPS, GAS_WEAK, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, frostVuln, fullHit, gasDmg, isRanged, type MobKind, type RoomType, type StatKey } from './data';
 import { envArt, eventArt, sprites, uiArt } from './assets';
 import { FOOD_TOSS, ZONE_COL, type Game, type HeroState } from './game';
-import type { Mob } from './room';
+import type { Mob, RoomSpec } from './room';
+import { BET_TURNS } from './events';
 import { BASE_TH, drawHeroFigure, drawMiniature, drawMobFigure } from './draw/figures';
 import { lg } from './draw/util';
 import { art, artIcon, fillIcons, icon } from './icons';
@@ -168,6 +169,18 @@ const statusHtml = (list: Status[]) => list.map(s => `<i class="st st-${s.k}" ti
 
 /** The turn button's job right now. */
 type TurnAct = 'fight' | 'end' | 'cancel' | 'none';
+
+/** What an event left the fight, a word each in the top bar and a line in its tooltip. */
+const CHIPS: { on: (s: RoomSpec) => boolean; name: string; txt: string; ico?: string }[] = [
+  { on: s => !!s.smoke, name: 'дым-машина', txt: 'Дым-машина: видно только вокруг героев.' },
+  { on: s => !!s.strobe, name: 'стробоскоп', txt: 'Стробоскоп: нет линии прицела.' },
+  { on: s => s.ground === 'slick', name: 'пена на дисках', ico: 'ico_slick', txt: 'Пена на дисках: они не теряют скорость о стены.' },
+  { on: s => s.ground === 'soap', name: 'мыльный пол', ico: 'ico_soap', txt: 'Мыльный пол: диски катятся вдвое дальше.' },
+  { on: s => s.ground === 'sticky', name: 'липкий пол', ico: 'ico_sticky', txt: 'Липкий пол: диски тормозят быстрее.' },
+  { on: s => s.bet === 'art', name: 'пари: без царапины', ico: 'ico_bet', txt: 'Пари с букмекером: победа без царапины даст каждому трофей, иначе каждый потеряет свой.' },
+  { on: s => s.bet === 'up', name: `пари: за ${BET_TURNS} хода`, ico: 'ico_bet', txt: `Пари с букмекером: победа за ${BET_TURNS} хода даст каждому уровень, иначе каждый потеряет уровень.` },
+  { on: s => !!s.extra, name: '+1 диск', txt: 'Краденые шайбы: в этом бою каждый бросает на диск больше.' },
+];
 
 export class Hud {
   private lastPortrait = '';
@@ -359,10 +372,12 @@ export class Hud {
     rage.textContent = g.rage() ? `ярость +${g.rage()}` : 'ярость со след. хода';
     rage.title = `С ${g.rageFrom()}-го хода каждый враг с каждым ходом бьёт на 1 сильнее.`;
     // an event's curse on this fight
-    const curse = $('hCurse'), cs = [S.spec.smoke && 'дым-машина', S.spec.strobe && 'стробоскоп'].filter(Boolean);
-    curse.hidden = !cs.length || S.phase === 'over';
-    curse.textContent = cs.join(' · ');
-    curse.title = [S.spec.smoke && 'Дым-машина: видно только вокруг героев.', S.spec.strobe && 'Стробоскоп: нет линии прицела.'].filter(Boolean).join(' ');
+    // and what else an event left this fight: the foam party's floor, the bookie's bet, a disc more
+    const curse = $('hCurse'), on = CHIPS.filter(c => c.on(S.spec));
+    curse.hidden = !on.length || S.phase === 'over';
+    const chips = on.map(c => (c.ico ? art(c.ico, 'chip') : '') + c.name).join(' · ');
+    if (curse.dataset.k !== chips) { curse.dataset.k = chips; curse.innerHTML = chips; }
+    curse.title = on.map(c => c.txt).join(' ');
 
     // in the ore cave nobody moves against the party: the heroes hop to their discs and throw again
     const side: Side = S.phase === 'place' || S.phase === 'over' ? S.phase : S.phase === 'enemy' || (S.phase === 'resolve' && !g.cave()) ? 'enemies' : 'heroes';

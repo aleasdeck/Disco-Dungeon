@@ -60,6 +60,9 @@ export const SOCKETS = 3;
 /** Whether a hero owns this artifact (saves from before artifacts have none). */
 export const has = (h: Pick<HeroState, 'arts'>, k: ArtKey) => !!h.arts?.includes(k);
 
+/** Whether a hero has a free socket for one more trophy: the ones it owns and a pile kept for it count («Нет места» otherwise). */
+export const room = (h: Pick<HeroState, 'arts' | 'kept'>) => (h.arts?.length ?? 0) + (h.kept?.offer.length ? 1 : 0) < SOCKETS;
+
 /** The boss's trophies the party stands over, the same on every screen: the host keeps them and shares them with the map. */
 export interface LootState {
   /** The room's seed: the trophies offered were rolled from it. */
@@ -67,14 +70,18 @@ export interface LootState {
   /** The floor whose boss fell, 0 or 1. */
   floor: number;
   offer: ArtKey[];
-  /** Online: the trophy each player points at, by hero, by its place in `offer`. */
+  /** Online: the trophy each player points at, by hero, by its place in `offer`; PASS: a hero with all sockets taken keeps its own. */
   picks: Record<number, number>;
+  /** A hero with all sockets taken: the trophy of its own it throws away for the one picked, by hero. */
+  drops?: Record<number, ArtKey>;
   /** Once shared out: which trophy each hero took, by hero (a duo leaves one behind). */
   done?: Record<number, ArtKey>;
   /** The event whose outcome gave them (its key); none for a floor boss's hoard. */
   from?: string;
   /** The boss that fell (its own kind: king, ratswarm…): its hoard is the window's picture. A save from before names only the floor. */
   boss?: string;
+  /** The heroes with all their sockets taken as the trophies were offered: one picked replaces one of their own (`drops`). */
+  full?: number[];
 }
 
 /**
@@ -91,14 +98,31 @@ export function rollOffer(seed: number, party: Pick<HeroState, 'arts' | 'kept'>[
   return out;
 }
 
-export function newLoot(seed: number, floor: number, party: Pick<HeroState, 'arts' | 'kept'>[], boss?: string): LootState {
-  return { seed, floor, offer: rollOffer(seed, party), picks: {}, ...(boss ? { boss } : {}) };
+export function newLoot(seed: number, floor: number, party: Pick<HeroState, 'i' | 'arts' | 'kept'>[], boss?: string): LootState {
+  const full = party.filter(h => !room(h)).map(h => h.i);
+  return { seed, floor, offer: rollOffer(seed, party), picks: {}, ...(boss ? { boss } : {}), ...(full.length ? { full } : {}) };
 }
 
-/** Online the trophies are shared out once every player here points at one and no two point at the same. */
+/** Whether there is anything to share out: a hero with all sockets taken can still swap one of its own for a new one. */
+export const lootFor = (loot: LootState) => loot.offer.length > 0;
+
+/** A pick that leaves a hero with all sockets taken its own three, and one that takes a pick back. */
+export const PASS = -1;
+export const UNDO = -2;
+
+/** Whether a hero has picked for good: a trophy (with what to throw away for it, when full) or, when full, none. */
+export const lootDone = (loot: LootState, hero: number) => {
+  const p = loot.picks[hero], full = !!loot.full?.includes(hero);
+  return p === PASS ? full : p !== undefined && loot.offer[p] !== undefined && (!full || !!loot.drops?.[hero]);
+};
+
+/**
+ * Online the trophies are shared out once every player here points at one and no two point at the same; a hero with all
+ * sockets taken has also said which of its own goes, or keeps its own.
+ */
 export function lootAgreed(loot: LootState, table: number[]) {
-  const ps = table.map(h => loot.picks[h]);
-  return ps.length > 0 && ps.every(p => p !== undefined && loot.offer[p] !== undefined) && new Set(ps).size === ps.length;
+  const ps = table.map(h => loot.picks[h]).filter(p => p !== PASS);
+  return table.length > 0 && table.every(h => lootDone(loot, h)) && new Set(ps).size === ps.length;
 }
 
 /**
@@ -111,18 +135,24 @@ export function settleLoot(loot: LootState, party: HeroState[], table: number[])
   const done: Record<number, ArtKey> = {}, taken = new Set<number>();
   for (const h of table) {
     const p = loot.picks[h];
-    if (p === undefined || taken.has(p) || !loot.offer[p]) continue;
+    if (p === undefined || taken.has(p) || !loot.offer[p] || !lootDone(loot, h)) continue;
     done[h] = loot.offer[p];
     taken.add(p);
   }
   const rest = loot.offer.filter((_, k) => !taken.has(k));
   for (const h of party) {
-    if (done[h.i] !== undefined || table.includes(h.i) || !rest.length) continue;
+    if (done[h.i] !== undefined || table.includes(h.i) || loot.full?.includes(h.i) || !rest.length) continue;
     // still away since a share-out before: that pile can't wait any longer, the first of it is theirs
     if (h.kept?.offer.length) takeKept(party, h.i, h.kept.offer[0]);
     h.kept = { seed: loot.seed, floor: loot.floor, offer: [...rest], ...(loot.from ? { from: loot.from } : {}), ...(loot.boss ? { boss: loot.boss } : {}) };
   }
-  for (const h of party) if (done[h.i]) give(h, done[h.i]);
+  for (const h of party) {
+    if (!done[h.i]) continue;
+    // a hero with all sockets taken throws one of its own away for it
+    const out = loot.drops?.[h.i];
+    if (out && loot.full?.includes(h.i)) drop(h, out);
+    give(h, done[h.i]);
+  }
   loot.done = done;
 }
 
@@ -144,9 +174,17 @@ export function takeKept(party: HeroState[], hero: number, k: ArtKey) {
   return true;
 }
 
-function give(h: HeroState, k: ArtKey) {
+export function give(h: HeroState, k: ArtKey) {
   (h.arts ??= []).push(k);
   if (k === 'belly') { h.max += BELLY; if (h.hp > 0) h.hp += BELLY; }
+}
+
+/** A trophy taken from a hero (sold, lost on a bet, robbed): what it gave at once goes with it. */
+export function drop(h: HeroState, k: ArtKey) {
+  const at = h.arts?.indexOf(k) ?? -1;
+  if (at < 0) return;
+  h.arts!.splice(at, 1);
+  if (k === 'belly') { h.max = Math.max(1, h.max - BELLY); h.hp = Math.min(h.hp, h.max); }
 }
 
 /** «Пивной живот»: this much more of the most health, and as much health at once. */

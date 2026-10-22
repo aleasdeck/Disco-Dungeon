@@ -68,6 +68,8 @@ export interface CampaignSave {
   /** Ore mined in the room and paid for it «Без царапины», for its result screen. */
   mined: number;
   clean: number;
+  /** How the bookie's bet came out in the room, for its result screen; saves from before have none. */
+  bet?: string;
   snap: Snapshot;
   /** How far the statistics had counted the run, so it goes on counting there even after an online game was counted. */
   count: Cur | null;

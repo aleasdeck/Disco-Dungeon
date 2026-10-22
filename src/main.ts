@@ -17,11 +17,11 @@ import { sound, type Track } from './sound';
 import { CAMPAIGN, clearCampaign, clearSeat, keepKey, keyFor, loadCampaign, loadHost, loadSeat, newKey, saveCampaign, saveHost, saveSeat, type Ending, type HostSave } from './resume';
 import { bossOf } from './room';
 import { FLOORS, LAYERS, agreed, depthOf, newRun, nodeById, reachable, roomSeed, type Run, type Votes } from './run';
-import { applyFx, canPick, eventDef, eventOf, rolled, type EventState } from './events';
+import { choicesOf, cupPick, doneOf, eventOf, heroPick, sellDone, sellPick, sellersLeft, stageOf, take, type EventState, type Table } from './events';
 import { EventView, type EventVotes } from './eventview';
 import { campDo, campLeave, type CampPick, type CampState } from './camp';
 import { CampView } from './campview';
-import { lootAgreed, newLoot, settleLoot, takeKept, type ArtKey, type LootState } from './artifacts';
+import { PASS, UNDO, lootAgreed, lootDone, lootFor, newLoot, settleLoot, takeKept, type ArtKey, type LootState } from './artifacts';
 import { LootView, type LootVotes } from './lootview';
 import { beginRun, endRun, playTime, resumeRun, runCount, saveStats, syncRun } from './stats';
 import { BASTION_I, Tutor, hearAgain, heard, saveHeard } from './tutor';
@@ -212,7 +212,11 @@ function goOn() {
   hud.refresh();
   // the others may already agree
   settle();
-  if (ev && !ev.done) { const go = agreed(ev.votes, atTable()); if (go !== null) settleEvent(go); else shareMap(); }
+  if (ev && !ev.done) {
+    // the pawnshop waits only for the players here; a vote goes on with the ones here
+    if (stageOf(ev) === 'sell') { if (sellDone(ev, table(), atTable())) afterEvent(); else shareMap(); }
+    else { const go = agreed(ev.votes, atTable()); if (go !== null) settleEvent(go); else shareMap(); }
+  }
   if (loot && !loot.done) { if (lootAgreed(loot, atTable())) shareLoot(); else shareMap(); }
 }
 const myHero = () => players.find(p => p.id === net.id)?.hero ?? null;
@@ -481,18 +485,42 @@ function showEvent() {
   const open = !!ev && !(ev.done && evShut === ev.seed);
   $('eventScreen').hidden = !open;
   liftStrip();
-  if (open) evView.render(ev!, game.bank, game.party.length === 1, eventVotes());
+  if (open) evView.render(ev!, table(), evHero(), eventVotes());
 }
 
-// alone a tap takes the choice; online it is the player's vote, and the party takes it once everyone here picked it
+/** What the event plays with: the party, its ore and the run's map. */
+const table = (): Table => ({ party: game.party, bank: game.bank, run });
+
+/** The heroes who take part in the event's steps: online the ones whose players are here, alone the whole party. */
+const evTable = () => (game.online ? atTable() : game.party.map(h => h.i));
+
+/**
+ * The hero the event window speaks for at the pawnshop: online and alone this screen's own; for a party with one player
+ * the first still to hand a trophy over (once all have, the last of them).
+ */
+function evHero(): HeroState | null {
+  if (!team()) return meHero();
+  const left = ev ? sellersLeft(ev, game.party, evTable()) : [];
+  return left[0] ?? game.party.filter(h => h.arts?.length).pop() ?? null;
+}
+
+// alone a tap takes the choice; online it is the player's vote, and the party takes it once everyone here picked it; at the
+// pawnshop each hero hands over its own trophy
 evView.onPick = opt => {
   if (!ev || ev.done) return;
+  const sell = stageOf(ev) === 'sell';
+  if (!game.online) {
+    if (sell) evSell(evHero()?.i ?? -1, opt);
+    else settleEvent(opt);
+    return;
+  }
   const me = myHero();
-  if (!game.online) settleEvent(opt);
-  else if (me === null) return;
-  else if (mode === 'host') evVote(me, opt);
+  if (me === null) return;
+  if (mode === 'host') evVote(me, opt);
   else {
-    ev = { ...ev, votes: { ...ev.votes, [me]: opt } };
+    const k = game.party.find(h => h.i === me)?.arts?.[opt] as ArtKey | undefined;
+    if (sell && !k) return;
+    ev = sell ? { ...ev, sold: { ...ev.sold, [me]: k! } } : { ...ev, votes: { ...ev.votes, [me]: opt } };
     showEvent();
     net.send({ t: 'evote', opt });
   }
@@ -504,29 +532,49 @@ evView.onLeave = () => {
   showLoot();
 };
 
-/** Host: a player points at one of the event's choices. */
+/** Host: a player points at one of the event's choices (or a hero, a cup), or hands over a trophy at the pawnshop. */
 function evVote(hero: number, opt: number) {
-  if (!ev || ev.done || !eventDef(ev.key).choices[opt]) return;
+  if (!ev || ev.done) return;
+  const st = stageOf(ev);
+  if (st === 'sell') return evSell(hero, opt);
+  const ok = st === 'choose' ? !!choicesOf(ev)[opt] : st === 'hero' ? game.party.some(h => h.i === opt) : opt >= 0 && opt < 3;
+  if (!ok) return;
   ev.votes[hero] = opt;
   const go = agreed(ev.votes, atTable());
   if (go !== null) settleEvent(go);
   else { showEvent(); shareMap(); }
 }
 
-/** Take a choice: pay for it, roll its toss-up, and do what comes of it to the party; then the map is open again. */
+/** A hero hands the trophy at `opt` among its own over at the pawnshop; the shop pays once every hero here has. */
+function evSell(hero: number, opt: number) {
+  const k = game.party.find(h => h.i === hero)?.arts?.[opt] as ArtKey | undefined;
+  if (!ev || !k || !sellPick(ev, hero, k, table(), evTable())) return;
+  afterEvent();
+}
+
+/**
+ * Take a choice, or the hero, or the cup it asks for next: pay, roll, and do what comes of it to the party; once the event
+ * is over the map is open again (after the trophies, if it gave any).
+ */
 function settleEvent(opt: number) {
   if (!ev || ev.done) return;
-  const c = eventDef(ev.key).choices[opt];
-  if (!c || !canPick(c, game.bank)) return;
-  const won = rolled(c, ev.seed, opt), out = won ? c.win : c.lose!;
-  game.bank.ore -= c.pay ?? 0;
-  applyFx(out.fx, game.party, game.bank, ev.seed);
-  ev.done = { opt, won };
-  // a trophy: the party shares out three before the map opens again, once the outcome is read
-  const l = out.fx.some(f => f.k === 'art') ? newLoot(ev.seed * 7 + 3, run.floor, game.party) : null;
-  if (l?.offer.length) loot = { ...l, from: ev.key };
-  choosing = !loot;
-  votes = {};
+  const st = stageOf(ev), t = table();
+  const ok = st === 'choose' ? take(ev, opt, t) : st === 'hero' ? heroPick(ev, opt, t) : st === 'cups' ? cupPick(ev, opt, t) : false;
+  if (!ok) { showEvent(); shareMap(); return; }
+  // nobody here has a trophy to hand over at the pawnshop: it pays nothing and is over
+  if (stageOf(ev) === 'sell') sellDone(ev, t, evTable());
+  afterEvent();
+}
+
+/** The event has moved on: once it is over, a trophy is shared out before the map opens again, once the outcome is read. */
+function afterEvent() {
+  if (!ev) return;
+  if (ev.done) {
+    const l = doneOf(ev)!.out.fx.some(f => f.k === 'art') ? newLoot(ev.seed * 7 + 3, run.floor, game.party) : null;
+    if (l && lootFor(l)) loot = { ...l, from: ev.key };
+    choosing = !loot;
+    votes = {};
+  }
   hud.buildAllies();
   game.onChange();
   showEvent();
@@ -541,11 +589,17 @@ function eventVotes(): EventVotes | undefined {
   const me = myHero(), cast = ev.votes;
   const nameOf = (h: number) => players.find(p => p.hero === h)?.name ?? HEROES[h].name;
   const faces: EventVotes['faces'] = {};
+  if (stageOf(ev) === 'sell') {
+    // at the pawnshop nobody votes: each hands over their own
+    const left = sellersLeft(ev, game.party, table).map(h => (h.i === me ? 'ты' : nameOf(h.i)));
+    return { faces, mine: null, note: left.length ? `Ещё выбирают: ${left.join(', ')}.` : '' };
+  }
   for (const h of table) if (cast[h] !== undefined) (faces[cast[h]] ??= []).push({ col: HEROES[h].col, name: nameOf(h), me: h === me, face: faceUrl(game.party.find(o => o.i === h) ?? { i: h, def: HEROES[h] }) });
   const idle = table.filter(h => cast[h] === undefined).map(h => (h === me ? 'ты' : nameOf(h)));
-  const note = idle.length === table.length ? 'Выбор общий: отряд сделает то, что нажмут все.'
+  const what = stageOf(ev) === 'hero' ? 'одного героя' : stageOf(ev) === 'cups' ? 'один стакан' : 'одно и то же';
+  const note = idle.length === table.length ? `Выбор общий: отряд сделает то, что нажмут все.`
     : idle.length ? `Ещё не выбрали: ${idle.join(', ')}.`
-    : 'Голоса разошлись. Договоритесь и нажмите одно и то же.';
+    : `Голоса разошлись. Договоритесь и нажмите ${what}.`;
   return { faces, mine: me !== null ? cast[me] ?? null : null, note };
 }
 
@@ -593,7 +647,8 @@ function lootHero(): HeroState | null {
     const mine = game.online ? myHero() : game.party[0]?.i ?? null;
     return game.party.find(h => h.i === mine) ?? null;
   }
-  return loot?.done ? null : game.party.find(h => loot?.picks[h.i] === undefined) ?? null;
+  // a hero with all sockets taken still has to say which of its own goes before the next one picks
+  return loot?.done ? null : game.party.find(h => loot && !lootDone(loot, h.i)) ?? null;
 }
 
 // alone a tap takes the trophy; online it points at the one the player wants, and they are shared out once no two want the
@@ -601,17 +656,30 @@ function lootHero(): HeroState | null {
 lootView.onPick = opt => {
   if (lootShows === 'kept') return keptTake(opt);
   if (!loot || loot.done) return;
-  if (team()) {
+  if (team() && opt >= 0) {
     const by = game.party.find(h => loot!.picks[h.i] === opt);
-    if (by) { delete loot.picks[by.i]; showLoot(); return; }
+    if (by) { delete loot.picks[by.i]; delete loot.drops?.[by.i]; showLoot(); return; }
   }
   const me = lootHero()?.i ?? null;
   if (me === null) return;
   if (mode === 'client') {
-    loot = { ...loot, picks: { ...loot.picks, [me]: opt } };
+    const picks = { ...loot.picks, [me]: opt }, drops = { ...loot.drops };
+    if (opt === UNDO) { delete picks[me]; delete drops[me]; }
+    loot = { ...loot, picks, drops };
     showLoot();
     net.send({ t: 'loot', opt });
   } else lootPick(me, opt);
+};
+// a hero with all three sockets taken says which of its own it throws away for the one picked
+lootView.onDrop = k => {
+  if (!loot || loot.done || lootShows !== 'loot') return;
+  const me = lootHero()?.i ?? null, opt = me !== null ? loot.picks[me] : undefined;
+  if (me === null || opt === undefined || opt < 0) return;
+  if (mode === 'client') {
+    loot = { ...loot, drops: { ...loot.drops, [me]: k } };
+    showLoot();
+    net.send({ t: 'loot', opt, drop: k });
+  } else lootPick(me, opt, k);
 };
 lootView.onLeave = () => {
   // the kept trophies' window shuts over whatever the party is at: the map, the camp, the blacksmith's
@@ -652,10 +720,20 @@ function keptPick(hero: number, k: ArtKey) {
 /** The heroes whose players share the trophies out: online the ones here, alone every hero of the party. */
 const lootTable = () => (game.online ? atTable() : game.party.map(h => h.i));
 
-/** Host (or a lone player): a player points at a trophy for their hero. */
-function lootPick(hero: number, opt: number) {
-  if (!loot || loot.done || loot.offer[opt] === undefined) return;
-  loot.picks[hero] = opt;
+/**
+ * Host (or a lone player): a player points at a trophy for their hero. A hero with all sockets taken names the one of its
+ * own it throws away for it (`drop`), or keeps its own (PASS); UNDO takes the pick back.
+ */
+function lootPick(hero: number, opt: number, drop?: ArtKey) {
+  if (!loot || loot.done) return;
+  const full = !!loot.full?.includes(hero), h = game.party.find(o => o.i === hero);
+  if (opt === UNDO) { delete loot.picks[hero]; delete loot.drops?.[hero]; }
+  else if (opt === PASS ? !full : loot.offer[opt] === undefined) return;
+  else {
+    if (loot.picks[hero] !== opt) delete loot.drops?.[hero];
+    loot.picks[hero] = opt;
+    if (drop && full && opt >= 0 && h?.arts?.includes(drop)) (loot.drops ??= {})[hero] = drop;
+  }
   if (lootAgreed(loot, lootTable())) shareLoot();
   else { showLoot(); shareMap(); }
 }
@@ -796,7 +874,7 @@ game.onRoomEnd = win => {
     // the floor's boss leaves trophies: the party shares them out before the map opens again
     if (boss) {
       const l = newLoot(run.seed + run.floor * 977 + S.spec.depth, S.spec.floor, game.party, bossOf(S.spec));
-      if (l.offer.length) {
+      if (lootFor(l)) {
         loot = l;
         choosing = false;
         showLoot();
@@ -811,11 +889,13 @@ game.onRoomEnd = win => {
     const solo = game.party.length === 1 && game.party[0].def;
     const healed = !boss ? '' : solo ? `${solo.name} ${solo.fem ? 'восстановила' : 'восстановил'} половину здоровья. ` : 'Герои восстановили половину здоровья. ';
     const clean = game.clean ? `Без царапины: +${game.clean} руды. ` : '';
+    // the bookie's bet
+    const bet = game.betLine ? game.betLine + ' ' : '';
     // an elite pays a stat level for every hero, taken in the sharpening window the result screen leads to
     const elite = S.spec.type === 'elite';
     if (elite) game.sharpen(S.spec.depth);
     showEnd({ title: boss ? `Этаж ${run.floor} пройден` : cave ? (game.cleared() ? 'Пещера выбрана дочиста' : 'Ходы кончились') : elite ? 'Элита повержена' : 'Комната зачищена',
-      text: cave ? `Добыто руды: ${game.mined}. ${rooms}` : `Ходов: ${S.turn}. ${healed}${clean}${elite ? 'Гном-кузнец бесплатно заточит каждому диск. ' : ''}${rooms}`,
+      text: cave ? `Добыто руды: ${game.mined}. ${rooms}` : `Ходов: ${S.turn}. ${healed}${clean}${bet}${elite ? 'Гном-кузнец бесплатно заточит каждому диск. ' : ''}${rooms}`,
       kind: 'map', next: elite ? 'whet' : undefined });
     shareMap();
   }, 900);
@@ -1263,7 +1343,7 @@ net.onMsg = (from, m) => {
     else if (m.t === 'vote' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) vote(h, m.id); }
     else if (m.t === 'evote' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) evVote(h, m.opt); }
     else if (m.t === 'camp' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) campPick(h, m.pick); }
-    else if (m.t === 'loot' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) lootPick(h, m.opt); }
+    else if (m.t === 'loot' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) lootPick(h, m.opt, m.drop as ArtKey | undefined); }
     else if (m.t === 'kept' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) keptPick(h, m.k as ArtKey); }
     else if (m.t === 'act' && started && ownerOf(m.a.h) === from) game.perform(m.a);
     return;
@@ -1415,7 +1495,7 @@ function keepRun(now: number, force = false) {
   runAt = now;
   saveCampaign({
     v: CAMPAIGN, run, choosing, ev, camp, campFor, loot, shut: { ev: evShut, camp: campShut, loot: lootShut }, ending,
-    forgeLeft: game.forge > 0 && !hud.atForge, act: game.act, mined: game.mined, clean: game.clean,
+    forgeLeft: game.forge > 0 && !hud.atForge, act: game.act, mined: game.mined, clean: game.clean, bet: game.betLine,
     // what only flashes by is left out, so a room standing still isn't written again every second
     snap: { ...snapshot(game), floats: [], sparks: [], shake: 0 },
     count: runCount(run),
@@ -1446,6 +1526,7 @@ function resumeCampaign() {
     applySnapshot(game, s.snap);
     game.mined = s.mined;
     game.clean = s.clean;
+    game.betLine = s.bet ?? '';
   } catch (e) {
     // a save the game can no longer read (a much older make): it is let go, so it doesn't fail every time
     console.error(e);
