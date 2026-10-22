@@ -11,7 +11,7 @@ export const PHOTO = 1024;
 export interface PhotoSeat { hero: number | null; look: number | null; name?: string; host?: boolean; ready?: boolean }
 
 /** The backdrops, square rooms with an empty floor in the middle, and how strongly each one's light tints the heroes. */
-const BACKDROPS = [
+export const BACKDROPS = [
   { key: 'photo_disco', tint: 0.7 },
   { key: 'photo_bar', tint: 0.7 },
   { key: 'photo_camp', tint: 0.7 },
@@ -20,17 +20,17 @@ const BACKDROPS = [
 export const BACKDROP_COUNT = BACKDROPS.length;
 
 /** Where each hero stands (its feet) and how big, by party size: in a trio the middle one stands further back. */
-const SPOTS: Record<number, { x: number; y: number; s: number }[]> = {
+export const SPOTS: Record<number, { x: number; y: number; s: number }[]> = {
   1: [{ x: 512, y: 930, s: 1.25 }],
   2: [{ x: 335, y: 925, s: 1.14 }, { x: 695, y: 905, s: 1.08 }],
   3: [{ x: 245, y: 940, s: 1.1 }, { x: 512, y: 845, s: 0.95 }, { x: 780, y: 940, s: 1.1 }],
 };
 /** A hero's height in the photo at scale 1, for a hero of the usual figure height. */
-const TALL = 470;
+export const TALL = 470;
 
 /** A hero's picture trimmed to what is drawn on it, turned to look the given way; made once for each. */
 const arts = new Map<string, HTMLCanvasElement>();
-function artOf(i: number, look: 'left' | 'right') {
+export function artOf(i: number, look: 'left' | 'right') {
   const d = HEROES[i], sp = sprites.get(d.key);
   if (!sp) return null;
   const id = d.key + look;
@@ -72,7 +72,7 @@ function artOf(i: number, look: 'left' | 'right') {
  * white by `tint` and dimmed by half that, so the figures take the room's colour instead of looking pasted on.
  */
 const lights = new Map<HTMLImageElement, [number, number, number]>();
-function lightOf(bg: HTMLImageElement) {
+export function lightOf(bg: HTMLImageElement) {
   let l = lights.get(bg);
   if (!l) {
     const cv = document.createElement('canvas');
@@ -91,8 +91,12 @@ function lightOf(bg: HTMLImageElement) {
 const lit = new Map<string, HTMLCanvasElement>();
 function tinted(art: HTMLCanvasElement, id: string, light: [number, number, number], tint: number) {
   let cv = lit.get(id);
-  if (cv) return cv;
-  cv = document.createElement('canvas');
+  if (!cv) lit.set(id, (cv = inLight(art, light, tint)));
+  return cv;
+}
+/** A picture in a light, drawn anew: for the album's figures, each drawn once with its own bruises and trophies. */
+export function inLight(art: HTMLCanvasElement, light: [number, number, number], tint: number) {
+  const cv = document.createElement('canvas');
   cv.width = art.width;
   cv.height = art.height;
   const c = cv.getContext('2d')!, dim = 1 - tint / 2;
@@ -103,18 +107,17 @@ function tinted(art: HTMLCanvasElement, id: string, light: [number, number, numb
   // multiplying fills the empty corners too; the picture's own outline cuts them away again
   c.globalCompositeOperation = 'destination-in';
   c.drawImage(art, 0, 0);
-  lit.set(id, cv);
   return cv;
 }
 
 /** A hero's height in the photo at a spot's scale: the fat ones stand shorter, the thin ones taller, as on the table. */
-const tallOf = (i: number, s: number) => TALL * s * (heroFig(HEROES[i]) / HERO_FIG);
+export const tallOf = (i: number, s: number) => TALL * s * (heroFig(HEROES[i]) / HERO_FIG);
 
 /**
  * Words written on the print with a marker, a dark edge round them so they read on any part of the picture: one colour,
  * or pieces of different colours on one line.
  */
-function marker(c: CanvasRenderingContext2D, text: string | [string, string][], x: number, y: number, size: number, rot: number, col = '#fbf6ea') {
+export function marker(c: CanvasRenderingContext2D, text: string | [string, string][], x: number, y: number, size: number, rot: number, col = '#fbf6ea') {
   const parts: [string, string][] = typeof text === 'string' ? [[text, col]] : text;
   c.save();
   c.translate(x, y);
@@ -136,13 +139,13 @@ function marker(c: CanvasRenderingContext2D, text: string | [string, string][], 
 }
 
 /** A hero's colour brought towards white, so its name reads in marker on the dark print (as on the hero's card). */
-function light(hex: string) {
+export function light(hex: string) {
   const v = parseInt(hex.slice(1), 16);
   return `rgb(${[v >> 16, (v >> 8) & 255, v & 255].map(x => Math.round(x * 0.62 + 255 * 0.38)).join(',')})`;
 }
 
 /** A hand-drawn arrow: one bent stroke from the words to the figure and two strokes of a head. */
-function arrow(c: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, bend: number) {
+export function arrow(c: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, bend: number) {
   const mx = (x1 + x2) / 2 - (y2 - y1) * bend, my = (y1 + y2) / 2 + (x2 - x1) * bend;
   const a = Math.atan2(y2 - my, x2 - mx), L = 30;
   const path = () => {
@@ -177,7 +180,7 @@ const NOTES: Record<number, { x: number; y: number; rot: number; bend: number; d
  * Draw the photo: the backdrop, the party standing on its floor, a warm flash and dark corners, the film camera's date,
  * and with `names` each player's name with an arrow to their hero. Drawn only when something changes: no animation.
  */
-export function drawPhoto(cv: HTMLCanvasElement, seats: PhotoSeat[], o: { bg: number; names: boolean }) {
+export function drawPhoto(cv: HTMLCanvasElement, seats: PhotoSeat[], o: { bg: number; names: boolean; date?: number }) {
   const c = cv.getContext('2d')!, b = BACKDROPS[((o.bg % BACKDROP_COUNT) + BACKDROP_COUNT) % BACKDROP_COUNT], bg = uiArt.get(b.key);
   c.fillStyle = '#1a120d';
   c.fillRect(0, 0, PHOTO, PHOTO);
@@ -220,30 +223,7 @@ export function drawPhoto(cv: HTMLCanvasElement, seats: PhotoSeat[], o: { bg: nu
       marker(c, '?', p.x, p.y - 150 * p.s, 150 * p.s, 6);
     }
   }
-  // the print: a warm flash on the party, darker corners
-  c.save();
-  c.globalCompositeOperation = 'soft-light';
-  const fl = c.createRadialGradient(PHOTO / 2, PHOTO * 0.62, 40, PHOTO / 2, PHOTO * 0.62, PHOTO * 0.6);
-  fl.addColorStop(0, 'rgba(255,236,200,.55)');
-  fl.addColorStop(1, 'rgba(255,236,200,0)');
-  c.fillStyle = fl;
-  c.fillRect(0, 0, PHOTO, PHOTO);
-  c.restore();
-  const vg = c.createRadialGradient(PHOTO / 2, PHOTO / 2, PHOTO * 0.38, PHOTO / 2, PHOTO / 2, PHOTO * 0.75);
-  vg.addColorStop(0, 'rgba(10,6,4,0)');
-  vg.addColorStop(1, 'rgba(10,6,4,.5)');
-  c.fillStyle = vg;
-  c.fillRect(0, 0, PHOTO, PHOTO);
-  // the film camera's orange date in the corner
-  const d = new Date(), dd = (v: number) => String(v).padStart(2, '0');
-  c.save();
-  c.font = '600 34px Oswald';
-  c.textAlign = 'right';
-  c.fillStyle = '#ff9a3c';
-  c.shadowColor = 'rgba(255,120,40,.8)';
-  c.shadowBlur = 8;
-  c.fillText(`'${String(d.getFullYear()).slice(2)} ${dd(d.getMonth() + 1)} ${dd(d.getDate())}`, PHOTO - 34, PHOTO - 34);
-  c.restore();
+  finish(c, o.date);
   if (!o.names) return;
   // online: who is who, the same words on every player's screen, so everyone's screenshot is the same photo
   seats.slice(0, n).forEach((s, k) => {
@@ -258,6 +238,37 @@ export function drawPhoto(cv: HTMLCanvasElement, seats: PhotoSeat[], o: { bg: nu
   });
 }
 
+/**
+ * The print's finish over a picture: a warm flash on the middle (`flash`), darker corners, and the film camera's orange
+ * date in the corner, the day it is shot (or `date`, in ms).
+ */
+export function finish(c: CanvasRenderingContext2D, date?: number, flash = true) {
+  if (flash) {
+    c.save();
+    c.globalCompositeOperation = 'soft-light';
+    const fl = c.createRadialGradient(PHOTO / 2, PHOTO * 0.62, 40, PHOTO / 2, PHOTO * 0.62, PHOTO * 0.6);
+    fl.addColorStop(0, 'rgba(255,236,200,.55)');
+    fl.addColorStop(1, 'rgba(255,236,200,0)');
+    c.fillStyle = fl;
+    c.fillRect(0, 0, PHOTO, PHOTO);
+    c.restore();
+  }
+  const vg = c.createRadialGradient(PHOTO / 2, PHOTO / 2, PHOTO * 0.38, PHOTO / 2, PHOTO / 2, PHOTO * 0.75);
+  vg.addColorStop(0, 'rgba(10,6,4,0)');
+  vg.addColorStop(1, 'rgba(10,6,4,.5)');
+  c.fillStyle = vg;
+  c.fillRect(0, 0, PHOTO, PHOTO);
+  const d = new Date(date ?? Date.now()), dd = (v: number) => String(v).padStart(2, '0');
+  c.save();
+  c.font = '600 34px Oswald';
+  c.textAlign = 'right';
+  c.fillStyle = '#ff9a3c';
+  c.shadowColor = 'rgba(255,120,40,.8)';
+  c.shadowBlur = 8;
+  c.fillText(`'${String(d.getFullYear()).slice(2)} ${dd(d.getMonth() + 1)} ${dd(d.getDate())}`, PHOTO - 34, PHOTO - 34);
+  c.restore();
+}
+
 /** Save the print in its white edge, as the players see it; a phone offers to share it instead. */
 export function savePhoto(cv: HTMLCanvasElement) {
   const m = 34, out = document.createElement('canvas');
@@ -267,9 +278,14 @@ export function savePhoto(cv: HTMLCanvasElement) {
   c.fillStyle = '#f3ead8';
   c.fillRect(0, 0, out.width, out.height);
   c.drawImage(cv, m, m);
+  saveCanvas(out, 'discodungeon-otryad.png');
+}
+
+/** Save a picture as a PNG file of that name; a phone offers to share it instead. */
+export function saveCanvas(out: HTMLCanvasElement, name: string) {
   out.toBlob(b => {
     if (!b) return;
-    const file = new File([b], 'discodungeon-otryad.png', { type: 'image/png' });
+    const file = new File([b], name, { type: 'image/png' });
     if (navigator.canShare?.({ files: [file] })) {
       navigator.share({ files: [file] }).catch(() => {});
       return;

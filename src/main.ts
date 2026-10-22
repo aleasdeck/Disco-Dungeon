@@ -1,11 +1,11 @@
 import './style.css';
 import { AB_COST, BOOT_GAGS, COMBAT_ROOMS, HEROES, MAX_PLAYERS, MOBS, WALL_H, forgeOre, type MobKind } from './data';
 import { Camera } from './camera';
-import { Game, newBank, newParty, type HeroState } from './game';
+import { Game, newBank, newParty, newTally, type HeroState } from './game';
 import { Net, type Player } from './net';
 import { applySnapshot, snapshot, type MapState } from './sync';
 import { saveSettings, settings } from './settings';
-import { bindSettings, lobbyStatus, renderCollection, renderHeroSelect, renderLobby, renderStats, resetLobby, show, startable } from './menu';
+import { bindSettings, campPhotoBg, lobbyStatus, renderCollection, renderHeroSelect, renderLobby, renderStats, resetLobby, show, startable } from './menu';
 import { Input } from './input';
 import { Hud, faceUrl, mobFace } from './ui';
 import { hl } from './hl';
@@ -28,6 +28,8 @@ import { BASTION_I, Tutor, hearAgain, heard, saveHeard } from './tutor';
 import { ENTRANCES, SCRATCH_BEAT, bossKind, intro } from './intro';
 import { cardOut, closeIntro, openIntro, showCard } from './introview';
 import { collect } from './trinkets';
+import type { Album } from './album';
+import { hideAlbum, showAlbum } from './albumview';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -255,6 +257,10 @@ function setOnline(m: Mode) {
 function startRun(picks?: number[]) {
   flushStats();
   run = newRun();
+  // the party photo the run begins with, for its album: online the lobby's, with the players' names
+  run.photo = mode === 'host'
+    ? { bg: photoBg, heroes: players.map(p => p.hero!), names: players.map(p => p.name), host: players.findIndex(p => p.id === 'host') }
+    : { bg: campPhotoBg(), heroes: picks ?? [0, 1, 2] };
   game.party = newParty(picks, run.seed);
   const mine = myHeroes();
   if (mine.length) beginRun(run, mine.map(h => h.def.key), mode === 'host');
@@ -770,17 +776,20 @@ game.onRoomEnd = win => {
   if (S.spec.tut) { setTimeout(() => tutor.won(() => startCampaign(warmFor)), 900); return; }
   const last = boss && run.floor === FLOORS - 1;
   setTimeout(() => {
+    // the album's photo of the floor's boss: the heroes as it fell, before it gave them half their health back
+    if (win && boss) (run.shots ??= [])[run.floor] = { boss: bossOf(S.spec), heroes: game.wounds ?? game.party.map(h => ({ i: h.i, hp: Math.max(0, h.hp), max: h.max })) };
     if (!win || last) {
       endRun(run, myHeroes(), win);
       runOver = true;
       if (mode === 'solo') clearCampaign();
     }
-    if (!win) return showEnd({ title: game.party.length > 1 ? 'Отряд пал' : 'Герой пал', text: `Забег окончен на этаже ${run.floor + 1}, сложность ${S.spec.depth}.`, kind: 'again' });
+    if (!win) return showEnd({ title: game.party.length > 1 ? 'Отряд пал' : 'Герой пал', text: `Забег окончен на этаже ${run.floor + 1}, сложность ${S.spec.depth}.`, kind: 'again', album: albumOf(false) });
     if (last) {
       const left = game.alive().map(h => h.def.name).join(', '), fell = MOBS[bossOf(S.spec)];
       return showEnd({ title: 'Вы победили!', kind: 'win',
         text: `${fell.name} ${fell.fem ? 'повержена' : 'повержен'}, все три этажа позади. Комнат пройдено: ${run.path.reduce((a, p) => a + p.length, 0)}.`
-          + (game.party.length > 1 ? ` Дошли до конца: ${left}.` : '') });
+          + (game.party.length > 1 ? ` Дошли до конца: ${left}.` : ''),
+        album: albumOf(true) });
     }
     if (boss) run.floor++;
     votes = {};
@@ -815,6 +824,18 @@ game.onRoomEnd = win => {
 /** The result of a room: on to the map, or (the run is over) a new run; online that means back to the lobby. */
 function showEnd(e: Ending) {
   ending = e;
+  if (e.album) {
+    // the end of the run: its album instead of the plain result; online every player sees it, the host takes them back
+    $('roomEnd').hidden = true;
+    if (mode === 'client') wait('');
+    showAlbum(e.album, {
+      button: mode === 'client' ? null : mode === 'host' ? 'В лобби' : 'Новый забег',
+      onButton: mode === 'host' ? backToLobby : () => { hideEnd(); openHeroSelect(); },
+    });
+    victory($('runEnd'), e.album.win);
+    if (mode === 'host') { screen(e.title, e.text, e.kind === 'win', e.kind === 'again'); net.broadcast({ t: 'end', e }); }
+    return;
+  }
   $('roomEnd').hidden = false;
   victory($('roomEnd'), e.kind === 'win');
   $('roomEnd').classList.toggle('lose', e.kind === 'again');
@@ -847,6 +868,29 @@ function victory(el: HTMLElement, on: boolean) {
 function hideEnd() {
   ending = null;
   $('roomEnd').hidden = true;
+  hideAlbum();
+}
+
+/**
+ * The run's album as it ends: the party photo it began with, the bosses beaten and the party as it is left, after a win
+ * with the health it had as the last boss fell. Made by the host (or alone) and sent with the result to everyone.
+ */
+function albumOf(win: boolean): Album {
+  const S = game.S, shots = (run.shots ?? []).filter(s => s !== null), last = shots[shots.length - 1];
+  return {
+    win,
+    floor: run.floor,
+    boss: !win && S.spec.type === 'boss' ? bossOf(S.spec) : undefined,
+    photo: run.photo ?? { bg: 0, heroes: game.party.map(h => h.i) },
+    shots,
+    heroes: game.party.map(h => {
+      const was = win ? last?.heroes.find(o => o.i === h.i) : undefined;
+      return { i: h.i, hp: Math.max(0, was?.hp ?? h.hp), max: was?.max ?? h.max, arts: h.arts ?? [], t: h.tally ?? newTally() };
+    }),
+    rooms: run.path.reduce((a, p) => a + p.length, 0),
+    time: runCount(run)?.time ?? 0,
+    at: Date.now(),
+  };
 }
 
 $('forgeDone').addEventListener('click', () => {
@@ -912,7 +956,7 @@ $('setTips').addEventListener('change', () => {
 tutor.where = () => {
   const open = (id: string) => !$(id).hidden;
   if (intro.now || open('boot') || inMenu() || open('pause') || open('settingsScreen') || open('help') || open('waitScreen')) return 'menu';
-  if (open('roomEnd')) return 'end';
+  if (open('roomEnd') || open('runEnd')) return 'end';
   if (open('lootScreen')) return 'loot';
   if (open('eventScreen')) return 'event';
   if (open('campScreen')) return 'camp';
@@ -1169,7 +1213,7 @@ function welcome(id: string, name: string, key: string) {
       // everyone hears they are back at the table: the vote now waits for them too
       shareMap();
       net.sendTo(id, { t: 'screen', ...lastScreen });
-      if (ending?.kind === 'map') net.sendTo(id, { t: 'end', e: ending });
+      if (ending?.kind === 'map' || ending?.album) net.sendTo(id, { t: 'end', e: ending });
       game.float(game.S.Wx / 2, 20, `${name} вернулся`, '#c7cbe0');
       if (back.hero !== null) leftAt.delete(back.hero);
       setOnline('host');

@@ -2,6 +2,7 @@
 
 import { ROOM_TYPES, type RoomType } from './data';
 import { makeRng } from './rng';
+import type { Shot, StartPhoto } from './album';
 
 export interface MapNode { id: string; l: number; i: number; type: RoomType; next: string[] }
 
@@ -12,6 +13,10 @@ export interface Run {
   floors: MapNode[][][];
   /** The events the party has met this run, so the next event room is a new one; older saves have none. */
   seen?: string[];
+  /** The party photo of the pick screen, for the album at the run's end; older saves have none. */
+  photo?: StartPhoto;
+  /** The floors' bosses beaten, by floor, and how the heroes stood as each fell, for the album; older saves have none. */
+  shots?: (Shot | null)[];
 }
 
 export const FLOORS = 3;

@@ -306,6 +306,8 @@ function heroRow(box: HTMLElement, o: {
 /** The face under the mouse on the campaign screen, and the backdrop of its photo (a new one each time it opens). */
 let campPeek = -1;
 let campBg = Math.floor(Math.random() * BACKDROP_COUNT);
+/** The backdrop of the campaign's party photo as it is now: the run keeps it for its album. */
+export const campPhotoBg = () => campBg;
 
 /**
  * The campaign's screen: how many heroes go (1 to 3, one player plays them all), the party's photo, the twelve heroes on
