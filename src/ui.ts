@@ -999,8 +999,8 @@ export class Hud {
 
   /**
    * The party's ore on the strip and in the blacksmith's window. There a change plays (src/orefx.ts): the smith's gift
-   * pours in from his picture as the window opens, and ore bought with (here or by another player) goes out to the slab
-   * bought, or to the buyer's tab or face.
+   * ticks in as the window opens, and ore bought with (here or by another player) ticks out, the buyer's face on the
+   * sticker when it was another hero.
    */
   private ore() {
     const g = this.g, ore = g.bank.ore, at = this.atForge && !g.whet ? String(g.forge) : '', was = this.oreWas, visit = this.oreAt;
@@ -1013,18 +1013,12 @@ export class Hud {
     if (at && at !== visit) {
       // only when this screen had the ore from before the gift, on the map over the same room: a campaign reopened at
       // the blacksmith's (or a player back at the table) just shows it
-      if (g.gift > 0 && was === ore - g.gift && room === behind) this.counters.play(was, ore, { from: $('forgeArt'), wait: 450 });
+      if (g.gift > 0 && was === ore - g.gift && room === behind) this.counters.play(was, ore, { wait: 450 });
       else this.counters.show(ore);
       return;
     }
     if (!at || ore > was) { this.counters.show(ore); return; }
     const h = g.party.find(o => this.levels.get(o.i)!.some((v, k) => v > (seen.get(o.i)?.[k] ?? v)));
-    if (!h) { this.counters.play(was, ore); return; }
-    const k = this.levels.get(h.i)!.findIndex((v, j) => v > seen.get(h.i)![j]), key = k ? UPS[k - 1].k : 'n', box = $('forgeMine');
-    if (h === this.forgeHero()) this.counters.play(was, ore, { to: box.querySelector(`button[data-k="${key}"] > i[data-art]`) });
-    else this.counters.play(was, ore, {
-      to: box.querySelector(`button[data-hero="${h.i}"] img`) ?? $('ally' + h.i),
-      who: { face: faceUrl(h), col: h.def.col },
-    });
+    this.counters.play(was, ore, h && h !== this.forgeHero() ? { who: { face: faceUrl(h), col: h.def.col } } : {});
   }
 }
