@@ -34,7 +34,7 @@ export interface Stats {
   rooms: number;
   bosses: number;
   arts: number;
-  /** Every run's tallies added up; `top` and `rico` hold the best of them instead. */
+  /** Every run's tallies added up; `top`, `rico`, `multi` and `late` hold the best of them instead. */
   sum: Tally;
   /** One run's best: most kills, most rooms, the deepest floor (1 to 3), the fastest win in seconds (0 for none yet); who dealt the biggest blow. */
   best: { kills: number; rooms: number; floor: number; fast: number; topBy: string };
@@ -47,7 +47,7 @@ export interface Stats {
 /** The demo counts apart: its runs are not the full game's. */
 const KEY = stored('discodungeon.stats');
 /** The tallies that add up from run to run; the others are records. */
-const SUMS = ['dmg', 'kills', 'throws', 'crits', 'abs', 'ore', 'hurt', 'falls'] as const;
+const SUMS = ['dmg', 'kills', 'throws', 'crits', 'abs', 'ore', 'hurt', 'falls', 'walls', 'holes', 'clangs'] as const;
 
 const blank = (): Stats => ({
   runs: 0, online: 0, wins: 0, losses: 0, time: 0, rooms: 0, bosses: 0, arts: 0, sum: newTally(),
@@ -135,9 +135,10 @@ export function syncRun(run: Run, heroes: HeroState[], choosing: boolean) {
   for (const h of mine) {
     const key = h.def.key, t = h.tally!, seen = (c.tallies[key] ??= newTally(c.seed));
     for (const k of SUMS) {
-      const d = t[k] - seen[k];
-      if (d <= 0) continue;
-      stats.sum[k] += d;
+      // a tally or a count from before a number was kept has none of it
+      const d = (t[k] ?? 0) - (seen[k] ?? 0);
+      if (!(d > 0)) continue;
+      stats.sum[k] = (stats.sum[k] ?? 0) + d;
       seen[k] = t[k];
       if (k === 'kills') heroStats(key).kills += d;
     }
@@ -145,6 +146,8 @@ export function syncRun(run: Run, heroes: HeroState[], choosing: boolean) {
     seen.rico = Math.max(seen.rico, t.rico);
     if (t.top > stats.sum.top) { stats.sum.top = t.top; stats.best.topBy = key; }
     stats.sum.rico = Math.max(stats.sum.rico, t.rico);
+    stats.sum.multi = Math.max(stats.sum.multi ?? 0, t.multi ?? 0);
+    stats.sum.late = Math.max(stats.sum.late ?? 0, t.late ?? 0);
   }
   if (mine.length) {
     stats.best.kills = Math.max(stats.best.kills, Object.values(c.tallies).reduce((n, t) => n + t.kills, 0));

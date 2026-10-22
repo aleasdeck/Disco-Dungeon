@@ -74,6 +74,8 @@ const el = <K extends keyof SVGElementTagNameMap>(parent: Element, tag: K, at: R
 
 export class MapView {
   onChoose: (id: string) => void = () => {};
+  /** An event this player has just opened waits in the next event room: the event rooms ahead wear a «Новое» sticker. */
+  fresh = false;
 
   render(run: Run, canChoose: boolean, party: MapParty, votes?: MapVotes) {
     const f = run.floor, layers = run.floors[f];
@@ -146,6 +148,11 @@ export class MapView {
       if (beer) el(g, 'image', { href: beer.src, x: x + r - 14, y: y - r - 6, width: 26, height: 26, class: 'mbeer' });
       else if (n.beer) el(g, 'circle', { cx: x + r - 2, cy: y - r + 6, r: 9, class: 'mbeer ring' });
       el(g, 'text', { x, y: y + r + (pic ? 17 : 14), class: 'mlabel' }).textContent = t.name;
+      if (this.fresh && n.type === 'event' && n.l > atL) {
+        const sg = el(g, 'g', { class: 'mnew', transform: `rotate(-8 ${x - r} ${y - r})` });
+        el(sg, 'rect', { x: x - r - 26, y: y - r - 9, width: 56, height: 18 });
+        el(sg, 'text', { x: x - r + 2, y: y - r + 4 }).textContent = 'НОВОЕ';
+      }
       // the players' heroes stand on the room's top rim, each face in its hero's colour
       const ps = votes?.pips[n.id] ?? [];
       ps.forEach((p, k) => {

@@ -699,6 +699,13 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .tr-head { grid-column: 1 / -1; margin: 0; color: #d6cfbd; font-size: 14px; }
 .tr-head b { color: var(--gold); font: 600 16px Oswald, sans-serif; }
 .col-grid:has(.tr-card) { grid-template-columns: 1fr; }
+/* the events: a picture of the scene; the trophies and events not opened yet, dark, with the feat or the hint and how far it got */
+.col-ev-pic { width: 72px; height: 72px; overflow: hidden; clip-path: var(--cut-tile); background: #2a2019; }
+.card .col-ev-pic img { width: 100%; height: 100%; border: 0; border-radius: 0; clip-path: none; object-fit: cover; }
+.card.shut .col-art-ico > * { filter: brightness(0) opacity(0.55); }
+.card.shut .col-ev-pic img { filter: blur(5px) brightness(0.4) saturate(0.4); scale: 1.15; }
+.card.shut h3 { color: var(--muted); }
+.col-feat { margin-top: 4px; font-weight: 700; color: var(--gold); }
 .tr-card { grid-template-columns: 84px minmax(0, 1fr); }
 .tr-card h3 small { margin-left: 6px; font: 500 14px Oswald, sans-serif; color: var(--muted); }
 .tr-pic { display: grid; place-items: center; width: 84px; height: 84px; background: #2a2019; clip-path: var(--cut-tile); }
@@ -842,6 +849,9 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 #map .edge.tunnel { stroke: #d9a03a; stroke-dasharray: 3 5; stroke-width: 3.5; }
 #map .edge.tunnel.walked, #map .edge.tunnel.next { stroke: #f0b84a; }
 #map .mbeer { pointer-events: none; }
+#map .mnew { pointer-events: none; }
+#map .mnew rect { fill: var(--gold-1); stroke: #2a1a0d; stroke-width: 1.5; }
+#map .mnew text { font: 700 12px Oswald, sans-serif; letter-spacing: 0.08em; text-anchor: middle; fill: #2a1a0d; }
 #map .mbeer.ring { fill: none; stroke: rgba(217, 160, 58, 0.85); stroke-width: 3; }
 #map .gate path { fill: #6b5a48; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; }
 #map .mnode .disc { stroke: var(--ink); stroke-width: 2.5; }
@@ -1087,6 +1097,9 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .ev-opt small { font: 15px var(--hand); color: #ff8a7a; }
 /* plain running text, so a long effect wraps inside itself rather than dropping whole under its odds */
 .ev-fx { display: block; font: 18px/1.2 var(--hand); }
+/* what the choice opened (src/progress.ts), and the sticker of an event just opened */
+.ev-news { display: block; margin-top: 6px; font: 700 18px/1.2 var(--hand); color: var(--gold-1); }
+.ev-new { display: inline-block; margin-left: 12px; padding: 3px 10px; vertical-align: middle; font: 700 14px/1.2 Oswald, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: #2a1a0d; background: var(--gold-1); rotate: -4deg; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.4); }
 .ev-fx em { font-style: normal; margin-right: 10px; }
 .ev-fx .good { color: #8ee07f; }
 .ev-fx .bad { color: #ff7d70; }
@@ -1759,6 +1772,10 @@ body:not(.demo) .demo-only, body.demo .full-only { display: none !important; }
 .re-gain .stars { font-size: 20px; }
 .re-gain span:not(.stars) { font: 700 17px/1 var(--hand); color: var(--gold); }
 .re-new { padding: 4px 16px 4px 4px; background: color-mix(in srgb, var(--c) 28%, rgba(18, 12, 9, 0.6)); box-shadow: 0 0 0 2px var(--gold-1); }
+.re-thing { --c: #6e5c49; }
+.re-thing img { clip-path: none; border-radius: 6px; object-fit: cover; }
+.re-art { display: grid; place-items: center; width: 44px; height: 44px; flex: none; }
+.re-art > .ico, .re-art > .art { width: 40px; height: 40px; border: 0; background: none; border-radius: 0; clip-path: none; }
 .re-new em { display: block; font: 600 13px/1.1 Oswald, sans-serif; font-style: normal; color: var(--gold-1); text-transform: uppercase; letter-spacing: 0.08em; }
 /* the numbers' board */
 .re-panel { width: min(1180px, 100%); display: flex; flex-direction: column; gap: 14px; animation: re-up 0.5s 1.2s ease-out both; }
