@@ -1,7 +1,7 @@
 // Main menu and its screens: collection, settings and the online lobby.
 
 import { BIOMES, HEROES, MOB_HP_MUL, KINDS, MOBS, fullHit, heroesByKind, kindOf, type MobKind } from './data';
-import { drawPortrait, faceUrl, mobIcon } from './ui';
+import { drawPortrait, drawShadow, faceUrl, mobIcon, shadowUrl } from './ui';
 import { ARTIFACTS } from './artifacts';
 import { artIcon } from './icons';
 import { BOSS_UP, CASTS } from './room';
@@ -14,6 +14,7 @@ import { sound } from './sound';
 import type { Player } from './net';
 import { uiArt } from './assets';
 import { BACKDROP_COUNT, drawPhoto, savePhoto, type PhotoSeat } from './photo';
+import { locked } from './demo';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -34,11 +35,20 @@ export function renderCollection(tab: 'heroes' | 'mobs' | 'arts' | 'trinkets') {
   const grid = $('colGrid');
   grid.innerHTML = '';
   if (tab === 'heroes') {
-    // the same order as the pick screens: the biggest discs first
-    heroesByKind().flat().forEach(i => {
+    // the same order as the pick screens: the biggest discs first; in the demo its own heroes before the rest
+    heroesByKind().flat().sort((a, b) => +locked(HEROES[a].key) - +locked(HEROES[b].key)).forEach(i => {
       const def = HEROES[i], card = document.createElement('article');
       card.className = 'card';
       const cv = document.createElement('canvas');
+      // the demo's other heroes: a dark shape and nothing told
+      if (locked(def.key)) {
+        drawShadow(cv, { i, def });
+        card.classList.add('shut');
+        card.innerHTML = '<div></div><div><h3>???</h3><p>Этот герой ждёт в полной версии игры.</p></div>';
+        card.firstElementChild!.replaceWith(cv);
+        grid.appendChild(card);
+        return;
+      }
       drawPortrait(cv, { i, def });
       // starting health, then the same words as the disc upgrades: damage of a full straight throw, speed next to Ash's, speed kept off a wall
       const stats = `<dt>HP</dt><dd>${def.hp}</dd><dt>Урон</dt><dd>${fullHit(def.m, def.pw)}</dd><dt>Скорость</dt><dd>${Math.round(def.pw * 100)}%</dd><dt>Отскок</dt><dd>${Math.round(def.e * 100)}%</dd>`;
@@ -76,7 +86,8 @@ export function renderCollection(tab: 'heroes' | 'mobs' | 'arts' | 'trinkets') {
  * device. A trinket nobody has picked up yet is a dark shape with only its floor told.
  */
 function renderTrinkets(grid: HTMLElement) {
-  const list = TRINKETS.filter(t => t.drawn), order = heroesByKind().flat();
+  // the demo: its floor's trinkets and its heroes' lines
+  const list = TRINKETS.filter(t => t.drawn && t.floor < FLOORS), order = heroesByKind().flat().filter(i => !locked(HEROES[i].key));
   const all = list.length * order.length, open = list.reduce((n, t) => n + order.filter(i => opened(t.key, HEROES[i].key)).length, 0);
   const head = document.createElement('p');
   head.className = 'tr-head';
@@ -276,7 +287,17 @@ function heroRow(box: HTMLElement, o: {
     faces.className = 'pk-faces';
     group.append(faces);
     for (const i of list) {
-      const def = HEROES[i], m = o.mark(i), b = document.createElement('button');
+      const def = HEROES[i], b = document.createElement('button');
+      // the demo's other heroes: a dark shape in its frame with a «?» for the name, not to be picked or read
+      if (locked(def.key)) {
+        b.className = 'pick shut';
+        b.disabled = true;
+        b.setAttribute('aria-label', 'Герой из полной версии');
+        b.innerHTML = `<img src="${shadowUrl({ i, def })}" alt=""><span>?</span><b class="pick-q" aria-hidden="true">?</b>`;
+        faces.append(b);
+        continue;
+      }
+      const m = o.mark(i);
       b.className = 'pick' + (m.cls ? ' ' + m.cls : '');
       b.style.setProperty('--c', def.col);
       b.dataset.i = String(i);
@@ -398,7 +419,7 @@ export function renderLobby(o: {
   $('lobbyRoomCode').textContent = o.code;
   const me = o.players.find(p => p.id === o.me), mine = me?.hero ?? null;
   const ownerOf = (i: number) => o.players.find(p => p.hero === i);
-  if (lobbyShown < 0) lobbyShown = mine ?? Math.max(0, HEROES.findIndex((_, i) => !ownerOf(i)));
+  if (lobbyShown < 0) lobbyShown = mine ?? Math.max(0, HEROES.findIndex((h, i) => !ownerOf(i) && !locked(h.key)));
   const photo = $<HTMLCanvasElement>('lobbyPhoto');
   zoomable(photo.parentElement!);
   const paint = () => {

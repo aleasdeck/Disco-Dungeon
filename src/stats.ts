@@ -5,6 +5,7 @@
 
 import { newTally, type HeroState, type Tally } from './game';
 import { FLOORS, type Run } from './run';
+import { stored } from './demo';
 
 /** One hero's runs on this device. */
 export interface HeroStats { runs: number; wins: number; time: number; kills: number }
@@ -43,7 +44,8 @@ export interface Stats {
   cur: Cur | null;
 }
 
-const KEY = 'discodungeon.stats';
+/** The demo counts apart: its runs are not the full game's. */
+const KEY = stored('discodungeon.stats');
 /** The tallies that add up from run to run; the others are records. */
 const SUMS = ['dmg', 'kills', 'throws', 'crits', 'abs', 'ore', 'hurt', 'falls'] as const;
 
