@@ -59,6 +59,8 @@ let choosing = true;
 let votes: Votes = {};
 /** Client: the heroes whose players the host waits for. */
 let voters: number[] = [];
+/** Client: the heroes whose players pick the next room: the voters still on their feet. */
+let walkers: number[] = [];
 /** The event the party stands in between the map and the next room; null anywhere else. */
 let ev: EventState | null = null;
 /** The seed of the event whose outcome this player has read and closed: the window stays shut for it. */
@@ -806,11 +808,11 @@ function lootVotes(): LootVotes | undefined {
   return { faces, mine: me !== null ? picks[me] ?? null : null, note };
 }
 
-// alone a click on the map goes there; online it is a vote, and the party goes once everyone here picked the same room
+// alone a click on the map goes there; online it is a vote, and the party goes once everyone here on their feet picked the same room
 mapView.onChoose = id => {
   const me = myHero();
   if (!game.online) choose(id);
-  else if (me === null) return;
+  else if (me === null || !mapTable().includes(me)) return;
   else if (mode === 'host') vote(me, id);
   else {
     // the token moves at once; the host's count follows
@@ -823,9 +825,21 @@ mapView.onChoose = id => {
 /** Host: the heroes whose players are here to vote; the host plays the others, and they have no say. */
 const atTable = () => players.filter(p => p.hero !== null && seated(p)).map(p => p.hero!);
 
+/**
+ * Host: the heroes whose players pick the next room: the ones here still on their feet. A fallen hero's player watches the
+ * others choose and goes along; with everyone here fallen (the host plays a standing one) they all choose as before.
+ */
+function walking() {
+  const t = atTable(), up = t.filter(h => (game.party.find(o => o.i === h)?.hp ?? 0) > 0);
+  return up.length ? up : t;
+}
+
+/** Online: the heroes whose players pick the next room, as the host counts them. */
+const mapTable = () => (mode === 'host' ? walking() : mode === 'client' ? walkers : []);
+
 /** Host: a player points at a room. */
 function vote(hero: number, id: string) {
-  if (!choosing || !reachable(run, run.floor).includes(id)) return;
+  if (!choosing || !reachable(run, run.floor).includes(id) || !walking().includes(hero)) return;
   votes[hero] = id;
   settle();
 }
@@ -833,7 +847,7 @@ function vote(hero: number, id: string) {
 /** Host: go where everyone here agreed, or show them all how the vote stands. */
 function settle() {
   if (!choosing) return;
-  const go = agreed(votes, atTable());
+  const go = agreed(votes, walking());
   if (go) choose(go);
   else shareMap();
 }
@@ -841,7 +855,7 @@ function settle() {
 /** Host: tell everyone where the party stands on the map, and show it on the host's own map too. */
 function shareMap() {
   if (mode !== 'host' || !started) return;
-  const m: MapState = { run, choosing, votes, voters: atTable(), ev, camp, loot };
+  const m: MapState = { run, choosing, votes, voters: atTable(), walkers: walking(), ev, camp, loot };
   net.broadcast({ t: 'map', m });
   if (!$('mapScreen').hidden) showMap(true);
 }
@@ -854,14 +868,16 @@ function mapParty(): MapParty {
 
 /** Online: whose token stands on which room, and whom the party still waits for. Alone there is nothing to show. */
 function mapVotes(): MapVotes | undefined {
-  const table = mode === 'host' ? atTable() : mode === 'client' ? voters : [];
-  if (!choosing || table.length < 2) return undefined;
-  const me = myHero();
+  const table = mapTable(), me = myHero();
+  // this player's hero has fallen: the others pick the room, and the map says so
+  const out = me !== null && (mode === 'host' ? atTable() : mode === 'client' ? voters : []).includes(me) && !table.includes(me);
+  if (!choosing || (table.length < 2 && !out)) return undefined;
   const nameOf = (h: number) => players.find(p => p.hero === h)?.name ?? HEROES[h].name;
   const pips: MapVotes['pips'] = {};
   for (const h of table) if (votes[h]) (pips[votes[h]] ??= []).push({ hero: h, col: HEROES[h].col, name: nameOf(h), face: faceUrl(game.party.find(o => o.i === h) ?? { i: h, def: HEROES[h] }) });
   const idle = table.filter(h => !votes[h]).map(h => (h === me ? 'ты' : nameOf(h)));
-  const note = idle.length === table.length ? 'Идём, когда все нажмут одну и ту же комнату.'
+  const note = out ? `Ты ${HEROES[me].fem ? 'пала' : 'пал'}: комнату выбирают живые, ты идёшь с ними.`
+    : idle.length === table.length ? 'Идём, когда все нажмут одну и ту же комнату.'
     : idle.length ? `Ещё не выбрали: ${idle.join(', ')}.`
     : 'Голоса разошлись. Договоритесь и нажмите одну комнату.';
   return { pips, mine: me !== null ? votes[me] ?? null : null, note };
@@ -1416,7 +1432,7 @@ net.onMsg = (from, m) => {
     wait('');
   } else if (m.t === 'map') {
     const went = choosing && !m.m.choosing;
-    ({ run, choosing, votes, voters } = m.m);
+    ({ run, choosing, votes, voters, walkers } = m.m);
     const mine = myHero();
     if (started && mine !== null) beginRun(run, [HEROES[mine].key], true);
     ev = m.m.ev ?? null;
