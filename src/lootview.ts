@@ -14,15 +14,18 @@ import { faceUrl } from './ui';
 
 const $ = (id: string) => document.getElementById(id)!;
 
-/** The boss's hoard after the fight, by the floor whose boss fell. */
-const SCENES = [
-  'Король-в-короне грохнулся с трона, корона укатилась под лавку. Под мантией нашёлся сундучок с личными вещами его величества: всё подписано, всё немного липкое.',
-  'Ледяной лич рассыпался горкой инея. В его морозилке, между пельменями и чьей-то челюстью, лежат странные штуки. Холодные, но в хозяйстве пригодятся.',
-  'Владыка кузни остыл и треснул пополам. Из трещины вываливается всё, что он годами прятал от гномов.',
-];
+/** The boss's hoard after the fight, by the boss that fell; its picture is `loot_<boss>` among the events in the manifest. */
+const SCENES: Record<string, string> = {
+  king: 'Король-в-короне грохнулся с трона, корона укатилась под лавку. Под мантией нашёлся сундучок с личными вещами его величества: всё подписано, всё немного липкое.',
+  ratswarm: 'Крысиная свора разбежалась по норам, самые медленные прилегли кверху пузом. В гнезде из краденых носков нашлась их общая заначка. Пахнет так себе, зато блестит.',
+  pahan: 'Пахан прилёг на пол и больше не командует. Под матрасом у него нашёлся общак: вся отжатая руда и пара вещиц на чёрный день. День настал.',
+  lich: 'Ледяной лич рассыпался горкой инея. В его морозилке, между пельменями и чьей-то челюстью, лежат странные штуки. Холодные, но в хозяйстве пригодятся.',
+  fridge: 'Холодильник-людоед опрокинулся кверху валенками и потёк от обиды. Из него вывалились огурцы, курица и всё, что он так и не смог переварить.',
+  dancer: 'Мёртвый танцор диско сел на шпагат и больше не встал, штаны сдались первыми. Из карманов пиджака высыпалось всё, что ему кидали поклонницы.',
+};
 
-/** Picture of the hoard by the floor (events in the manifest), until painted the boss room's sticker. */
-const ART = ['loot_king', 'loot_lich', 'loot_forge'];
+/** Whose hoard a save from before the boss was written down shows: the floor's first boss. */
+const FLOOR_BOSS = ['king', 'lich'];
 
 /** Trophies an event gave: what the party finds, by the event's key. */
 const FOUND: Record<string, string> = {
@@ -55,7 +58,8 @@ export class LootView {
    */
   render(loot: LootState, me: HeroState | null, party: HeroState[], votes?: LootVotes, nameOf?: (h: HeroState) => string, team = false, kept = false) {
     // an event's trophies come with the event's own picture and name
-    const key = loot.from ?? ART[loot.floor] ?? ART[0], pic = eventArt.get(key) ?? uiArt.get(loot.from ? 'room_event' : 'room_boss'), img = $('lootImg') as HTMLImageElement;
+    const boss = loot.boss ?? FLOOR_BOSS[loot.floor] ?? FLOOR_BOSS[0];
+    const key = loot.from ?? `loot_${boss}`, pic = eventArt.get(key) ?? uiArt.get(loot.from ? 'room_event' : 'room_boss'), img = $('lootImg') as HTMLImageElement;
     if (pic && img.getAttribute('src') !== pic.src) img.src = pic.src;
     img.hidden = !pic;
     $('lootArt').classList.toggle('stub', !eventArt.has(key));
@@ -75,7 +79,7 @@ export class LootView {
         + away.map(h => `<p class="camp-ask">${nameOf?.(h) ?? h.def.name} выберет свой трофей, когда вернётся.</p>`).join('');
     } else {
       $('lootText').textContent = kept ? 'Пока тебя не было, остальные разобрали свои трофеи. Твой отложили до твоего возвращения.'
-        : loot.from ? FOUND[loot.from] ?? 'Здесь нашлись трофеи.' : `${SCENES[loot.floor] ?? SCENES[0]} ${healed}`;
+        : loot.from ? FOUND[loot.from] ?? 'Здесь нашлись трофеи.' : `${SCENES[boss] ?? SCENES.king} ${healed}`;
       const ask = solo || kept ? 'Забери один трофей' : team && me ? `<img src="${faceUrl(me)}" alt="">Выбери трофей ${me.def.dat}` : 'Каждый берёт по трофею';
       $('lootOpts').innerHTML = `<p class="camp-ask${team && me ? ' camp-for' : ''}"${me ? ` style="--c:${me.def.col}"` : ''}>${ask}</p>`
         + loot.offer.map((k, i) => this.option(k, i, votes)).join('');

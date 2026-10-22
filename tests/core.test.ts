@@ -910,13 +910,14 @@ describe('boss trophies', () => {
   });
 
   it('shares all three among a trio, and keeps what is left for a hero whose player dropped out', () => {
-    const party = newParty([0, 1, 2]), loot = newLoot(79, 0, party), table = [0, 2];
+    const party = newParty([0, 1, 2]), loot = newLoot(79, 0, party, 'pahan'), table = [0, 2];
     loot.picks[0] = 2;
     loot.picks[2] = 0;
     expect(lootAgreed(loot, table)).toBe(true);
     settleLoot(loot, party, table);
     expect([party[0].arts, party[1].arts ?? [], party[2].arts]).toEqual([[loot.offer[2]], [], [loot.offer[0]]]);
-    expect(party[1].kept).toEqual({ seed: 79, floor: 0, offer: [loot.offer[1]] });
+    // the pile keeps whose hoard it was, for the window's picture
+    expect(party[1].kept).toEqual({ seed: 79, floor: 0, offer: [loot.offer[1]], boss: 'pahan' });
     // back at the table, the player takes it
     expect(takeKept(party, 1, loot.offer[1])).toBe(true);
     expect(party[1].arts).toEqual([loot.offer[1]]);
