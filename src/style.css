@@ -1573,7 +1573,6 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .pick-panel .pick-print.zoomed { --ph: min(calc(100vw - 32px), calc(100dvh - 32px)); position: fixed; z-index: 60; left: 50%; top: 50%; margin: 0; padding: 10px; translate: -50% -50%; rotate: -1deg; box-shadow: 0 0 0 100vmax rgba(10, 6, 4, 0.82), 0 10px 22px rgba(0, 0, 0, 0.55); cursor: zoom-out; }
 .pick-tools { display: flex; gap: 10px; }
 .pick-tools .btn { padding: 6px 16px 7px; font-size: 15px; }
-.pick-tools .btn i { font-style: normal; font-family: system-ui, sans-serif; margin-right: 5px; }
 /* the twelve on one row, kind after kind, each kind on its own piece of cardboard with its name over its faces */
 .pick-row { grid-column: 1 / -1; grid-row: 1; display: flex; justify-content: center; gap: 18px; overflow-x: auto; scrollbar-width: thin; padding: 4px 2px 6px; }
 .pick-kind { display: flex; flex-direction: column; gap: 4px; flex: none; padding: 5px 7px 7px; background: rgba(0, 0, 0, 0.28); clip-path: var(--cut-card); }
@@ -1629,7 +1628,7 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
   .pick-print::after { right: -12px; }
   .pick-tools { grid-column: 1; grid-row: 2; justify-self: center; gap: 6px; }
   .pick-tools .btn { display: grid; justify-items: center; width: 61px; padding: 5px 4px 6px; font-size: 12px; line-height: 1.05; }
-  .pick-tools .btn i { margin: 0; font-size: 18px; line-height: 1; }
+  .pick-tools .btn > i[data-art] { margin: 0 0 2px; }
   .pick-row { grid-column: 2; grid-row: 2; flex-direction: column; gap: 5px; padding: 0; overflow: visible; }
   .pick-kind { padding: 3px 5px 5px; gap: 2px; }
   .pk-faces { gap: 4px; }

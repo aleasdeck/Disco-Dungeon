@@ -183,7 +183,7 @@
       <div class="pick-body">
         <div class="pick-pic">
           <div class="pick-print"><canvas id="heroPhoto" width="1024" height="1024" role="img" aria-label="Фото отряда"></canvas></div>
-          <div class="pick-tools"><button class="btn" id="heroBg" title="Другой фон"><i aria-hidden="true">⇄</i>Фон</button><button class="btn" id="heroSave" title="Сохранить фото"><i aria-hidden="true">⤓</i>Фото</button></div>
+          <div class="pick-tools"><button class="btn" id="heroBg" title="Другой фон"><i data-art="m_bg" aria-hidden="true"></i>Фон</button><button class="btn" id="heroSave" title="Сохранить фото"><i data-art="m_photo" aria-hidden="true"></i>Фото</button></div>
         </div>
         <div class="pick-side">
           <div id="heroPicks" class="pick-row" role="group" aria-label="Герои"></div>
@@ -216,7 +216,7 @@
         <div class="pick-body">
           <div class="pick-pic">
             <div class="pick-print"><canvas id="lobbyPhoto" width="1024" height="1024" role="img" aria-label="Фото отряда"></canvas></div>
-            <div class="pick-tools"><button class="btn" id="lobbyBg" title="Другой фон"><i aria-hidden="true">⇄</i>Фон</button><button class="btn" id="lobbySave" title="Сохранить фото"><i aria-hidden="true">⤓</i>Фото</button></div>
+            <div class="pick-tools"><button class="btn" id="lobbyBg" title="Другой фон"><i data-art="m_bg" aria-hidden="true"></i>Фон</button><button class="btn" id="lobbySave" title="Сохранить фото"><i data-art="m_photo" aria-hidden="true"></i>Фото</button></div>
           </div>
           <div class="pick-side">
             <div class="room-code">Код комнаты <b id="lobbyRoomCode"></b> <button class="btn sm" id="lobbyCopy"><i data-art="m_link" aria-hidden="true"></i>Скопировать ссылку</button></div>
@@ -304,9 +304,9 @@
             <li><i class="help-ico" data-art="art_xray" aria-hidden="true"></i><p><b>Прицел.</b> Пунктир ведёт до первого, во что диск врежется, или докуда докатится. Что будет после отскока, угадывай сам.</p></li>
             <li><i class="help-ico" data-art="up_dmg" aria-hidden="true"></i><p><b>Урон.</b> Бьёт <em class="k-hurt">скорость</em>: чем быстрее диск в момент удара и чем прямее входит, тем больнее. Вскользь и на излёте почти не ранит. Удар на полной натяжке есть в карточке героя.</p></li>
             <li><i class="help-ico" data-art="up_bounce" aria-hidden="true"></i><p><b>Отскоки.</b> От стен и колонн диск отлетает, теряя часть скорости: сколько, решает его «Отскок». У Дрищей диски прыгучие, у Толстяков тяжёлые. От врага диск отскакивает вяло, от ресурса почти глохнет: один бросок, одна цель. Рикошет за каждый отскок до удара бьёт на <em class="k-hurt">+1</em>, до +4.</p></li>
-            <li><i class="help-ico" data-art="art_glasseye" aria-hidden="true"></i><p><b><em class="k-crit">«ТОЧНО!»</em></b> Диск влетел во врага, ни обо что не стукнувшись, и почти в самый центр: урон <em class="k-crit">×1.5</em>. Стена, колонна, ресурс или другой враг по пути его отменяют, другой диск нет.</p></li>
-            <li><i class="help-ico" data-art="art_bells" aria-hidden="true"></i><p><b><em class="k-ring">«ЗВОН»</em>.</b> Диски двух разных героев с размаху стукнулись: следующий удар каждого по врагу <em class="k-ring">×2</em>. Брошенные диски лежат на столе до конца хода, так что целься и в них.</p></li>
-            <li><i class="help-ico" data-art="ico_heat" aria-hidden="true"></i><p><b>Ямы и шипы.</b> Диск в яме: <em class="k-hurt">−2 HP</em> своему герою. Остался на шипах или в лаве: <em class="k-hurt">−3</em> и <em class="k-hurt">−4</em>. Сквозь героев диски пролетают, своих не зашибёшь.</p></li>
+            <li><i class="help-ico" data-art="ico_crit" aria-hidden="true"></i><p><b><em class="k-crit">«ТОЧНО!»</em></b> Диск влетел во врага, ни обо что не стукнувшись, и почти в самый центр: урон <em class="k-crit">×1.5</em>. Стена, колонна, ресурс или другой враг по пути его отменяют, другой диск нет.</p></li>
+            <li><i class="help-ico" data-art="ico_ring" aria-hidden="true"></i><p><b><em class="k-ring">«ЗВОН»</em>.</b> Диски двух разных героев с размаху стукнулись: следующий удар каждого по врагу <em class="k-ring">×2</em>. Брошенные диски лежат на столе до конца хода, так что целься и в них.</p></li>
+            <li><i class="help-ico" data-art="ico_pit" aria-hidden="true"></i><p><b>Ямы и шипы.</b> Диск в яме: <em class="k-hurt">−2 HP</em> своему герою. Остался на шипах или в лаве: <em class="k-hurt">−3</em> и <em class="k-hurt">−4</em>. Сквозь героев диски пролетают, своих не зашибёшь.</p></li>
             <li><i class="help-ico" data-art="ico_move" aria-hidden="true"></i><p><b>Куда встанешь.</b> Все диски за ход герой бросает с одной клетки, а после хода переходит к последнему своему диску (тот в яме: к предыдущему). Бросок решает и то, где герой встретит врагов.</p></li>
         </ul>
         <ul class="help-list" data-tab="fight" hidden>
