@@ -2,8 +2,8 @@
 
 import type { Knock } from './fx';
 import type { Bet, Floor } from './events';
-import { BIOMES, MOB_HP_MUL, MOBS, NODES, TILE, isRanged, mobSize, type Biome, type MobKind, type NodeKind, type RoomType } from './data';
-import { makeRng } from './rng';
+import { BIOMES, MOB_HP_MUL, MOBS, NODES, TILE, isRanged, mobSize, toughOf, type Biome, type MobKind, type NodeKind, type RoomType } from './data';
+import { makeRng, mulberry32 } from './rng';
 import { DEMO, DEMO_BOSS } from './demo';
 import { LAYERS } from './run';
 import { TRINKET_CHANCE, trinketsOf } from './trinkets';
@@ -255,12 +255,29 @@ export interface Layout {
   dmgMul: number;
 }
 
-export function newMob(k: MobKind, x: number, y: number, hpMul = 1, dmgAdd = 0, dmgMul = 1): Mob {
+/**
+ * An enemy's blow: its own plus the floor's extra, cut for a smaller party, plus `plus` (a boss's BOSS_UP), and then
+ * `toughOf` more. Blows are a few points, so a plain rounding would leave a 3 a 3 and make a 5 a 6: the fraction left
+ * is paid as one point more by a coin instead, the same for every enemy of a kind in a room (by the room's seed), so on
+ * the average every blow grows by the same share and two skeletons side by side still hit alike. Without a `room` (the
+ * warm-up dummies, the dragon's eggs) or for a kind that doesn't hit the blow stays as it was.
+ */
+export function mobDmg(k: MobKind, dmgAdd = 0, dmgMul = 1, room: number | null = null, plus = 0) {
+  const n = Math.max(1, Math.round((MOBS[k].dmg + dmgAdd) * dmgMul)) + plus;
+  if (room === null || !MOBS[k].dmg) return n;
+  let h = room | 0;
+  for (let i = 0; i < k.length; i++) h = Math.imul(h ^ k.charCodeAt(i), 16777619);
+  const x = n * toughOf(k), whole = Math.floor(x + 1e-9);
+  return whole + (mulberry32(h)() < x - whole ? 1 : 0);
+}
+
+/** An enemy; one a room's fight brings (`room`, its seed) gets `toughOf` more HP and blow, see `mobDmg`. */
+export function newMob(k: MobKind, x: number, y: number, hpMul = 1, dmgAdd = 0, dmgMul = 1, room: number | null = null): Mob {
   const d = MOBS[k];
-  const hp = Math.round(d.hp * hpMul);
+  const hp = Math.round(d.hp * hpMul * (room === null ? 1 : toughOf(k)));
   return {
     k, name: d.name, r: d.r, speed: d.speed, reach: d.reach, armor: d.armor,
-    hp, max: hp, dmg: Math.max(1, Math.round((d.dmg + dmgAdd) * dmgMul)), x, y, flash: 0, dead: 0, burn: 0, intent: null,
+    hp, max: hp, dmg: mobDmg(k, dmgAdd, dmgMul, room), x, y, flash: 0, dead: 0, burn: 0, intent: null,
     fx: x, fy: y, tx: x, ty: y, hop: 0, owner: -1, born: 0,
   };
 }
@@ -886,8 +903,8 @@ export function generate(spec: RoomSpec): Layout {
     const far2 = (x: number, y: number) => far(x, y) && onMain(x, y), short = (x: number, y: number) => x / Wx + y / Wy < 1.25 && onMain(x, y);
     const q = placeCell(sz, r, far2) ?? placeCell(sz, r, short) ?? placeCell(sz, r, far2, true) ?? placeCell(sz, r, short, true) ?? (piece && placeCell(sz, r, onMain, true)) ?? placeCell(sz, r, any, true);
     if (!q) continue;
-    const m = newMob(k, q[0], q[1], hpMul, dmgAdd, dmgMul), up = MOBS[k].boss && BOSS_UP[k], at = Math.max(1, Math.min(3, spec.heroes ?? 3)) - 1;
-    if (up) { m.hp = m.max = Math.round(m.hp * up.hp[at]); m.dmg += up.dmg[at]; }
+    const m = newMob(k, q[0], q[1], hpMul, dmgAdd, dmgMul, spec.seed), up = MOBS[k].boss && BOSS_UP[k], at = Math.max(1, Math.min(3, spec.heroes ?? 3)) - 1;
+    if (up) { m.hp = m.max = Math.round(m.hp * up.hp[at]); m.dmg = mobDmg(k, dmgAdd, dmgMul, spec.seed, up.dmg[at]); }
     mobs.push(m);
     objs.push({ x: q[0], y: q[1], r: MOBS[k].r });
     if (piece) bossCell = (q[1] / TILE - 1) * gw + q[0] / TILE - 1;

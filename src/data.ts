@@ -342,6 +342,13 @@ export interface MobDef {
  */
 export const MOB_HP_MUL = 1.06;
 
+/**
+ * Runs got too easy (thread «Сложность врагов»): every enemy has this much more HP and hits this much harder, a floor boss
+ * (its later phases too) by `boss`, the rest (elites, escorts, summons) by `mob`. See `mobDmg` in room.ts for the blow's rounding.
+ */
+export const TOUGH = { mob: 1.1, boss: 1.05 };
+export const toughOf = (k: MobKind) => (MOBS[k].boss ? TOUGH.boss : TOUGH.mob);
+
 export const MOBS: Record<MobKind, MobDef> = {
   skel: { name: 'Скелет', floor: 0, hp: 9, r: 7, speed: 34, reach: 30, dmg: 4, fig: 31, txt: 'Идёт к ближайшему герою и бьёт вблизи.', acc: 'Скелета' },
   archer: { name: 'Гоблин-лучник', floor: 0, hp: 6, r: 6, speed: 32, reach: 999, dmg: 3, fig: 26, txt: 'Стреляет через всю комнату, но только в того, кого видит. За колонной не достанет: сперва выйдет на линию огня.', acc: 'Гоблина-лучника' },

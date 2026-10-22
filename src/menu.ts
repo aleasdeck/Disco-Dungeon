@@ -1,6 +1,6 @@
 // Main menu and its screens: collection, settings and the online lobby.
 
-import { BIOMES, HEROES, MOB_HP_MUL, KINDS, MOBS, fullHit, heroesByKind, kindOf, type MobKind } from './data';
+import { BIOMES, HEROES, MOB_HP_MUL, KINDS, MOBS, fullHit, heroesByKind, kindOf, toughOf, type MobKind } from './data';
 import { drawPortrait, drawShadow, faceUrl, mobIcon, shadowUrl } from './ui';
 import { ARTIFACTS } from './artifacts';
 import { artIcon } from './icons';
@@ -81,7 +81,7 @@ export function renderCollection(tab: 'heroes' | 'mobs' | 'arts' | 'events' | 't
       const d = MOBS[k], up = BOSS_UP[k], card = document.createElement('article');
       card.className = 'card';
       card.innerHTML = `<img src="${mobIcon(k)}" alt=""><div><h3>${d.name}</h3><p><b>${FLOOR_NAMES[d.floor]}${d.boss ? ', босс' : CASTS.some(c => c.elite === k) ? ', элита' : ''}.</b> ${d.txt}</p>`
-        + `<dl><dt>HP</dt><dd>${Math.round(d.hp * MOB_HP_MUL * (up?.hp[2] ?? 1))}</dd><dt>Удар</dt><dd>${d.dmg + (up?.dmg[2] ?? 0)}</dd>${d.armor ? `<dt>Броня</dt><dd>${d.armor}</dd>` : ''}</dl></div>`;
+        + `<dl><dt>HP</dt><dd>${Math.round(d.hp * MOB_HP_MUL * toughOf(k) * (up?.hp[2] ?? 1))}</dd><dt>Удар</dt><dd>${Math.round((d.dmg + (up?.dmg[2] ?? 0)) * toughOf(k))}</dd>${d.armor ? `<dt>Броня</dt><dd>${d.armor}</dd>` : ''}</dl></div>`;
       grid.appendChild(card);
     });
   }
