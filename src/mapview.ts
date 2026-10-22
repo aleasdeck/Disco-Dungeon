@@ -91,6 +91,8 @@ export class MapView {
       pos[n.id] = [W / 2 + (i - (L.length - 1) / 2) * (L.length > 2 ? 104 : 124) + (l % 2 ? 8 : -8) * (L.length > 1 ? 1 : 0), H - 92 - l * ((H - 150) / (layers.length - 1))];
     }));
     const path = run.path[f], reach = canChoose ? reachable(run, f) : [], gate: [number, number] = [W / 2, H - 22];
+    // the row the party stands in: the cartographer's tunnel skips rows, so it is not always the length of the path
+    const byId = new Map(layers.flat().map(n => [n.id, n])), atL = path.length ? byId.get(path[path.length - 1])!.l : -1;
     const gl = el(svg, 'g', {});
     // a soft S: the ends lean towards each other, so a path across the row runs at a slant instead of flat
     const edge = (a: [number, number], b: [number, number], cls: string) => {
@@ -105,7 +107,9 @@ export class MapView {
     for (const n of layers.flat()) for (const id of n.next) {
       const walked = path.includes(n.id) && path.indexOf(id) === path.indexOf(n.id) + 1;
       const next = path[path.length - 1] === n.id && reach.includes(id);
-      edge(top(n.id), foot(id), walked ? 'edge walked' : next ? 'edge next' : n.l < path.length - 1 || (n.l === path.length - 1 && !path.includes(n.id)) ? 'edge past' : 'edge');
+      // a link over rows is the cartographer's tunnel, drawn in beer
+      const tunnel = byId.get(id)!.l > n.l + 1 ? ' tunnel' : '';
+      edge(top(n.id), foot(id), (walked ? 'edge walked' : next ? 'edge next' : n.l < atL || (n.l === atL && !path.includes(n.id)) ? 'edge past' : 'edge') + tunnel);
     }
     gl.append(...gl.querySelectorAll('.next'));
     const st = el(svg, 'g', { class: 'gate' });
@@ -113,7 +117,7 @@ export class MapView {
     for (const n of layers.flat()) {
       const [x, y] = pos[n.id], t = ROOM_TYPES[n.type], g = el(svg, 'g', {});
       const isR = reach.includes(n.id), isV = path.includes(n.id), isCur = path[path.length - 1] === n.id;
-      const past = !isV && n.l < path.length;
+      const past = !isV && n.l <= atL;
       g.setAttribute('class', 'mnode' + (isR ? ' reach' : '') + (isV ? ' visited' : '') + (isCur ? ' cur' : '') + (past ? ' past' : '')
         + (isR && votes?.mine === n.id ? ' mine' : ''));
       g.dataset.id = n.id;
@@ -137,6 +141,10 @@ export class MapView {
         el(g, 'circle', { cx: x, cy: y, r, class: 'rim' });
         el(g, 'path', { d: `M${x - 13} ${y - r + 4}L${x - 14} ${y - r - 10}L${x - 6} ${y - r - 3}L${x} ${y - r - 14}L${x + 6} ${y - r - 3}L${x + 14} ${y - r - 10}L${x + 13} ${y - r + 4}Z`, class: 'crown' });
       } else if (!pic) icon(g, n.type, x, y);
+      // a room the cartographer redrew: a beer ring stamped on its corner
+      const beer = n.beer && uiArt.get('map_beer');
+      if (beer) el(g, 'image', { href: beer.src, x: x + r - 14, y: y - r - 6, width: 26, height: 26, class: 'mbeer' });
+      else if (n.beer) el(g, 'circle', { cx: x + r - 2, cy: y - r + 6, r: 9, class: 'mbeer ring' });
       el(g, 'text', { x, y: y + r + (pic ? 17 : 14), class: 'mlabel' }).textContent = t.name;
       // the players' heroes stand on the room's top rim, each face in its hero's colour
       const ps = votes?.pips[n.id] ?? [];

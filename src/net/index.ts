@@ -38,8 +38,11 @@ export type Msg =
   | { t: 'evote'; opt: number }
   /** A player says what their hero does by the camp's fire. */
   | { t: 'camp'; pick: CampPick }
-  /** A player points at one of the floor boss's trophies for their hero, by its place in the offer. */
-  | { t: 'loot'; opt: number }
+  /**
+   * A player points at one of the floor boss's trophies for their hero, by its place in the offer; a hero with all sockets
+   * taken may keep its own (PASS), take its pick back (UNDO), or name the trophy of its own it throws away (`drop`).
+   */
+  | { t: 'loot'; opt: number; drop?: string }
   /** A player back at the table takes one of the trophies kept for their hero while they were away. */
   | { t: 'kept'; k: string }
   /** A cleared room's result: each player reads it and walks over to the map on their own. */

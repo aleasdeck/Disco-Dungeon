@@ -314,7 +314,21 @@
     "up_discs": "ui/up_discs.webp",
     "up_dmg": "ui/up_dmg.webp",
     "up_speed": "ui/up_speed.webp",
-    "win": "ui/win.webp"
+    "win": "ui/win.webp",
+    "ev_bottle": "ui/ev_bottle.webp",
+    "ev_cup": "ui/ev_cup.webp",
+    "wheel_toad": "ui/wheel_toad.webp",
+    "wheel_nerd": "ui/wheel_nerd.webp",
+    "wheel_jock": "ui/wheel_jock.webp",
+    "wheel_drink": "ui/wheel_drink.webp",
+    "reel_cherry": "ui/reel_cherry.webp",
+    "reel_skull": "ui/reel_skull.webp",
+    "reel_lips": "ui/reel_lips.webp",
+    "ico_bet": "ui/ico_bet.webp",
+    "ico_soap": "ui/ico_soap.webp",
+    "ico_sticky": "ui/ico_sticky.webp",
+    "ico_slick": "ui/ico_slick.webp",
+    "map_beer": "ui/map_beer.webp"
   },
   "music": {
     "menu": { "file": "music/funk.mp3", "loop": 48.813559322033896 },
@@ -346,6 +360,18 @@
     "loot_dancer": "events/loot_dancer.webp",
     "loot_forgelord": "events/loot_forgelord.webp",
     "loot_discoball": "events/loot_discoball.webp",
-    "loot_dragon": "events/loot_dragon.webp"
+    "loot_dragon": "events/loot_dragon.webp",
+    "slot": "events/slot.webp",
+    "sphinx": "events/sphinx.webp",
+    "gnome": "events/gnome.webp",
+    "bookie": "events/bookie.webp",
+    "pawn": "events/pawn.webp",
+    "mapper": "events/mapper.webp",
+    "foam": "events/foam.webp",
+    "bottle": "events/bottle.webp",
+    "thimble": "events/thimble.webp",
+    "tattoo": "events/tattoo.webp",
+    "gopnik": "events/gopnik.webp",
+    "husband": "events/husband.webp"
   }
 }

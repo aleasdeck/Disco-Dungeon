@@ -4,7 +4,11 @@ import { ROOM_TYPES, type RoomType } from './data';
 import { makeRng } from './rng';
 import type { Shot, StartPhoto } from './album';
 
-export interface MapNode { id: string; l: number; i: number; type: RoomType; next: string[] }
+export interface MapNode {
+  id: string; l: number; i: number; type: RoomType; next: string[];
+  /** Redrawn by the drunk cartographer (an event): a beer stain on the room, and a route from it may skip rows. */
+  beer?: boolean;
+}
 
 export interface Run {
   seed: number;
@@ -177,7 +181,7 @@ export function reachable(run: Run, f: number): string[] {
 }
 
 /** The whole run is beaten: the last floor's boss is behind (a floor's own rows count, so a save from a shorter map still ends). */
-export const runDone = (run: Run) => run.path[FLOORS - 1].length === run.floors[FLOORS - 1].length;
+export const runDone = (run: Run) => run.path[FLOORS - 1].some(id => nodeById(run, FLOORS - 1, id).type === 'boss');
 
 /** Online, the room each player points at on the map, by their hero. */
 export type Votes = Record<number, string>;
@@ -194,7 +198,8 @@ export function minutes(run: Run) {
   for (let f = 0; f < FLOORS; f++) {
     const p = run.path[f].map(id => nodeById(run, f, id)), rows = run.floors[f].length;
     for (const n of p) done += ROOM_TYPES[n.type].min;
-    for (let l = p.length; l < rows; l++) est += l === rows - 1 ? ROOM_TYPES.boss.min : l === rows - 2 ? 0.75 : l < 3 ? 1.5 : 2.5;
+    // a route through the cartographer's tunnel skips rows: what is left starts past the room the party stands in
+    for (let l = p.length ? p[p.length - 1].l + 1 : 0; l < rows; l++) est += l === rows - 1 ? ROOM_TYPES.boss.min : l === rows - 2 ? 0.75 : l < 3 ? 1.5 : 2.5;
   }
   return { done, total: done + est };
 }

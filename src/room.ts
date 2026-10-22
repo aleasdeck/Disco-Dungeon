@@ -1,6 +1,7 @@
 // Procedural room generator. Pure: the same RoomSpec always yields the same layout.
 
 import type { Knock } from './fx';
+import type { Bet, Floor } from './events';
 import { BIOMES, MOB_HP_MUL, MOBS, NODES, TILE, isRanged, mobSize, type Biome, type MobKind, type NodeKind, type RoomType } from './data';
 import { makeRng } from './rng';
 import { LAYERS } from './run';
@@ -17,6 +18,12 @@ export interface RoomSpec {
   smoke?: boolean;
   /** An event's curse on the fight, «Стробоскоп»: no aiming line. */
   strobe?: boolean;
+  /** The foam party's floor under the discs (src/events.ts): they keep their speed off the walls, roll twice as far, or stick. */
+  ground?: Floor;
+  /** The bookie's bet this fight settles (src/events.ts settleBet). */
+  bet?: Bet;
+  /** One disc a turn more for every hero in this fight only (the guard's reward at the black market). */
+  extra?: number;
   /** The boss room's boss, when not the one its seed picks (bossOf): a test or the bot may name it. */
   boss?: MobKind;
   /** The warm-up room of the hero's lesson, built by hand (warmRoom): the same for any seed. */

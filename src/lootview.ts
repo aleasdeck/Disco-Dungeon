@@ -6,7 +6,7 @@
 // it once back, and picks their own.
 
 import { eventArt, uiArt } from './assets';
-import { artDef, type LootState } from './artifacts';
+import { PASS, UNDO, artDef, type ArtKey, type LootState } from './artifacts';
 import { eventDef } from './events';
 import type { HeroState } from './game';
 import { artIcon } from './icons';
@@ -30,7 +30,11 @@ const FLOOR_BOSS = ['king', 'lich'];
 /** Trophies an event gave: what the party finds, by the event's key. */
 const FOUND: Record<string, string> = {
   mimic: 'На бархатном дне сундука лежат подарки от прошлых ухажёров, все с бантиками и записками. Сундук краснеет и разрешает взять.',
+  pawn: 'Руда уплачена. Скелет снимает с полки три вещицы и раскладывает на бархатной тряпочке: «Бери одну. Остальное не лапать».',
+  slot: 'Из лотка Люськи вывалился джекпот: три вещицы в ленточках, тёплые и немного липкие. Бери, пока она не передумала.',
 };
+
+
 
 /** Online: the faces of the players on the trophies they point at, and a line on how the share-out stands. */
 export interface LootVotes {
@@ -41,10 +45,14 @@ export interface LootVotes {
 
 export class LootView {
   onPick: (opt: number) => void = () => {};
+  /** A hero with all sockets taken throws this trophy of its own away for the one picked. */
+  onDrop: (k: ArtKey) => void = () => {};
   onLeave: () => void = () => {};
 
   constructor() {
     $('lootOpts').addEventListener('click', e => {
+      const d = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-drop]');
+      if (d) return this.onDrop(d.dataset.drop as ArtKey);
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-opt]');
       if (b && !b.disabled) this.onPick(Number(b.dataset.opt));
     });
@@ -75,18 +83,37 @@ export class LootView {
       const order = me ? [me, ...party.filter(h => h !== me)] : party;
       // a hero whose player was away still has their own to pick once back
       const away = party.filter(h => !done[h.i] && h.kept?.seed === loot.seed);
-      $('lootOpts').innerHTML = order.filter(h => done[h.i]).map(h => this.got(h, done[h.i], h === me || solo ? '' : nameOf?.(h) ?? h.def.name)).join('')
-        + away.map(h => `<p class="camp-ask">${nameOf?.(h) ?? h.def.name} выберет свой трофей, когда вернётся.</p>`).join('');
+      $('lootOpts').innerHTML = order.filter(h => done[h.i]).map(h => this.got(h, done[h.i], h === me || solo ? '' : nameOf?.(h) ?? h.def.name, loot.drops?.[h.i])).join('')
+        + away.map(h => `<p class="camp-ask">${nameOf?.(h) ?? h.def.name} выберет свой трофей, когда вернётся.</p>`).join('')
+        + order.filter(h => loot.picks[h.i] === PASS).map(h => `<p class="camp-ask">${h === me && !team ? 'Ты оставляешь' : `${nameOf?.(h) ?? h.def.name} оставляет`} свои три трофея.</p>`).join('');
     } else {
       $('lootText').textContent = kept ? 'Пока тебя не было, остальные разобрали свои трофеи. Твой отложили до твоего возвращения.'
         : loot.from ? FOUND[loot.from] ?? 'Здесь нашлись трофеи.' : `${SCENES[boss] ?? SCENES.king} ${healed}`;
-      const ask = solo || kept ? 'Забери один трофей' : team && me ? `<img src="${faceUrl(me)}" alt="">Выбери трофей ${me.def.dat}` : 'Каждый берёт по трофею';
-      $('lootOpts').innerHTML = `<p class="camp-ask${team && me ? ' camp-for' : ''}"${me ? ` style="--c:${me.def.col}"` : ''}>${ask}</p>`
-        + loot.offer.map((k, i) => this.option(k, i, votes)).join('');
+      // a hero with all sockets taken takes a new one for one of its own, or keeps its own
+      const full = !kept && !!me && !!loot.full?.includes(me.i), p = me ? loot.picks[me.i] : undefined, out = me ? loot.drops?.[me.i] : undefined;
+      const face = team && me ? `<img src="${faceUrl(me)}" alt="">` : '', whose = team && me ? ` ${me.def.dat}` : '';
+      const head = (ask: string) => `<p class="camp-ask${face ? ' camp-for' : ''}"${me ? ` style="--c:${me.def.col}"` : ''}>${face}${ask}</p>`;
+      if (full && me && p !== undefined && p >= 0 && !out) {
+        $('lootOpts').innerHTML = head(`Все три гнезда заняты. Что выбросить ради «${artDef(loot.offer[p]).name}»?`)
+          + (me.arts ?? []).map(k => this.dropOpt(k)).join('')
+          + `<button class="ev-opt camp-back" data-opt="${UNDO}"><b>Передумать</b></button>`;
+      } else {
+        const ask = full ? (out && p !== undefined && p >= 0 ? `Берёшь «${artDef(loot.offer[p]).name}» вместо «${artDef(out).name}»` : whose ? `Выбери трофей${whose}: все три гнезда заняты, новый встанет вместо одного из своих` : 'Все три гнезда заняты: новый трофей встанет вместо одного из своих')
+          : solo || kept ? 'Забери один трофей' : team && me ? `Выбери трофей ${me.def.dat}` : 'Каждый берёт по трофею';
+        $('lootOpts').innerHTML = head(ask) + loot.offer.map((k, i) => this.option(k, i, votes)).join('')
+          + (full ? `<button class="ev-opt camp-back${p === PASS ? ' mine' : ''}" data-opt="${PASS}"><b>Оставить свои</b></button>` : '');
+      }
     }
     $('lootNote').textContent = (!done && votes?.note) || '';
     $('lootNote').hidden = !!done || !votes?.note;
     $('lootLeave').hidden = !done;
+  }
+
+  /** One of a full hero's own trophies, to throw away for the new one. */
+  private dropOpt(k: string) {
+    const a = artDef(k);
+    return `<button class="ev-opt loot-opt" data-drop="${k}" title="${a.gag}"><i class="loot-ico" aria-hidden="true">${artIcon(k)}</i>`
+      + `<b>${a.name}</b><span class="ev-fx"><em class="bad">Выбросить: ${a.txt}</em></span></button>`;
   }
 
   private option(k: string, i: number, votes?: LootVotes) {
@@ -98,10 +125,10 @@ export class LootView {
   }
 
   /** A trophy a hero took: its picture, its name, what it does, and online whose it is. */
-  private got(h: HeroState, k: string, who: string) {
+  private got(h: HeroState, k: string, who: string, out?: string) {
     const a = artDef(k);
     return `<div class="ev-out loot-opt loot-got"><i class="loot-ico" aria-hidden="true">${artIcon(k)}</i>`
-      + `<b>${a.name}</b><span class="ev-fx"><em class="good">${a.txt}</em></span>`
+      + `<b>${a.name}</b><span class="ev-fx"><em class="good">${a.txt}</em>${out ? `<em class="bad">вместо «${artDef(out).name}»</em>` : ''}</span>`
       + (who ? `<span class="loot-whose" style="--c:${h.def.col}"><img src="${faceUrl(h)}" alt="">${who}</span>` : '') + '</div>';
   }
 }
