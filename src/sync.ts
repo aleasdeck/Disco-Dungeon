@@ -96,6 +96,8 @@ export interface MapState {
   votes: Votes;
   /** Heroes whose players are here to vote; the host plays the others, and they have no say. */
   voters: number[];
+  /** The voters who pick the next room on the map: the ones on their feet. A fallen hero's player watches the others choose. */
+  walkers: number[];
   /** The event the party stands in: its choices, the vote on them, and once taken what came of it. */
   ev?: EventState | null;
   /** The camp the party sits at: what each hero has done by the fire. */
