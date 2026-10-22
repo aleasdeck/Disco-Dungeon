@@ -90,10 +90,22 @@ export interface Tally {
   falls: number;
   /** The most bounces a disc made on its way into an enemy. */
   rico: number;
+  /** Since the trophies' feats (src/progress.ts): bounces off walls and blocks, discs dropped into holes, «Звон» rung. */
+  walls: number;
+  holes: number;
+  clangs: number;
+  /** The most enemies one disc hit, and the latest turn a fight was won on. */
+  multi: number;
+  late: number;
 }
 
-export const newTally = (run = 0): Tally => ({ run, dmg: 0, top: 0, kills: 0, throws: 0, crits: 0, abs: 0, ore: 0, hurt: 0, falls: 0, rico: 0 });
-const tallyOf = (h: HeroState) => (h.tally ??= newTally());
+export const newTally = (run = 0): Tally => ({ run, dmg: 0, top: 0, kills: 0, throws: 0, crits: 0, abs: 0, ore: 0, hurt: 0, falls: 0, rico: 0, walls: 0, holes: 0, clangs: 0, multi: 0, late: 0 });
+/** A hero's tally, the counts a save from before them lacks put in at 0. */
+const tallyOf = (h: HeroState) => {
+  const t = (h.tally ??= newTally());
+  if (t.walls === undefined) Object.assign(t, { ...newTally(t.run), ...t });
+  return t;
+};
 
 export interface Disc {
   /** Tells the discs of a turn apart: the turn and the throw's place in it (saves from before the new heroes have none). */
@@ -116,6 +128,8 @@ export interface Disc {
   spin: number;
   /** Enemies and resources this disc has hit; a disc that hit nothing is a miss. */
   hits: number;
+  /** The enemies it hit, by their place in the room's list: one counts once. */
+  foes?: number[];
   /** Thrown with the hero's ability on. */
   ab: boolean;
   /** Ricochet's ability: bounces left that cost the disc no speed. */
@@ -2593,6 +2607,7 @@ export class Game {
    */
   private bounced(d: Disc, v: number, nx: number, ny: number) {
     d.bounces++;
+    if (!d.fan) tallyOf(d.hero).walls++;
     if (d.rico > 0) d.rico--;
     else if (d.slick) d.slick--;
     if (v > 15) this.sfx('wall', Math.min(1, v / 300));
@@ -2669,6 +2684,7 @@ export class Game {
       if (!wild && !has(d.hero, 'undies') && pit) {
         d.fall = 0.001; d.vx = d.vy = 0;
         this.sfx('pit');
+        if (!d.fan) tallyOf(d.hero).holes++;
         // the rat swarm's eyes glow down this hole: the disc lands on its heads, twice as hard, and costs the hero nothing
         const rats = d.fan ? null : S.mobs.find(o => o.hp > 0 && o.under !== undefined && S.pits[o.under] === pit);
         if (rats) {
@@ -2756,6 +2772,8 @@ export class Game {
         const t = tallyOf(h);
         if (crit && m.hp > 0) { this.float(m.x, m.y - 24, 'ТОЧНО!', '#ffe27a'); this.sfx('crit'); t.crits++; }
         t.rico = Math.max(t.rico, d.bounces);
+        const at = S.mobs.indexOf(m), foes = (d.foes ??= []);
+        if (!d.fan && !foes.includes(at)) { foes.push(at); t.multi = Math.max(t.multi, foes.length); }
         // the ability goes first: fire on an enemy this very hit kills leaps on to the next one
         if (d.ab) this.abilityHit(d, m);
         if (mirrored) { this.float(m.x, m.y - 14, 'зеркало!', '#ffe27a'); this.burst(d.x, d.y, '#fff6c8', 10); this.sfx('armor'); }
@@ -2794,7 +2812,10 @@ export class Game {
       // own discs ring off each other too, and its discs deal triple
       if (-rv > 40 && (a.hero !== b.hero || has(a.hero, 'bells'))) {
         a.charged = b.charged = true;
-        for (const o of new Set([a.hero, b.hero])) if (has(o, 'bells')) this.pop(o, 'bells');
+        for (const o of new Set([a.hero, b.hero])) {
+          if (has(o, 'bells')) this.pop(o, 'bells');
+          tallyOf(o).clangs++;
+        }
         const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, ka = this.ring(a.hero), kb = this.ring(b.hero);
         this.float(mx, my, ka === kb ? `ЗВОН ×${ka}` : `ЗВОН ×${Math.min(ka, kb)}/×${Math.max(ka, kb)}`, '#b893ff');
         this.burst(mx, my, '#b893ff', 10);
@@ -3377,6 +3398,8 @@ export class Game {
     S.phase = 'over';
     this.wounds = win && S.spec.type === 'boss' ? S.heroes.map(h => ({ i: h.i, hp: Math.max(0, h.hp), max: h.max })) : null;
     if (win && S.spec.type === 'boss') this.bossHeal();
+    // the turn a fight was won on, for «Ромашковый чай»'s feat; the cave and the warm-up are no fights
+    if (win && S.spec.type !== 'treasure' && !S.spec.tut) for (const h of S.heroes) tallyOf(h).late = Math.max(tallyOf(h).late, S.turn);
     // a fight won without a scratch pays the party ore, as much for any party; the ore cave has nobody to scratch them
     if (win && S.spec.type !== 'treasure' && !S.hurt) {
       this.clean = CLEAN_ORE;

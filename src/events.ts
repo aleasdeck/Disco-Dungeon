@@ -7,7 +7,7 @@
 
 import { AB_COST, E_MAX, HAND_MAX, KINDS, UPS, UP_COST, type StatKey } from './data';
 import type { Bank, HeroState } from './game';
-import { ARTIFACTS, artDef, drop, give, room, type ArtKey } from './artifacts';
+import { artDef, artsLeft, drop, give, room, type ArtKey } from './artifacts';
 import { REST_ROW, nodeById, type MapNode, type Run } from './run';
 import { makeRng } from './rng';
 import { DEMO, DEMO_EVENTS } from './demo';
@@ -133,6 +133,8 @@ export interface EventState {
   sold?: Record<number, ArtKey>;
   /** Once taken. */
   done?: Done;
+  /** An event the player has just opened: it comes with a «Новое» sticker. */
+  fresh?: boolean;
 }
 
 /** What an event plays with: the party, the pool, and the run whose map the cartographer redraws. */
@@ -525,10 +527,17 @@ export const EVENTS: EventDef[] = [
 
 export const eventDef = (key: string) => EVENTS.find(e => e.key === key) ?? EVENTS[0];
 
-/** Which event an event room turns out to be: one the run hasn't met yet when there is one, the same on every screen. */
-export function eventOf(seed: number, seen: readonly string[] = []): string {
+/**
+ * Which event an event room turns out to be: one the run hasn't met yet when there is one. `open`: the events this player
+ * has opened (src/progress.ts), all when not given; `due`: ones just opened, the first of them not met yet comes first.
+ * The host (or a lone player) picks it and shares it.
+ */
+export function eventOf(seed: number, seen: readonly string[] = [], open?: readonly string[], due: readonly string[] = []): string {
   // the demo draws from its few
-  const pool = DEMO ? EVENTS.filter(e => DEMO_EVENTS.includes(e.key)) : EVENTS, fresh = pool.filter(e => !seen.includes(e.key));
+  const pool = DEMO ? EVENTS.filter(e => DEMO_EVENTS.includes(e.key)) : open ? EVENTS.filter(e => open.includes(e.key)) : EVENTS;
+  const first = due.find(k => !seen.includes(k) && pool.some(e => e.key === k));
+  if (first) return first;
+  const fresh = pool.filter(e => !seen.includes(e.key));
   return makeRng(seed).pick(fresh.length ? fresh : pool).key;
 }
 
@@ -705,8 +714,7 @@ function levelDown(h: HeroState, R: ReturnType<typeof makeRng>) {
 
 /** A trophy for every hero with room for one, picked at random among those nobody in the party has. Says who got what. */
 export function giftArts(party: HeroState[], seed: number) {
-  const owned = new Set(party.flatMap(h => [...(h.arts ?? []), ...(h.kept?.offer ?? [])]));
-  const left = ARTIFACTS.map(a => a.key).filter(k => !owned.has(k)), R = makeRng(seed * 19 + 5), notes: string[] = [];
+  const left = artsLeft(party), R = makeRng(seed * 19 + 5), notes: string[] = [];
   for (const h of party) {
     if (!room(h) || !left.length) continue;
     const k = left.splice(R.int(0, left.length - 1), 1)[0];

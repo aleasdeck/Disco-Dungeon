@@ -23,7 +23,7 @@ import { campDo, campLeave, type CampPick, type CampState } from './camp';
 import { CampView } from './campview';
 import { PASS, UNDO, lootAgreed, lootDone, lootFor, newLoot, settleLoot, takeKept, type ArtKey, type LootState } from './artifacts';
 import { LootView, type LootVotes } from './lootview';
-import { beginRun, endRun, playTime, resumeRun, runCount, saveStats, syncRun } from './stats';
+import { beginRun, endRun, playTime, resumeRun, runCount, saveStats, stats, syncRun } from './stats';
 import { BASTION_I, Tutor, hearAgain, heard, saveHeard } from './tutor';
 import { ENTRANCES, SCRATCH_BEAT, bossKind, intro } from './intro';
 import { cardOut, closeIntro, openIntro, showCard } from './introview';
@@ -31,7 +31,7 @@ import { collect } from './trinkets';
 import type { Album } from './album';
 import { hideAlbum, showAlbum } from './albumview';
 import { DEMO } from './demo';
-import { creditRun, demoLocked, locked, runGains } from './progress';
+import { creditRun, demoLocked, dueEvents, locked, openEvents, openedBy, runGains } from './progress';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -163,6 +163,8 @@ function showMap(open: boolean) {
   $('mapScreen').hidden = !open;
   $('mapClose').hidden = choosing;
   if (open) {
+    // the host's or a lone player's own new event comes in the next event room; a client's map can't tell
+    mapView.fresh = mode !== 'client' && dueEvents().some(k => !(run.seen ?? []).includes(k));
     mapView.render(run, choosing, mapParty(), mapVotes());
     // on a short screen the map scrolls; bring the rooms to choose from into view
     if (!was) document.querySelector('#map .mnode.reach, #map .mnode.cur')?.scrollIntoView({ block: 'center' });
@@ -403,9 +405,10 @@ function choose(id: string) {
     game.onChange();
   } else if (n.type === 'event') {
     // everyone reads the scene and the party takes one of its choices; the map waits until then
-    const seed = run.seed + depth * 131, key = eventOf(seed, run.seen);
+    // the events this player has opened; one just opened by a choice at another comes first, with a «Новое» sticker
+    const seed = run.seed + depth * 131, due = dueEvents(), key = eventOf(seed, run.seen, openEvents(), due);
     (run.seen ??= []).push(key);
-    ev = { key, seed, votes: {} };
+    ev = { key, seed, votes: {}, ...(due.includes(key) ? { fresh: true } : {}) };
     choosing = false;
     showMap(false);
     showEvent();
@@ -490,7 +493,10 @@ function showEvent() {
   const open = !!ev && !(ev.done && evShut === ev.seed);
   $('eventScreen').hidden = !open;
   liftStrip();
-  if (open) evView.render(ev!, table(), evHero(), eventVotes());
+  if (!open) return;
+  // the choice taken may have opened an event or a trophy: the window says so at once
+  creditStars();
+  evView.render(ev!, table(), evHero(), eventVotes(), openedBy(ev!, run));
 }
 
 /** What the event plays with: the party, its ore and the run's map. */
@@ -911,6 +917,7 @@ game.onRoomEnd = win => {
 function showEnd(e: Ending) {
   ending = e;
   if (e.album) {
+    creditStars();
     // the end of the run: its album instead of the plain result; online every player sees it, the host takes them back
     $('roomEnd').hidden = true;
     if (mode === 'client') wait('');
@@ -1055,7 +1062,7 @@ tutor.where = () => {
 };
 tutor.me = meHero;
 $('mSettings').addEventListener('click', () => openSettings('menu'));
-document.querySelectorAll<HTMLButtonElement>('#collection .tab').forEach(b => b.addEventListener('click', () => renderCollection(b.dataset.tab as 'heroes' | 'mobs' | 'arts' | 'trinkets')));
+document.querySelectorAll<HTMLButtonElement>('#collection .tab').forEach(b => b.addEventListener('click', () => renderCollection(b.dataset.tab as 'heroes' | 'mobs' | 'arts' | 'events' | 'trinkets')));
 $('colBack').addEventListener('click', openMenu);
 $('setBack').addEventListener('click', () => (settingsFrom === 'pause' ? show('pause') : openMenu()));
 const syncSettings = bindSettings(() => { applyQuality(); sizeCanvas(); });
@@ -1653,10 +1660,16 @@ function flushStats() {
   creditStars();
 }
 
-/** The stars of the bosses the run has beaten so far, to this player's heroes counted in it, and the heroes they open. */
+/**
+ * What the run has done so far for this player's heroes counted in it (src/progress.ts): the stars of the bosses beaten
+ * and the heroes they open, the event the party stands in and what its choice opens, the trophies of the feats done.
+ */
 function creditStars() {
   const c = runCount(run);
-  if (c) creditRun(run, c.heroes, c.end === 'win');
+  if (!c) return;
+  // the last boss's photo comes with the end of the run: an online player's map never shows it
+  const bosses = [...(run.shots ?? []), ...(ending?.album?.shots ?? [])].flatMap(s => (s ? [s.boss] : []));
+  creditRun(run, c.heroes, { won: c.end === 'win', ev, sum: stats.sum, bosses });
 }
 
 /** The run's time goes on while it is on screen and the player is at it; its numbers are written down every couple of seconds. */

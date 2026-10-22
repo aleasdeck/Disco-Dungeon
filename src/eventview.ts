@@ -70,9 +70,10 @@ export class EventView {
 
   /**
    * `me` is the hero this screen speaks for: online the player's, for a party with one player the one whose trophy goes to
-   * the pawnshop now. `votes` online shows who points at what.
+   * the pawnshop now. `votes` online shows who points at what. `news`: the events and the trophies the choice taken has
+   * just opened for this player (src/progress.ts).
    */
-  render(ev: EventState, t: Table, me: HeroState | null, votes?: EventVotes) {
+  render(ev: EventState, t: Table, me: HeroState | null, votes?: EventVotes, news?: { events: string[]; arts: string[] }) {
     const def = eventDef(ev.key), pic = eventArt.get(ev.key) ?? uiArt.get('room_event'), solo = t.party.length === 1;
     const img = $('evImg') as HTMLImageElement;
     if (pic && img.getAttribute('src') !== pic.src) img.src = pic.src;
@@ -80,6 +81,8 @@ export class EventView {
     $('evArt').classList.toggle('stub', !eventArt.has(ev.key));
     $('evArt').dataset.ev = ev.key;
     $('evTitle').textContent = def.title;
+    // an event the player has just opened by a choice at another one
+    if (ev.fresh) $('evTitle').insertAdjacentHTML('beforeend', '<span class="ev-new">Новое</span>');
     const stage = stageOf(ev), done = stage === 'done';
     $('eventScreen').classList.toggle('done', done);
     this.play(ev, t, votes);
@@ -91,8 +94,10 @@ export class EventView {
       const d = doneOf(ev)!, h = t.party.find(o => o.i === d.who);
       const notes = (ev.done!.notes ?? []).map(n => `<em class="none">${n}</em>`).join(' ');
       $('evText').textContent = d.out.txt;
+      const met = (news?.events ?? []).map(k => `<span class="ev-news">Новое знакомство: «${eventDef(k).title}» ждёт в следующей комнате событий</span>`)
+        .concat((news?.arts ?? []).map(k => `<span class="ev-news">Подвиг! Открыт трофей «${artDef(k).name}»</span>`)).join('');
       $('evOpts').innerHTML = `<div class="ev-out"><b>${d.head}</b><span class="ev-fx">${ev.done!.cost ? line(ev.done!.cost, solo) + ' ' : ''}${line(d.out.fx, solo, d.pay, h && !solo ? h.def.dat : undefined)}</span>`
-        + (notes ? `<span class="ev-fx">${notes}</span>` : '') + '</div>';
+        + (notes ? `<span class="ev-fx">${notes}</span>` : '') + met + '</div>';
     } else if (stage === 'hero') {
       const c = choicesOf(ev)[ev.step!];
       $('evText').textContent = 'Скелет хлопает по кушетке: «Кто первый? Он же последний, краски на одного».';

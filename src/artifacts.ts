@@ -90,10 +90,19 @@ export interface LootState {
  */
 export type Kept = Pick<LootState, 'seed' | 'floor' | 'offer' | 'from' | 'boss'>;
 
+/** Trophies this player hasn't opened yet (src/progress.ts): no boss or event hands them out. All are open until it says. */
+let shut: (k: ArtKey) => boolean = () => false;
+export const shutArts = (f: (k: ArtKey) => boolean) => { shut = f; };
+
+/** The trophies the party may still be handed: opened, and not owned by anyone in it (nor waiting for them). */
+export function artsLeft(party: Pick<HeroState, 'arts' | 'kept'>[]): ArtKey[] {
+  const owned = new Set(party.flatMap(h => [...(h.arts ?? []), ...(h.kept?.offer ?? [])]));
+  return ARTIFACTS.map(a => a.key).filter(k => !owned.has(k) && !shut(k));
+}
+
 /** The trophies a boss leaves: OFFER of the artifacts nobody in the party has yet (nor has waiting for them), the same on every screen. */
 export function rollOffer(seed: number, party: Pick<HeroState, 'arts' | 'kept'>[]): ArtKey[] {
-  const owned = new Set(party.flatMap(h => [...(h.arts ?? []), ...(h.kept?.offer ?? [])]));
-  const left = ARTIFACTS.map(a => a.key).filter(k => !owned.has(k)), R = makeRng(seed * 13 + 7), out: ArtKey[] = [];
+  const left = artsLeft(party), R = makeRng(seed * 13 + 7), out: ArtKey[] = [];
   while (out.length < OFFER && left.length) out.push(left.splice(R.int(0, left.length - 1), 1)[0]);
   return out;
 }

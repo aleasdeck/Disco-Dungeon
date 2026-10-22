@@ -1,13 +1,22 @@
-// What this player has opened, kept in this browser: the heroes and their stars. A run starts with one hero of each kind;
-// every floor boss beaten gives each hero of the party as many stars as the floor's number (a whole run: 1 + 2 + 3), and a
-// hero with STARS_TO_OPEN of them opens the next hero of its own kind's ladder. Online every player counts their own
-// hero, on their own device, and picks only from the heroes they have opened. The demo has its own three heroes and no
-// stars. `?progress=full` in the address opens everything for a test without writing it down.
+// What this player has opened, kept in this browser: the heroes and their stars, the events and the trophies.
+// Heroes: a run starts with one hero of each kind; every floor boss beaten gives each hero of the party as many stars as
+// the floor's number (a whole run: 1 + 2 + 3), and a hero with STARS_TO_OPEN of them opens the next hero of its own
+// kind's ladder. Online every player counts their own hero, on their own device, and picks only from the heroes they have
+// opened.
+// Events («знакомства»): ten are open from the start, each of the others opens by a choice at the event before it in its
+// chain (somebody there knows somebody) and waits in the next event room. Trophies («подвиги»): twelve are open from the
+// start, each of the others opens by a feat of its own. Online the host's events and trophies come up, and every player
+// opens their own by what they did there.
+// The demo has its own three heroes and events, all the trophies and no stars. `?progress=full` in the address opens
+// everything for a test without writing it down.
 
 import { HEROES } from './data';
-import { DEMO, DEMO_HEROES, stored } from './demo';
+import { DEMO, DEMO_EVENTS, DEMO_HEROES, stored } from './demo';
 import { stats } from './stats';
 import { FLOORS, type Run } from './run';
+import { EVENTS, type EventState } from './events';
+import { shutArts, type ArtKey } from './artifacts';
+import type { Tally } from './game';
 
 /** The heroes open from the first run: Бастион, Зажигалка, Рикошет, one of each kind, the same as the demo's. */
 export const START_HEROES = ['bastion', 'ash', 'ricochet'];
@@ -22,7 +31,52 @@ export const STARS_TO_OPEN = 6;
 /** Stars a floor's boss gives every hero of the party that beats it: the floor's number, 1 to 3. */
 export const bossStars = (floor: number) => floor + 1;
 
-/** One run as far as its stars are given out: how many of its bosses have paid, and what they brought. */
+/** The events open from the first run. */
+export const START_EVENTS = ['bar', 'mimic', 'altar', 'doctor', 'gym', 'seer', 'toilet', 'ogre', 'goblin', 'dj'];
+
+/**
+ * The other events: each opens at the event `from` by one of its choices `opts` (their places in its list; any when not
+ * given). `how` is the hint the collection gives. The slot machine counts a pull as its first choice.
+ */
+export const MEETS: { key: string; from: string; opts?: number[]; how: string }[] = [
+  { key: 'mapper', from: 'bar', opts: [0, 1], how: 'В баре «Последний глоток» выпей что угодно: картограф пьёт за соседним столиком.' },
+  { key: 'gnome', from: 'mapper', how: 'Дай пьяному картографу что-нибудь нарисовать: на его карте крестиком отмечена чужая заначка.' },
+  { key: 'thimble', from: 'goblin', opts: [0, 1], how: 'Заключи сделку на Чёрном рынке: брат гоблина работает этажом ниже.' },
+  { key: 'slot', from: 'thimble', opts: [0, 1, 2], how: 'Сыграй с наперсточником: азарт затягивает.' },
+  { key: 'bookie', from: 'slot', opts: [0], how: 'Дёрни рычаг Жадной Люськи: у неё есть знакомый букмекер.' },
+  { key: 'sphinx', from: 'seer', opts: [0], how: '«Позолоти ручку» гадалке: Лысый Сфинкс её кот.' },
+  { key: 'tattoo', from: 'gym', opts: [0, 1], how: 'В качалке пожми валуны или хлебни протеина: качки идут бить наколки.' },
+  { key: 'foam', from: 'dj', opts: [1], how: 'У будки диджея «Танцуй до упаду»: диджей зовёт на пенную.' },
+  { key: 'bottle', from: 'foam', how: 'Побывай на пенной вечеринке: после неё афтепати.' },
+  { key: 'husband', from: 'bottle', opts: [0, 1], how: 'Покрути бутылочку: на кого она покажет, та замужем.' },
+  { key: 'gopnik', from: 'ogre', opts: [0], how: 'У храпуна на руде «Набей карманы»: слух о богачах разошёлся.' },
+  { key: 'pawn', from: 'gopnik', opts: [0, 1], how: 'Отдай гопникам руду или цацку: отнятое всплывает на полке ломбарда.' },
+];
+
+/** The trophies open from the first run: a number or one plain rule each. */
+export const START_ARTS: ArtKey[] = ['tray', 'polish', 'cup', 'belly', 'fangs', 'piggy', 'battery', 'energy', 'opener', 'glasseye', 'hedgehog', 'sock'];
+
+/**
+ * The other trophies, each opened by a feat about the trophy itself: a number this player's heroes have reached in all their
+ * runs (`sum`: the statistics' sum, or its record for top, rico, multi and late), the floor's boss beaten (`boss`), or a
+ * choice taken at an event (`ev`: the event and the places of the choices, any when null). `how` is what the collection says.
+ */
+export const FEATS: { key: ArtKey; how: string; sum?: [keyof Tally, number]; boss?: string; ev?: [string, number[] | null] }[] = [
+  { key: 'xray', how: 'Попади во врага одним броском после трёх отскоков.', sum: ['rico', 3] },
+  { key: 'spring', how: 'Нанеси один удар на 15 урона или больше.', sum: ['top', 15] },
+  { key: 'chalk', how: 'Набери 100 «ТОЧНО!» за все забеги.', sum: ['crits', 100] },
+  { key: 'insoles', how: 'Задень одним диском трёх врагов.', sum: ['multi', 3] },
+  { key: 'bells', how: 'Набери 20 «ЗВОН!» за все забеги: это диски двух героев бьются друг о друга.', sum: ['clangs', 20] },
+  { key: 'lube', how: 'Набери 1000 отскоков от стен и камней за все забеги.', sum: ['walls', 1000] },
+  { key: 'undies', how: 'Урони 25 дисков в ямы. Утешительный приз.', sum: ['holes', 25] },
+  { key: 'tea', how: 'Выиграй бой на 10-м ходу или позже, когда все уже озверели.', sum: ['late', 10] },
+  { key: 'mirrorball', how: 'Победи Великого Диско-шара.', boss: 'discoball' },
+  { key: 'denture', how: 'На алтаре диско-бога «Стащи подношения»: челюсть лежит прямо там.', ev: ['altar', [2]] },
+  { key: 'boomerang', how: 'Побывай на пенной вечеринке: он оттуда.', ev: ['foam', null] },
+  { key: 'hand', how: '«Отдай почку» гоблину на Чёрном рынке: рука за почку.', ev: ['goblin', [0]] },
+];
+
+/** One run as far as it is counted: how many of its bosses have paid their stars, and what it opened. */
 interface Cur {
   seed: number;
   heroes: string[];
@@ -30,8 +84,10 @@ interface Cur {
   floors: number;
   /** Stars each hero got in this run. */
   got: Record<string, number>;
-  /** Heroes this run opened, in the order they opened. */
+  /** Heroes, events and trophies this run opened, in the order they opened. */
   opened: string[];
+  events?: string[];
+  arts?: string[];
 }
 
 interface Progress {
@@ -40,6 +96,11 @@ interface Progress {
   stars: Record<string, number>;
   /** The heroes opened beyond START_HEROES. */
   open: string[];
+  /** The events opened beyond START_EVENTS, and the ones of them not met yet: the next event room brings the first. */
+  events: string[];
+  due: string[];
+  /** The trophies opened beyond START_ARTS. */
+  arts: string[];
   cur: Cur | null;
 }
 
@@ -53,9 +114,9 @@ const ALL = typeof location !== 'undefined' && new URLSearchParams(location.sear
 function load(): Progress {
   try {
     const o = JSON.parse(localStorage.getItem(KEY) || 'null') as Progress | null;
-    if (o && o.v === 1) return { v: 1, stars: o.stars ?? {}, open: o.open ?? [], cur: o.cur ?? null };
+    if (o && o.v === 1) return { v: 1, stars: o.stars ?? {}, open: o.open ?? [], events: o.events ?? [], due: o.due ?? [], arts: o.arts ?? [], cur: o.cur ?? null };
   } catch { /* unreadable: start over below */ }
-  const p: Progress = { v: 1, stars: {}, open: [], cur: null };
+  const p: Progress = { v: 1, stars: {}, open: [], events: [], due: [], arts: [], cur: null };
   for (const [k, h] of Object.entries(stats.heroes)) {
     if (!HEROES.some(d => d.key === k)) continue;
     if (h.runs > 0 && !START_HEROES.includes(k)) p.open.push(k);
@@ -67,6 +128,8 @@ function load(): Progress {
 
 const progress: Progress = load();
 save();
+// the bosses and the events hand out only the trophies opened
+shutArts(k => artLocked(k));
 
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(progress)); } catch { /* private mode: the progress lasts for this visit */ }
@@ -124,33 +187,115 @@ export const opening = (key: string) => {
   return !DEMO && !!next && locked(next);
 };
 
+/** What a run has done that opens things: won, the event the party stands in, and the player's numbers of all runs. */
+export interface Deeds {
+  won: boolean;
+  ev?: EventState | null;
+  /** The statistics' sums and records (stats.sum). */
+  sum?: Partial<Tally>;
+  /** The floor bosses beaten in this run. */
+  bosses?: string[];
+}
+
 /**
- * Give out the stars of the bosses beaten in `run` that haven't paid yet, to the heroes this player plays in it (`keys`),
- * and open what they bring. `won`: the last boss is down too. The same run pays each boss once, whatever comes again: a
- * reload, a rejoin, a saved campaign.
+ * Count what `run` has done for the heroes this player plays in it (`keys`): the stars of the bosses beaten that haven't
+ * paid yet and the heroes they open, the events met and the ones their choices open, and the trophies of the feats done.
+ * The same run pays each boss once, whatever comes again: a reload, a rejoin, a saved campaign.
  */
-export function creditRun(run: Run, keys: string[], won: boolean) {
+export function creditRun(run: Run, keys: string[], o: Deeds) {
   if (DEMO || !keys.length) return;
   let c = progress.cur;
   if (!c || c.seed !== run.seed || c.heroes.join() !== keys.join()) c = progress.cur = { seed: run.seed, heroes: keys, floors: 0, got: {}, opened: [] };
-  const beaten = won ? FLOORS : Math.min(run.floor, FLOORS);
-  if (beaten <= c.floors) return;
-  for (let f = c.floors; f < beaten; f++) {
-    for (const k of keys) {
-      progress.stars[k] = (progress.stars[k] ?? 0) + bossStars(f);
-      c.got[k] = (c.got[k] ?? 0) + bossStars(f);
+  let changed = false;
+  const beaten = o.won ? FLOORS : Math.min(run.floor, FLOORS);
+  if (beaten > c.floors) {
+    for (let f = c.floors; f < beaten; f++) {
+      for (const k of keys) {
+        progress.stars[k] = (progress.stars[k] ?? 0) + bossStars(f);
+        c.got[k] = (c.got[k] ?? 0) + bossStars(f);
+      }
     }
+    c.floors = beaten;
+    for (const k of keys) if (openNext(progress, k)) c.opened.push(nextOf(k)!);
+    changed = true;
   }
-  c.floors = beaten;
-  for (const k of keys) if (openNext(progress, k)) c.opened.push(nextOf(k)!);
-  save();
+  if (o.ev && meet(o.ev, c)) changed = true;
+  for (const f of FEATS) {
+    const did = (f.sum && (o.sum?.[f.sum[0]] ?? 0) >= f.sum[1]) || (f.boss && o.bosses?.includes(f.boss));
+    if (did && openArt(f.key, c)) changed = true;
+  }
+  if (changed) save();
 }
 
-/** What a run brought this player: each of its heroes' stars, and the heroes it opened in the order they opened. */
-export interface Gains { heroes: string[]; got: Record<string, number>; opened: string[] }
+/** Open the trophy `k` if it is shut; true when it did. */
+function openArt(k: ArtKey, c: Cur) {
+  if (START_ARTS.includes(k) || progress.arts.includes(k)) return false;
+  progress.arts.push(k);
+  (c.arts ??= []).push(k);
+  return true;
+}
+
+/** The party is at the event `ev`: it is met (no longer waited for), and once a choice is taken, what that choice opens. */
+function meet(ev: EventState, c: Cur) {
+  let changed = false;
+  if (progress.due.includes(ev.key)) {
+    progress.due = progress.due.filter(k => k !== ev.key);
+    changed = true;
+  }
+  if (!ev.done) return changed;
+  // a pull of the slot machine's lever, whatever came of it
+  const opt = ev.key === 'slot' && (ev.pulls ?? 0) > 0 ? 0 : ev.done.opt;
+  for (const m of MEETS) {
+    if (m.from !== ev.key || (m.opts && !m.opts.includes(opt)) || START_EVENTS.includes(m.key) || progress.events.includes(m.key)) continue;
+    progress.events.push(m.key);
+    progress.due.push(m.key);
+    (c.events ??= []).push(m.key);
+    changed = true;
+  }
+  for (const f of FEATS) if (f.ev && f.ev[0] === ev.key && (!f.ev[1] || f.ev[1].includes(opt)) && openArt(f.key, c)) changed = true;
+  return changed;
+}
+
+/** What the choice taken at the event `ev` has just opened for this player in `run`: events and trophies. */
+export function openedBy(ev: EventState, run: Run): { events: string[]; arts: ArtKey[] } {
+  const c = progress.cur;
+  if (DEMO || !c || c.seed !== run.seed || !ev.done) return { events: [], arts: [] };
+  return {
+    events: MEETS.filter(m => m.from === ev.key && c.events?.includes(m.key)).map(m => m.key),
+    arts: FEATS.filter(f => f.ev?.[0] === ev.key && c.arts?.includes(f.key)).map(f => f.key),
+  };
+}
+
+/** Whether this player hasn't opened the event `key`: in the demo, any but its three. */
+export function eventLocked(key: string) {
+  if (DEMO) return !DEMO_EVENTS.includes(key);
+  return !ALL && !START_EVENTS.includes(key) && !progress.events.includes(key);
+}
+
+/** The events this player's runs draw from, and the ones just opened that wait for the next event room, oldest first. */
+export const openEvents = () => EVENTS.map(e => e.key).filter(k => !eventLocked(k));
+export const dueEvents = (): readonly string[] => (DEMO ? [] : progress.due);
+
+/** How the event `key` opens, if it is one that opens. */
+export const meetOf = (key: string) => MEETS.find(m => m.key === key) ?? null;
+
+/** Whether this player hasn't opened the trophy `key`. The demo hands out all of them. */
+export function artLocked(key: string) {
+  return !DEMO && !ALL && !START_ARTS.includes(key as ArtKey) && !progress.arts.includes(key);
+}
+
+/** The feat that opens the trophy `key`, and how far this player has got with a counted one (null for the others). */
+export function featOf(key: string) {
+  const f = FEATS.find(o => o.key === key);
+  if (!f) return null;
+  return { how: f.how, now: f.sum ? Math.min(stats.sum[f.sum[0]] ?? 0, f.sum[1]) : null, need: f.sum?.[1] ?? null };
+}
+
+/** What a run brought this player: each of its heroes' stars, and the heroes, events and trophies it opened, in order. */
+export interface Gains { heroes: string[]; got: Record<string, number>; opened: string[]; events: string[]; arts: string[] }
 
 /** What `run` brought this player; null if it isn't the run counted. */
 export function runGains(run: Run): Gains | null {
   const c = progress.cur;
-  return !DEMO && c && c.seed === run.seed ? { got: c.got, opened: c.opened, heroes: c.heroes } : null;
+  return !DEMO && c && c.seed === run.seed ? { got: c.got, opened: c.opened, heroes: c.heroes, events: c.events ?? [], arts: c.arts ?? [] } : null;
 }

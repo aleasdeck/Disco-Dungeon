@@ -3,7 +3,10 @@
 // only what the party got through: no empty prints for the floors it never reached. The prints are drawn in src/album.ts.
 
 import { BIOMES, HEROES, MOBS, type MobKind } from './data';
-import { uiArt } from './assets';
+import { eventArt, uiArt } from './assets';
+import { eventDef } from './events';
+import { artDef } from './artifacts';
+import { artIcon } from './icons';
 import { faceUrl } from './ui';
 import { FLOORS, LAYERS } from './run';
 import { drawAfter, drawShot, drawStart, type Album } from './album';
@@ -202,11 +205,11 @@ export function showAlbum(a: Album, o: { gains?: Gains | null; button: string | 
 
 /**
  * Over the numbers: the stars the run's bosses gave each of this player's heroes, how far each is from opening the next
- * hero of its kind, and every hero the run opened. Nothing when no boss fell.
+ * hero of its kind, and every hero, event and trophy the run opened. Nothing when it brought nothing.
  */
 function showGains(g: Gains | null) {
   const box = $('reGains'), got = g ? g.heroes.filter(k => g.got[k] > 0) : [];
-  box.hidden = !g || !got.length;
+  box.hidden = !g || !(got.length || g.events.length || g.arts.length);
   if (!g || box.hidden) return;
   const at = (k: string) => HEROES.findIndex(h => h.key === k);
   const face = (i: number) => `<img alt="" src="${faceUrl({ i, def: HEROES[i] })}">`;
@@ -218,7 +221,10 @@ function showGains(g: Gains | null) {
   }).join('') + g.opened.map(k => {
     const i = at(k), def = HEROES[i];
     return `<div class="re-gain re-new" style="--c:${def.col}">${face(i)}<div><em>Новый герой</em><b>${def.name}</b></div></div>`;
-  }).join('');
+  }).join('') + g.events.map(k => {
+    const pic = eventArt.get(k);
+    return `<div class="re-gain re-new re-thing">${pic ? `<img alt="" src="${pic.src}">` : ''}<div><em>Новое событие</em><b>${eventDef(k).title}</b></div></div>`;
+  }).join('') + g.arts.map(k => `<div class="re-gain re-new re-thing"><i class="re-art">${artIcon(k)}</i><div><em>Новый трофей</em><b>${artDef(k).name}</b></div></div>`).join('');
 }
 
 export function hideAlbum() {

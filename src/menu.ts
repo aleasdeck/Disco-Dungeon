@@ -8,14 +8,15 @@ import { BOSS_UP, CASTS } from './room';
 import { saveSettings, settings } from './settings';
 import { favourite, stats } from './stats';
 import { TRINKETS, opened, type TrinketDef } from './trinkets';
-import { envArt } from './assets';
+import { envArt, eventArt } from './assets';
 import { FLOORS, LAYERS } from './run';
 import { sound } from './sound';
 import type { Player } from './net';
 import { uiArt } from './assets';
 import { BACKDROP_COUNT, drawPhoto, savePhoto, type PhotoSeat } from './photo';
 import { DEMO } from './demo';
-import { demoLocked, kindAt, locked, opening, prevOf, STARS_TO_OPEN, starsOf } from './progress';
+import { artLocked, demoLocked, eventLocked, featOf, kindAt, locked, meetOf, opening, prevOf, STARS_TO_OPEN, starsOf } from './progress';
+import { EVENTS, eventDef } from './events';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -31,7 +32,7 @@ const FLOOR_NAMES = BIOMES.map(b => b.name);
 
 // ------------------------------------------------------------ collection
 
-export function renderCollection(tab: 'heroes' | 'mobs' | 'arts' | 'trinkets') {
+export function renderCollection(tab: 'heroes' | 'mobs' | 'arts' | 'events' | 'trinkets') {
   document.querySelectorAll<HTMLButtonElement>('#collection .tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   const grid = $('colGrid');
   grid.innerHTML = '';
@@ -61,13 +62,17 @@ export function renderCollection(tab: 'heroes' | 'mobs' | 'arts' | 'trinkets') {
   } else if (tab === 'trinkets') {
     renderTrinkets(grid);
   } else if (tab === 'arts') {
-    // the floor bosses' trophies: what each does, and its joke
-    for (const a of ARTIFACTS) {
-      const card = document.createElement('article');
-      card.className = 'card col-art';
-      card.innerHTML = `<span class="col-art-ico">${artIcon(a.key)}</span><div><h3>${a.name}</h3><p><b>${a.txt}.</b> ${a.gag}</p></div>`;
+    // the floor bosses' trophies: what each does, and its joke; one not opened yet tells the feat that opens it
+    for (const a of [...ARTIFACTS].sort((x, y) => +artLocked(x.key) - +artLocked(y.key))) {
+      const card = document.createElement('article'), feat = artLocked(a.key) && featOf(a.key);
+      card.className = 'card col-art' + (feat ? ' shut' : '');
+      card.innerHTML = `<span class="col-art-ico">${artIcon(a.key)}</span>`
+        + (feat ? `<div><h3>???</h3><p><b>Подвиг.</b> ${feat.how}</p>${feat.need ? `<p class="col-feat">${num(feat.now ?? 0)} из ${num(feat.need)}</p>` : ''}</div>`
+          : `<div><h3>${a.name}</h3><p><b>${a.txt}.</b> ${a.gag}</p></div>`);
       grid.appendChild(card);
     }
+  } else if (tab === 'events') {
+    renderEvents(grid);
   } else {
     // the undertaker's coffin is a thing, not an enemy of its own
     // a boss's later phases are told on its own card
@@ -79,6 +84,27 @@ export function renderCollection(tab: 'heroes' | 'mobs' | 'arts' | 'trinkets') {
         + `<dl><dt>HP</dt><dd>${Math.round(d.hp * MOB_HP_MUL * (up?.hp[2] ?? 1))}</dd><dt>Удар</dt><dd>${d.dmg + (up?.dmg[2] ?? 0)}</dd>${d.armor ? `<dt>Броня</dt><dd>${d.armor}</dd>` : ''}</dl></div>`;
       grid.appendChild(card);
     });
+  }
+}
+
+/**
+ * The events of the run map: the open ones with their picture and scene, the rest dark with the hint of who knows them. In
+ * the demo its three and the rest waiting for the full game.
+ */
+function renderEvents(grid: HTMLElement) {
+  const keys = EVENTS.map(e => e.key).sort((a, b) => +eventLocked(a) - +eventLocked(b));
+  const head = document.createElement('p');
+  head.className = 'tr-head';
+  head.innerHTML = `Открыто событий: <b>${keys.filter(k => !eventLocked(k)).length}</b> из ${keys.length}. Новые открываются знакомствами: кто-нибудь в одном событии знает кого-нибудь из другого.`;
+  grid.append(head);
+  for (const k of keys) {
+    const e = eventDef(k), shut = eventLocked(k), m = meetOf(k), card = document.createElement('article'), pic = eventArt.get(k);
+    card.className = 'card col-ev' + (shut ? ' shut' : '');
+    // the one before it in its chain is shut too: whom it knows stays a secret
+    const how = DEMO ? 'Это событие ждёт в полной версии игры.' : !m ? '' : eventLocked(m.from) ? 'Сначала открой событие, которое к нему ведёт.' : m.how;
+    card.innerHTML = `<span class="col-ev-pic">${pic ? `<img src="${pic.src}" alt="">` : ''}</span>`
+      + (shut ? `<div><h3>???</h3><p>${how}</p></div>` : `<div><h3>${e.title}</h3><p>${e.txt}</p></div>`);
+    grid.appendChild(card);
   }
 }
 
