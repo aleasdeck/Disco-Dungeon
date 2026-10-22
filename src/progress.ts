@@ -8,8 +8,9 @@
 // start, each of the others opens by a feat of its own. Online the host's events and trophies come up, and every player
 // opens their own by what they did there.
 // «Громкость» (src/volume.ts): the first won run opens its first step, and a run won at the highest step opens the next.
-// The demo has its own three heroes and events, all the trophies, no stars and no «Громкость». `?progress=full` in the
-// address opens everything for a test without writing it down.
+// «Подставки мастерства» (src/stands.ts): the runs won with a hero dress it in a new stand.
+// The demo has its own three heroes and events, all the trophies, no stars, no «Громкость» and no stands. `?progress=full`
+// in the address opens everything for a test without writing it down, and `?stand=wood` puts every hero on that stand.
 
 import { HEROES } from './data';
 import { DEMO, DEMO_EVENTS, DEMO_HEROES, stored } from './demo';
@@ -19,6 +20,7 @@ import { EVENTS, type EventState } from './events';
 import { shutArts, type ArtKey } from './artifacts';
 import type { Tally } from './game';
 import { VOL_MAX } from './volume';
+import { STAND_MATS, standOf, type StandMat } from './stands';
 
 /** The heroes open from the first run: Бастион, Зажигалка, Рикошет, one of each kind, the same as the demo's. */
 export const START_HEROES = ['bastion', 'ash', 'ricochet'];
@@ -92,6 +94,9 @@ interface Cur {
   arts?: string[];
   /** The «Громкость» step this run opened. */
   vol?: number;
+  /** The win is counted for the stands, and the new stands it gave the heroes. */
+  stood?: boolean;
+  stands?: Record<string, StandMat>;
 }
 
 interface Progress {
@@ -111,7 +116,8 @@ interface Progress {
 }
 
 const KEY = stored('discodungeon.progress');
-const ALL = typeof location !== 'undefined' && new URLSearchParams(location.search).get('progress') === 'full';
+/** `?progress=full` in the address: everything open for a test, nothing written down. */
+export const ALL = typeof location !== 'undefined' && new URLSearchParams(location.search).get('progress') === 'full';
 
 /**
  * Read the progress; a player who played before there was any keeps every hero they have played and gets a whole
@@ -171,7 +177,10 @@ export function prevOf(key: string) {
 /** The kind's place in KINDS (0 Толстяки, 1 Чуваки, 2 Дрищи) of the hero `key`. */
 export const kindAt = (key: string) => placeOf(key)?.r ?? 0;
 
-const isOpen = (p: Progress, key: string) => START_HEROES.includes(key) || p.open.includes(key);
+/** Whether `key` is open in `p`; a function declaration, as loading the progress (above) already needs it. */
+function isOpen(p: Progress, key: string) {
+  return START_HEROES.includes(key) || p.open.includes(key);
+}
 
 /** Open the hero after `key` if `key` has the stars for it; true when it did. */
 function openNext(p: Progress, key: string) {
@@ -237,6 +246,15 @@ export function creditRun(run: Run, keys: string[], o: Deeds) {
   const up = Math.min(VOL_MAX, (o.vol ?? 0) + 1);
   if (o.won && up > progress.vol) {
     progress.vol = c.vol = up;
+    changed = true;
+  }
+  // a won run may dress its heroes in a new stand: the statistics have counted the win by now
+  if (o.won && !c.stood) {
+    c.stood = true;
+    for (const k of keys) {
+      const w = stats.heroes[k]?.wins ?? 0;
+      if (standOf(w) !== standOf(w - 1)) (c.stands ??= {})[k] = standOf(w);
+    }
     changed = true;
   }
   if (o.ev && meet(o.ev, c)) changed = true;
@@ -311,14 +329,24 @@ export function featOf(key: string) {
   return { how: f.how, now: f.sum ? Math.min(stats.sum[f.sum[0]] ?? 0, f.sum[1]) : null, need: f.sum?.[1] ?? null };
 }
 
-/** What a run brought this player: each of its heroes' stars, the heroes, events and trophies it opened, in order, and the «Громкость» step. */
-export interface Gains { heroes: string[]; got: Record<string, number>; opened: string[]; events: string[]; arts: string[]; vol?: number }
+/** What a run brought this player: each of its heroes' stars, the heroes, events and trophies it opened, in order, the «Громкость» step and the new stands. */
+export interface Gains { heroes: string[]; got: Record<string, number>; opened: string[]; events: string[]; arts: string[]; vol?: number; stands?: Record<string, StandMat> }
 
 /** What `run` brought this player; null if it isn't the run counted. */
 export function runGains(run: Run): Gains | null {
   const c = progress.cur;
-  return !DEMO && c && c.seed === run.seed ? { got: c.got, opened: c.opened, heroes: c.heroes, events: c.events ?? [], arts: c.arts ?? [], ...(c.vol ? { vol: c.vol } : {}) } : null;
+  return !DEMO && c && c.seed === run.seed ? { got: c.got, opened: c.opened, heroes: c.heroes, events: c.events ?? [], arts: c.arts ?? [], ...(c.vol ? { vol: c.vol } : {}), ...(c.stands ? { stands: c.stands } : {}) } : null;
 }
 
 /** The highest «Громкость» step this player can turn the knob to: none in the demo, all of them with `?progress=full`. */
 export const volTop = () => (DEMO ? 0 : ALL ? VOL_MAX : progress.vol);
+
+/** `?stand=wood` in the address: every hero on that stand, for a test. */
+const TEST_STAND = typeof location !== 'undefined' ? (new URLSearchParams(location.search).get('stand') as StandMat | null) : null;
+
+/** The stand this player's wins with the hero `key` have earned: plain in the demo, the mirror with `?progress=full`. */
+export function standFor(key: string): StandMat {
+  if (TEST_STAND && STAND_MATS.includes(TEST_STAND)) return TEST_STAND;
+  if (DEMO) return 'plastic';
+  return ALL ? 'mirror' : standOf(stats.heroes[key]?.wins ?? 0);
+}

@@ -706,6 +706,13 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .card.shut .col-ev-pic img { filter: blur(5px) brightness(0.4) saturate(0.4); scale: 1.15; }
 .card.shut h3 { color: var(--muted); }
 .col-feat { margin-top: 4px; font-weight: 700; color: var(--gold); }
+/* the enemies' dossier (src/dossier.ts): a shape until met, then its two lines, the shut ones saying how far */
+.card img.dark { filter: brightness(0) opacity(0.55); }
+.dos-n { font-weight: 700; color: var(--gold) !important; }
+.dos-lines { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.dos-lines li { font-size: 13px; color: #f0e5d0; padding-left: 10px; border-left: 2px solid var(--gold); }
+.dos-lines q { quotes: none; font-style: italic; }
+.dos-lines li.off { color: var(--muted); border-left-color: rgba(255, 255, 255, 0.15); font-size: 12px; }
 .tr-card { grid-template-columns: 84px minmax(0, 1fr); }
 .tr-card h3 small { margin-left: 6px; font: 500 14px Oswald, sans-serif; color: var(--muted); }
 .tr-pic { display: grid; place-items: center; width: 84px; height: 84px; background: #2a2019; clip-path: var(--cut-tile); }
@@ -872,11 +879,9 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 #map .mnode .crown { fill: var(--gold-1); stroke: var(--ink); stroke-width: 1.8; stroke-linejoin: round; }
 #map .token { pointer-events: none; }
 #map .token .tk-rim { stroke: var(--ink); stroke-width: 2.5; }
-#map .token .tk-rim.me { stroke: var(--gold-1); stroke-width: 3; }
 #map .mnode.reach:hover .disc, #map .mnode.reach:focus .disc { stroke: var(--gold); }
 #map .mnode.mine .halo { stroke: var(--text); stroke-width: 3.5; }
 #map .pip circle { stroke: var(--ink); stroke-width: 2.5; }
-#map .pip circle.me { stroke: var(--gold-1); stroke-width: 3; }
 #map .mlabel { fill: var(--muted); font: 14px var(--hand); text-anchor: middle; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
 .map-info { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
 .map-info b { color: var(--text); }
@@ -1625,6 +1630,9 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .pc-next { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0; font: 700 18px/1 var(--hand); color: var(--muted); }
 .pc-next .stars { font-size: 22px; }
 .pc-shut .pc-next { margin-top: 10px; color: #6a5640; }
+/* the hero's stand (src/stands.ts) and the wins to the next one */
+.pc-stand { display: flex; align-items: center; gap: 8px; margin: 0; font: 700 17px/1.05 var(--hand); color: var(--muted); }
+.pc-stand img { width: 42px; height: 27px; flex: none; }
 .pc-shut .stars i { color: #6a5640; opacity: 0.45; }
 .pick-q { position: absolute; inset: 0; display: grid; place-items: center; padding-top: 12%; font: 700 42cqw/1 Oswald, sans-serif; color: #f3e6c8; text-shadow: 0 2px 0 #1c120a, 0 0 8px rgba(0, 0, 0, 0.8); pointer-events: none; }
 .card.shut canvas { background-color: #6e5c49; }
@@ -1830,6 +1838,7 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
 .re-art { display: grid; place-items: center; width: 44px; height: 44px; flex: none; }
 .re-art > .ico, .re-art > .art { width: 40px; height: 40px; border: 0; background: none; border-radius: 0; clip-path: none; }
 /* the «Громкость» step the run opened: its token, not a face */
+.re-stand img { width: 56px; height: 36px; background: none; border-radius: 0; object-fit: contain; }
 .re-vol span.vol-token { height: 54px; font: inherit; }
 .re-vol .vol-token img { width: auto; height: 100%; clip-path: none; background: none; border-radius: 0; }
 .re-vol .vol-token b { display: grid; font: 700 14px/1 Oswald, sans-serif; color: #1a1210; min-width: 22px; height: 22px; }
@@ -1872,6 +1881,7 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
   .art-panel .re-panel { padding: 18px 16px; border-image-width: 30px 22px; }
   .re-gains { gap: 8px 16px; }
   .re-gain img { width: 34px; height: 34px; }
+  .re-stand img { width: 48px; height: 31px; }
   .re-gain b { font-size: 16px; }
   .re-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
   .re-tile { min-height: 46px; padding: 4px 4px 4px 32px; }

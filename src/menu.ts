@@ -1,7 +1,7 @@
 // Main menu and its screens: collection, settings and the online lobby.
 
 import { BIOMES, HEROES, MOB_HP_MUL, KINDS, MOBS, fullHit, heroesByKind, kindOf, toughOf, type MobKind } from './data';
-import { drawPortrait, drawShadow, faceUrl, mobIcon, shadowUrl } from './ui';
+import { drawPortrait, drawShadow, faceUrl, mobIcon, shadowUrl, standIcon } from './ui';
 import { ARTIFACTS } from './artifacts';
 import { artIcon } from './icons';
 import { BOSS_UP, CASTS } from './room';
@@ -15,7 +15,9 @@ import type { Player } from './net';
 import { uiArt } from './assets';
 import { BACKDROP_COUNT, drawPhoto, savePhoto, type PhotoSeat } from './photo';
 import { DEMO } from './demo';
-import { artLocked, demoLocked, eventLocked, featOf, kindAt, locked, meetOf, opening, prevOf, STARS_TO_OPEN, starsOf, volTop } from './progress';
+import { artLocked, demoLocked, eventLocked, featOf, kindAt, locked, meetOf, opening, prevOf, standFor, STARS_TO_OPEN, starsOf, volTop } from './progress';
+import { nextStand, standDef } from './stands';
+import { dossierOf, inDossier } from './dossier';
 import { EVENTS, eventDef } from './events';
 import { renderKnob } from './volview';
 
@@ -75,17 +77,41 @@ export function renderCollection(tab: 'heroes' | 'mobs' | 'arts' | 'events' | 't
   } else if (tab === 'events') {
     renderEvents(grid);
   } else {
-    // the undertaker's coffin is a thing, not an enemy of its own
-    // a boss's later phases are told on its own card
-    (Object.keys(MOBS) as MobKind[]).filter(k => !MOBS[k].prop && !MOBS[k].of && !MOBS[k].dummy).forEach(k => {
-      // a boss as a party of three meets it, its extra health and blow (BOSS_UP) included
-      const d = MOBS[k], up = BOSS_UP[k], card = document.createElement('article');
-      card.className = 'card';
-      card.innerHTML = `<img src="${mobIcon(k)}" alt=""><div><h3>${d.name}</h3><p><b>${FLOOR_NAMES[d.floor]}${d.boss ? ', босс' : CASTS.some(c => c.elite === k) ? ', элита' : ''}.</b> ${d.txt}</p>`
-        + `<dl><dt>HP</dt><dd>${Math.round(d.hp * MOB_HP_MUL * toughOf(k) * (up?.hp[2] ?? 1))}</dd><dt>Удар</dt><dd>${Math.round((d.dmg + (up?.dmg[2] ?? 0)) * toughOf(k))}</dd>${d.armor ? `<dt>Броня</dt><dd>${d.armor}</dd>` : ''}</dl></div>`;
-      grid.appendChild(card);
-    });
+    renderMobs(grid);
   }
+}
+
+/**
+ * The enemies' dossier: an enemy not met yet is a dark shape with its floor; one met has its picture, what it does, its
+ * numbers and the two lines of its file, each open once it is beaten often enough (a boss: won over), the rest saying how far.
+ * The undertaker's coffin is a thing, not an enemy of its own, and a boss's later phases are told on its own card.
+ */
+function renderMobs(grid: HTMLElement) {
+  const kinds = (Object.keys(MOBS) as MobKind[]).filter(inDossier), files = kinds.map(dossierOf);
+  const head = document.createElement('p');
+  head.className = 'tr-head';
+  head.innerHTML = `Встречено врагов: <b>${files.filter(f => f.met).length}</b> из ${kinds.length}. Строчек досье: <b>${files.reduce((n, f) => n + f.open, 0)}</b> из ${kinds.length * 2}. `
+    + `Строчки открываются победами: над обычным врагом 10 и 50 раз, над боссом 1 и 5 раз.`;
+  grid.append(head);
+  kinds.forEach((k, at) => {
+    const d = MOBS[k], f = files[at], card = document.createElement('article');
+    const where = `${FLOOR_NAMES[d.floor]}${d.boss ? ', босс' : CASTS.some(c => c.elite === k) ? ', элита' : ''}`;
+    card.className = 'card' + (f.met ? '' : ' shut');
+    if (!f.met) {
+      card.innerHTML = `<img class="dark" src="${mobIcon(k)}" alt=""><div><h3>???</h3><p><b>${where}.</b> Ещё не ${d.fem ? 'встречалась' : 'встречался'}.</p></div>`;
+      grid.appendChild(card);
+      return;
+    }
+    // a boss as a party of three meets it, its extra health and blow (BOSS_UP) included
+    const up = BOSS_UP[k], won = d.fem ? 'Побеждена' : 'Побеждён';
+    const lines = (f.lines ?? []).map((line, i) => (i < f.open ? `<li><q>${line}</q></li>`
+      : `<li class="off">${d.boss ? (f.need[i] === 1 ? 'Откроется после первой победы' : `Откроется после ${f.need[i]} побед: ${f.n} из ${f.need[i]}`) : `Откроется после ${f.need[i]} побед над ${d.fem ? 'ней' : 'ним'}: ${f.n} из ${f.need[i]}`}</li>`)).join('');
+    card.innerHTML = `<img src="${mobIcon(k)}" alt=""><div><h3>${d.name}</h3><p><b>${where}.</b> ${d.txt}</p>`
+      + `<dl><dt>HP</dt><dd>${Math.round(d.hp * MOB_HP_MUL * toughOf(k) * (up?.hp[2] ?? 1))}</dd><dt>Удар</dt><dd>${Math.round((d.dmg + (up?.dmg[2] ?? 0)) * toughOf(k))}</dd>${d.armor ? `<dt>Броня</dt><dd>${d.armor}</dd>` : ''}</dl>`
+      + (d.boss && f.n ? `<p class="dos-n">${won} ${f.n} ${plural(f.n, 'раз', 'раза', 'раз')}</p>` : '')
+      + (lines ? `<ul class="dos-lines">${lines}</ul>` : '') + '</div>';
+    grid.appendChild(card);
+  });
 }
 
 /**
@@ -268,6 +294,14 @@ function shutStars(key: string) {
   const n = starsOf(prev);
   return `<p class="pc-next">${starRow(n)}<span>${Math.min(n, STARS_TO_OPEN)} из ${STARS_TO_OPEN}</span></p>`;
 }
+/** What the hero's stand is made of and how many more wins with it make the next one; nothing in the demo. */
+function standLine(key: string, col: string) {
+  if (DEMO) return '';
+  const mat = standFor(key), next = nextStand(mat), left = next ? next.wins - (stats.heroes[key]?.wins ?? 0) : 0;
+  const tail = !next ? 'выше некуда' : left > 0 ? `до ${next.gen} ${left} ${plural(left, 'победа', 'победы', 'побед')}` : '';
+  return `<p class="pc-stand"><img src="${standIcon(mat, col)}" alt=""><span>Подставка: ${standDef(mat).name}${tail ? `, ${tail}` : ''}</span></p>`;
+}
+
 /** Mice can point at a hero to read it without taking it; fingers take it with a tap. */
 const canPoint = () => matchMedia('(hover: hover)').matches;
 
@@ -292,6 +326,7 @@ function heroCard(box: HTMLElement, i: number, shut = locked(HEROES[i].key)) {
     + `<li title="Скорость"><img src="${icon('up_speed')}" alt="Скорость">${Math.round(d.pw * 100)}%</li>`
     + `<li title="Отскок"><img src="${icon('up_bounce')}" alt="Отскок">${Math.round(d.e * 100)}%</li></ul></div>`
     + (opening(d.key) ? `<p class="pc-next" title="${STARS_WHY}">${starRow(starsOf(d.key))}<span>до нового ${KIND_OF[kindAt(d.key)]}</span></p>` : '')
+    + standLine(d.key, d.col)
     + `<div class="pc-ab"><div class="pc-abname"><span class="pc-gem" style="--ab:${d.abCol}"><img src="${icon('ab_' + d.key)}" alt=""></span><b>«${d.ab}»</b></div>`
     + `<p>${d.abTxt}</p><p class="pc-more">${d.abMore}</p></div>`;
   fitCard(box);

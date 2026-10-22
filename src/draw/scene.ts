@@ -2191,7 +2191,7 @@ export class SceneRenderer {
     const target = g.liveMobs()[0] ?? S.nodes.filter(n => n.left > 0).sort((a, b) => b.r - a.r)[0] ?? { x: S.Wx / 2, y: S.Wy / 2 };
     if (lifted) { ell(c, sx, sy0, HERO_BASE * 1.27, HERO_BASE * 0.64); c.fillStyle = 'rgba(0,0,0,.35)'; c.fill(); }
     drawMiniature(c, {
-      key: h.def.key, x: sx, y: sy, baseR: HERO_BASE, baseCol: h.def.col, fig: heroFig(h.def),
+      key: h.def.key, x: sx, y: sy, baseR: HERO_BASE, baseCol: h.def.col, fig: heroFig(h.def), mat: h.stand,
       faceRight: this.faceRight(p.x, p.y, target.x, target.y), flash: h.flash > 0, hop: at ? 0 : g.figureAt(h)!.lift,
       alpha: dead ? 0.45 : carried ? 0.3 : lifted ? 0.85 : this.aimFade(h),
       hp: dead || carried ? undefined : { now: h.hp, max: h.max },
