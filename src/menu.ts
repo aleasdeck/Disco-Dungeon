@@ -1,7 +1,7 @@
 // Main menu and its screens: collection, settings and the online lobby.
 
 import { BIOMES, HEROES, MOB_HP_MUL, KINDS, MOBS, fullHit, heroesByKind, kindOf, toughOf, type MobKind } from './data';
-import { drawPortrait, drawShadow, faceUrl, mobIcon, shadowUrl } from './ui';
+import { drawPortrait, drawShadow, faceUrl, mobIcon, shadowUrl, standIcon } from './ui';
 import { ARTIFACTS } from './artifacts';
 import { artIcon } from './icons';
 import { BOSS_UP, CASTS } from './room';
@@ -15,7 +15,8 @@ import type { Player } from './net';
 import { uiArt } from './assets';
 import { BACKDROP_COUNT, drawPhoto, savePhoto, type PhotoSeat } from './photo';
 import { DEMO } from './demo';
-import { artLocked, demoLocked, eventLocked, featOf, kindAt, locked, meetOf, opening, prevOf, STARS_TO_OPEN, starsOf, volTop } from './progress';
+import { artLocked, demoLocked, eventLocked, featOf, kindAt, locked, meetOf, opening, prevOf, standFor, STARS_TO_OPEN, starsOf, volTop } from './progress';
+import { nextStand, standDef } from './stands';
 import { EVENTS, eventDef } from './events';
 import { renderKnob } from './volview';
 
@@ -268,6 +269,14 @@ function shutStars(key: string) {
   const n = starsOf(prev);
   return `<p class="pc-next">${starRow(n)}<span>${Math.min(n, STARS_TO_OPEN)} из ${STARS_TO_OPEN}</span></p>`;
 }
+/** What the hero's stand is made of and how many more wins with it make the next one; nothing in the demo. */
+function standLine(key: string, col: string) {
+  if (DEMO) return '';
+  const mat = standFor(key), next = nextStand(mat), left = next ? next.wins - (stats.heroes[key]?.wins ?? 0) : 0;
+  const tail = !next ? 'выше некуда' : left > 0 ? `до ${next.gen} ${left} ${plural(left, 'победа', 'победы', 'побед')}` : '';
+  return `<p class="pc-stand"><img src="${standIcon(mat, col)}" alt=""><span>Подставка: ${standDef(mat).name}${tail ? `, ${tail}` : ''}</span></p>`;
+}
+
 /** Mice can point at a hero to read it without taking it; fingers take it with a tap. */
 const canPoint = () => matchMedia('(hover: hover)').matches;
 
@@ -292,6 +301,7 @@ function heroCard(box: HTMLElement, i: number, shut = locked(HEROES[i].key)) {
     + `<li title="Скорость"><img src="${icon('up_speed')}" alt="Скорость">${Math.round(d.pw * 100)}%</li>`
     + `<li title="Отскок"><img src="${icon('up_bounce')}" alt="Отскок">${Math.round(d.e * 100)}%</li></ul></div>`
     + (opening(d.key) ? `<p class="pc-next" title="${STARS_WHY}">${starRow(starsOf(d.key))}<span>до нового ${KIND_OF[kindAt(d.key)]}</span></p>` : '')
+    + standLine(d.key, d.col)
     + `<div class="pc-ab"><div class="pc-abname"><span class="pc-gem" style="--ab:${d.abCol}"><img src="${icon('ab_' + d.key)}" alt=""></span><b>«${d.ab}»</b></div>`
     + `<p>${d.abTxt}</p><p class="pc-more">${d.abMore}</p></div>`;
   fitCard(box);

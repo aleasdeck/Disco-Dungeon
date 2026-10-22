@@ -7,7 +7,8 @@ import { envArt, eventArt, sprites, uiArt } from './assets';
 import { FOOD_TOSS, ZONE_COL, type Game, type HeroState } from './game';
 import type { Mob, RoomSpec } from './room';
 import { BET_TURNS } from './events';
-import { BASE_TH, drawHeroFigure, drawMiniature, drawMobFigure } from './draw/figures';
+import { BASE_TH, drawBase, drawHeroFigure, drawMiniature, drawMobFigure } from './draw/figures';
+import type { StandMat } from './stands';
 import { lg } from './draw/util';
 import { art, artIcon, fillIcons, icon } from './icons';
 import { SOCKETS, artDef } from './artifacts';
@@ -37,6 +38,23 @@ export function mobIcon(k: MobKind) {
     });
     url = cv.toDataURL();
     mobIcons.set(key, url);
+  }
+  return url;
+}
+
+/** A hero's stand on its own, in its material and the hero's colour, for the hero's card and the run's album. */
+const standIcons = new Map<string, string>();
+export function standIcon(mat: StandMat, col: string) {
+  let url = standIcons.get(mat + col);
+  if (!url) {
+    // drawn twice the size it shows at (56 × 36), the stand's bottom face centred low
+    const cv = document.createElement('canvas'), c = cv.getContext('2d')!, R = 9.4, s = 104 / (R * 2.54);
+    cv.width = 112;
+    cv.height = 72;
+    c.setTransform(s, 0, 0, s, cv.width / 2, cv.height - 3 - R * 0.64 * s);
+    drawBase(c, 0, 0, R, col, undefined, mat);
+    url = cv.toDataURL();
+    standIcons.set(mat + col, url);
   }
   return url;
 }

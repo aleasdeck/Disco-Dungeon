@@ -5,6 +5,7 @@ import { HEROES, INK, type MobKind } from '../data';
 import { sprites } from '../assets';
 import type { Pose } from '../fx';
 import { litLevels } from './standee';
+import type { StandMat } from '../stands';
 import { brow, circ, ell, eye, fs, lg, mix, pth, rg, rr, type Ctx, type Pt } from './util';
 
 export const BASE_TH = 2.5;
@@ -28,6 +29,8 @@ export interface MiniatureOpts {
   alpha: number;
   /** Current and maximum health, shown on the stand; left out for icons. */
   hp?: { now: number; max: number };
+  /** What a hero's stand is made of (src/stands.ts); painted plastic when not given. */
+  mat?: StandMat;
   /** Rocking after a knock, or toppling over. */
   pose?: Pose;
   /** The floor's light the picture is washed in (see `Biome.light`). */
@@ -35,28 +38,148 @@ export interface MiniatureOpts {
   placeholder: (c: Ctx, x: number, y: number, flash: boolean) => void;
 }
 
-/** Round painted base, as on a board-game miniature. (x, y) is the centre of its bottom face. */
-export function drawBase(c: Ctx, x: number, y: number, R: number, col: string, hp?: { now: number; max: number }) {
-  const rx = R * 1.27, ry = R * 0.64, th = BASE_TH;
-  c.beginPath();
-  c.ellipse(x, y, rx, ry, 0, 0, Math.PI);
-  c.lineTo(x - rx, y - th);
-  c.ellipse(x, y - th, rx, ry, 0, Math.PI, 0, true);
-  c.closePath();
-  fs(c, lg(c, x - rx, 0, x + rx, 0, mix(col, '#000000', 0.25), mix(col, '#000000', 0.6)), 1);
-  ell(c, x, y - th, rx, ry);
-  fs(c, lg(c, 0, y - th - ry, 0, y - th + ry, mix(col, '#ffffff', 0.28), col), 1);
-  // bevel highlight and a ring of texture, like flocking on a painted base
+/** Round painted base, as on a board-game miniature, its top of `mat` (src/stands.ts). (x, y) is the centre of its bottom face. */
+export function drawBase(c: Ctx, x: number, y: number, R: number, col: string, hp?: { now: number; max: number }, mat: StandMat = 'plastic') {
+  const rx = R * 1.27, ry = R * 0.64, th = BASE_TH, plain = mat === 'plastic';
+  sidePath(c, x, y, rx, ry, th);
+  fs(c, plain ? lg(c, x - rx, 0, x + rx, 0, mix(col, '#000000', 0.25), mix(col, '#000000', 0.6)) : matSide(c, x, rx, mat), 1);
+  if (plain) plasticTop(c, x, y - th, rx, ry, col);
+  else {
+    matTop(c, x, y - th, rx, ry, mat);
+    // the hero's colour stays as a thin painted ring round the top
+    ell(c, x, y - th, rx * 0.9, ry * 0.86);
+    c.strokeStyle = col;
+    c.lineWidth = R * 0.16;
+    c.stroke();
+    ell(c, x, y - th, rx, ry);
+    c.lineWidth = 1;
+    c.strokeStyle = INK;
+    c.stroke();
+  }
+  if (hp) drawStandHp(c, x, y, rx, ry, th, hp.now, hp.max);
+}
+
+/** The painted plastic top every stand starts with: the hero's colour, a bevel highlight and a ring of texture, like flocking. */
+function plasticTop(c: Ctx, x: number, y: number, rx: number, ry: number, col: string) {
+  ell(c, x, y, rx, ry);
+  fs(c, lg(c, 0, y - ry, 0, y + ry, mix(col, '#ffffff', 0.28), col), 1);
   c.strokeStyle = 'rgba(255,255,255,.35)';
   c.lineWidth = 0.6;
   c.beginPath();
-  c.ellipse(x, y - th, rx * 0.86, ry * 0.8, 0, Math.PI * 1.05, Math.PI * 1.6);
+  c.ellipse(x, y, rx * 0.86, ry * 0.8, 0, Math.PI * 1.05, Math.PI * 1.6);
   c.stroke();
   c.strokeStyle = 'rgba(0,0,0,.18)';
   c.beginPath();
-  c.ellipse(x, y - th, rx * 0.62, ry * 0.6, 0, 0, Math.PI * 2);
+  c.ellipse(x, y, rx * 0.62, ry * 0.6, 0, 0, Math.PI * 2);
   c.stroke();
-  if (hp) drawStandHp(c, x, y, rx, ry, th, hp.now, hp.max);
+}
+
+/** A fixed scatter in [0, 1) for a material's grain: the same every frame, wherever the stand goes. */
+const grain = (i: number) => {
+  const v = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+  return v - Math.floor(v);
+};
+
+/** A gradient across the stand through the given colours. */
+function bands(c: Ctx, x0: number, x1: number, stops: string[]) {
+  const g = c.createLinearGradient(x0, 0, x1, 0);
+  stops.forEach((s, i) => g.addColorStop(i / (stops.length - 1), s));
+  return g;
+}
+
+/** The front rim in the material, seen when the stand shows no health (a fallen hero). */
+function matSide(c: Ctx, x: number, rx: number, mat: StandMat) {
+  const a = x - rx, b = x + rx;
+  switch (mat) {
+    case 'card': return bands(c, a, b, ['#d8b27a', '#c49a62', '#9c7442']);
+    case 'wood': return bands(c, a, b, ['#8a4a24', '#6a3418', '#44200c']);
+    case 'bronze': return bands(c, a, b, ['#b06a32', '#eaa676', '#8a4a1e', '#5a2f12']);
+    case 'gold': return bands(c, a, b, ['#e0b020', '#fff0a0', '#e8b818', '#a07408']);
+    default: return bands(c, a, b, ['#c9d1da', '#6c7580', '#e8edf2', '#4b535c']);
+  }
+}
+
+/** The stand's top in the material: kraft board, the rings of a tree, turned bronze or gold, or a mirror ball's tiles. */
+function matTop(c: Ctx, x: number, y: number, rx: number, ry: number, mat: StandMat) {
+  ell(c, x, y, rx, ry);
+  c.save();
+  c.clip();
+  if (mat === 'card') {
+    c.fillStyle = lg(c, 0, y - ry, 0, y + ry, '#e2bd86', '#c4995e');
+    c.fill();
+    // fibres and specks of kraft board, and a pressed ring
+    for (let i = 0; i < 26; i++) {
+      c.fillStyle = i % 3 ? 'rgba(110,72,34,.45)' : 'rgba(255,240,210,.5)';
+      c.fillRect(x + (grain(i) * 2 - 1) * rx, y + (grain(i + 40) * 2 - 1) * ry, rx * 0.06, ry * 0.05);
+    }
+    c.strokeStyle = 'rgba(120,80,40,.5)';
+    c.lineWidth = 0.35;
+    c.setLineDash([0.8, 0.6]);
+    ell(c, x, y, rx * 0.8, ry * 0.78);
+    c.stroke();
+    c.setLineDash([]);
+  } else if (mat === 'wood') {
+    c.fillStyle = lg(c, 0, y - ry, 0, y + ry, '#a5653a', '#7d4220');
+    c.fill();
+    // growth rings round a heart off the middle
+    const hx = x - rx * 0.35, hy = y + ry * 0.15;
+    c.strokeStyle = 'rgba(78,40,14,.5)';
+    c.lineWidth = 0.4;
+    for (let k = 1; k <= 7; k++) {
+      c.beginPath();
+      c.ellipse(hx, hy, rx * 0.22 * k * (1 + grain(k) * 0.12), ry * 0.2 * k, 0, 0, Math.PI * 2);
+      c.stroke();
+    }
+    ell(c, hx, hy, rx * 0.06, ry * 0.06);
+    c.fillStyle = 'rgba(60,30,10,.55)';
+    c.fill();
+  } else if (mat === 'bronze' || mat === 'gold') {
+    const gold = mat === 'gold';
+    c.fillStyle = bands(c, x - rx, x + rx, gold
+      ? ['#b8860b', '#ffe27a', '#e0a91a', '#fff6c8', '#c9950f', '#8a6406']
+      : ['#8a4a1e', '#e0a070', '#b0662e', '#f2c49a', '#9a5626', '#6a3614']);
+    c.fill();
+    // an engraved ring and the lathe's turned lines, lit along the front
+    c.lineWidth = 0.3;
+    for (let k = 0; k < 4; k++) {
+      c.strokeStyle = k ? 'rgba(80,52,8,.22)' : 'rgba(80,52,8,.7)';
+      ell(c, x, y, rx * (0.8 - k * 0.16), ry * (0.78 - k * 0.16));
+      c.stroke();
+    }
+    c.strokeStyle = 'rgba(255,250,220,.6)';
+    c.beginPath();
+    c.ellipse(x, y + 0.25, rx * 0.8, ry * 0.78, 0, Math.PI * 0.15, Math.PI * 0.85);
+    c.stroke();
+    if (gold) glint(c, x - rx * 0.45, y - ry * 0.35, rx * 0.22);
+  } else {
+    // silver squares each catching the light its own way, a few of them the club's pink and blue
+    c.fillStyle = '#7d8691';
+    c.fill();
+    const N = 7, M = 5, w = (2 * rx) / N, h = (2 * ry) / M;
+    for (let i = 0; i < N; i++) for (let j = 0; j < M; j++) {
+      const t = grain(i * 5 + j * 17 + 3);
+      c.fillStyle = t > 0.9 ? '#f3a6d6' : t > 0.82 ? '#9fe3ff' : `hsl(210, 10%, ${Math.round(45 + grain(i * 13 + j * 7 + 1) * 50)}%)`;
+      c.fillRect(x - rx + i * w + 0.15, y - ry + j * h + 0.15, w - 0.3, h - 0.3);
+    }
+    glint(c, x + rx * 0.3, y - ry * 0.4, rx * 0.26);
+    glint(c, x - rx * 0.55, y + ry * 0.2, rx * 0.15);
+  }
+  // the light from above
+  c.fillStyle = lg(c, 0, y - ry, 0, y + ry, 'rgba(255,255,255,.18)', 'rgba(0,0,0,.12)');
+  c.fillRect(x - rx, y - ry, 2 * rx, 2 * ry);
+  c.restore();
+}
+
+/** A four-pointed glint. */
+function glint(c: Ctx, x: number, y: number, r: number) {
+  c.fillStyle = 'rgba(255,255,255,.95)';
+  c.beginPath();
+  c.moveTo(x, y - r);
+  c.quadraticCurveTo(x, y, x + r * 0.7, y);
+  c.quadraticCurveTo(x, y, x, y + r);
+  c.quadraticCurveTo(x, y, x - r * 0.7, y);
+  c.quadraticCurveTo(x, y, x, y - r);
+  c.fill();
 }
 
 /** The front rim of the stand, between its top and bottom faces. */
@@ -101,7 +224,7 @@ export function drawMiniature(c: Ctx, o: MiniatureOpts) {
     c.rotate(ps.rot);
     c.translate(-px, -py);
   }
-  drawBase(c, o.x, y, r, o.baseCol, o.hp);
+  drawBase(c, o.x, y, r, o.baseCol, o.hp, o.mat);
   const feet = y - BASE_TH;
   const sp = sprites.get(o.key);
   c.save();
