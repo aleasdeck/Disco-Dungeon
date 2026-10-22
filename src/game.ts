@@ -3377,9 +3377,9 @@ export class Game {
     S.phase = 'over';
     this.wounds = win && S.spec.type === 'boss' ? S.heroes.map(h => ({ i: h.i, hp: Math.max(0, h.hp), max: h.max })) : null;
     if (win && S.spec.type === 'boss') this.bossHeal();
-    // a fight won without a scratch pays ore for every hero; the ore cave has nobody to scratch them
+    // a fight won without a scratch pays the party ore, as much for any party; the ore cave has nobody to scratch them
     if (win && S.spec.type !== 'treasure' && !S.hurt) {
-      this.clean = CLEAN_ORE * this.party.length;
+      this.clean = CLEAN_ORE;
       this.bank.ore += this.clean;
       this.float(S.Wx / 2, S.Wy / 2, `БЕЗ ЦАРАПИНЫ +${this.clean}`, '#ffd34d');
     }
