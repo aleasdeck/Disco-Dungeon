@@ -22,7 +22,7 @@ export type Msg =
   | { t: 'hello'; name: string; key: string; demo?: boolean }
   /** The host turns a player away (the room is full, or the game started without them). */
   | { t: 'deny'; text: string }
-  | { t: 'lobby'; players: Player[]; bg?: number }
+  | { t: 'lobby'; players: Player[]; bg?: number; vol?: number }
   | { t: 'pick'; hero: number | null }
   /** A player still without a hero points at one in the lobby: the others see it pale in the party photo. */
   | { t: 'look'; hero: number | null }

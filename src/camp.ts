@@ -3,6 +3,7 @@
 
 import type { Bank, HeroState } from './game';
 import { makeRng } from './rng';
+import { VOL, VOL_CAMP_HEAL, loud } from './volume';
 
 /** Health a rest by the fire or a teammate's bandage gives back; a fallen hero gets up with half instead. */
 export const CAMP_HEAL = 8;
@@ -21,15 +22,23 @@ export interface CampState {
   seed: number;
   /** What each hero has done here, by hero; every hero does one thing. */
   did: Record<number, CampDid>;
+  /** Health a rest or a bandage gives back here, when not CAMP_HEAL: less at «Громкость». */
+  heal?: number;
 }
+
+/** The camp of the room with this seed on a run at «Громкость» step `vol`. */
+export const newCamp = (seed: number, vol?: number): CampState => ({ seed, did: {}, ...(loud(vol, VOL.camp) ? { heal: VOL_CAMP_HEAL } : {}) });
+
+/** Health a rest or a bandage gives back at this camp. */
+export const healOf = (camp: CampState) => camp.heal ?? CAMP_HEAL;
 
 /** Ore a hero digs out at this camp, 0 to DIG_MAX: the same on every screen and after a reload. */
 export const digOre = (seed: number, hero: number) => makeRng(seed * 7 + hero * 977 + 5).int(0, DIG_MAX);
 
-/** Health back by CAMP_HEAL, up to the top; a fallen hero gets up with half. Returns how much it gave. */
-function heal(h: HeroState) {
+/** Health back by `n`, up to the top; a fallen hero gets up with half. Returns how much it gave. */
+function heal(h: HeroState, n: number) {
   const was = Math.max(0, h.hp);
-  h.hp = h.hp <= 0 ? Math.ceil(h.max / 2) : Math.min(h.max, h.hp + CAMP_HEAL);
+  h.hp = h.hp <= 0 ? Math.ceil(h.max / 2) : Math.min(h.max, h.hp + n);
   return h.hp - was;
 }
 
@@ -46,8 +55,8 @@ export function canCamp(h: HeroState, pick: CampPick, party: HeroState[]): boole
 export function campDo(camp: CampState, h: HeroState, pick: CampPick, party: HeroState[], bank: Bank): CampDid | null {
   if (camp.did[h.i] || !canCamp(h, pick, party)) return null;
   let did: CampDid;
-  if (pick.k === 'rest') did = { k: 'rest', hp: heal(h) };
-  else if (pick.k === 'mend') did = { k: 'mend', to: pick.to, hp: heal(party.find(o => o.i === pick.to)!) };
+  if (pick.k === 'rest') did = { k: 'rest', hp: heal(h, healOf(camp)) };
+  else if (pick.k === 'mend') did = { k: 'mend', to: pick.to, hp: heal(party.find(o => o.i === pick.to)!, healOf(camp)) };
   else {
     did = { k: 'dig', ore: digOre(camp.seed, h.i) };
     bank.ore += did.ore;

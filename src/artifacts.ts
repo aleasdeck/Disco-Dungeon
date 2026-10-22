@@ -6,6 +6,7 @@
 
 import type { HeroState } from './game';
 import { makeRng } from './rng';
+import { VOL, VOL_OFFER, loud } from './volume';
 
 export type ArtKey =
   | 'xray' | 'polish' | 'tray' | 'lube'
@@ -100,16 +101,17 @@ export function artsLeft(party: Pick<HeroState, 'arts' | 'kept'>[]): ArtKey[] {
   return ARTIFACTS.map(a => a.key).filter(k => !owned.has(k) && !shut(k));
 }
 
-/** The trophies a boss leaves: OFFER of the artifacts nobody in the party has yet (nor has waiting for them), the same on every screen. */
-export function rollOffer(seed: number, party: Pick<HeroState, 'arts' | 'kept'>[]): ArtKey[] {
+/** The trophies a boss leaves: `n` of the artifacts nobody in the party has yet (nor has waiting for them), the same on every screen. */
+export function rollOffer(seed: number, party: Pick<HeroState, 'arts' | 'kept'>[], n = OFFER): ArtKey[] {
   const left = artsLeft(party), R = makeRng(seed * 13 + 7), out: ArtKey[] = [];
-  while (out.length < OFFER && left.length) out.push(left.splice(R.int(0, left.length - 1), 1)[0]);
+  while (out.length < n && left.length) out.push(left.splice(R.int(0, left.length - 1), 1)[0]);
   return out;
 }
 
-export function newLoot(seed: number, floor: number, party: Pick<HeroState, 'i' | 'arts' | 'kept'>[], boss?: string): LootState {
-  const full = party.filter(h => !room(h)).map(h => h.i);
-  return { seed, floor, offer: rollOffer(seed, party), picks: {}, ...(boss ? { boss } : {}), ...(full.length ? { full } : {}) };
+/** The boss's trophies for `party` on a run at «Громкость» step `vol`: fewer to pick from at its loudest, still one for every hero. */
+export function newLoot(seed: number, floor: number, party: Pick<HeroState, 'i' | 'arts' | 'kept'>[], boss?: string, vol?: number): LootState {
+  const full = party.filter(h => !room(h)).map(h => h.i), n = loud(vol, VOL.loot) ? Math.max(VOL_OFFER, party.length) : OFFER;
+  return { seed, floor, offer: rollOffer(seed, party, n), picks: {}, ...(boss ? { boss } : {}), ...(full.length ? { full } : {}) };
 }
 
 /** Whether there is anything to share out: a hero with all sockets taken can still swap one of its own for a new one. */

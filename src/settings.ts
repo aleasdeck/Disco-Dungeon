@@ -13,10 +13,12 @@ export interface Settings {
   /** Music and sound effect volumes, 0 to 1. */
   music: number;
   sfx: number;
+  /** The «Громкость» step (src/volume.ts) the knob was last turned to for the campaign or a room this player hosts. */
+  vol: number;
 }
 
 const KEY = 'discodungeon.settings';
-const defaults: Settings = { name: '', quality: 'auto', hero: 0, size: 1, party: [], music: 0.7, sfx: 0.85 };
+const defaults: Settings = { name: '', quality: 'auto', hero: 0, size: 1, party: [], music: 0.7, sfx: 0.85, vol: 0 };
 
 function load(): Settings {
   let s: Settings;

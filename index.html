@@ -70,7 +70,7 @@
       </div>
       <div id="mapParty" class="map-party"></div>
       <p id="mapVotes" class="map-info map-votes" aria-live="polite" hidden></p>
-      <svg id="map" viewBox="0 0 320 600" role="group" aria-label="Комнаты этажа"></svg>
+      <div class="map-board"><svg id="map" viewBox="0 0 320 600" role="group" aria-label="Комнаты этажа"></svg><div id="mapVol" class="vol-knob mini" hidden></div></div>
     </div>
   </section>
 
@@ -189,6 +189,7 @@
         <div class="pick-side">
           <div id="heroPicks" class="pick-row" role="group" aria-label="Герои"></div>
           <article id="heroInfo" class="pick-card"></article>
+          <div id="heroVol" class="vol-knob pick-vol" hidden></div>
           <div class="lobby-foot pick-go"><span id="heroLeft" class="sr-only"></span><button class="btn big" id="heroGo">В путь</button></div>
         </div>
       </div>
@@ -224,6 +225,7 @@
             <div id="lobbyHeroes" class="pick-row" role="group" aria-label="Герои"></div>
             <article id="lobbyInfo" class="pick-card"></article>
             <ul id="lobbyPlayers" class="players sr-only"></ul>
+            <div id="lobbyVol" class="vol-knob pick-vol" hidden></div>
             <div class="lobby-foot pick-go"><span id="lobbyHint" class="sr-only"></span><button class="btn big" id="lobbyStartBtn" hidden>Начать</button><button class="btn big" id="lobbyReadyBtn" hidden>Готов</button></div>
           </div>
         </div>

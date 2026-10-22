@@ -834,6 +834,9 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .map-panel .panel-btns .btn { white-space: nowrap; }
 .map-panel .btn { padding: 6px 10px; font-size: 13px; }
 #map { width: 100%; flex: 1 1 auto; min-height: 0; height: auto; display: block; margin-top: 4px; }
+/* the map and, in its top left corner by the boss, the run's «Громкость» token */
+.map-board { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+#mapVol { position: absolute; left: 4px; top: 10px; }
 /* a phone on its side: the floor stays readable and scrolls instead of shrinking to dots */
 @media (max-height: 520px) {
   #mapScreen { align-items: start; }
@@ -1567,7 +1570,7 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .pick-body {
   /* a face of the row: as big as the height allows, and all twelve across the panel */
   --tile: min(clamp(56px, 9dvh, 92px), calc((min(1400px, 100vw) - 240px) / 12));
-  flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto;
+  flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   gap: 14px 34px; align-items: start;
 }
 .pick-side { display: contents; }
@@ -1575,8 +1578,8 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 /* the photo: a square print in a white edge, taped to the board like the events' pictures; its two buttons sit left of the
    start button under the card, so the photo gets all the height */
 .pick-pic { display: contents; }
-.pick-print { grid-column: 1; grid-row: 2 / 5; justify-self: center; }
-.pick-tools { grid-column: 2; grid-row: 4; justify-self: start; align-self: center; }
+.pick-print { grid-column: 1; grid-row: 2 / 6; justify-self: center; }
+.pick-tools { grid-column: 2; grid-row: 5; justify-self: start; align-self: center; }
 .pick-print { --ph: min(calc(100dvh - 216px - var(--tile)), 720px, 46vw); position: relative; width: var(--ph); height: var(--ph); margin-top: 30px; padding: 12px; background: #f3ead8; rotate: -1.5deg; box-shadow: 0 10px 22px rgba(0, 0, 0, 0.55); }
 .pick-print::before, .pick-print::after { content: ''; position: absolute; z-index: 1; top: -12px; width: 90px; height: 28px; background: rgba(226, 205, 160, 0.86); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); }
 .pick-print::before { left: -24px; rotate: -35deg; }
@@ -1635,7 +1638,43 @@ body:not(.demo) .demo-only, body.demo .full-only { display: none !important; }
 /* the start button under the card: no line of hints of its own, the photo says who is ready */
 .pick-panel .lobby-foot { flex: none; flex-wrap: nowrap; font-size: 18px; font-family: var(--hand); }
 .pick-panel .lobby-foot .btn { flex: none; white-space: nowrap; }
-.pick-go { grid-column: 2; grid-row: 4; justify-self: end; }
+.pick-go { grid-column: 2; grid-row: 5; justify-self: end; }
+/* the «Громкость» knob over the start button; with nothing to turn its row takes no room */
+.pick-vol { grid-column: 2; grid-row: 4; justify-self: end; }
+/* «Громкость» (src/volview.ts): a step's token is its disco ball with the number on a sticker; the knob stands left of the
+   start button, «тише» and «громче» round the token, the step's own rule beside it, and a tap opens the list of the steps */
+.vol-token { position: relative; display: inline-block; flex: none; height: 60px; line-height: 0; }
+.vol-token img { height: 100%; width: auto; filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.5)); }
+.vol-token.off img { filter: grayscale(1) brightness(0.55); opacity: 0.55; }
+.vol-token b { position: absolute; right: -7px; bottom: -2px; display: grid; place-items: center; min-width: 25px; height: 25px; padding: 0 4px; border-radius: 50%; background: #f3ead8; color: #1a1210; font: 700 15px/1 Oswald, sans-serif; box-shadow: 0 0 0 2px #120c09, 0 2px 3px rgba(0, 0, 0, 0.5); rotate: -8deg; }
+.vol-token.sm { height: 30px; }
+.vol-token.sm b { display: none; }
+.vol-knob { position: relative; display: flex; align-items: center; gap: 2px; min-width: 0; }
+.vol-knob[hidden] { display: none; }
+.vol-knob button { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.vk-arrow { flex: none; width: 28px; height: 48px; color: var(--text) !important; font: 700 36px/1 Oswald, sans-serif !important; text-shadow: 0 2px 0 #120c09; }
+.vk-arrow:disabled { opacity: 0.22; cursor: default; }
+.vk-face { flex: none; padding: 0 4px !important; }
+.vk-txt { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; padding-left: 8px !important; text-align: left; }
+.vk-txt b { font: 700 17px/1 Oswald, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold-1); white-space: nowrap; }
+.vk-txt small { font: 18px/1.02 var(--hand); color: var(--text); }
+.vk-txt .vk-more { font-size: 15px; color: var(--muted); }
+.vk-list { position: absolute; z-index: 30; left: 0; bottom: calc(100% + 10px); width: min(440px, calc(100vw - 48px)); max-height: min(72dvh, 600px); overflow-y: auto; padding: 12px 12px 10px; background: rgb(240, 229, 204) var(--grain) 0 0 / 160px; background-blend-mode: overlay; color: #2a1a0d; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.6); rotate: -0.6deg; }
+.vk-list[hidden] { display: none; }
+/* the token alone in the map's corner: its list hangs down from it */
+.vol-knob.mini .vol-token { height: 46px; }
+.vol-knob.mini .vol-token b { min-width: 21px; height: 21px; font-size: 13px; right: -7px; }
+.vol-knob.mini .vk-list { left: 0; top: calc(100% + 6px); bottom: auto; width: min(380px, calc(100vw - 48px)); }
+.vk-head { margin: 0 0 8px; font: 17px/1.08 var(--hand); color: #6a5640; }
+.vk-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 3px 8px 3px 4px !important; text-align: left; font: 18px/1.05 var(--hand) !important; color: #2a1a0d !important; }
+.vk-row > span { min-width: 0; }
+.vk-row b { margin-right: 4px; font: 700 15px/1 Oswald, sans-serif; }
+.vk-row small { display: block; font-size: 15px; color: #8a7458; }
+.vk-row.cur { background: rgba(217, 178, 74, 0.45) !important; }
+.vk-row.open { opacity: 0.7; }
+.vk-row.shut { opacity: 0.45; }
+.vk-row.shut .vol-token img { filter: grayscale(1); }
+button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 0.12); outline: 0; }
 
 /* an upright phone: a small photo (a tap opens it big) beside the three kinds on three rows, then the card, all without scrolling */
 @media (orientation: portrait) and (max-width: 700px) {
@@ -1647,7 +1686,7 @@ body:not(.demo) .demo-only, body.demo .full-only { display: none !important; }
   .pick-panel .hero-size { order: 3; flex: 1 0 100%; }
   .pick-panel .hero-size .btn { padding: 6px 12px; font-size: 14px; }
   .pick-panel .lobby-foot .btn.big { padding: 10px 26px; font-size: 18px; }
-  .pick-body { grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 8px 10px; }
+  .pick-body { grid-template-rows: auto auto minmax(0, 1fr) auto auto; gap: 8px 10px; }
   .pick-side .room-code { grid-column: 1 / -1; grid-row: 1; gap: 6px; font-size: 14px; }
   .pick-side .room-code b { font-size: 20px; }
   /* the photo's own place keeps its size while the photo is lifted out */
@@ -1667,6 +1706,8 @@ body:not(.demo) .demo-only, body.demo .full-only { display: none !important; }
   .pick-row .pick-n { min-width: 17px; height: 17px; font-size: 10px; top: 2px; left: 2px; }
   .pick-card { grid-column: 1 / -1; gap: 6px; }
   .pick-go { grid-column: 1 / -1; }
+  .pick-vol { grid-column: 1 / -1; justify-self: stretch; }
+  .vk-txt small { font-size: 16px; }
   .pick-card h3 { font-size: 24px; }
   .pick-card h3 em { display: none; }
   .pc-stats { gap: 4px; }
@@ -1702,6 +1743,7 @@ body:not(.demo) .demo-only, body.demo .full-only { display: none !important; }
   .pick-row { grid-column: 2; grid-row: 2; }
   .pick-card { grid-column: 2; grid-row: 3; }
   .pick-go { grid-column: 2; grid-row: 4; }
+  .pick-vol { grid-column: 2; grid-row: 4; justify-self: start; }
   .pick-panel .lobby-status { grid-column: 2; grid-row: 5; }
   .pick-row { gap: 8px; padding: 2px 0 4px; justify-content: flex-start; }
   .pick-kind { flex: 1 1 auto; gap: 3px; padding: 5px 4px 4px; }
@@ -1776,6 +1818,10 @@ body:not(.demo) .demo-only, body.demo .full-only { display: none !important; }
 .re-thing img { clip-path: none; border-radius: 6px; object-fit: cover; }
 .re-art { display: grid; place-items: center; width: 44px; height: 44px; flex: none; }
 .re-art > .ico, .re-art > .art { width: 40px; height: 40px; border: 0; background: none; border-radius: 0; clip-path: none; }
+/* the «Громкость» step the run opened: its token, not a face */
+.re-vol span.vol-token { height: 54px; font: inherit; }
+.re-vol .vol-token img { width: auto; height: 100%; clip-path: none; background: none; border-radius: 0; }
+.re-vol .vol-token b { display: grid; font: 700 14px/1 Oswald, sans-serif; color: #1a1210; min-width: 22px; height: 22px; }
 .re-new em { display: block; font: 600 13px/1.1 Oswald, sans-serif; font-style: normal; color: var(--gold-1); text-transform: uppercase; letter-spacing: 0.08em; }
 /* the numbers' board */
 .re-panel { width: min(1180px, 100%); display: flex; flex-direction: column; gap: 14px; animation: re-up 0.5s 1.2s ease-out both; }

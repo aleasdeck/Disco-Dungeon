@@ -8,7 +8,8 @@ import { has, type ArtKey, type Kept } from './artifacts';
 import type { Sfx } from './audio/sfx';
 import { TRINKET_R } from './trinkets';
 import { BET_TURNS, FLOOR_FR, settleBet, type Bet, type Floor } from './events';
-import { CASTS, caveTurns, cellAt, cellCentre, generate, hazKey, inPit, isFloor, mobDmg, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec, type Zone } from './room';
+import { CASTS, caveTurns, cellAt, cellCentre, generate, hazKey, inPit, isFloor, mobDmg, muAt, newMob, partyScale, pitAt, standing, volBlow, type Intent, type Layout, type Mob, type RoomSpec, type Zone } from './room';
+import { VOL, loud } from './volume';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
 
@@ -374,10 +375,13 @@ export interface Bank {
   ore: number; boon?: number; shield?: number; rage?: number; smoke?: boolean; strobe?: boolean;
   /** The next fight's floor, its bet and one disc a turn more in it: they go with the room's spec too. */
   ground?: Floor; bet?: Bet; extra?: number;
+  /** The run's «Громкость» step (src/volume.ts), for the whole run: every room's spec carries it, the blacksmith and the camp read it. */
+  vol?: number;
 }
 
-export function newBank(): Bank {
-  return { ore: 0, boon: 0 };
+/** The party's pool for a new run at «Громкость» step `vol`. */
+export function newBank(vol = 0): Bank {
+  return { ore: 0, boon: 0, vol };
 }
 
 /** A fresh party for the run with seed `run`; `picks` lists which heroes (by index into HEROES) take part, the first three by default. */
@@ -466,6 +470,7 @@ export class Game {
     if (this.bank.strobe) spec.strobe = true;
     if (this.bank.ground) spec.ground = this.bank.ground;
     if (this.bank.extra) spec.extra = this.bank.extra;
+    if (this.bank.vol) spec.vol = this.bank.vol;
     const bet = this.bank.bet && spec.type !== 'treasure' && !spec.tut ? this.bank.bet : undefined;
     if (bet) spec.bet = bet;
     const L = generate(spec);
@@ -831,7 +836,12 @@ export class Game {
 
   /** Cost of the next extra disc, or 0 when the hero already has the most. */
   discCost(h: HeroState) {
-    return h.discs < HAND_MAX ? HAND_COST[h.discs - HAND_START] : 0;
+    return h.discs < HAND_MAX ? HAND_COST[h.discs - HAND_START] + this.dearer() : 0;
+  }
+
+  /** What «Громкость» adds to every price at the blacksmith's. */
+  private dearer() {
+    return loud(this.bank.vol, VOL.forge) ? 1 : 0;
   }
 
   buyDisc(h = this.hero) {
@@ -846,7 +856,8 @@ export class Game {
   /** Cost of the next level of a disc stat, or 0 when there is nothing more to gain (a bounce already at the limit). */
   upCost(h: HeroState, k: StatKey) {
     if (k === 'e' && this.stat(h, 'e') >= E_MAX) return 0;
-    return UP_COST[h.up[k]] ?? 0;
+    const c = UP_COST[h.up[k]];
+    return c ? c + this.dearer() : 0;
   }
 
   /** The hero's next stat level costs nothing: an elite owes it one. */
@@ -1437,7 +1448,10 @@ export class Game {
     // «Ромашковый чай» in anyone's bag calms the whole room down for a while
     // the warm-up's dummies never get angry
     if (this.S.spec.tut) return Infinity;
-    return (this.S.spec.type === 'boss' ? RAGE_FROM_BOSS : RAGE_FROM) + (this.S.heroes.some(h => has(h, 'tea')) ? ART.tea : 0);
+    // «Громкость»: a turn sooner, and in the boss's room from the first
+    const { vol, type } = this.S.spec, boss = type === 'boss';
+    const from = boss && loud(vol, VOL.bossRage) ? 1 : (boss ? RAGE_FROM_BOSS : RAGE_FROM) - (loud(vol, VOL.rage) ? 1 : 0);
+    return from + (this.S.heroes.some(h => has(h, 'tea')) ? ART.tea : 0);
   }
 
   /** Extra damage every enemy deals this turn: one more for each turn the fight has dragged past rageFrom. */
@@ -1640,7 +1654,7 @@ export class Game {
       return S.mobs.filter(c => c.k === 'coffin' && c.hp > 0 && c.owner === mi).length < max;
     });
     if (!u) return;
-    const c = newMob('coffin', dead.x, dead.y, S.hpMul, S.dmgAdd, S.dmgMul, S.spec.seed);
+    const c = this.spawn('coffin', dead.x, dead.y);
     c.owner = S.mobs.indexOf(u); c.born = 1; c.hold = dead.k; c.rise = COFFIN_TURNS;
     c.intent = this.rising(c);
     S.mobs.push(c);
@@ -2139,7 +2153,7 @@ export class Game {
     for (const c of [...this.around(area, 1), ...this.around(area, 2)]) {
       if (n <= 0) break;
       if (!this.cellFree(c.x, c.y, taken) || stands.has(hazKey(c.x, c.y)) || S.haz.has(hazKey(c.x, c.y))) continue;
-      const p = cellCentre(c.x, c.y), o = newMob('rat', p.x, p.y, S.hpMul, S.dmgAdd, S.dmgMul, S.spec.seed);
+      const p = cellCentre(c.x, c.y), o = this.spawn('rat', p.x, p.y);
       o.owner = S.mobs.indexOf(m);
       o.born = 1;
       S.mobs.push(o);
@@ -2149,9 +2163,16 @@ export class Game {
     }
   }
 
+  /** An enemy the fight brings in, as tough as the room's own: «Громкость» included. */
+  private spawn(k: MobKind, x: number, y: number) {
+    const S = this.S, m = newMob(k, x, y, S.hpMul, S.dmgAdd, S.dmgMul, S.spec.seed);
+    m.dmg += volBlow(S.spec, k);
+    return m;
+  }
+
   /** A dragon's egg hatches: a fire imp gets up in its place, and goes from the next turn on. */
   private hatch(o: Mob) {
-    const S = this.S, imp = newMob(o.hold ?? 'imp', o.x, o.y, S.hpMul, S.dmgAdd, S.dmgMul, S.spec.seed);
+    const imp = this.spawn(o.hold ?? 'imp', o.x, o.y);
     Object.assign(o, imp, { owner: o.owner, born: 1, intent: null, hold: undefined });
     this.burst(o.x, o.y, '#ff7a3d', 14);
     this.float(o.x, o.y - 12, 'вылупился!', '#ff7a3d');
@@ -3232,7 +3253,7 @@ export class Game {
         return;
       }
       // the lid flies off: the enemy in it stands up whole, in the coffin's place in the order
-      const o = newMob(m.hold!, m.x, m.y, S.hpMul, S.dmgAdd, S.dmgMul, S.spec.seed);
+      const o = this.spawn(m.hold!, m.x, m.y);
       Object.assign(m, o, { owner: m.owner, born: 1, intent: null, hold: undefined, rise: undefined });
       this.burst(m.x, m.y, '#b7a07a', 16);
       this.sfx('ability');
@@ -3283,7 +3304,7 @@ export class Game {
       this.note(`${m.name} ${did(d, 'призвал')} ${MOBS[kind].acc.toLowerCase()}${n > 1 ? ' ×' + n : ''}`);
       for (const p of it.spots ?? []) {
         // a disc may have come to rest on the circle; the mob still rises, the disc is long gone by then
-        const o = newMob(kind, p.x, p.y, S.hpMul, S.dmgAdd, S.dmgMul, S.spec.seed);
+        const o = this.spawn(kind, p.x, p.y);
         o.owner = mi; o.born = 1;
         S.mobs.push(o);
         this.burst(p.x, p.y, '#b893ff', 16);

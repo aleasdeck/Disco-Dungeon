@@ -15,8 +15,9 @@ import type { Player } from './net';
 import { uiArt } from './assets';
 import { BACKDROP_COUNT, drawPhoto, savePhoto, type PhotoSeat } from './photo';
 import { DEMO } from './demo';
-import { artLocked, demoLocked, eventLocked, featOf, kindAt, locked, meetOf, opening, prevOf, STARS_TO_OPEN, starsOf } from './progress';
+import { artLocked, demoLocked, eventLocked, featOf, kindAt, locked, meetOf, opening, prevOf, STARS_TO_OPEN, starsOf, volTop } from './progress';
 import { EVENTS, eventDef } from './events';
+import { renderKnob } from './volview';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -404,7 +405,7 @@ export const campPhotoBg = () => campBg;
  * one row and the card of the hero last tapped (`shown`) or under the mouse. The next free place in the photo shows the
  * hero under the mouse pale, as a try-on.
  */
-export function renderHeroSelect(o: { size: number; party: number[]; shown: number; onPick: (hero: number) => void; onSize: (n: number) => void }) {
+export function renderHeroSelect(o: { size: number; party: number[]; shown: number; vol: number; onPick: (hero: number) => void; onSize: (n: number) => void; onVol: (n: number) => void }) {
   $('heroSize').innerHTML = [1, 2, 3].map(n => `<button class="btn tab${n === o.size ? ' on' : ''}" data-n="${n}" aria-pressed="${n === o.size}">${n} ${plural(n, 'герой', 'героя', 'героев')}</button>`).join('');
   $('heroSize').querySelectorAll<HTMLButtonElement>('button').forEach(b => b.addEventListener('click', () => o.onSize(Number(b.dataset.n))));
   campPeek = -1;
@@ -437,6 +438,7 @@ export function renderHeroSelect(o: { size: number; party: number[]; shown: numb
   const go = $<HTMLButtonElement>('heroGo');
   go.disabled = left > 0;
   go.textContent = left > 0 ? `Ещё ${left} ${plural(left, 'герой', 'героя', 'героев')}` : 'В путь';
+  renderKnob($('heroVol'), { vol: o.vol, top: volTop(), onVol: o.onVol });
 }
 
 // ------------------------------------------------------------ settings
@@ -479,8 +481,8 @@ let lobbyShown = -1;
  * rest). A player still choosing stands pale in the photo as the hero they point at.
  */
 export function renderLobby(o: {
-  code: string; players: Player[]; me: string; host: boolean; bg: number;
-  onPick: (hero: number | null) => void; onLook: (hero: number | null) => void; onBg: () => void;
+  code: string; players: Player[]; me: string; host: boolean; bg: number; vol: number;
+  onPick: (hero: number | null) => void; onLook: (hero: number | null) => void; onBg: () => void; onVol: (n: number) => void;
 }) {
   $('lobbyStart').hidden = true;
   $('lobbyRoom').hidden = false;
@@ -538,6 +540,8 @@ export function renderLobby(o: {
     const ready = p.id === 'host' ? '' : p.ready ? '<span class="rdy on">готов</span>' : '<span class="rdy">не готов</span>';
     return `<li><b>${escapeHtml(p.name)}</b>${p.id === 'host' ? ' · хозяин' : ''}${p.id === o.me ? ' · ты' : ''}<span class="muted">${def ? def.name : 'выбирает героя'}</span>${ready}</li>`;
   }).join('');
+  // the host turns the knob for the table, the rest see where it stands
+  renderKnob($('lobbyVol'), { vol: o.vol, top: volTop(), ...(o.host ? { onVol: o.onVol } : {}) });
   const go = startable(o.players), waiting = o.players.filter(p => p.id !== 'host' && !p.ready);
   $('lobbyStartBtn').hidden = !o.host;
   $<HTMLButtonElement>('lobbyStartBtn').disabled = !go;

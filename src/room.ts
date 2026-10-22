@@ -3,6 +3,7 @@
 import type { Knock } from './fx';
 import type { Bet, Floor } from './events';
 import { BIOMES, MOB_HP_MUL, MOBS, NODES, TILE, isRanged, mobSize, toughOf, type Biome, type MobKind, type NodeKind, type RoomType } from './data';
+import { VOL, VOL_BOSS_HP, loud } from './volume';
 import { makeRng, mulberry32 } from './rng';
 import { DEMO, DEMO_BOSS } from './demo';
 import { LAYERS } from './run';
@@ -29,6 +30,8 @@ export interface RoomSpec {
   boss?: MobKind;
   /** The warm-up room of the hero's lesson, built by hand (warmRoom): the same for any seed. */
   tut?: boolean;
+  /** The run's «Громкость» step (src/volume.ts): an elite's extra enemy, thicker bosses, fewer mushrooms, harder blows, earlier rage. */
+  vol?: number;
 }
 
 export interface Pad { x: number; y: number }
@@ -270,6 +273,9 @@ export function mobDmg(k: MobKind, dmgAdd = 0, dmgMul = 1, room: number | null =
   const x = n * toughOf(k), whole = Math.floor(x + 1e-9);
   return whole + (mulberry32(h)() < x - whole ? 1 : 0);
 }
+
+/** The «Громкость» blow on top of an enemy's own in a room built for `spec`: one more for any that hits, the bosses aside. */
+export const volBlow = (spec: Pick<RoomSpec, 'vol'>, k: MobKind) => (loud(spec.vol, VOL.blow) && !MOBS[k].boss && MOBS[k].dmg ? 1 : 0);
 
 /** An enemy; one a room's fight brings (`room`, its seed) gets `toughOf` more HP and blow, see `mobDmg`. */
 export function newMob(k: MobKind, x: number, y: number, hpMul = 1, dmgAdd = 0, dmgMul = 1, room: number | null = null): Mob {
@@ -892,7 +898,8 @@ export function generate(spec: RoomSpec): Layout {
   let mk: MobKind[];
   if (type === 'treasure') mk = [];
   else if (type === 'boss') mk = [boss!, ...draw(fewer(Math.max(0, 1 + f + extra.mobs - (LESS_ESCORT[boss!] ?? 0)), 0), SOLO)];
-  else if (type === 'elite') mk = [cast.elite, ...draw(fewer(count - 1, 0), [cast.elite])];
+  // «Громкость» brings the elite one enemy more, whatever the party
+  else if (type === 'elite') mk = [cast.elite, ...draw(fewer(count - 1, 0) + (loud(spec.vol, VOL.elite) ? 1 : 0), [cast.elite])];
   else mk = draw(fewer(count, 1));
   const mobs: Mob[] = [];
   for (const k of mk) {
@@ -905,6 +912,8 @@ export function generate(spec: RoomSpec): Layout {
     if (!q) continue;
     const m = newMob(k, q[0], q[1], hpMul, dmgAdd, dmgMul, spec.seed), up = MOBS[k].boss && BOSS_UP[k], at = Math.max(1, Math.min(3, spec.heroes ?? 3)) - 1;
     if (up) { m.hp = m.max = Math.round(m.hp * up.hp[at]); m.dmg = mobDmg(k, dmgAdd, dmgMul, spec.seed, up.dmg[at]); }
+    if (MOBS[k].boss && loud(spec.vol, VOL.boss)) m.hp = m.max = Math.round(m.hp * VOL_BOSS_HP);
+    m.dmg += volBlow(spec, k);
     mobs.push(m);
     objs.push({ x: q[0], y: q[1], r: MOBS[k].r });
     if (piece) bossCell = (q[1] / TILE - 1) * gw + q[0] / TILE - 1;
@@ -942,8 +951,8 @@ export function generate(spec: RoomSpec): Layout {
     const away = k === 'herb' && !cave && nodes.some(o => o.k === 'herb');
     const q = placeCell(1, NODES[k].r, side) ?? placeCell(1, NODES[k].r, (x, y) => apart(x, y, k) && open(x, y)) ?? (away ? placeCell(1, NODES[k].r, (x, y) => apart(x, y, k) && open(x, y), true) : null) ?? placeCell(1, NODES[k].r, (x, y) => mid(x, y) && open(x, y)) ?? placeCell(1, NODES[k].r, open) ?? (extra ? null : placeCell(1, NODES[k].r, any, true));
     if (!q) continue;
-    // the ore cave's veins and mushrooms hold as much for any party
-    const ch = cave ? (k === 'ore' ? CAVE.small.ch : NODES[k].ch) : sc.ch[k] ?? NODES[k].ch;
+    // the ore cave's veins and mushrooms hold as much for any party; «Громкость» takes a mushroom off every patch in a fight
+    const ch = cave ? (k === 'ore' ? CAVE.small.ch : NODES[k].ch) : Math.max(1, (sc.ch[k] ?? NODES[k].ch) - (k === 'herb' && loud(spec.vol, VOL.herb) ? 1 : 0));
     nodes.push({ k, ...NODES[k], ch, x: q[0], y: q[1], left: ch, hit: 0 });
     objs.push({ x: q[0], y: q[1], r: NODES[k].r });
     shut.add(hazKey(Math.floor(q[0] / TILE), Math.floor(q[1] / TILE)));

@@ -34,6 +34,8 @@ export interface Album {
   time: number;
   /** When the run ended, in ms: the prints' date. */
   at: number;
+  /** The «Громкость» step the run was played at, if any. */
+  vol?: number;
 }
 
 /** How beaten a hero looks by the part of its health left: 0 whole, 1 knocked about, 2 barely alive, 3 fallen. */
