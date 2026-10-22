@@ -2,7 +2,7 @@
 
 import type { Knock } from './fx';
 import type { Bet, Floor } from './events';
-import { BIOMES, MOB_DMG_MUL, MOB_HP_MUL, MOBS, NODES, TILE, isRanged, mobSize, type Biome, type MobKind, type NodeKind, type RoomType } from './data';
+import { BIOMES, MOB_HP_MUL, MOBS, NODES, TILE, isRanged, mobSize, toughOf, type Biome, type MobKind, type NodeKind, type RoomType } from './data';
 import { makeRng, mulberry32 } from './rng';
 import { DEMO, DEMO_BOSS } from './demo';
 import { LAYERS } from './run';
@@ -257,26 +257,27 @@ export interface Layout {
 
 /**
  * An enemy's blow: its own plus the floor's extra, cut for a smaller party, plus `plus` (a boss's BOSS_UP), and then
- * MOB_DMG_MUL more. Blows are a few points, so a plain rounding would leave a 3 a 3 and make a 5 a 6: the fraction left
- * is paid as one point more by a coin instead, the same for every enemy of a kind in a room (by the room's `seed`), so on
- * the average every blow grows by the same share and two skeletons side by side still hit alike. No `seed` (the warm-up
- * room's dummies) or a kind that doesn't hit keeps the blow as it was.
+ * `toughOf` more. Blows are a few points, so a plain rounding would leave a 3 a 3 and make a 5 a 6: the fraction left
+ * is paid as one point more by a coin instead, the same for every enemy of a kind in a room (by the room's seed), so on
+ * the average every blow grows by the same share and two skeletons side by side still hit alike. Without a `room` (the
+ * warm-up dummies, the dragon's eggs) or for a kind that doesn't hit the blow stays as it was.
  */
-export function mobDmg(k: MobKind, dmgAdd = 0, dmgMul = 1, seed: number | null = null, plus = 0) {
+export function mobDmg(k: MobKind, dmgAdd = 0, dmgMul = 1, room: number | null = null, plus = 0) {
   const n = Math.max(1, Math.round((MOBS[k].dmg + dmgAdd) * dmgMul)) + plus;
-  if (seed === null || !MOBS[k].dmg) return n;
-  let h = seed | 0;
+  if (room === null || !MOBS[k].dmg) return n;
+  let h = room | 0;
   for (let i = 0; i < k.length; i++) h = Math.imul(h ^ k.charCodeAt(i), 16777619);
-  const x = n * MOB_DMG_MUL, whole = Math.floor(x + 1e-9);
+  const x = n * toughOf(k), whole = Math.floor(x + 1e-9);
   return whole + (mulberry32(h)() < x - whole ? 1 : 0);
 }
 
-export function newMob(k: MobKind, x: number, y: number, hpMul = 1, dmgAdd = 0, dmgMul = 1, seed: number | null = null): Mob {
+/** An enemy; one a room's fight brings (`room`, its seed) gets `toughOf` more HP and blow, see `mobDmg`. */
+export function newMob(k: MobKind, x: number, y: number, hpMul = 1, dmgAdd = 0, dmgMul = 1, room: number | null = null): Mob {
   const d = MOBS[k];
-  const hp = Math.round(d.hp * hpMul);
+  const hp = Math.round(d.hp * hpMul * (room === null ? 1 : toughOf(k)));
   return {
     k, name: d.name, r: d.r, speed: d.speed, reach: d.reach, armor: d.armor,
-    hp, max: hp, dmg: mobDmg(k, dmgAdd, dmgMul, seed), x, y, flash: 0, dead: 0, burn: 0, intent: null,
+    hp, max: hp, dmg: mobDmg(k, dmgAdd, dmgMul, room), x, y, flash: 0, dead: 0, burn: 0, intent: null,
     fx: x, fy: y, tx: x, ty: y, hop: 0, owner: -1, born: 0,
   };
 }
