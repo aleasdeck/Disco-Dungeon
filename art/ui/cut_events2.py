@@ -3,7 +3,7 @@
     python3 art/ui/cut_events2.py SRC [--pick slot=fix/ev_slot_00006 ...]
 
 SRC is output/events2 as the PC renders it: ev_<key>/ and fix/ev_<key>/ hold the scenes, ui/<piece>/ and fix/<piece>/
-the props and stickers. PICKS below says which variant goes into the game; --pick overrides one (path under SRC,
+the props and stickers. SCENES and PIECES say which variant goes into the game (his picks on the variant page, 2026-10-22); --pick overrides one (path under SRC,
 without _.png). Scenes are scaled to 768x768 -> public/assets/events/<key>.webp. Props and stickers lose the white
 background that touches the edge (plus the white hole of the beer ring), with a soft edge, cropped and scaled to 256
 on the long side -> public/assets/ui/<key>.webp; the cup is turned mouth down for the thimble game.
@@ -17,19 +17,19 @@ from PIL import Image, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parents[2]
 SCENES = {
-    'slot': 'fix/ev_slot/ev_slot_00006', 'sphinx': 'ev_sphinx/ev_sphinx_00002', 'gnome': 'fix/ev_gnome/ev_gnome_00005',
-    'bookie': 'ev_bookie/ev_bookie_00001', 'pawn': 'ev_pawn/ev_pawn_00003', 'mapper': 'fix/ev_mapper2/ev_mapper2_00004',
-    'foam': 'fix/ev_foam/ev_foam_00005', 'bottle': 'fix/ev_bottle/ev_bottle_00004', 'thimble': 'ev_thimble/ev_thimble_00001',
-    'tattoo': 'ev_tattoo/ev_tattoo_00002', 'gopnik': 'ev_gopnik/ev_gopnik_00002', 'husband': 'fix/ev_husband/ev_husband_00004',
+    'slot': 'fix/ev_slot/ev_slot_00005', 'sphinx': 'ev_sphinx/ev_sphinx_00003', 'gnome': 'fix/ev_gnome/ev_gnome_00005',
+    'bookie': 'ev_bookie/ev_bookie_00001', 'pawn': 'ev_pawn/ev_pawn_00003', 'mapper': 'ev_mapper/ev_mapper_00001',
+    'foam': 'fix/ev_foam/ev_foam_00006', 'bottle': 'fix/ev_bottle/ev_bottle_00004', 'thimble': 'ev_thimble/ev_thimble_00002',
+    'tattoo': 'ev_tattoo/ev_tattoo_00001', 'gopnik': 'ev_gopnik/ev_gopnik_00002', 'husband': 'ev_husband/ev_husband_00002',
 }
 PIECES = {
     'ev_bottle': 'ui/bottle/bottle_00002', 'ev_cup': 'ui/cup/cup_00001',
-    'wheel_toad': 'ui/wheel_toad/wheel_toad_00002', 'wheel_nerd': 'fix/wheel_nerd/wheel_nerd_00004',
-    'wheel_jock': 'ui/wheel_jock/wheel_jock_00002', 'wheel_drink': 'ui/wheel_drink/wheel_drink_00003',
-    'reel_cherry': 'ui/reel_cherry/reel_cherry_00002', 'reel_skull': 'ui/reel_skull/reel_skull_00003',
+    'wheel_toad': 'ui/wheel_toad/wheel_toad_00001', 'wheel_nerd': 'fix/wheel_nerd/wheel_nerd_00004',
+    'wheel_jock': 'ui/wheel_jock/wheel_jock_00002', 'wheel_drink': 'ui/wheel_drink/wheel_drink_00001',
+    'reel_cherry': 'ui/reel_cherry/reel_cherry_00001', 'reel_skull': 'ui/reel_skull/reel_skull_00003',
     'reel_lips': 'ui/reel_lips/reel_lips_00002', 'ico_bet': 'fix/ico_bet/ico_bet_00004',
     'ico_soap': 'ui/ico_soap/ico_soap_00002', 'ico_sticky': 'ui/ico_sticky/ico_sticky_00001',
-    'ico_slick': 'fix/ico_slick/ico_slick_00006', 'map_beer': 'fix/map_beer/map_beer_00004',
+    'ico_slick': 'fix/ico_slick/ico_slick_00004', 'map_beer': 'fix/map_beer/map_beer_00004',
 }
 FLIP = {'ev_cup'}
 HOLES = {'map_beer'}
