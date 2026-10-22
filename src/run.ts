@@ -1,6 +1,7 @@
-// Run structure: 3 floors, each a layered branching map of rooms; a path takes 8 rooms ending at the boss.
+// Run structure: 3 floors (the demo's one), each a layered branching map of rooms; a path takes 8 rooms ending at the boss.
 
 import { ROOM_TYPES, type RoomType } from './data';
+import { DEMO } from './demo';
 import { makeRng } from './rng';
 import type { Shot, StartPhoto } from './album';
 
@@ -23,7 +24,7 @@ export interface Run {
   shots?: (Shot | null)[];
 }
 
-export const FLOORS = 3;
+export const FLOORS = DEMO ? 1 : 3;
 /** Rows of a floor: the entrance fight, five rows of choices, the rest row and the boss. */
 export const LAYERS = 8;
 /** The row before the boss: a camp and a blacksmith's, and a route comes to one of them only, so the party picks it on the way there. */
@@ -165,7 +166,8 @@ function link(layers: MapNode[][], R: ReturnType<typeof makeRng>) {
 }
 
 export function newRun(seed = Math.floor(Math.random() * 90000) + 10000): Run {
-  return { seed, floor: 0, path: [[], [], []], floors: [0, 1, 2].map(f => genFloor(seed, f)), seen: [] };
+  const fs = Array.from({ length: FLOORS }, (_, f) => f);
+  return { seed, floor: 0, path: fs.map(() => []), floors: fs.map(f => genFloor(seed, f)), seen: [] };
 }
 
 export const nodeById = (run: Run, f: number, id: string) => run.floors[f].flat().find(n => n.id === id)!;

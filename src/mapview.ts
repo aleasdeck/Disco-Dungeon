@@ -77,9 +77,9 @@ export class MapView {
 
   render(run: Run, canChoose: boolean, party: MapParty, votes?: MapVotes) {
     const f = run.floor, layers = run.floors[f];
-    // the floor, and the whole run as three gems: done, here, ahead
+    // the floor, and the whole run as three gems: done, here, ahead (the demo's one floor has none)
     const dots = Array.from({ length: FLOORS }, (_, k) => `<i class="${k < f ? 'done' : k === f ? 'cur' : ''}"></i>`).join('');
-    $('mapFloor').innerHTML = `Этаж ${f + 1}<em class="fl-dots" title="Этаж ${f + 1} из ${FLOORS}">${dots}</em><span>${BIOMES[f].name}</span>`;
+    $('mapFloor').innerHTML = `Этаж ${f + 1}${FLOORS > 1 ? `<em class="fl-dots" title="Этаж ${f + 1} из ${FLOORS}">${dots}</em>` : ''}<span>${BIOMES[f].name}</span>`;
     this.partyRow(party);
     const svg = $('map');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);

@@ -18,7 +18,8 @@ export interface Player { id: string; name: string; hero: number | null; key?: s
 export type Msg =
   /** A player's first word on every link: which browser it is, so a link made anew after a drop keeps its place. */
   | { t: 'me'; id: string }
-  | { t: 'hello'; name: string; key: string }
+  /** `demo`: the player plays the demo (src/demo.ts); a room takes only players of its own version. */
+  | { t: 'hello'; name: string; key: string; demo?: boolean }
   /** The host turns a player away (the room is full, or the game started without them). */
   | { t: 'deny'; text: string }
   | { t: 'lobby'; players: Player[]; bg?: number }

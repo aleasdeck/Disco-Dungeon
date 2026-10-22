@@ -10,6 +10,7 @@ import type { Run, Votes } from './run';
 import type { Snapshot } from './sync';
 import type { Cur } from './stats';
 import type { Album } from './album';
+import { stored } from './demo';
 
 /** A room's result screen; `again` and `win` (the whole run beaten) lead back to the lobby, `map` to the map. */
 export interface Ending {
@@ -75,7 +76,8 @@ export interface CampaignSave {
   count: Cur | null;
 }
 
-const SEAT = 'discodungeon.seat', SAVE = 'discodungeon.hostSave', KEYS = 'discodungeon.keys', RUN = 'discodungeon.campaign';
+// the demo keeps its own: a run of one floor can't go on in the full game, nor the other way round
+const SEAT = stored('discodungeon.seat'), SAVE = stored('discodungeon.hostSave'), KEYS = stored('discodungeon.keys'), RUN = stored('discodungeon.campaign');
 /** The campaign save's make: bumped when an old save could no longer be played on. */
 export const CAMPAIGN = 1;
 /** A seat older than this is a finished game, not a crash. */

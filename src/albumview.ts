@@ -10,6 +10,7 @@ import { drawAfter, drawShot, drawStart, type Album } from './album';
 import { saveCanvas } from './photo';
 import type { Tally } from './game';
 import { escapeHtml } from './menu';
+import { DEMO } from './demo';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -129,12 +130,12 @@ function sheet(title: string) {
 export function showAlbum(a: Album, o: { button: string | null; onButton: () => void }) {
   const party = a.heroes, solo = party.length === 1 && HEROES[party[0].i], lastBoss = a.shots[a.shots.length - 1]?.boss;
   const killer = a.boss && MOBS[a.boss as MobKind];
-  $('reRibbon').textContent = a.win ? 'Подземелье пройдено' : `Этаж ${a.floor + 1} · ${BIOMES[a.floor]?.name ?? ''}`;
+  $('reRibbon').textContent = a.win ? (DEMO ? 'Демо пройдено' : 'Подземелье пройдено') : `Этаж ${a.floor + 1} · ${BIOMES[a.floor]?.name ?? ''}`;
   $('reRibbon').classList.toggle('lose', !a.win);
   $('reTitle').textContent = a.win ? (solo ? (solo.fem ? 'Ты победила!' : 'Ты победил!') : 'Вы победили!')
     : solo ? (solo.fem ? 'Героиня пала' : 'Герой пал') : 'Отряд пал';
   $('reTitle').classList.toggle('lose', !a.win);
-  $('reGag').textContent = a.win ? WON[lastBoss ?? ''] ?? 'Все три этажа позади. Диско продолжается.'
+  $('reGag').textContent = a.win ? (DEMO ? 'Король остался без короны, казематы ваши. Дальше подземелье ждёт в полной версии.' : WON[lastBoss ?? ''] ?? 'Все три этажа позади. Диско продолжается.')
     : killer ? `${killer.name} ${killer.fem ? 'оставила' : 'оставил'} вас себе. Кости срастутся, приходите ещё.` : LOST[a.floor] ?? LOST[0];
   // the prints: ДО, the bosses beaten floor by floor, ПОСЛЕ
   prints = [

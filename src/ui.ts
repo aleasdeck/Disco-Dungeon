@@ -12,6 +12,7 @@ import { lg } from './draw/util';
 import { art, artIcon, fillIcons, icon } from './icons';
 import { SOCKETS, artDef } from './artifacts';
 import { hl } from './hl';
+import { DEMO } from './demo';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -69,6 +70,30 @@ export function faceUrl(h: Pick<HeroState, 'i' | 'def'>) {
   if (!url) {
     const cv = document.createElement('canvas');
     drawPortrait(cv, h);
+    url = cv.toDataURL();
+    faces.set(key, url);
+  }
+  return url;
+}
+
+/** A hero's bust as a dark shape only: the demo's way of showing the full game's heroes (src/demo.ts). */
+export function drawShadow(cv: HTMLCanvasElement, h: Pick<HeroState, 'i' | 'def'>) {
+  drawPortrait(cv, h);
+  const c = cv.getContext('2d')!;
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.globalCompositeOperation = 'source-in';
+  c.fillStyle = '#1c130d';
+  c.fillRect(0, 0, cv.width, cv.height);
+  c.globalCompositeOperation = 'source-over';
+}
+
+/** The dark shape as a picture, drawn once per hero like its face. */
+export function shadowUrl(h: Pick<HeroState, 'i' | 'def'>) {
+  const key = h.def.key + (sprites.has(h.def.key) ? '+img' : '') + '+shadow';
+  let url = faces.get(key);
+  if (!url) {
+    const cv = document.createElement('canvas');
+    drawShadow(cv, h);
     url = cv.toDataURL();
     faces.set(key, url);
   }
@@ -798,7 +823,7 @@ export class Hud {
       const a = artDef(key), st = this.spent(h, key);
       html = `<div class="mc-head"><i class="tok">${artIcon(key)}</i><b>${a.name}</b></div><p>${a.txt}</p><small>${a.gag}</small>`
         + (st ? `<span class="at-state">${st}</span>` : '');
-    } else html = '<div class="mc-head"><b>Пустое место</b></div><p>Трофеи дают боссы первого и второго этажа, а иногда «Влюблённый сундук».</p>';
+    } else html = `<div class="mc-head"><b>Пустое место</b></div><p>${DEMO ? 'Трофеи появятся в полной версии игры.' : 'Трофеи дают боссы первого и второго этажа, а иногда «Влюблённый сундук».'}</p>`;
     if (tip.dataset.html !== html) { tip.innerHTML = html; tip.dataset.html = html; }
     tip.hidden = false;
     // beside the column of sockets, over the health, kept on the screen, its tail at the token

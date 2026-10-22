@@ -30,6 +30,7 @@ import { cardOut, closeIntro, openIntro, showCard } from './introview';
 import { collect } from './trinkets';
 import type { Album } from './album';
 import { hideAlbum, showAlbum } from './albumview';
+import { DEMO, locked } from './demo';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -299,7 +300,8 @@ function startRun(picks?: number[]) {
  */
 function openHeroSelect() {
   const size = Math.min(3, Math.max(1, settings.size || 1));
-  let party = settings.party.filter((i, k, a) => HEROES[i] && a.indexOf(i) === k).slice(-size);
+  // the demo's other heroes can't go, even when the full game last picked them
+  let party = settings.party.filter((i, k, a) => HEROES[i] && !locked(HEROES[i].key) && a.indexOf(i) === k).slice(-size);
   if (!party.length) party = [0];
   let shown = party[party.length - 1];
   const draw = () => {
@@ -310,6 +312,7 @@ function openHeroSelect() {
     renderHeroSelect({ size, party, shown, onPick, onSize });
   };
   const onPick = (i: number) => {
+    if (locked(HEROES[i].key)) return;
     shown = i;
     if (party.includes(i)) { if (size > 1) party = party.filter(o => o !== i); }
     else party = [...party, i].slice(-size);
@@ -865,7 +868,7 @@ game.onRoomEnd = win => {
     if (last) {
       const left = game.alive().map(h => h.def.name).join(', '), fell = MOBS[bossOf(S.spec)];
       return showEnd({ title: 'Вы победили!', kind: 'win',
-        text: `${fell.name} ${fell.fem ? 'повержена' : 'повержен'}, все три этажа позади. Комнат пройдено: ${run.path.reduce((a, p) => a + p.length, 0)}.`
+        text: `${fell.name} ${fell.fem ? 'повержена' : 'повержен'}, ${DEMO ? 'демо пройдено' : 'все три этажа позади'}. Комнат пройдено: ${run.path.reduce((a, p) => a + p.length, 0)}.`
           + (game.party.length > 1 ? ` Дошли до конца: ${left}.` : ''),
         album: albumOf(true) });
     }
@@ -992,7 +995,8 @@ document.querySelectorAll<HTMLButtonElement>('#help .tab').forEach(b => b.addEve
 
 /** v<major.minor>.<build>, put in by vite.config.ts at the build. */
 declare const __VERSION__: string;
-$('menuVer').textContent = __VERSION__;
+$('menuVer').textContent = __VERSION__ + (DEMO ? ' · демо' : '');
+document.body.classList.toggle('demo', DEMO);
 
 /** A campaign to go on with: the one on screen, or after the game was closed (or played online) the one this browser kept. */
 const unfinished = () => (mode === 'solo' ? !runOver : !!loadCampaign());
@@ -1124,7 +1128,7 @@ function look(id: string, hero: number | null) {
 function pick(id: string, hero: number | null) {
   const p = players.find(o => o.id === id);
   if (!p || started) return;
-  if (hero !== null && players.some(o => o.hero === hero && o.id !== id)) return;
+  if (hero !== null && (players.some(o => o.hero === hero && o.id !== id) || !HEROES[hero] || locked(HEROES[hero].key))) return;
   if (p.hero !== hero) p.ready = false;
   p.hero = hero;
   p.look = null;
@@ -1233,7 +1237,7 @@ function greet() {
   answered = false;
   const say = (left: number) => {
     if (answered || mode !== 'client' || !net.active || left <= 0) return;
-    net.send({ t: 'hello', name: playerName(), key: myKey });
+    net.send({ t: 'hello', name: playerName(), key: myKey, demo: DEMO });
     setTimeout(() => say(left - 1), 3000);
   };
   say(10);
@@ -1278,7 +1282,13 @@ net.onJoin = id => setTimeout(() => { if (!players.some(p => p.id === id)) net.k
  * Host: someone said hello. Their key either gives them their old seat back or they take a free one. Mid-game a player
  * whose browser lost its key (or who came back on another device) takes a hero whose player is away, by name if one fits.
  */
-function welcome(id: string, name: string, key: string) {
+function welcome(id: string, name: string, key: string, demo: boolean) {
+  // the demo and the full game play different runs: a room lets in only its own version
+  if (demo !== DEMO) {
+    net.sendTo(id, { t: 'deny', text: DEMO ? 'Это комната демо-версии. Зайди по ссылке хозяина.' : 'Это комната полной версии, а у тебя демо. Зайди по ссылке хозяина.' });
+    setTimeout(() => net.kick(id), 300);
+    return;
+  }
   name = name.slice(0, 16) || 'Игрок';
   const away = started ? players.filter(p => p.id !== 'host' && p.hero !== null && !net.has(p.id)) : [];
   const back = (key ? players.find(p => p.key === key && p.id !== 'host') : undefined) ?? away.find(p => p.name === name) ?? away[0];
@@ -1336,7 +1346,7 @@ net.onLost = () => { if (mode === 'client') reconnect(net.code); };
 
 net.onMsg = (from, m) => {
   if (mode === 'host') {
-    if (m.t === 'hello') welcome(from, m.name, m.key);
+    if (m.t === 'hello') welcome(from, m.name, m.key, !!m.demo);
     else if (m.t === 'pick') pick(from, m.hero);
     else if (m.t === 'look') look(from, m.hero);
     else if (m.t === 'ready') readyUp(from, m.on);

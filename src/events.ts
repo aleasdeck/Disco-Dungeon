@@ -10,6 +10,7 @@ import type { Bank, HeroState } from './game';
 import { ARTIFACTS, artDef, drop, give, room, type ArtKey } from './artifacts';
 import { REST_ROW, nodeById, type MapNode, type Run } from './run';
 import { makeRng } from './rng';
+import { DEMO, DEMO_EVENTS } from './demo';
 
 /** The floor of the next fight, from the foam party: discs keep their speed off the walls, or roll twice as far, or stick. */
 export type Floor = 'slick' | 'soap' | 'sticky';
@@ -526,8 +527,9 @@ export const eventDef = (key: string) => EVENTS.find(e => e.key === key) ?? EVEN
 
 /** Which event an event room turns out to be: one the run hasn't met yet when there is one, the same on every screen. */
 export function eventOf(seed: number, seen: readonly string[] = []): string {
-  const fresh = EVENTS.filter(e => !seen.includes(e.key));
-  return makeRng(seed).pick(fresh.length ? fresh : EVENTS).key;
+  // the demo draws from its few
+  const pool = DEMO ? EVENTS.filter(e => DEMO_EVENTS.includes(e.key)) : EVENTS, fresh = pool.filter(e => !seen.includes(e.key));
+  return makeRng(seed).pick(fresh.length ? fresh : pool).key;
 }
 
 /** The choices the event offers now: the slot machine's change with every pull, the sphinx's are the answers to its riddle. */
