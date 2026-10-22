@@ -171,7 +171,10 @@ export function prevOf(key: string) {
 /** The kind's place in KINDS (0 Толстяки, 1 Чуваки, 2 Дрищи) of the hero `key`. */
 export const kindAt = (key: string) => placeOf(key)?.r ?? 0;
 
-const isOpen = (p: Progress, key: string) => START_HEROES.includes(key) || p.open.includes(key);
+/** Whether `key` is open in `p`; a function declaration, as loading the progress (above) already needs it. */
+function isOpen(p: Progress, key: string) {
+  return START_HEROES.includes(key) || p.open.includes(key);
+}
 
 /** Open the hero after `key` if `key` has the stars for it; true when it did. */
 function openNext(p: Progress, key: string) {
