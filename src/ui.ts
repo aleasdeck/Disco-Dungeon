@@ -14,6 +14,7 @@ import { art, artIcon, fillIcons, icon } from './icons';
 import { SOCKETS, artDef } from './artifacts';
 import { hl } from './hl';
 import { DEMO } from './demo';
+import { OreCounters } from './orefx';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -255,6 +256,13 @@ export class Hud {
   /** Alone with a party: the hero (by index) whose tab is open in the blacksmith's window, at the visit `forgeAt`. */
   private forgeFor = -1;
   private forgeAt = '';
+  /** The ore counters, playing a change at the blacksmith's; the ore they were last given, at which visit ('' elsewhere), over which room. */
+  private counters = new OreCounters(() => [$('forgeOre'), $('hOre')]);
+  private oreWas = -1;
+  private oreAt = '';
+  private oreRoom = '';
+  /** Each hero's discs and stat levels when the ore was last looked at, to tell who has just bought something with it. */
+  private levels = new Map<number, number[]>();
   /** The first press of «Конец хода» with discs still in hand only asks «ТОЧНО?»; a second press within a moment ends. */
   private confirmUntil = 0;
   private act: TurnAct = 'none';
@@ -407,7 +415,6 @@ export class Hud {
     // the ore cave counts its turns down: «Ход 2 из 3»
     const max = g.turnsMax(), last = max > 0 && S.turn >= max;
     $('hTurn').textContent = S.phase === 'place' ? 'Расстановка' : max ? `Ход ${S.turn} из ${max}` : `Ход ${S.turn}`;
-    $('hOre').textContent = String(g.bank.ore);
     // enemies grow angrier every turn once a fight drags on; warn a turn ahead
     const rage = $('hRage'), fighting = S.phase !== 'place' && S.phase !== 'over' && !g.cave(), soon = g.rageFrom() - S.turn;
     rage.hidden = !fighting || (g.rage() === 0 && soon > 1);
@@ -449,6 +456,7 @@ export class Hud {
     if (!$('ups').hidden) this.fillCard();
     if (this.peek >= 0) this.openHero(this.peek);
     this.forge();
+    this.ore();
   }
 
   // ------------------------------------------------------------ top strip
@@ -998,7 +1006,6 @@ export class Hud {
     const h = this.forgeHero();
     $('forgeTitle').textContent = g.whet ? 'Заточка' : 'Кузнец';
     $('forgeText').textContent = g.whet ? whetTxt(!!h && g.freeUp(h)) : forgeTxt(g.gift);
-    $('forgeOre').textContent = String(g.bank.ore);
     const box = $('forgeMine'), html = h ? forgeRows(g, h, this.forgeTeam()) : '';
     if (html !== this.forgeHtml) {
       box.innerHTML = html;
@@ -1006,5 +1013,30 @@ export class Hud {
       fillIcons(box);
       this.forgeHtml = html;
     }
+  }
+
+  /**
+   * The party's ore on the strip and in the blacksmith's window. There a change plays (src/orefx.ts): the smith's gift
+   * ticks in as the window opens, and ore bought with (here or by another player) ticks out, the buyer's face on the
+   * sticker when it was another hero.
+   */
+  private ore() {
+    const g = this.g, ore = g.bank.ore, at = this.atForge && !g.whet ? String(g.forge) : '', was = this.oreWas, visit = this.oreAt;
+    const seen = this.levels, sp = g.S.spec, room = `${sp.floor}:${sp.depth}:${sp.seed}`, behind = this.oreRoom;
+    this.levels = new Map(g.party.map(h => [h.i, [h.discs, ...UPS.map(u => h.up[u.k])]]));
+    this.oreRoom = room;
+    if (ore === was && at === visit) return;
+    this.oreWas = ore;
+    this.oreAt = at;
+    if (at && at !== visit) {
+      // only when this screen had the ore from before the gift, on the map over the same room: a campaign reopened at
+      // the blacksmith's (or a player back at the table) just shows it
+      if (g.gift > 0 && was === ore - g.gift && room === behind) this.counters.play(was, ore, { wait: 450 });
+      else this.counters.show(ore);
+      return;
+    }
+    if (!at || ore > was) { this.counters.show(ore); return; }
+    const h = g.party.find(o => this.levels.get(o.i)!.some((v, k) => v > (seen.get(o.i)?.[k] ?? v)));
+    this.counters.play(was, ore, h && h !== this.forgeHero() ? { who: { face: faceUrl(h), col: h.def.col } } : {});
   }
 }
