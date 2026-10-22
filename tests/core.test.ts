@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, CUFF_TURNS, FOOD_HEAL, FOOD_PER_DISC, CLEAN_ORE, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, KISS_TURNS, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, KINDS, RAGE_FROM, SHOVE_DMG, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
@@ -910,17 +911,26 @@ describe('boss trophies', () => {
   });
 
   it('shares all three among a trio, and keeps what is left for a hero whose player dropped out', () => {
-    const party = newParty([0, 1, 2]), loot = newLoot(79, 0, party), table = [0, 2];
+    const party = newParty([0, 1, 2]), loot = newLoot(79, 0, party, 'pahan'), table = [0, 2];
     loot.picks[0] = 2;
     loot.picks[2] = 0;
     expect(lootAgreed(loot, table)).toBe(true);
     settleLoot(loot, party, table);
     expect([party[0].arts, party[1].arts ?? [], party[2].arts]).toEqual([[loot.offer[2]], [], [loot.offer[0]]]);
-    expect(party[1].kept).toEqual({ seed: 79, floor: 0, offer: [loot.offer[1]] });
+    // the pile keeps whose hoard it was, for the window's picture
+    expect(party[1].kept).toEqual({ seed: 79, floor: 0, offer: [loot.offer[1]], boss: 'pahan' });
     // back at the table, the player takes it
     expect(takeKept(party, 1, loot.offer[1])).toBe(true);
     expect(party[1].arts).toEqual([loot.offer[1]]);
     expect(party[1].kept).toBeNull();
+  });
+
+  it('has a hoard scene of its own for every boss that leaves trophies', () => {
+    const events: Record<string, string> = JSON.parse(readFileSync('public/assets/manifest.json', 'utf8')).events;
+    for (const f of [0, 1]) for (const k of CASTS[f].bosses) {
+      expect(events[`loot_${k}`], k).toBeDefined();
+      expect(existsSync(`public/assets/${events[`loot_${k}`]}`), k).toBe(true);
+    }
   });
 
   it('lets a fallen hero whose player was away pick their own once back, from what the others left', () => {

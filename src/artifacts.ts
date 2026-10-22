@@ -73,13 +73,15 @@ export interface LootState {
   done?: Record<number, ArtKey>;
   /** The event whose outcome gave them (its key); none for a floor boss's hoard. */
   from?: string;
+  /** The boss that fell (its own kind: king, ratswarm…): its hoard is the window's picture. A save from before names only the floor. */
+  boss?: string;
 }
 
 /**
  * Online: the trophies left on the pile for a hero whose player was away when they were shared out (a fallen hero's
  * player often puts the phone down). They pick one of them once back; heroes away from the same share-out pick from one pile.
  */
-export type Kept = Pick<LootState, 'seed' | 'floor' | 'offer' | 'from'>;
+export type Kept = Pick<LootState, 'seed' | 'floor' | 'offer' | 'from' | 'boss'>;
 
 /** The trophies a boss leaves: OFFER of the artifacts nobody in the party has yet (nor has waiting for them), the same on every screen. */
 export function rollOffer(seed: number, party: Pick<HeroState, 'arts' | 'kept'>[]): ArtKey[] {
@@ -89,8 +91,8 @@ export function rollOffer(seed: number, party: Pick<HeroState, 'arts' | 'kept'>[
   return out;
 }
 
-export function newLoot(seed: number, floor: number, party: Pick<HeroState, 'arts' | 'kept'>[]): LootState {
-  return { seed, floor, offer: rollOffer(seed, party), picks: {} };
+export function newLoot(seed: number, floor: number, party: Pick<HeroState, 'arts' | 'kept'>[], boss?: string): LootState {
+  return { seed, floor, offer: rollOffer(seed, party), picks: {}, ...(boss ? { boss } : {}) };
 }
 
 /** Online the trophies are shared out once every player here points at one and no two point at the same. */
@@ -118,7 +120,7 @@ export function settleLoot(loot: LootState, party: HeroState[], table: number[])
     if (done[h.i] !== undefined || table.includes(h.i) || !rest.length) continue;
     // still away since a share-out before: that pile can't wait any longer, the first of it is theirs
     if (h.kept?.offer.length) takeKept(party, h.i, h.kept.offer[0]);
-    h.kept = { seed: loot.seed, floor: loot.floor, offer: [...rest], ...(loot.from ? { from: loot.from } : {}) };
+    h.kept = { seed: loot.seed, floor: loot.floor, offer: [...rest], ...(loot.from ? { from: loot.from } : {}), ...(loot.boss ? { boss: loot.boss } : {}) };
   }
   for (const h of party) if (done[h.i]) give(h, done[h.i]);
   loot.done = done;

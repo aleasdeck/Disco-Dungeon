@@ -15,6 +15,7 @@ import { loadAll } from './assets';
 import { BACKDROP_COUNT } from './photo';
 import { sound, type Track } from './sound';
 import { CAMPAIGN, clearCampaign, clearSeat, keepKey, keyFor, loadCampaign, loadHost, loadSeat, newKey, saveCampaign, saveHost, saveSeat, type Ending, type HostSave } from './resume';
+import { bossOf } from './room';
 import { FLOORS, LAYERS, agreed, depthOf, newRun, nodeById, reachable, roomSeed, type Run, type Votes } from './run';
 import { applyFx, canPick, eventDef, eventOf, rolled, type EventState } from './events';
 import { EventView, type EventVotes } from './eventview';
@@ -776,16 +777,16 @@ game.onRoomEnd = win => {
     }
     if (!win) return showEnd({ title: game.party.length > 1 ? 'Отряд пал' : 'Герой пал', text: `Забег окончен на этаже ${run.floor + 1}, сложность ${S.spec.depth}.`, kind: 'again' });
     if (last) {
-      const left = game.alive().map(h => h.def.name).join(', ');
+      const left = game.alive().map(h => h.def.name).join(', '), fell = MOBS[bossOf(S.spec)];
       return showEnd({ title: 'Вы победили!', kind: 'win',
-        text: `Владыка кузни повержен, все три этажа позади. Комнат пройдено: ${run.path.reduce((a, p) => a + p.length, 0)}.`
+        text: `${fell.name} ${fell.fem ? 'повержена' : 'повержен'}, все три этажа позади. Комнат пройдено: ${run.path.reduce((a, p) => a + p.length, 0)}.`
           + (game.party.length > 1 ? ` Дошли до конца: ${left}.` : '') });
     }
     if (boss) run.floor++;
     votes = {};
     // the floor's boss leaves trophies: the party shares them out before the map opens again
     if (boss) {
-      const l = newLoot(run.seed + run.floor * 977 + S.spec.depth, S.spec.floor, game.party);
+      const l = newLoot(run.seed + run.floor * 977 + S.spec.depth, S.spec.floor, game.party, bossOf(S.spec));
       if (l.offer.length) {
         loot = l;
         choosing = false;
