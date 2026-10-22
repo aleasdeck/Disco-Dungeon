@@ -31,7 +31,8 @@ import { collect } from './trinkets';
 import type { Album } from './album';
 import { hideAlbum, showAlbum } from './albumview';
 import { DEMO } from './demo';
-import { creditRun, demoLocked, dueEvents, locked, openEvents, openedBy, runGains, volTop } from './progress';
+import { creditRun, demoLocked, dueEvents, locked, openEvents, openedBy, runGains, standFor, volTop } from './progress';
+import { STAND_MATS, type StandMat } from './stands';
 import { setOut } from './volume';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -280,6 +281,8 @@ function startRun(picks?: number[], vol = 0) {
     ? { bg: photoBg, heroes: players.map(p => p.hero!), names: players.map(p => p.name), host: players.findIndex(p => p.id === 'host') }
     : { bg: campPhotoBg(), heroes: picks ?? [0, 1, 2] };
   game.party = newParty(picks, run.seed);
+  // every hero on the stand its player's wins with it have earned: online each player told the host theirs with the pick
+  for (const h of game.party) h.stand = mode === 'host' ? players.find(p => p.hero === h.i)?.stand : standFor(h.def.key);
   const mine = myHeroes();
   if (mine.length) beginRun(run, mine.map(h => h.def.key), mode === 'host');
   game.bank = newBank(vol);
@@ -366,6 +369,7 @@ function startWarmup(heroes: number[]) {
   run = newRun();
   runOver = true;
   game.party = newParty([BASTION_I], run.seed);
+  game.party[0].stand = standFor(game.party[0].def.key);
   game.bank = newBank();
   game.pickActiveParty();
   hud.buildAllies();
@@ -1134,7 +1138,7 @@ function lobbyView() {
     },
     onPick: hero => {
       if (mode === 'host') { pick('host', hero); return; }
-      net.send({ t: 'pick', hero });
+      net.send({ t: 'pick', hero, ...(hero === null ? {} : { stand: standFor(HEROES[hero].key) }) });
     },
     onLook: hero => {
       if (mode === 'host') { look('host', hero); return; }
@@ -1164,13 +1168,15 @@ function look(id: string, hero: number | null) {
  * Host: a player picks a hero, if it is free; one who changes their hero has to press «Готов» again. Every player picks
  * from the heroes opened on their own device: the host checks its own, and keeps only the demo's heroes for everyone.
  */
-function pick(id: string, hero: number | null) {
+function pick(id: string, hero: number | null, stand?: StandMat) {
   const p = players.find(o => o.id === id);
   if (!p || started) return;
   if (hero !== null && (players.some(o => o.hero === hero && o.id !== id) || !HEROES[hero] || (id === 'host' ? locked : demoLocked)(HEROES[hero].key))) return;
   if (p.hero !== hero) p.ready = false;
   p.hero = hero;
   p.look = null;
+  // the hero's stand comes with it: the host knows its own, a player says theirs, and anything else is plain
+  p.stand = hero === null ? undefined : id === 'host' ? standFor(HEROES[hero].key) : stand && STAND_MATS.includes(stand) ? stand : undefined;
   shareLobby();
   lobbyView();
 }
@@ -1386,7 +1392,7 @@ net.onLost = () => { if (mode === 'client') reconnect(net.code); };
 net.onMsg = (from, m) => {
   if (mode === 'host') {
     if (m.t === 'hello') welcome(from, m.name, m.key, !!m.demo);
-    else if (m.t === 'pick') pick(from, m.hero);
+    else if (m.t === 'pick') pick(from, m.hero, m.stand);
     else if (m.t === 'look') look(from, m.hero);
     else if (m.t === 'ready') readyUp(from, m.on);
     else if (m.t === 'vote' && started) { const h = players.find(p => p.id === from)?.hero; if (h != null) vote(h, m.id); }

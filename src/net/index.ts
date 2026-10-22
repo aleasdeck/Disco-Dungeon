@@ -6,6 +6,7 @@
 import type { CampPick } from '../camp';
 import type { Action } from '../game';
 import type { Ending } from '../resume';
+import type { StandMat } from '../stands';
 import type { MapState, Snapshot } from '../sync';
 import { hostRoom, joinRoom, RoomError, type Accept, type HostedRoom, type JoinRoom, type Link, type OpenRoom } from './link';
 
@@ -13,7 +14,8 @@ import { hostRoom, joinRoom, RoomError, type Accept, type HostedRoom, type JoinR
  * `key` is the player's secret for rejoining after a drop; only the host keeps it. `ready`: the player pressed
  * «Готов» in the lobby (the host has no such flag: pressing «Начать» is its word).
  */
-export interface Player { id: string; name: string; hero: number | null; key?: string; ready?: boolean; look?: number | null }
+/** `stand`: what the player's wins with the hero picked have made its stand of (src/stands.ts). */
+export interface Player { id: string; name: string; hero: number | null; key?: string; ready?: boolean; look?: number | null; stand?: StandMat }
 
 export type Msg =
   /** A player's first word on every link: which browser it is, so a link made anew after a drop keeps its place. */
@@ -23,7 +25,7 @@ export type Msg =
   /** The host turns a player away (the room is full, or the game started without them). */
   | { t: 'deny'; text: string }
   | { t: 'lobby'; players: Player[]; bg?: number; vol?: number }
-  | { t: 'pick'; hero: number | null }
+  | { t: 'pick'; hero: number | null; stand?: StandMat }
   /** A player still without a hero points at one in the lobby: the others see it pale in the party photo. */
   | { t: 'look'; hero: number | null }
   /** A player in the lobby says they are ready to start, or takes it back. */

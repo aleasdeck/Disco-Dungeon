@@ -10,6 +10,7 @@ import { TRINKET_R } from './trinkets';
 import { BET_TURNS, FLOOR_FR, settleBet, type Bet, type Floor } from './events';
 import { CASTS, caveTurns, cellAt, cellCentre, generate, hazKey, inPit, isFloor, mobDmg, muAt, newMob, partyScale, pitAt, standing, volBlow, type Intent, type Layout, type Mob, type RoomSpec, type Zone } from './room';
 import { VOL, loud } from './volume';
+import type { StandMat } from './stands';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
 
@@ -64,6 +65,8 @@ export interface HeroState {
   cuffing?: number[];
   /** Online: the boss's trophies kept for the hero while its player was away at the share-out, to pick one from once back. */
   kept?: Kept | null;
+  /** What the hero's stand is made of, by its player's wins with it (src/stands.ts); plain painted plastic when not given. */
+  stand?: StandMat;
 }
 
 /**

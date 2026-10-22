@@ -7,7 +7,8 @@ import { eventArt, uiArt } from './assets';
 import { eventDef } from './events';
 import { artDef } from './artifacts';
 import { artIcon } from './icons';
-import { faceUrl } from './ui';
+import { faceUrl, standIcon } from './ui';
+import { standDef } from './stands';
 import { FLOORS, LAYERS } from './run';
 import { drawAfter, drawShot, drawStart, type Album } from './album';
 import { saveCanvas } from './photo';
@@ -211,7 +212,8 @@ export function showAlbum(a: Album, o: { gains?: Gains | null; button: string | 
  */
 function showGains(g: Gains | null) {
   const box = $('reGains'), got = g ? g.heroes.filter(k => g.got[k] > 0) : [];
-  box.hidden = !g || !(got.length || g.events.length || g.arts.length || g.vol);
+  const stands = Object.entries(g?.stands ?? {});
+  box.hidden = !g || !(got.length || g.events.length || g.arts.length || g.vol || stands.length);
   if (!g || box.hidden) return;
   const at = (k: string) => HEROES.findIndex(h => h.key === k);
   const face = (i: number) => `<img alt="" src="${faceUrl({ i, def: HEROES[i] })}">`;
@@ -228,7 +230,12 @@ function showGains(g: Gains | null) {
     return `<div class="re-gain re-new re-thing">${pic ? `<img alt="" src="${pic.src}">` : ''}<div><em>Новое событие</em><b>${eventDef(k).title}</b></div></div>`;
   }).join('') + g.arts.map(k => `<div class="re-gain re-new re-thing"><i class="re-art">${artIcon(k)}</i><div><em>Новый трофей</em><b>${artDef(k).name}</b></div></div>`).join('')
     // the next «Громкость» step; the first one says where its knob is
-    + (g.vol ? `<div class="re-gain re-new re-thing re-vol">${volToken(g.vol)}<div><em>${g.vol === 1 ? 'Открыта громкость: выбирай перед забегом' : 'Новая громкость'}</em><b>Громкость ${g.vol}</b><span>${VOL_RULES[g.vol - 1]}</span></div></div>` : '');
+    + (g.vol ? `<div class="re-gain re-new re-thing re-vol">${volToken(g.vol)}<div><em>${g.vol === 1 ? 'Открыта громкость: выбирай перед забегом' : 'Новая громкость'}</em><b>Громкость ${g.vol}</b><span>${VOL_RULES[g.vol - 1]}</span></div></div>` : '')
+    // the heroes the win put on a new stand
+    + stands.map(([k, mat]) => {
+      const def = HEROES[at(k)];
+      return `<div class="re-gain re-new re-thing re-stand" style="--c:${def.col}"><img alt="" src="${standIcon(mat, def.col)}"><div><em>Новая подставка</em><b>${def.name}: ${standDef(mat).name}</b></div></div>`;
+    }).join('');
 }
 
 export function hideAlbum() {
