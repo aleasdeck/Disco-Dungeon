@@ -17,7 +17,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parents[2]
 SCENES = {
-    'slot': 'fix/ev_slot/ev_slot_00005', 'sphinx': 'ev_sphinx/ev_sphinx_00003', 'gnome': 'fix/ev_gnome/ev_gnome_00005',
+    'slot': 'fix/ev_slot/ev_slot_00005', 'sphinx': 'ev_sphinx/ev_sphinx_00003', 'gnome': 'fix2/ev_gnome_a/ev_gnome_a_00002',
     'bookie': 'ev_bookie/ev_bookie_00001', 'pawn': 'ev_pawn/ev_pawn_00003', 'mapper': 'ev_mapper/ev_mapper_00001',
     'foam': 'fix/ev_foam/ev_foam_00006', 'bottle': 'fix/ev_bottle/ev_bottle_00004', 'thimble': 'ev_thimble/ev_thimble_00002',
     'tattoo': 'ev_tattoo/ev_tattoo_00001', 'gopnik': 'ev_gopnik/ev_gopnik_00002', 'husband': 'ev_husband/ev_husband_00002',

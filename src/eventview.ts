@@ -78,6 +78,7 @@ export class EventView {
     if (pic && img.getAttribute('src') !== pic.src) img.src = pic.src;
     img.hidden = !pic;
     $('evArt').classList.toggle('stub', !eventArt.has(ev.key));
+    $('evArt').dataset.ev = ev.key;
     $('evTitle').textContent = def.title;
     const stage = stageOf(ev), done = stage === 'done';
     $('eventScreen').classList.toggle('done', done);

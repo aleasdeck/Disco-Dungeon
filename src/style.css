@@ -1120,6 +1120,8 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
   .ev-panel { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .ev-art { aspect-ratio: 16 / 10; }
   .ev-art img { object-position: 50% 45%; }
+  /* the gnome's cap lies on the floor, so his strip is cut lower */
+  .ev-art[data-ev="gnome"] img { object-position: 50% 75%; }
   .ev-panel h2 { font-size: 24px; }
   .ev-text { font-size: 17px; }
   .ev-fx { font-size: 16px; }
