@@ -1,10 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, CUFF_TURNS, FOOD_HEAL, FOOD_PER_DISC, CLEAN_ORE, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, KISS_TURNS, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, KINDS, RAGE_FROM, SHOVE_DMG, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, CUFF_TURNS, FOOD_HEAL, FOOD_PER_DISC, CLEAN_ORE, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, KISS_TURNS, MAX_PLAYERS, MOBS, MOB_DMG_MUL, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, KINDS, RAGE_FROM, SHOVE_DMG, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
 import { ART, DOOR_MUL, FOOD_FLY, FOOD_TOSS, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { BOSS_UP, CASTS, CAVE, MOB_CAP, bossOf, mobPool, caveStock, PARTY_SCALE, RUNE_AREA, SPK_AREA, caveTurns, crystals, runes, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob, type ResNode } from '../src/room';
+import { BOSS_UP, CASTS, CAVE, MOB_CAP, bossOf, mobPool, caveStock, PARTY_SCALE, RUNE_AREA, SPK_AREA, caveTurns, crystals, runes, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, dmgBonus, floorAt, generate, hazKey, inPit, isFloor, mobDmg, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob, type ResNode } from '../src/room';
 import { ELITES, FIGHTS, FLOORS, FORGE_ROWS, LAYERS, REST_ROW, agreed, floorOk, genFloor, isFight, newRun, nodeById, reachable, routes, runDone } from '../src/run';
 import { makeRng } from '../src/rng';
 import { BOTTLE, CUPS, EVENTS, PULL_ODDS, RIDDLES, ROB_MIN, SELL, applyFx, canPick, choicesOf, cupPick, doneOf, eventDef, eventOf, fxParts, heroPick, redrawn, riddleOf, rolled, sellDone, sellPick, settleBet, shuffleOf, shutWhy, stageOf, take, type EventState, type Table } from '../src/events';
@@ -38,6 +38,17 @@ describe('room generator', () => {
     const L = generate({ seed: 5, depth: 1, floor: 0, type: 'fight' });
     expect('waves' in L).toBe(false);
     for (const m of L.mobs) expect(m.max).toBe(Math.round(MOBS[m.k].hp * MOB_HP_MUL));
+  });
+
+  it('makes every blow MOB_DMG_MUL harder on the average, a kind alike in a room, the warm-up dummies as they were', () => {
+    for (const [k, dmgAdd, dmgMul] of [['archer', 0, 1], ['skel', 0, 0.8], ['ghoul', 3, 0.6], ['golem', 4, 1]] as [keyof typeof MOBS, number, number][]) {
+      const plain = mobDmg(k, dmgAdd, dmgMul), blows = Array.from({ length: 2000 }, (_, seed) => mobDmg(k, dmgAdd, dmgMul, seed));
+      for (const b of blows) expect([Math.floor(plain * MOB_DMG_MUL + 1e-9), Math.floor(plain * MOB_DMG_MUL + 1e-9) + 1]).toContain(b);
+      expect(blows.reduce((a, b) => a + b, 0) / blows.length / plain).toBeCloseTo(MOB_DMG_MUL, 1);
+    }
+    const L = generate({ seed: 11, depth: 5, floor: 0, type: 'fight' });
+    for (const m of L.mobs) expect(m.dmg).toBe(L.mobs.find(o => o.k === m.k)!.dmg);
+    expect(newMob('dummy_boxer', 0, 0).dmg).toBe(MOBS.dummy_boxer.dmg);
   });
 
   it('makes rooms of different shapes, each one connected', () => {
@@ -4585,7 +4596,9 @@ describe("the floors' other bosses", () => {
         expect(now.k).toBe(k);
         expect(now.max).toBe(Math.round(was.max * up.hp[heroes - 1]));
         expect(now.hp).toBe(now.max);
-        expect(now.dmg).toBe(was.dmg + up.dmg[heroes - 1]);
+        // the boss's extra goes into its blow before MOB_DMG_MUL, so the whole blow grows by it
+        expect(now.dmg).toBe(mobDmg(k, dmgBonus(f, tierOf(spec).t), PARTY_SCALE[heroes].dmg, spec.seed, up.dmg[heroes - 1]));
+        expect(now.dmg).toBeGreaterThanOrEqual(was.dmg + up.dmg[heroes - 1]);
         expect(up.hp[heroes - 1]).toBeGreaterThanOrEqual(1);
       }
     }

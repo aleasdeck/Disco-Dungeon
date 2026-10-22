@@ -8,7 +8,7 @@ import { has, type ArtKey, type Kept } from './artifacts';
 import type { Sfx } from './audio/sfx';
 import { TRINKET_R } from './trinkets';
 import { BET_TURNS, FLOOR_FR, settleBet, type Bet, type Floor } from './events';
-import { CASTS, caveTurns, cellAt, cellCentre, generate, hazKey, inPit, isFloor, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec, type Zone } from './room';
+import { CASTS, caveTurns, cellAt, cellCentre, generate, hazKey, inPit, isFloor, mobDmg, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec, type Zone } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
 
@@ -1626,7 +1626,7 @@ export class Game {
       return S.mobs.filter(c => c.k === 'coffin' && c.hp > 0 && c.owner === mi).length < max;
     });
     if (!u) return;
-    const c = newMob('coffin', dead.x, dead.y, S.hpMul, S.dmgAdd, S.dmgMul);
+    const c = newMob('coffin', dead.x, dead.y, S.hpMul, S.dmgAdd, S.dmgMul, S.spec.seed);
     c.owner = S.mobs.indexOf(u); c.born = 1; c.hold = dead.k; c.rise = COFFIN_TURNS;
     c.intent = this.rising(c);
     S.mobs.push(c);
@@ -2047,8 +2047,8 @@ export class Game {
    */
   private become(m: Mob, k: MobKind) {
     const S = this.S, was = MOBS[m.k], d = MOBS[k], mi = S.mobs.indexOf(m), sz0 = mobSize(m.k), sz = mobSize(k);
-    const [i0, j0] = cellAt(m.x, m.y, sz0), scaled = (n: number) => Math.max(1, Math.round((n + S.dmgAdd) * S.dmgMul));
-    m.dmg += scaled(d.dmg) - scaled(was.dmg);
+    const [i0, j0] = cellAt(m.x, m.y, sz0), blow = (kind: MobKind) => mobDmg(kind, S.dmgAdd, S.dmgMul, S.spec.seed);
+    m.dmg += blow(k) - blow(m.k);
     Object.assign(m, { k, name: d.name, r: d.r, speed: d.speed, reach: d.reach, armor: d.armor });
     delete m.mad;
     const foot = this.footprint(i0, j0, sz0), area = m.under !== undefined ? S.pits[m.under].cells.map(([x, y]) => ({ x, y })) : foot;
@@ -2125,7 +2125,7 @@ export class Game {
     for (const c of [...this.around(area, 1), ...this.around(area, 2)]) {
       if (n <= 0) break;
       if (!this.cellFree(c.x, c.y, taken) || stands.has(hazKey(c.x, c.y)) || S.haz.has(hazKey(c.x, c.y))) continue;
-      const p = cellCentre(c.x, c.y), o = newMob('rat', p.x, p.y, S.hpMul, S.dmgAdd, S.dmgMul);
+      const p = cellCentre(c.x, c.y), o = newMob('rat', p.x, p.y, S.hpMul, S.dmgAdd, S.dmgMul, S.spec.seed);
       o.owner = S.mobs.indexOf(m);
       o.born = 1;
       S.mobs.push(o);
@@ -2137,7 +2137,7 @@ export class Game {
 
   /** A dragon's egg hatches: a fire imp gets up in its place, and goes from the next turn on. */
   private hatch(o: Mob) {
-    const S = this.S, imp = newMob(o.hold ?? 'imp', o.x, o.y, S.hpMul, S.dmgAdd, S.dmgMul);
+    const S = this.S, imp = newMob(o.hold ?? 'imp', o.x, o.y, S.hpMul, S.dmgAdd, S.dmgMul, S.spec.seed);
     Object.assign(o, imp, { owner: o.owner, born: 1, intent: null, hold: undefined });
     this.burst(o.x, o.y, '#ff7a3d', 14);
     this.float(o.x, o.y - 12, 'вылупился!', '#ff7a3d');
@@ -3211,7 +3211,7 @@ export class Game {
         return;
       }
       // the lid flies off: the enemy in it stands up whole, in the coffin's place in the order
-      const o = newMob(m.hold!, m.x, m.y, S.hpMul, S.dmgAdd, S.dmgMul);
+      const o = newMob(m.hold!, m.x, m.y, S.hpMul, S.dmgAdd, S.dmgMul, S.spec.seed);
       Object.assign(m, o, { owner: m.owner, born: 1, intent: null, hold: undefined, rise: undefined });
       this.burst(m.x, m.y, '#b7a07a', 16);
       this.sfx('ability');
@@ -3262,7 +3262,7 @@ export class Game {
       this.note(`${m.name} ${did(d, 'призвал')} ${MOBS[kind].acc.toLowerCase()}${n > 1 ? ' ×' + n : ''}`);
       for (const p of it.spots ?? []) {
         // a disc may have come to rest on the circle; the mob still rises, the disc is long gone by then
-        const o = newMob(kind, p.x, p.y, S.hpMul, S.dmgAdd, S.dmgMul);
+        const o = newMob(kind, p.x, p.y, S.hpMul, S.dmgAdd, S.dmgMul, S.spec.seed);
         o.owner = mi; o.born = 1;
         S.mobs.push(o);
         this.burst(p.x, p.y, '#b893ff', 16);

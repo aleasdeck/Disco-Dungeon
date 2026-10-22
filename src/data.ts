@@ -338,9 +338,13 @@ export interface MobDef {
 
 /**
  * Every enemy is in the room from the start (no reinforcements) and a room holds only a few, so each gets this much more HP.
- * Down from 1.25 when «ТОЧНО!» went from ×2 to ×1.5 and grew rarer, so a run stays as hard as before.
+ * Down from 1.25 when «ТОЧНО!» went from ×2 to ×1.5 and grew rarer, so a run stays as hard as before; then 10% up from
+ * 1.06 with MOB_DMG_MUL (thread «Сложность врагов»), when runs got too easy.
  */
-export const MOB_HP_MUL = 1.06;
+export const MOB_HP_MUL = 1.17;
+
+/** Every enemy's blow, bosses' too, is this much harder (thread «Сложность врагов»); see `mobDmg` in room.ts for the rounding. */
+export const MOB_DMG_MUL = 1.1;
 
 export const MOBS: Record<MobKind, MobDef> = {
   skel: { name: 'Скелет', floor: 0, hp: 9, r: 7, speed: 34, reach: 30, dmg: 4, fig: 31, txt: 'Идёт к ближайшему герою и бьёт вблизи.', acc: 'Скелета' },
