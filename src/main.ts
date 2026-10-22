@@ -1,5 +1,5 @@
 import './style.css';
-import { AB_COST, BOOT_GAGS, COMBAT_ROOMS, HEROES, MAX_PLAYERS, MOBS, WALL_H, forgeOre, type MobKind } from './data';
+import { AB_COST, BOOT_GAGS, COMBAT_ROOMS, HEROES, MAX_PLAYERS, MOBS, RISE_HP, WALL_H, forgeOre, type MobKind } from './data';
 import { Camera } from './camera';
 import { Game, newBank, newParty, newTally, type HeroState } from './game';
 import { Net, type Player } from './net';
@@ -936,6 +936,9 @@ game.onRoomEnd = win => {
     // the boss gave every hero back half their health as it fell (Game.bossHeal)
     const solo = game.party.length === 1 && game.party[0].def;
     const healed = !boss ? '' : solo ? `${solo.name} ${solo.fem ? 'восстановила' : 'восстановил'} половину здоровья. ` : 'Герои восстановили половину здоровья. ';
+    // a hero who fell in a room the others won gets up as the next fight begins (Game.loadRoom), or with half by the fire
+    const down = game.party.filter(h => h.hp <= 0).map(h => h.def.name);
+    const rise = !down.length ? '' : `${down.join(' и ')} ${down.length > 1 ? 'встанут' : 'встанет'} с ${RISE_HP} HP к следующему бою, у костра с половиной. `;
     const clean = game.clean ? `Без царапины: +${game.clean} руды. ` : '';
     // the bookie's bet
     const bet = game.betLine ? game.betLine + ' ' : '';
@@ -943,7 +946,7 @@ game.onRoomEnd = win => {
     const elite = S.spec.type === 'elite';
     if (elite) game.sharpen(S.spec.depth);
     showEnd({ title: boss ? `Этаж ${run.floor} пройден` : cave ? (game.cleared() ? 'Пещера выбрана дочиста' : 'Ходы кончились') : elite ? 'Элита повержена' : 'Комната зачищена',
-      text: cave ? `Добыто руды: ${game.mined}. ${rooms}` : `Ходов: ${S.turn}. ${healed}${clean}${bet}${elite ? 'Гном-кузнец бесплатно заточит каждому диск. ' : ''}${rooms}`,
+      text: cave ? `Добыто руды: ${game.mined}. ${rooms}` : `Ходов: ${S.turn}. ${healed}${rise}${clean}${bet}${elite ? 'Гном-кузнец бесплатно заточит каждому диск. ' : ''}${rooms}`,
       kind: 'map', next: elite ? 'whet' : undefined });
     shareMap();
   }, 900);
