@@ -33,6 +33,7 @@ import { hideAlbum, showAlbum } from './albumview';
 import { DEMO } from './demo';
 import { creditRun, demoLocked, dueEvents, locked, openEvents, openedBy, runGains, standFor, volTop } from './progress';
 import { STAND_MATS, type StandMat } from './stands';
+import { noteRoom } from './dossier';
 import { setOut } from './volume';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -1708,6 +1709,8 @@ function countStats(now: number, raw: number) {
   if (mode !== 'solo' && !(started && (mode === 'host' || mode === 'client'))) return;
   // a trinket's line opens in the collection as soon as the snapshot says the hero picked it up
   collect(myHeroes());
+  // the enemies' dossier: the room the party is in (not the quiet one behind the map), counted the moment it is over
+  if (!choosing) noteRoom(game.S);
   if (!document.hidden && now - touchedAt < AWAY_MS && !inMenu()) playTime(run, Math.min(raw, 1));
   // a client's discs still rolling may run ahead of the host's count for a moment: the numbers wait until they stop
   if (now - statsAt < 2000 || game.moving()) return;
