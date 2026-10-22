@@ -7,8 +7,9 @@
 // chain (somebody there knows somebody) and waits in the next event room. Trophies («подвиги»): twelve are open from the
 // start, each of the others opens by a feat of its own. Online the host's events and trophies come up, and every player
 // opens their own by what they did there.
-// The demo has its own three heroes and events, all the trophies and no stars. `?progress=full` in the address opens
-// everything for a test without writing it down.
+// «Громкость» (src/volume.ts): the first won run opens its first step, and a run won at the highest step opens the next.
+// The demo has its own three heroes and events, all the trophies, no stars and no «Громкость». `?progress=full` in the
+// address opens everything for a test without writing it down.
 
 import { HEROES } from './data';
 import { DEMO, DEMO_EVENTS, DEMO_HEROES, stored } from './demo';
@@ -17,6 +18,7 @@ import { FLOORS, type Run } from './run';
 import { EVENTS, type EventState } from './events';
 import { shutArts, type ArtKey } from './artifacts';
 import type { Tally } from './game';
+import { VOL_MAX } from './volume';
 
 /** The heroes open from the first run: Бастион, Зажигалка, Рикошет, one of each kind, the same as the demo's. */
 export const START_HEROES = ['bastion', 'ash', 'ricochet'];
@@ -88,6 +90,8 @@ interface Cur {
   opened: string[];
   events?: string[];
   arts?: string[];
+  /** The «Громкость» step this run opened. */
+  vol?: number;
 }
 
 interface Progress {
@@ -101,6 +105,8 @@ interface Progress {
   due: string[];
   /** The trophies opened beyond START_ARTS. */
   arts: string[];
+  /** The highest «Громкость» step opened, 0 before the first won run. */
+  vol: number;
   cur: Cur | null;
 }
 
@@ -114,9 +120,10 @@ const ALL = typeof location !== 'undefined' && new URLSearchParams(location.sear
 function load(): Progress {
   try {
     const o = JSON.parse(localStorage.getItem(KEY) || 'null') as Progress | null;
-    if (o && o.v === 1) return { v: 1, stars: o.stars ?? {}, open: o.open ?? [], events: o.events ?? [], due: o.due ?? [], arts: o.arts ?? [], cur: o.cur ?? null };
+    // a player who has won before there was any «Громкость» has its first step open
+    if (o && o.v === 1) return { v: 1, stars: o.stars ?? {}, open: o.open ?? [], events: o.events ?? [], due: o.due ?? [], arts: o.arts ?? [], vol: o.vol ?? (wonBefore() ? 1 : 0), cur: o.cur ?? null };
   } catch { /* unreadable: start over below */ }
-  const p: Progress = { v: 1, stars: {}, open: [], events: [], due: [], arts: [], cur: null };
+  const p: Progress = { v: 1, stars: {}, open: [], events: [], due: [], arts: [], vol: wonBefore() ? 1 : 0, cur: null };
   for (const [k, h] of Object.entries(stats.heroes)) {
     if (!HEROES.some(d => d.key === k)) continue;
     if (h.runs > 0 && !START_HEROES.includes(k)) p.open.push(k);
@@ -124,6 +131,11 @@ function load(): Progress {
   }
   for (const k of Object.keys(p.stars)) openNext(p, k);
   return p;
+}
+
+/** Some hero of this player's has won a run, by the statistics. */
+function wonBefore() {
+  return Object.values(stats.heroes).some(h => h.wins > 0);
 }
 
 const progress: Progress = load();
@@ -195,6 +207,8 @@ export interface Deeds {
   sum?: Partial<Tally>;
   /** The floor bosses beaten in this run. */
   bosses?: string[];
+  /** The «Громкость» step the run is played at. */
+  vol?: number;
 }
 
 /**
@@ -217,6 +231,12 @@ export function creditRun(run: Run, keys: string[], o: Deeds) {
     }
     c.floors = beaten;
     for (const k of keys) if (openNext(progress, k)) c.opened.push(nextOf(k)!);
+    changed = true;
+  }
+  // a run won at the highest step opens the next one
+  const up = Math.min(VOL_MAX, (o.vol ?? 0) + 1);
+  if (o.won && up > progress.vol) {
+    progress.vol = c.vol = up;
     changed = true;
   }
   if (o.ev && meet(o.ev, c)) changed = true;
@@ -291,11 +311,14 @@ export function featOf(key: string) {
   return { how: f.how, now: f.sum ? Math.min(stats.sum[f.sum[0]] ?? 0, f.sum[1]) : null, need: f.sum?.[1] ?? null };
 }
 
-/** What a run brought this player: each of its heroes' stars, and the heroes, events and trophies it opened, in order. */
-export interface Gains { heroes: string[]; got: Record<string, number>; opened: string[]; events: string[]; arts: string[] }
+/** What a run brought this player: each of its heroes' stars, the heroes, events and trophies it opened, in order, and the «Громкость» step. */
+export interface Gains { heroes: string[]; got: Record<string, number>; opened: string[]; events: string[]; arts: string[]; vol?: number }
 
 /** What `run` brought this player; null if it isn't the run counted. */
 export function runGains(run: Run): Gains | null {
   const c = progress.cur;
-  return !DEMO && c && c.seed === run.seed ? { got: c.got, opened: c.opened, heroes: c.heroes, events: c.events ?? [], arts: c.arts ?? [] } : null;
+  return !DEMO && c && c.seed === run.seed ? { got: c.got, opened: c.opened, heroes: c.heroes, events: c.events ?? [], arts: c.arts ?? [], ...(c.vol ? { vol: c.vol } : {}) } : null;
 }
+
+/** The highest «Громкость» step this player can turn the knob to: none in the demo, all of them with `?progress=full`. */
+export const volTop = () => (DEMO ? 0 : ALL ? VOL_MAX : progress.vol);

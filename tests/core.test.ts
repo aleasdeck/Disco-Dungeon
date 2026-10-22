@@ -2054,7 +2054,7 @@ describe('online play', () => {
     applySnapshot(back, old);
     expect(back.party.map(h => h.sparks)).toEqual([AB_COST, 4 - AB_COST]);
     expect(back.bank.ore).toBe(6);
-    expect(JSON.parse(JSON.stringify(snapshot(back))).bank).toEqual({ ore: 6, boon: 0 });
+    expect(JSON.parse(JSON.stringify(snapshot(back))).bank).toEqual({ ore: 6, boon: 0, vol: 0 });
   });
 
   it('rolls the discs on a client step for step with the host, bounces and all, even from a late snapshot', () => {

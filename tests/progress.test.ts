@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FLOORS, newRun } from '../src/run';
-import { artLocked, bossStars, creditRun, dueEvents, eventLocked, featOf, locked, nextOf, openEvents, openedBy, opening, prevOf, runGains, START_ARTS, START_EVENTS, START_HEROES, STARS_TO_OPEN, starsOf } from '../src/progress';
+import { artLocked, bossStars, creditRun, dueEvents, eventLocked, featOf, locked, nextOf, openEvents, openedBy, opening, prevOf, runGains, START_ARTS, START_EVENTS, START_HEROES, STARS_TO_OPEN, starsOf, volTop } from '../src/progress';
+import { VOL_MAX } from '../src/volume';
 import { eventOf, type EventState } from '../src/events';
 import { rollOffer } from '../src/artifacts';
 
@@ -34,7 +35,8 @@ describe('hero unlocks', () => {
     expect(starsOf('bastion')).toBe(6);
     expect(locked('cook')).toBe(false);
     expect(opening('bastion')).toBe(false);
-    expect(runGains(run)).toEqual({ heroes: ['bastion'], got: { bastion: 6 }, opened: ['cook'], events: [], arts: [] });
+    // the first won run opens the first «Громкость» step too
+    expect(runGains(run)).toEqual({ heroes: ['bastion'], got: { bastion: 6 }, opened: ['cook'], events: [], arts: [], vol: 1 });
     expect(runGains(newRun(1))).toBe(null);
   });
 
@@ -98,5 +100,25 @@ describe('event and trophy unlocks', () => {
     expect(artLocked('hand')).toBe(false);
     expect(runGains(run)?.arts).toEqual(['lube', 'hand', 'chalk', 'mirrorball']);
     expect(featOf('undies')).toMatchObject({ need: 25 });
+  });
+});
+
+describe('«Громкость» steps', () => {
+  it('opens the next step by a run won at the highest, never past the last', () => {
+    // the first won run (above) opened the first step
+    expect(volTop()).toBe(1);
+    const run = newRun(1212);
+    creditRun(run, ['ash'], { won: false, vol: 1 });
+    expect(volTop()).toBe(1);
+    creditRun(run, ['ash'], { won: true, vol: 1 });
+    expect(volTop()).toBe(2);
+    expect(runGains(run)?.vol).toBe(2);
+    const low = newRun(1313);
+    creditRun(low, ['ash'], { won: true, vol: 0 });
+    expect(volTop()).toBe(2);
+    expect(runGains(low)?.vol).toBeUndefined();
+    creditRun(newRun(1414), ['ash'], { won: true, vol: VOL_MAX - 1 });
+    creditRun(newRun(1515), ['ash'], { won: true, vol: VOL_MAX });
+    expect(volTop()).toBe(VOL_MAX);
   });
 });

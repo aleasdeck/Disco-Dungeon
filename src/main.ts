@@ -19,7 +19,7 @@ import { bossOf } from './room';
 import { FLOORS, LAYERS, agreed, depthOf, newRun, nodeById, reachable, roomSeed, type Run, type Votes } from './run';
 import { choicesOf, cupPick, doneOf, eventOf, heroPick, sellDone, sellPick, sellersLeft, stageOf, take, type EventState, type Table } from './events';
 import { EventView, type EventVotes } from './eventview';
-import { campDo, campLeave, type CampPick, type CampState } from './camp';
+import { campDo, campLeave, newCamp, type CampPick, type CampState } from './camp';
 import { CampView } from './campview';
 import { PASS, UNDO, lootAgreed, lootDone, lootFor, newLoot, settleLoot, takeKept, type ArtKey, type LootState } from './artifacts';
 import { LootView, type LootVotes } from './lootview';
@@ -31,7 +31,8 @@ import { collect } from './trinkets';
 import type { Album } from './album';
 import { hideAlbum, showAlbum } from './albumview';
 import { DEMO } from './demo';
-import { creditRun, demoLocked, dueEvents, locked, openEvents, openedBy, runGains } from './progress';
+import { creditRun, demoLocked, dueEvents, locked, openEvents, openedBy, runGains, volTop } from './progress';
+import { setOut } from './volume';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -165,6 +166,7 @@ function showMap(open: boolean) {
   if (open) {
     // the host's or a lone player's own new event comes in the next event room; a client's map can't tell
     mapView.fresh = mode !== 'client' && dueEvents().some(k => !(run.seen ?? []).includes(k));
+    mapView.vol = game.bank.vol ?? 0;
     mapView.render(run, choosing, mapParty(), mapVotes());
     // on a short screen the map scrolls; bring the rooms to choose from into view
     if (!was) document.querySelector('#map .mnode.reach, #map .mnode.cur')?.scrollIntoView({ block: 'center' });
@@ -233,6 +235,13 @@ const myHeroes = (): HeroState[] => (game.online ? [meHero()].filter(h => h !== 
 /** The players as the clients see them: without anyone's rejoin key. */
 const pub = () => players.map(({ key: _key, ...p }) => p);
 
+/** The «Громкость» step the knob stands at: the one last turned to, as far as this player has opened. */
+const knobVol = () => Math.max(0, Math.min(settings.vol, volTop()));
+/** Online client: the step the host's knob stands at, as the host last said. */
+let roomVol = 0;
+/** Host: tell the table who sits at it, the photo's backdrop and the knob. */
+const shareLobby = () => net.broadcast({ t: 'lobby', players: pub(), bg: photoBg, vol: knobVol() });
+
 /** The waiting screen online clients see while the host is on the map or reading a room's result. */
 function screen(title: string, text = '', win = false, lose = false) {
   if (mode === 'host') { lastScreen = { title, text, win, lose }; net.broadcast({ t: 'screen', title, text, win, lose }); }
@@ -262,7 +271,8 @@ function setOnline(m: Mode) {
   if (mine !== null) game.act = mine;
 }
 
-function startRun(picks?: number[]) {
+/** A new run of the heroes `picks` at «Громкость» step `vol`. */
+function startRun(picks?: number[], vol = 0) {
   flushStats();
   run = newRun();
   // the party photo the run begins with, for its album: online the lobby's, with the players' names
@@ -272,7 +282,8 @@ function startRun(picks?: number[]) {
   game.party = newParty(picks, run.seed);
   const mine = myHeroes();
   if (mine.length) beginRun(run, mine.map(h => h.def.key), mode === 'host');
-  game.bank = newBank();
+  game.bank = newBank(vol);
+  setOut(game.party, vol);
   game.pickActiveParty();
   hud.buildAllies();
   choosing = true;
@@ -312,7 +323,7 @@ function openHeroSelect() {
     settings.party = party;
     settings.hero = party[0] ?? 0;
     saveSettings();
-    renderHeroSelect({ size, party, shown, onPick, onSize });
+    renderHeroSelect({ size, party, shown, vol: knobVol(), onPick, onSize, onVol });
   };
   const onPick = (i: number) => {
     shown = i;
@@ -320,6 +331,10 @@ function openHeroSelect() {
     if (locked(HEROES[i].key)) { draw(); return; }
     if (party.includes(i)) { if (size > 1) party = party.filter(o => o !== i); }
     else party = [...party, i].slice(-size);
+    draw();
+  };
+  const onVol = (n: number) => {
+    settings.vol = n;
     draw();
   };
   // a smaller party keeps the heroes picked last
@@ -335,7 +350,7 @@ function startCampaign(heroes: number[]) {
   leaveOnline();
   setOnline('solo');
   show(null);
-  startRun(heroes);
+  startRun(heroes, knobVol());
 }
 
 /**
@@ -414,7 +429,7 @@ function choose(id: string) {
     showEvent();
   } else {
     // the camp: every hero does one thing by the fire in its own window; the map waits behind it for the vote
-    camp = { seed: run.seed + depth * 131, did: {} };
+    camp = newCamp(run.seed + depth * 131, game.bank.vol);
     campFor = -1;
     showMap(false);
     showCamp();
@@ -885,7 +900,7 @@ game.onRoomEnd = win => {
     votes = {};
     // the floor's boss leaves trophies: the party shares them out before the map opens again
     if (boss) {
-      const l = newLoot(run.seed + run.floor * 977 + S.spec.depth, S.spec.floor, game.party, bossOf(S.spec));
+      const l = newLoot(run.seed + run.floor * 977 + S.spec.depth, S.spec.floor, game.party, bossOf(S.spec), game.bank.vol);
       if (lootFor(l)) {
         loot = l;
         choosing = false;
@@ -984,6 +999,7 @@ function albumOf(win: boolean): Album {
     rooms: run.path.reduce((a, p) => a + p.length, 0),
     time: runCount(run)?.time ?? 0,
     at: Date.now(),
+    ...(game.bank.vol ? { vol: game.bank.vol } : {}),
   };
 }
 
@@ -1106,7 +1122,16 @@ function leaveOnline() {
 
 function lobbyView() {
   renderLobby({
-    code: net.code, players, me: net.id, host: mode === 'host', bg: photoBg,
+    code: net.code, players, me: net.id, host: mode === 'host', bg: photoBg, vol: mode === 'host' ? knobVol() : roomVol,
+    // the host turns the knob for the whole table; whoever was ready says so again for the new step
+    onVol: n => {
+      if (mode !== 'host' || started) return;
+      settings.vol = n;
+      saveSettings();
+      for (const p of players) p.ready = false;
+      shareLobby();
+      lobbyView();
+    },
     onPick: hero => {
       if (mode === 'host') { pick('host', hero); return; }
       net.send({ t: 'pick', hero });
@@ -1118,7 +1143,7 @@ function lobbyView() {
     onBg: () => {
       if (mode !== 'host') return;
       photoBg++;
-      net.broadcast({ t: 'lobby', players: pub(), bg: photoBg });
+      shareLobby();
       lobbyView();
     },
   });
@@ -1131,7 +1156,7 @@ function look(id: string, hero: number | null) {
   const h = hero !== null && HEROES[hero] && !players.some(o => o.hero === hero) ? hero : null;
   if ((p.look ?? null) === h) return;
   p.look = h;
-  net.broadcast({ t: 'lobby', players: pub(), bg: photoBg });
+  shareLobby();
   lobbyView();
 }
 
@@ -1146,7 +1171,7 @@ function pick(id: string, hero: number | null) {
   if (p.hero !== hero) p.ready = false;
   p.hero = hero;
   p.look = null;
-  net.broadcast({ t: 'lobby', players: pub(), bg: photoBg });
+  shareLobby();
   lobbyView();
 }
 
@@ -1155,7 +1180,7 @@ function readyUp(id: string, on: boolean) {
   const p = players.find(o => o.id === id);
   if (!p || started || p.id === 'host') return;
   p.ready = on && p.hero !== null;
-  net.broadcast({ t: 'lobby', players: pub(), bg: photoBg });
+  shareLobby();
   lobbyView();
 }
 
@@ -1172,7 +1197,7 @@ function backToLobby() {
   hideEnd();
   showMap(false);
   net.broadcast({ t: 'lobbyBack' });
-  net.broadcast({ t: 'lobby', players: pub(), bg: photoBg });
+  shareLobby();
   lobbyView();
   show('lobby');
 }
@@ -1211,7 +1236,7 @@ $('lobbyStartBtn').addEventListener('click', () => {
   net.broadcast({ t: 'start', players: pub() });
   setOnline('host');
   show(null);
-  startRun(players.map(p => p.hero!).sort((a, b) => a - b));
+  startRun(players.map(p => p.hero!).sort((a, b) => a - b), knobVol());
 });
 
 $('lobbyReadyBtn').addEventListener('click', () => {
@@ -1334,14 +1359,14 @@ function welcome(id: string, name: string, key: string, demo: boolean) {
   } else players.push({ id, name, hero: null, key });
   // one who dropped out mid-run and is back once it ended still has «Связь потеряна» over the game: the lobby takes its place
   if (!started) net.sendTo(id, { t: 'lobbyBack' });
-  net.broadcast({ t: 'lobby', players: pub(), bg: photoBg });
+  shareLobby();
   lobbyView();
 }
 
 net.onLeave = id => {
   if (!started) {
     players = players.filter(p => p.id !== id);
-    net.broadcast({ t: 'lobby', players: pub(), bg: photoBg });
+    shareLobby();
     lobbyView();
     return;
   }
@@ -1373,7 +1398,7 @@ net.onMsg = (from, m) => {
     return;
   }
   answered = true;
-  if (m.t === 'lobby') { players = m.players; if (m.bg !== undefined) photoBg = m.bg; lobbyView(); }
+  if (m.t === 'lobby') { players = m.players; if (m.bg !== undefined) photoBg = m.bg; roomVol = m.vol ?? 0; lobbyView(); }
   else if (m.t === 'deny') lost(m.text);
   else if (m.t === 'bye') lost('Хозяин комнаты закрыл игру.');
   else if (m.t === 'start') {
@@ -1490,7 +1515,7 @@ async function reopen(code: string) {
     setTimeout(() => {
       if (mode !== 'host' || started || players.every(p => net.has(p.id))) return;
       players = players.filter(p => net.has(p.id));
-      net.broadcast({ t: 'lobby', players: pub(), bg: photoBg });
+      shareLobby();
       lobbyView();
     }, 15_000);
     lobbyView();
@@ -1669,7 +1694,7 @@ function creditStars() {
   if (!c) return;
   // the last boss's photo comes with the end of the run: an online player's map never shows it
   const bosses = [...(run.shots ?? []), ...(ending?.album?.shots ?? [])].flatMap(s => (s ? [s.boss] : []));
-  creditRun(run, c.heroes, { won: c.end === 'win', ev, sum: stats.sum, bosses });
+  creditRun(run, c.heroes, { won: c.end === 'win', ev, sum: stats.sum, bosses, vol: game.bank.vol });
 }
 
 /** The run's time goes on while it is on screen and the player is at it; its numbers are written down every couple of seconds. */

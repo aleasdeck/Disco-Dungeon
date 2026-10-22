@@ -7,6 +7,7 @@ import { icon as ico } from './icons';
 import { bossOf } from './room';
 import { FLOORS, reachable, roomSeed, type Run } from './run';
 import { faceUrl, mobFace } from './ui';
+import { renderKnob } from './volview';
 
 const NS = 'http://www.w3.org/2000/svg';
 const $ = (id: string) => document.getElementById(id)!;
@@ -76,12 +77,15 @@ export class MapView {
   onChoose: (id: string) => void = () => {};
   /** An event this player has just opened waits in the next event room: the event rooms ahead wear a «Новое» sticker. */
   fresh = false;
+  /** The run's «Громкость» step: its token stands by the floor's name, a tap lists its rules. */
+  vol = 0;
 
   render(run: Run, canChoose: boolean, party: MapParty, votes?: MapVotes) {
     const f = run.floor, layers = run.floors[f];
     // the floor, and the whole run as three gems: done, here, ahead (the demo's one floor has none)
     const dots = Array.from({ length: FLOORS }, (_, k) => `<i class="${k < f ? 'done' : k === f ? 'cur' : ''}"></i>`).join('');
     $('mapFloor').innerHTML = `Этаж ${f + 1}${FLOORS > 1 ? `<em class="fl-dots" title="Этаж ${f + 1} из ${FLOORS}">${dots}</em>` : ''}<span>${BIOMES[f].name}</span>`;
+    renderKnob($('mapVol'), { vol: this.vol, top: this.vol, mini: true, head: `Забег на громкости ${this.vol}. Её правила складываются:` });
     this.partyRow(party);
     const svg = $('map');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);

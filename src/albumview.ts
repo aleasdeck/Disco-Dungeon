@@ -15,6 +15,8 @@ import type { Tally } from './game';
 import { escapeHtml, starRow } from './menu';
 import { DEMO } from './demo';
 import { nextOf, opening, starsOf, type Gains } from './progress';
+import { VOL_RULES } from './volume';
+import { volToken } from './volview';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -134,7 +136,7 @@ function sheet(title: string) {
 export function showAlbum(a: Album, o: { gains?: Gains | null; button: string | null; onButton: () => void }) {
   const party = a.heroes, solo = party.length === 1 && HEROES[party[0].i], lastBoss = a.shots[a.shots.length - 1]?.boss;
   const killer = a.boss && MOBS[a.boss as MobKind];
-  $('reRibbon').textContent = a.win ? (DEMO ? 'Демо пройдено' : 'Подземелье пройдено') : `Этаж ${a.floor + 1} · ${BIOMES[a.floor]?.name ?? ''}`;
+  $('reRibbon').textContent = (a.win ? (DEMO ? 'Демо пройдено' : 'Подземелье пройдено') : `Этаж ${a.floor + 1} · ${BIOMES[a.floor]?.name ?? ''}`) + (a.vol ? ` · громкость ${a.vol}` : '');
   $('reRibbon').classList.toggle('lose', !a.win);
   $('reTitle').textContent = a.win ? (solo ? (solo.fem ? 'Ты победила!' : 'Ты победил!') : 'Вы победили!')
     : solo ? (solo.fem ? 'Героиня пала' : 'Герой пал') : 'Отряд пал';
@@ -209,7 +211,7 @@ export function showAlbum(a: Album, o: { gains?: Gains | null; button: string | 
  */
 function showGains(g: Gains | null) {
   const box = $('reGains'), got = g ? g.heroes.filter(k => g.got[k] > 0) : [];
-  box.hidden = !g || !(got.length || g.events.length || g.arts.length);
+  box.hidden = !g || !(got.length || g.events.length || g.arts.length || g.vol);
   if (!g || box.hidden) return;
   const at = (k: string) => HEROES.findIndex(h => h.key === k);
   const face = (i: number) => `<img alt="" src="${faceUrl({ i, def: HEROES[i] })}">`;
@@ -224,7 +226,9 @@ function showGains(g: Gains | null) {
   }).join('') + g.events.map(k => {
     const pic = eventArt.get(k);
     return `<div class="re-gain re-new re-thing">${pic ? `<img alt="" src="${pic.src}">` : ''}<div><em>Новое событие</em><b>${eventDef(k).title}</b></div></div>`;
-  }).join('') + g.arts.map(k => `<div class="re-gain re-new re-thing"><i class="re-art">${artIcon(k)}</i><div><em>Новый трофей</em><b>${artDef(k).name}</b></div></div>`).join('');
+  }).join('') + g.arts.map(k => `<div class="re-gain re-new re-thing"><i class="re-art">${artIcon(k)}</i><div><em>Новый трофей</em><b>${artDef(k).name}</b></div></div>`).join('')
+    // the next «Громкость» step; the first one says where its knob is
+    + (g.vol ? `<div class="re-gain re-new re-thing re-vol">${volToken(g.vol)}<div><em>${g.vol === 1 ? 'Открыта громкость: выбирай перед забегом' : 'Новая громкость'}</em><b>Громкость ${g.vol}</b><span>${VOL_RULES[g.vol - 1]}</span></div></div>` : '');
 }
 
 export function hideAlbum() {

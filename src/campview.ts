@@ -5,7 +5,7 @@
 
 import { eventArt, uiArt } from './assets';
 import type { HeroState } from './game';
-import { CAMP_HEAL, DIG_MAX, canCamp, type CampDid, type CampPick, type CampState } from './camp';
+import { CAMP_HEAL, DIG_MAX, canCamp, healOf, type CampDid, type CampPick, type CampState } from './camp';
 import { fillIcons } from './icons';
 import { faceUrl } from './ui';
 
@@ -48,6 +48,8 @@ export class CampView {
   private mates = '';
   /** The last render's arguments, to draw the window again when the bandage pick opens or closes. */
   private last?: Parameters<CampView['render']>;
+  /** What a rest or a bandage gives back at the camp shown. */
+  private heal = CAMP_HEAL;
 
   constructor() {
     $('campOpts').addEventListener('click', e => {
@@ -75,6 +77,7 @@ export class CampView {
    */
   render(camp: CampState, me: HeroState | null, party: HeroState[], nameOf?: (h: HeroState) => string, asked?: CampPick, team = false) {
     this.last = [camp, me, party, nameOf, asked, team];
+    this.heal = healOf(camp);
     const pic = eventArt.get('camp') ?? uiArt.get('room_camp'), img = $('campImg') as HTMLImageElement;
     if (pic && img.getAttribute('src') !== pic.src) img.src = pic.src;
     img.hidden = !pic;
@@ -130,14 +133,14 @@ export class CampView {
     const fallen = me.hp <= 0;
     const rest = fallen
       ? this.opt(me, party, { k: 'rest' }, 'camp_rest', 'Встать на ноги', `<em class="good">Половина здоровья</em>`, '', asked)
-      : this.opt(me, party, { k: 'rest' }, 'camp_rest', 'Отдохнуть у огня', `<em class="good">+${Math.min(CAMP_HEAL, me.max - me.hp)} HP</em>`, 'Здоровье и так полное', asked);
+      : this.opt(me, party, { k: 'rest' }, 'camp_rest', 'Отдохнуть у огня', `<em class="good">+${Math.min(this.heal, me.max - me.hp)} HP</em>`, 'Здоровье и так полное', asked);
     // one bandage slab, which opens the pick of whom to bandage, for a party of two or three
     let mend = '';
     if (others.length) {
       const can = others.some(t => canCamp(me, { k: 'mend', to: t.i }, party));
       mend = `<button class="ev-opt camp-opt${asked?.k === 'mend' ? ' mine' : ''}" data-mates${can && !asked ? '' : ' disabled'}>`
         + `<i data-art="camp_mend" aria-hidden="true"></i><b>Перевязать товарища</b>`
-        + (can ? `<span class="ev-fx"><em class="good">+${CAMP_HEAL} HP, кому выберешь</em></span>` : `<small>${fallen ? 'Сначала встань сам' : 'Все и так целы'}</small>`) + '</button>';
+        + (can ? `<span class="ev-fx"><em class="good">+${this.heal} HP, кому выберешь</em></span>` : `<small>${fallen ? 'Сначала встань сам' : 'Все и так целы'}</small>`) + '</button>';
     }
     const dig = this.opt(me, party, { k: 'dig' }, 'camp_dig', 'Добыть руду', `<em class="good">+0–${DIG_MAX} руды, как повезёт</em>`, 'Сначала встань на ноги', asked);
     return rest + mend + dig;
@@ -148,7 +151,7 @@ export class CampView {
     const fallen = me.hp <= 0;
     // for a party the question over the slabs already names who bandages
     return (team ? '' : '<p class="camp-ask">Кого перевязать?</p>') + others.map(t => this.opt(me, party, { k: 'mend', to: t.i }, 'camp_mend', t.hp > 0 ? `Перевязать ${t.def.acc}` : `Поднять ${t.def.acc}`,
-      `<em class="good">${t.hp > 0 ? `+${Math.min(CAMP_HEAL, t.max - t.hp)} HP ${t.def.dat}` : 'Встанет с половиной здоровья'}</em>`,
+      `<em class="good">${t.hp > 0 ? `+${Math.min(this.heal, t.max - t.hp)} HP ${t.def.dat}` : 'Встанет с половиной здоровья'}</em>`,
       fallen ? 'Сначала встань сам' : 'Здоровье и так полное', asked,
       `<span class="camp-mate" style="--c:${t.def.col}"><img src="${faceUrl(t)}" alt="">${hpBar(t)}</span>`)).join('')
       + `<button class="ev-opt camp-back" data-back${asked ? ' disabled' : ''}><b>Назад</b></button>`;
