@@ -9,8 +9,9 @@ import { FLOORS, LAYERS } from './run';
 import { drawAfter, drawShot, drawStart, type Album } from './album';
 import { saveCanvas } from './photo';
 import type { Tally } from './game';
-import { escapeHtml } from './menu';
+import { escapeHtml, starRow } from './menu';
 import { DEMO } from './demo';
+import { nextOf, opening, starsOf, type Gains } from './progress';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -127,7 +128,7 @@ function sheet(title: string) {
  * Show the run's end: `button` is what the main button says (a new run, the lobby), or null for an online player who
  * waits for the host to take everyone back to the lobby.
  */
-export function showAlbum(a: Album, o: { button: string | null; onButton: () => void }) {
+export function showAlbum(a: Album, o: { gains?: Gains | null; button: string | null; onButton: () => void }) {
   const party = a.heroes, solo = party.length === 1 && HEROES[party[0].i], lastBoss = a.shots[a.shots.length - 1]?.boss;
   const killer = a.boss && MOBS[a.boss as MobKind];
   $('reRibbon').textContent = a.win ? (DEMO ? 'Демо пройдено' : 'Подземелье пройдено') : `Этаж ${a.floor + 1} · ${BIOMES[a.floor]?.name ?? ''}`;
@@ -155,6 +156,7 @@ export function showAlbum(a: Album, o: { button: string | null; onButton: () => 
   tall.append(line(ends, [46, 46], [260, 260], 14, 0));
   if (bosses.length) tall.append(line(bosses, bosses.map(() => 30), bosses.map(() => 180), 12, 2));
   ropes.append(wide, tall);
+  showGains(o.gains ?? null);
   // the run in numbers: the party's sums, the best blow and who dealt it
   const sumOf = (k: keyof Tally) => party.reduce((s, h) => s + h.t[k], 0);
   const best = (k: keyof Tally) => party.reduce((p, h) => (h.t[k] > p.t[k] ? h : p));
@@ -196,6 +198,27 @@ export function showAlbum(a: Album, o: { button: string | null; onButton: () => 
   $('reLb').hidden = true;
   $('runEnd').hidden = false;
   $('runEnd').scrollTop = 0;
+}
+
+/**
+ * Over the numbers: the stars the run's bosses gave each of this player's heroes, how far each is from opening the next
+ * hero of its kind, and every hero the run opened. Nothing when no boss fell.
+ */
+function showGains(g: Gains | null) {
+  const box = $('reGains'), got = g ? g.heroes.filter(k => g.got[k] > 0) : [];
+  box.hidden = !g || !got.length;
+  if (!g || box.hidden) return;
+  const at = (k: string) => HEROES.findIndex(h => h.key === k);
+  const face = (i: number) => `<img alt="" src="${faceUrl({ i, def: HEROES[i] })}">`;
+  box.innerHTML = got.map(k => {
+    const i = at(k), def = HEROES[i], next = nextOf(k);
+    // the hero still gathering shows its row of stars; the one that just opened its next says so
+    const tail = g.opened.includes(next ?? '') ? `<span>Открыт новый герой</span>` : opening(k) ? starRow(starsOf(k)) : '';
+    return `<div class="re-gain" style="--c:${def.col}">${face(i)}<div><b>${def.name} +${g.got[k]} ★</b>${tail}</div></div>`;
+  }).join('') + g.opened.map(k => {
+    const i = at(k), def = HEROES[i];
+    return `<div class="re-gain re-new" style="--c:${def.col}">${face(i)}<div><em>Новый герой</em><b>${def.name}</b></div></div>`;
+  }).join('');
 }
 
 export function hideAlbum() {

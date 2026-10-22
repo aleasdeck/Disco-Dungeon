@@ -30,7 +30,8 @@ import { cardOut, closeIntro, openIntro, showCard } from './introview';
 import { collect } from './trinkets';
 import type { Album } from './album';
 import { hideAlbum, showAlbum } from './albumview';
-import { DEMO, locked } from './demo';
+import { DEMO } from './demo';
+import { creditRun, demoLocked, locked, runGains } from './progress';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -300,7 +301,7 @@ function startRun(picks?: number[]) {
  */
 function openHeroSelect() {
   const size = Math.min(3, Math.max(1, settings.size || 1));
-  // the demo's other heroes can't go, even when the full game last picked them
+  // heroes not opened can't go (the demo's other heroes), even when the full game or a test last picked them
   let party = settings.party.filter((i, k, a) => HEROES[i] && !locked(HEROES[i].key) && a.indexOf(i) === k).slice(-size);
   if (!party.length) party = [0];
   let shown = party[party.length - 1];
@@ -312,8 +313,9 @@ function openHeroSelect() {
     renderHeroSelect({ size, party, shown, onPick, onSize });
   };
   const onPick = (i: number) => {
-    if (locked(HEROES[i].key)) return;
     shown = i;
+    // a hero not opened yet is only read: its card says how it opens
+    if (locked(HEROES[i].key)) { draw(); return; }
     if (party.includes(i)) { if (size > 1) party = party.filter(o => o !== i); }
     else party = [...party, i].slice(-size);
     draw();
@@ -861,6 +863,7 @@ game.onRoomEnd = win => {
     if (win && boss) (run.shots ??= [])[run.floor] = { boss: bossOf(S.spec), heroes: game.wounds ?? game.party.map(h => ({ i: h.i, hp: Math.max(0, h.hp), max: h.max })) };
     if (!win || last) {
       endRun(run, myHeroes(), win);
+      creditStars();
       runOver = true;
       if (mode === 'solo') clearCampaign();
     }
@@ -912,6 +915,7 @@ function showEnd(e: Ending) {
     $('roomEnd').hidden = true;
     if (mode === 'client') wait('');
     showAlbum(e.album, {
+      gains: runGains(run),
       button: mode === 'client' ? null : mode === 'host' ? 'В лобби' : 'Новый забег',
       onButton: mode === 'host' ? backToLobby : () => { hideEnd(); openHeroSelect(); },
     });
@@ -1124,11 +1128,14 @@ function look(id: string, hero: number | null) {
   lobbyView();
 }
 
-/** Host: a player picks a hero, if it is free; one who changes their hero has to press «Готов» again. */
+/**
+ * Host: a player picks a hero, if it is free; one who changes their hero has to press «Готов» again. Every player picks
+ * from the heroes opened on their own device: the host checks its own, and keeps only the demo's heroes for everyone.
+ */
 function pick(id: string, hero: number | null) {
   const p = players.find(o => o.id === id);
   if (!p || started) return;
-  if (hero !== null && (players.some(o => o.hero === hero && o.id !== id) || !HEROES[hero] || locked(HEROES[hero].key))) return;
+  if (hero !== null && (players.some(o => o.hero === hero && o.id !== id) || !HEROES[hero] || (id === 'host' ? locked : demoLocked)(HEROES[hero].key))) return;
   if (p.hero !== hero) p.ready = false;
   p.hero = hero;
   p.look = null;
@@ -1403,7 +1410,7 @@ net.onMsg = (from, m) => {
     if (!shop && hud.atForge) showMap(false);
   } else if (m.t === 'screen') {
     // the host's word that the run is over: the last boss fell, or the whole party did
-    if (started && (m.win || m.lose)) endRun(run, myHeroes(), !!m.win);
+    if (started && (m.win || m.lose)) { endRun(run, myHeroes(), !!m.win); creditStars(); }
     screen(m.title, m.text, m.win, m.lose);
   }
   else if (m.t === 'lobbyBack') { started = false; ev = null; showEvent(); camp = null; showCamp(); loot = null; showLoot(); wait(''); hideEnd(); showMap(false); lobbyView(); show('lobby'); }
@@ -1643,6 +1650,13 @@ for (const ev of ['pointerdown', 'keydown', 'wheel'] as const) window.addEventLi
 function flushStats() {
   syncRun(run, myHeroes(), choosing);
   saveStats();
+  creditStars();
+}
+
+/** The stars of the bosses the run has beaten so far, to this player's heroes counted in it, and the heroes they open. */
+function creditStars() {
+  const c = runCount(run);
+  if (c) creditRun(run, c.heroes, c.end === 'win');
 }
 
 /** The run's time goes on while it is on screen and the player is at it; its numbers are written down every couple of seconds. */

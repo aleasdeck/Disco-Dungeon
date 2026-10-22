@@ -14,8 +14,5 @@ export const DEMO_EVENTS = ['bar', 'altar', 'doctor'];
 /** The demo's one boss. */
 export const DEMO_BOSS: MobKind = 'king';
 
-/** A hero the demo doesn't let anyone play, by its key. */
-export const locked = (key: string) => DEMO && !DEMO_HEROES.includes(key);
-
 /** The demo's own name for a thing kept in the browser. */
 export const stored = (key: string) => (DEMO ? key + '.demo' : key);

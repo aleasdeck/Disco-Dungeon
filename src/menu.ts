@@ -14,7 +14,8 @@ import { sound } from './sound';
 import type { Player } from './net';
 import { uiArt } from './assets';
 import { BACKDROP_COUNT, drawPhoto, savePhoto, type PhotoSeat } from './photo';
-import { locked } from './demo';
+import { DEMO } from './demo';
+import { demoLocked, kindAt, locked, opening, prevOf, STARS_TO_OPEN, starsOf } from './progress';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -40,11 +41,11 @@ export function renderCollection(tab: 'heroes' | 'mobs' | 'arts' | 'trinkets') {
       const def = HEROES[i], card = document.createElement('article');
       card.className = 'card';
       const cv = document.createElement('canvas');
-      // the demo's other heroes: a dark shape and nothing told
+      // a hero not opened yet (the demo's other heroes): a dark shape, its kind and how it opens
       if (locked(def.key)) {
         drawShadow(cv, { i, def });
         card.classList.add('shut');
-        card.innerHTML = '<div></div><div><h3>???</h3><p>Этот герой ждёт в полной версии игры.</p></div>';
+        card.innerHTML = `<div></div><div><h3>???</h3><p>${DEMO ? '' : KINDS[kindAt(def.key)].one + '. '}${howToOpen(def.key)}</p>${shutStars(def.key)}</div>`;
         card.firstElementChild!.replaceWith(cv);
         grid.appendChild(card);
         return;
@@ -212,12 +213,50 @@ const SIZE_WORDS = ['', 'одного героя', 'двух героев', 'т�
 // ------------------------------------------------------------ the pick screens: the party photo, the heroes, the card
 
 const icon = (key: string) => uiArt.get(key)?.src ?? '';
+
+/** A kind in the words «до нового …», by its place in KINDS. */
+const KIND_OF = ['толстяка', 'чувака', 'дрища'];
+const STARS_WHY = 'Босс этажа даёт каждому герою отряда звёзды по номеру этажа: 1, 2 и 3.';
+
+/** Stars toward the next hero as a row of STARS_TO_OPEN: the ones got in gold, the rest hollow. */
+export function starRow(n: number) {
+  const k = Math.min(n, STARS_TO_OPEN);
+  return `<span class="stars" role="img" aria-label="${k} из ${STARS_TO_OPEN} звёзд">${'★'.repeat(k)}<i>${'★'.repeat(STARS_TO_OPEN - k)}</i></span>`;
+}
+
+/** How a hero not opened yet opens: the hero before it on its ladder gathers the stars, once that one is open itself. */
+function howToOpen(key: string) {
+  if (DEMO) return 'Этот герой ждёт в полной версии игры.';
+  const prev = prevOf(key);
+  if (!prev) return '';
+  // the one before is shut too: its name stays a secret
+  if (locked(prev)) return `Сначала открой ${KIND_OF[kindAt(key)]} перед ним.`;
+  return `Откроется, когда ${HEROES.find(h => h.key === prev)!.name} наберёт ${STARS_TO_OPEN}&nbsp;★. ${STARS_WHY}`;
+}
+
+/** The stars the hero before a shut one has gathered toward it, when that one is open. */
+function shutStars(key: string) {
+  const prev = prevOf(key);
+  if (DEMO || !prev || locked(prev)) return '';
+  const n = starsOf(prev);
+  return `<p class="pc-next">${starRow(n)}<span>${Math.min(n, STARS_TO_OPEN)} из ${STARS_TO_OPEN}</span></p>`;
+}
 /** Mice can point at a hero to read it without taking it; fingers take it with a tap. */
 const canPoint = () => matchMedia('(hover: hover)').matches;
 
-/** The card beside the photo: whose the hero is, its name and kind, its numbers, its ability whole. */
-function heroCard(box: HTMLElement, i: number) {
+/**
+ * The card beside the photo: whose the hero is, its name and kind, its numbers, its ability whole, and its stars while it
+ * still has a hero to open. A hero this player hasn't opened (`shut`) shows only its kind and how it opens.
+ */
+function heroCard(box: HTMLElement, i: number, shut = locked(HEROES[i].key)) {
   const d = HEROES[i];
+  if (shut) {
+    box.style.setProperty('--c', '#a8916f');
+    box.innerHTML = `<div class="pc-top"><h3>???<em>${KINDS[kindAt(d.key)].one}</em></h3></div>`
+      + `<div class="pc-ab pc-shut"><p>${howToOpen(d.key)}</p>${shutStars(d.key)}</div>`;
+    fitCard(box);
+    return;
+  }
   box.style.setProperty('--c', d.col);
   // the name and the numbers on one line, so the ability fits whole without scrolling
   box.innerHTML = `<div class="pc-top"><h3>${d.name}<em>${kindOf(d)}</em></h3>`
@@ -225,6 +264,7 @@ function heroCard(box: HTMLElement, i: number) {
     + `<li title="Урон"><img src="${icon('up_dmg')}" alt="Урон">${fullHit(d.m, d.pw)}</li>`
     + `<li title="Скорость"><img src="${icon('up_speed')}" alt="Скорость">${Math.round(d.pw * 100)}%</li>`
     + `<li title="Отскок"><img src="${icon('up_bounce')}" alt="Отскок">${Math.round(d.e * 100)}%</li></ul></div>`
+    + (opening(d.key) ? `<p class="pc-next" title="${STARS_WHY}">${starRow(starsOf(d.key))}<span>до нового ${KIND_OF[kindAt(d.key)]}</span></p>` : '')
     + `<div class="pc-ab"><div class="pc-abname"><span class="pc-gem" style="--ab:${d.abCol}"><img src="${icon('ab_' + d.key)}" alt=""></span><b>«${d.ab}»</b></div>`
     + `<p>${d.abTxt}</p><p class="pc-more">${d.abMore}</p></div>`;
   fitCard(box);
@@ -289,7 +329,7 @@ function heroRow(box: HTMLElement, o: {
     for (const i of list) {
       const def = HEROES[i], b = document.createElement('button');
       // the demo's other heroes: a dark shape in its frame with a «?» for the name, not to be picked or read
-      if (locked(def.key)) {
+      if (demoLocked(def.key)) {
         b.className = 'pick shut';
         b.disabled = true;
         b.setAttribute('aria-label', 'Герой из полной версии');
@@ -298,12 +338,15 @@ function heroRow(box: HTMLElement, o: {
         continue;
       }
       const m = o.mark(i);
-      b.className = 'pick' + (m.cls ? ' ' + m.cls : '');
-      b.style.setProperty('--c', def.col);
+      // a hero not opened yet: the same dark shape, but its card tells how it opens; one another player took shows as itself
+      const shut = locked(def.key) && m.cls !== 'taken';
+      b.className = 'pick' + (shut ? ' shut' : '') + (m.cls ? ' ' + m.cls : '');
+      if (!shut) b.style.setProperty('--c', def.col);
       b.dataset.i = String(i);
-      b.setAttribute('aria-label', def.name + (m.label ? `, ${m.label}` : ''));
+      b.setAttribute('aria-label', (shut ? `Закрытый герой, ${KINDS[r].one}` : def.name) + (m.label ? `, ${m.label}` : ''));
       b.setAttribute('aria-pressed', String(!!m.cls?.includes('mine')));
-      b.innerHTML = `<img src="${faceUrl({ i, def })}" alt=""><span>${def.name}</span>${m.badge ? `<b class="pick-n">${m.badge}</b>` : ''}`;
+      b.innerHTML = (shut ? `<img src="${shadowUrl({ i, def })}" alt=""><span>?</span><b class="pick-q" aria-hidden="true">?</b>`
+        : `<img src="${faceUrl({ i, def })}" alt=""><span>${def.name}</span>`) + (m.badge ? `<b class="pick-n">${m.badge}</b>` : '');
       b.addEventListener('click', () => o.onTap(i));
       if (canPoint()) {
         b.addEventListener('mouseenter', () => o.onPeek(i));
@@ -345,7 +388,7 @@ export function renderHeroSelect(o: { size: number; party: number[]; shown: numb
   const paint = () => {
     const i = campPeek >= 0 ? campPeek : o.shown;
     heroCard($('heroInfo'), i);
-    const tryOn = campPeek >= 0 && !o.party.includes(campPeek) ? campPeek : null;
+    const tryOn = campPeek >= 0 && !o.party.includes(campPeek) && !locked(HEROES[campPeek].key) ? campPeek : null;
     const seats: PhotoSeat[] = Array.from({ length: o.size }, (_, k) => ({ hero: o.party[k] ?? null, look: k === o.party.length ? tryOn : null }));
     drawPhoto(photo, seats, { bg: campBg, names: false });
     photo.setAttribute('aria-label', 'Фото отряда: ' + (o.party.map(h => HEROES[h].name).join(', ') || 'пока никого'));
@@ -424,10 +467,10 @@ export function renderLobby(o: {
   zoomable(photo.parentElement!);
   const paint = () => {
     const i = lobbyPeek >= 0 ? lobbyPeek : lobbyShown;
-    heroCard($('lobbyInfo'), i);
+    heroCard($('lobbyInfo'), i, locked(HEROES[i].key) && !ownerOf(i));
     const seats: PhotoSeat[] = o.players.map(p => ({
       hero: p.hero,
-      look: p.hero !== null ? null : p.id === o.me && lobbyPeek >= 0 && !ownerOf(lobbyPeek) ? lobbyPeek : p.look ?? null,
+      look: p.hero !== null ? null : p.id === o.me && lobbyPeek >= 0 && !ownerOf(lobbyPeek) && !locked(HEROES[lobbyPeek].key) ? lobbyPeek : p.look ?? null,
       name: p.name, host: p.id === 'host', ready: !!p.ready,
     }));
     drawPhoto(photo, seats, { bg: o.bg, names: true });
@@ -444,7 +487,7 @@ export function renderLobby(o: {
     onTap: i => {
       lobbyShown = i;
       const by = ownerOf(i);
-      if (by && by.id !== o.me) { paint(); return; }
+      if ((by && by.id !== o.me) || (!by && locked(HEROES[i].key))) { paint(); return; }
       o.onPick(mine === i ? null : i);
     },
     onPeek: i => {
@@ -452,7 +495,7 @@ export function renderLobby(o: {
       paint();
       // the others see the hero I point at only while I have none; a pause first, so a sweep of the mouse sends one word
       if (mine !== null) return;
-      const want = i >= 0 && !ownerOf(i) ? i : null;
+      const want = i >= 0 && !ownerOf(i) && !locked(HEROES[i].key) ? i : null;
       clearTimeout(timer);
       timer = window.setTimeout(() => { if (want !== sent) { sent = want; o.onLook(want); } }, 160);
     },
