@@ -5,11 +5,11 @@ import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_M
 import { ART, DOOR_MUL, FOOD_FLY, FOOD_TOSS, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { BOSS_UP, CASTS, CAVE, MOB_CAP, bossOf, mobPool, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob, type ResNode } from '../src/room';
-import { ELITES, FIGHTS, FLOORS, FORGE_ROWS, LAYERS, REST_ROW, agreed, floorOk, genFloor, isFight, newRun, routes } from '../src/run';
+import { ELITES, FIGHTS, FLOORS, FORGE_ROWS, LAYERS, REST_ROW, agreed, floorOk, genFloor, isFight, newRun, nodeById, reachable, routes, runDone } from '../src/run';
 import { makeRng } from '../src/rng';
-import { EVENTS, applyFx, canPick, eventDef, eventOf, fxParts, rolled } from '../src/events';
+import { BOTTLE, CUPS, EVENTS, PULL_ODDS, RIDDLES, ROB_MIN, SELL, applyFx, canPick, choicesOf, cupPick, doneOf, eventDef, eventOf, fxParts, heroPick, redrawn, riddleOf, rolled, sellDone, sellPick, settleBet, shuffleOf, shutWhy, stageOf, take, type EventState, type Table } from '../src/events';
 import { CAMP_HEAL, DIG_MAX, campDo, campLeave, canCamp, digOre, type CampState } from '../src/camp';
-import { ARTIFACTS, BELLY, OFFER, lootAgreed, newLoot, rollOffer, settleLoot, takeKept } from '../src/artifacts';
+import { ARTIFACTS, BELLY, OFFER, PASS, SOCKETS, lootAgreed, lootFor, newLoot, rollOffer, settleLoot, takeKept, type ArtKey } from '../src/artifacts';
 
 /** Put every living hero on its own rune, as players do before the fight. */
 const placeAll = (g: Game) => g.alive().forEach((h, k) => g.movePad(h, k));
@@ -811,6 +811,355 @@ describe('map events', () => {
     expect(agreed<number>({ 0: 0 }, [0, 2])).toBeNull();
     expect(agreed<number>({ 0: 0, 2: 1 }, [0, 2])).toBeNull();
     expect(agreed<number>({ 0: 0, 2: 0 }, [0, 2])).toBe(0);
+  });
+});
+
+describe('the second batch of events', () => {
+  const at = (key: string, seed = 1000): EventState => ({ key, seed, votes: {} });
+  const tbl = (party: HeroState[], ore = 0): Table => ({ party, bank: { ore } });
+  const arts = (n: number, from = 0) => ARTIFACTS.slice(from, from + n).map(a => a.key) as string[];
+
+  it('gives every new event its scene, choices with outcomes, and keeps no two events alike in key', () => {
+    for (const k of ['slot', 'sphinx', 'gnome', 'bookie', 'pawn', 'mapper', 'foam', 'bottle', 'thimble', 'tattoo', 'gopnik', 'husband']) {
+      const e = eventDef(k);
+      expect(e.key).toBe(k);
+      expect(e.txt.length).toBeGreaterThan(80);
+    }
+    expect(EVENTS.length).toBe(22);
+  });
+
+  it('«Жадная Люська» puts a rung in the bank on every pull that comes off, and a bust burns it', () => {
+    // find a seed whose first two pulls come off and the third busts
+    let seed = 0;
+    const tries = (s: number) => [0, 1, 2].map(n => makeRng(s * 31 + n * 7919 + 101).next() < PULL_ODDS[n]);
+    while (!(tries(seed)[0] && tries(seed)[1] && !tries(seed)[2])) seed++;
+    const party = newParty([0, 1]), t = tbl(party), ev = at('slot', seed), hp = party.map(h => h.hp - 10);
+    party.forEach((h, k) => (h.hp = hp[k]));
+    expect(take(ev, 0, t)).toBe(true);
+    expect([ev.pulls, ev.done]).toEqual([1, undefined]);
+    // nothing is paid out until the bank is taken
+    expect(party.map(h => h.hp)).toEqual(hp);
+    expect(choicesOf(ev).map(c => c.label)).toEqual(['Дёрнуть ещё', 'Забрать банк']);
+    take(ev, 0, t);
+    expect(ev.pulls).toBe(2);
+    take(ev, 0, t);
+    expect(ev.done).toMatchObject({ opt: 0, won: false });
+    expect(party.map(h => h.hp)).toEqual(hp.map(x => x - 4));
+    expect(t.bank.boon ?? 0).toBe(0);
+    // a bank taken after two pulls pays both rungs
+    const ev2 = at('slot', seed), p2 = newParty([0]), t2 = tbl(p2);
+    p2[0].hp -= 10;
+    take(ev2, 0, t2); take(ev2, 0, t2); take(ev2, 1, t2);
+    expect(p2[0].hp).toBe(p2[0].max - 4);
+    expect(t2.bank.boon).toBe(AB_COST);
+    expect(stageOf(ev2)).toBe('done');
+  });
+
+  it('pays the slot machine\'s jackpot as a trophy', () => {
+    let seed = 0;
+    while (![0, 1, 2, 3].every(n => makeRng(seed * 31 + n * 7919 + 101).next() < PULL_ODDS[n])) seed++;
+    const party = newParty([2]), t = tbl(party), ev = at('slot', seed);
+    for (let k = 0; k < 4; k++) take(ev, 0, t);
+    expect(ev.done?.won).toBe(true);
+    expect(doneOf(ev)!.out.fx.some(f => f.k === 'art')).toBe(true);
+    // with all sockets taken the jackpot is still there to pull for: the new trophy replaces an old one
+    const full = newParty([2]);
+    full[0].arts = arts(SOCKETS);
+    const ev2: EventState = { ...at('slot', seed), pulls: 3 };
+    expect(shutWhy(choicesOf(ev2)[0], tbl(full))).toBeNull();
+  });
+
+  it('«Лысый Сфинкс» asks one of its riddles; the right answer is a level, a wrong one bites, «То самое» is safe', () => {
+    const asked = new Set(Array.from({ length: 200 }, (_, s) => riddleOf(s).q));
+    expect(asked.size).toBe(RIDDLES.length);
+    const seed = 55, r = riddleOf(seed), cs = choicesOf(at('sphinx', seed));
+    expect(cs.map(c => c.label)).toEqual([...r.answers, 'То самое']);
+    expect(cs.every(c => c.blind)).toBe(true);
+    const right = r.answers.indexOf(r.right), wrong = 1 - right;
+    const p1 = newParty([0]), e1 = at('sphinx', seed);
+    take(e1, right, tbl(p1));
+    expect(Object.values(p1[0].up).reduce((a, b) => a + b)).toBe(1);
+    const p2 = newParty([0]), e2 = at('sphinx', seed);
+    take(e2, wrong, tbl(p2));
+    expect(p2[0].hp).toBe(p2[0].max - 4);
+    const p3 = newParty([0]), e3 = at('sphinx', seed);
+    p3[0].hp -= 5;
+    take(e3, 2, tbl(p3));
+    expect(p3[0].hp).toBe(p3[0].max - 2);
+  });
+
+  it('«Застрявший гном» opens a choice only with a living hero of its kind in the party', () => {
+    const cs = eventDef('gnome').choices;
+    const fat = HEROES.findIndex(h => h.r === KINDS[0].r), slim = HEROES.findIndex(h => h.r === KINDS[2].r);
+    expect(shutWhy(cs[0], tbl(newParty([slim])))).toBe('Толстяка в отряде нет');
+    expect(shutWhy(cs[2], tbl(newParty([fat])))).toBe('Дрища в отряде нет');
+    expect(shutWhy(cs[0], tbl(newParty([fat, slim])))).toBeNull();
+    const party = newParty([fat, slim]);
+    party[0].hp = 0;
+    expect(shutWhy(cs[0], tbl(party))).toBe('Толстяка в отряде нет');
+    expect(shutWhy(cs[3], tbl(party))).toBeNull();
+  });
+
+  it('«Букмекер» leaves its bet for the next fight (never the ore cave) and settles it as the fight is won', () => {
+    const g = new Game();
+    g.party = newParty([0, 1]);
+    g.party[0].arts = arts(1);
+    expect(shutWhy(eventDef('bookie').choices[0], tbl(newParty([0])))).toBe('У тебя нет трофеев');
+    applyFx(eventDef('bookie').choices[0].win.fx, g.party, g.bank, 1);
+    expect(g.bank.bet).toBe('art');
+    g.loadRoom({ seed: 3, depth: 2, floor: 0, type: 'treasure' });
+    expect(g.S.spec.bet).toBeUndefined();
+    expect(g.bank.bet).toBe('art');
+    g.loadRoom({ seed: 3, depth: 2, floor: 0, type: 'fight' });
+    expect(g.S.spec.bet).toBe('art');
+    expect(g.bank.bet).toBeUndefined();
+    // won clean: a trophy for each, none the party has
+    const party = newParty([0, 1]);
+    party[0].arts = arts(1);
+    const line = settleBet('art', true, party, 9);
+    expect(party.map(h => h.arts!.length)).toEqual([2, 1]);
+    expect(new Set(party.flatMap(h => h.arts!)).size).toBe(3);
+    expect(line).toContain('Пари выиграно');
+    // lost: each with a trophy loses one
+    settleBet('art', false, party, 9);
+    expect(party.map(h => h.arts!.length)).toEqual([1, 0]);
+    // a level on three turns: one up for each, or one down (a hero with none pays with the top of its health)
+    const p = newParty([0]), top = p[0].max;
+    settleBet('up', true, p, 1);
+    expect(Object.values(p[0].up).reduce((a, b) => a + b)).toBe(1);
+    settleBet('up', false, p, 1);
+    expect(Object.values(p[0].up).reduce((a, b) => a + b)).toBe(0);
+    settleBet('up', false, p, 1);
+    expect(p[0].max).toBe(top - 3);
+  });
+
+  it('«Ломбард» sells a trophy for SELL ore a hero and sells one for 20, each hero handing over its own', () => {
+    const party = newParty([0, 1, 2]);
+    party[0].arts = ['belly', ...arts(1, 2)];
+    party[0].max += BELLY;
+    party[1].arts = arts(1, 5);
+    const top = party[0].max, t = tbl(party, 4), ev = at('pawn');
+    expect(shutWhy(eventDef('pawn').choices[0], t)).toBe('Нужно 20 руды');
+    expect(take(ev, 1, t)).toBe(true);
+    expect(stageOf(ev)).toBe('sell');
+    // hero 2 has nothing to hand over: the shop waits only for the first two
+    expect(sellPick(ev, 0, 'belly' as ArtKey, t, [0, 1, 2])).toBe(true);
+    expect(ev.done).toBeUndefined();
+    sellPick(ev, 1, party[1].arts![0] as ArtKey, t, [0, 1, 2]);
+    expect(stageOf(ev)).toBe('done');
+    expect(t.bank.ore).toBe(4 + 2 * SELL);
+    expect(party.map(h => h.arts!.length)).toEqual([1, 0, 0]);
+    expect(party[0].max).toBe(top - BELLY);
+    // online the shop doesn't wait for a player who dropped out
+    const p2 = newParty([0, 1]);
+    p2[0].arts = arts(1); p2[1].arts = arts(1, 3);
+    const t2 = tbl(p2), e2 = at('pawn');
+    take(e2, 1, t2);
+    expect(sellDone(e2, t2, [0])).toBe(false);
+    sellPick(e2, 0, p2[0].arts![0] as ArtKey, t2, [0]);
+    expect(stageOf(e2)).toBe('done');
+    expect(p2[1].arts).toHaveLength(1);
+  });
+
+  it('lets a hero with all sockets taken swap one of its trophies for a new one, or keep its own', () => {
+    const party = newParty([0, 1]);
+    party[0].arts = arts(SOCKETS);
+    party[1].arts = arts(1, 3);
+    // trophy choices stay open with every socket taken
+    const t = tbl(party, 30);
+    expect(shutWhy(eventDef('pawn').choices[0], t)).toBeNull();
+    expect(shutWhy(eventDef('mimic').choices[0], t)).toBeNull();
+    const loot = newLoot(5, 0, party), [a, b] = party.map(h => h.i);
+    expect(loot.full).toEqual([a]);
+    expect(lootFor(loot)).toBe(true);
+    // the full hero's pick waits for the trophy of its own it throws away
+    loot.picks[a] = 0;
+    loot.picks[b] = 1;
+    expect(lootAgreed(loot, [a, b])).toBe(false);
+    const out = party[0].arts![1] as ArtKey;
+    loot.drops = { [a]: out };
+    expect(lootAgreed(loot, [a, b])).toBe(true);
+    settleLoot(loot, party, [a, b]);
+    expect(party[0].arts).toHaveLength(SOCKETS);
+    expect(party[0].arts).not.toContain(out);
+    expect(party[0].arts).toContain(loot.offer[0]);
+    expect(party[1].arts).toEqual([...arts(1, 3), loot.offer[1]]);
+    // or it keeps its own three
+    const p2 = newParty([0, 1]);
+    p2[0].arts = arts(SOCKETS);
+    const l2 = newLoot(6, 0, p2), mine = [...p2[0].arts!];
+    l2.picks[p2[0].i] = PASS;
+    l2.picks[p2[1].i] = 0;
+    expect(lootAgreed(l2, p2.map(h => h.i))).toBe(true);
+    settleLoot(l2, p2, p2.map(h => h.i));
+    expect(p2[0].arts).toEqual(mine);
+    // a hero with room can't pass
+    const l3 = newLoot(7, 0, p2.slice(1));
+    l3.picks[p2[1].i] = PASS;
+    expect(lootAgreed(l3, [p2[1].i])).toBe(false);
+    // «Пивной живот» thrown away takes its health with it
+    const p4 = newParty([0]);
+    p4[0].arts = ['belly', ...arts(2, 5)];
+    p4[0].max += BELLY;
+    const top = p4[0].max, l4 = newLoot(8, 0, p4);
+    l4.picks[p4[0].i] = l4.offer.findIndex(k => k !== 'belly');
+    l4.drops = { [p4[0].i]: 'belly' };
+    settleLoot(l4, p4, [p4[0].i]);
+    expect(p4[0].max).toBe(top - BELLY + (p4[0].arts!.includes('belly') ? BELLY : 0));
+  });
+
+  it('«Пьяный картограф» redraws the floor ahead: a cave next, the elites gone, or a tunnel to the rest row', () => {
+    const run = newRun(4242), f = 0, layers = run.floors[f];
+    // stand in a room of the second row
+    const here = layers[1][0];
+    run.path[f].push(layers[0].find(n => n.next.includes(here.id))!.id, here.id);
+    const t: Table = { party: newParty([0]), bank: { ore: 0 }, run };
+    const tunnel = eventDef('mapper').choices[2];
+    expect(shutWhy(tunnel, t)).toBeNull();
+    applyFx(tunnel.win.fx, t.party, t.bank, 7, run);
+    expect(reachable(run, f).map(id => nodeById(run, f, id).l)).toEqual([REST_ROW, REST_ROW]);
+    expect(layers[REST_ROW].every(n => n.beer)).toBe(true);
+    // the walk goes on through the rest row to the boss, and the run counts the floor as done
+    run.path[f].push(layers[REST_ROW][0].id, layers[LAYERS - 1][0].id);
+    expect(nodeById(run, f, run.path[f][run.path[f].length - 1]).type).toBe('boss');
+    // next to the rest row there is no tunnel to dig
+    const run2 = newRun(4242), l5 = run2.floors[0][REST_ROW - 1][0];
+    run2.path[0].push(l5.id);
+    expect(shutWhy(tunnel, { ...t, run: run2 })).toBe('Костёр и так за углом');
+    // the elites ahead turn into plain fights
+    const run3 = newRun(4242);
+    run3.path[0].push(run3.floors[0][0][0].id);
+    const elites = run3.floors[0].flat().filter(n => n.type === 'elite');
+    expect(redrawn(run3, 'beer', 1).length).toBe(elites.length);
+    applyFx([{ k: 'map', m: 'beer' }], t.party, t.bank, 1, run3);
+    expect(run3.floors[0].flat().some(n => n.type === 'elite')).toBe(false);
+    expect(shutWhy(eventDef('mapper').choices[1], { ...t, run: run3 })).toBe('Впереди нет элиты');
+    // a room of the next row on the way becomes the ore cave
+    const run4 = newRun(77);
+    run4.path[0].push(run4.floors[0][0][0].id);
+    const cave = redrawn(run4, 'cave', 3);
+    applyFx([{ k: 'map', m: 'cave' }], t.party, t.bank, 3, run4);
+    expect(cave).toHaveLength(1);
+    expect(cave[0].type).toBe('treasure');
+    expect(run4.floors[0][0][0].next).toContain(cave[0].id);
+  });
+
+  it('ends the run at the last boss even when the cartographer\'s tunnel skipped rows', () => {
+    const run = newRun(5);
+    const last = run.floors[FLOORS - 1];
+    run.path[FLOORS - 1] = [last[0][0].id, last[REST_ROW][0].id];
+    expect(runDone(run)).toBe(false);
+    run.path[FLOORS - 1].push(last[LAYERS - 1][0].id);
+    expect(runDone(run)).toBe(true);
+  });
+
+  it('«Пенная вечеринка» lays its floor on the next fight: slick discs, soap twice as far, sticky shorter', () => {
+    const g = new Game();
+    g.party = newParty([0]);
+    applyFx([{ k: 'floor', f: 'soap' }], g.party, g.bank, 1);
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    expect(g.S.spec.ground).toBe('soap');
+    const h = g.party[0], fr = g.discFr(h);
+    expect(fr).toBeCloseTo(h.def.fr * 0.5);
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    expect(g.S.spec.ground).toBeUndefined();
+    expect(g.discFr(h)).toBeCloseTo(h.def.fr);
+    applyFx([{ k: 'floor', f: 'slick' }], g.party, g.bank, 1);
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    expect(g.slickOf(h)).toBeGreaterThan(20);
+    // the snapshot carries it to every screen
+    const c = new Game();
+    c.loadRoom({ seed: 1, depth: 1, floor: 0, type: 'fight' });
+    applySnapshot(c, snapshot(g));
+    expect(c.S.spec.ground).toBe('slick');
+  });
+
+  it('«Бутылочка» lands on one hero for a kiss or a punch, and a finger on it never lands on the punch', () => {
+    const counts = [0, 0, 0, 0];
+    for (let s = 0; s < 400; s++) {
+      const party = newParty([0, 1, 2]), ev = at('bottle', s), t = tbl(party);
+      take(ev, 0, t);
+      counts[ev.done!.slice!]++;
+      const s0 = BOTTLE[ev.done!.slice!];
+      expect(ev.done!.who !== undefined).toBe(!!s0.one);
+      const fixed = newParty([0, 1, 2]), e2 = at('bottle', s);
+      take(e2, 1, tbl(fixed));
+      expect(BOTTLE[e2.done!.slice!].name).not.toBe('Качок');
+      expect(fixed.every(h => h.hp <= h.max - 2 || BOTTLE[e2.done!.slice!].name === 'На бутылку')).toBe(true);
+    }
+    for (const n of counts) expect(n).toBeGreaterThan(60);
+    // the kiss goes to the hero it points at and nobody else
+    let s = 0;
+    while (true) { const ev = at('bottle', s), p = newParty([0, 1]); take(ev, 0, tbl(p)); if (BOTTLE[ev.done!.slice!].name === 'Жаба') break; s++; }
+    const p = newParty([0, 1]), tops = p.map(h => h.max), ev = at('bottle', s);
+    take(ev, 0, tbl(p));
+    expect(p.filter((h, k) => h.max === tops[k] + 5).map(h => h.i)).toEqual([ev.done!.who]);
+    expect(doneOf(ev)!.out.txt).toContain(HEROES[ev.done!.who!].acc);
+  });
+
+  it('«Наперсточник» shuffles the same on every screen and pays more the faster it goes', () => {
+    expect(shuffleOf(9, 2)).toEqual(shuffleOf(9, 2));
+    expect(CUPS.map(c => c.prize)).toEqual([...CUPS.map(c => c.prize)].sort((a, b) => a - b));
+    for (let s = 0; s < 30; s++) {
+      const sh = shuffleOf(s, 1);
+      expect(sh.swaps).toHaveLength(CUPS[1].swaps);
+      // the ball follows its cup through the swaps
+      let ball = sh.start;
+      for (const [a, b] of sh.swaps) ball = ball === a ? b : ball === b ? a : ball;
+      expect(ball).toBe(sh.ball);
+    }
+    const party = newParty([0]), t = tbl(party, 5), ev = at('thimble', 31);
+    take(ev, 2, t);
+    expect([stageOf(ev), t.bank.ore]).toEqual(['cups', 2]);
+    cupPick(ev, shuffleOf(31, 2).ball, t);
+    expect(ev.done?.won).toBe(true);
+    expect(t.bank.ore).toBe(2 + CUPS[2].prize);
+    const e2 = at('thimble', 31), t2 = tbl(newParty([0]), 3);
+    take(e2, 0, t2);
+    cupPick(e2, (shuffleOf(31, 0).ball + 1) % 3, t2);
+    expect([e2.done?.won, t2.bank.ore]).toEqual([false, 0]);
+  });
+
+  it('«Тату-салон» puts the tattoo on one hero: the party picks whom, a lone hero gets it at once', () => {
+    const party = newParty([0, 1]), t = tbl(party), ev = at('tattoo');
+    take(ev, 1, t);
+    expect(stageOf(ev)).toBe('hero');
+    expect(heroPick(ev, 1, t)).toBe(true);
+    expect(party.map(h => h.up.m)).toEqual([0, 2]);
+    const solo = newParty([2]), e2 = at('tattoo'), top = solo[0].max;
+    take(e2, 0, tbl(solo));
+    expect(stageOf(e2)).toBe('done');
+    expect(solo[0].max).toBe(top + 8);
+  });
+
+  it('the bad events take ore, a trophy, health, sparks or a level', () => {
+    const party = newParty([0, 1]), bank = { ore: 9 };
+    party[0].arts = arts(2);
+    party[0].sparks = 2;
+    applyFx([{ k: 'rob' }], party, bank, 1);
+    expect(bank.ore).toBe(4);
+    applyFx([{ k: 'rob' }], party, bank, 1);
+    expect(bank.ore).toBe(4 - ROB_MIN);
+    expect(shutWhy(eventDef('gopnik').choices[0], tbl(party, 2))).toBe(`Нужно ${ROB_MIN} руды`);
+    applyFx([{ k: 'unart' }], party, bank, 1);
+    expect(party.map(h => h.arts!.length)).toEqual([1, 0]);
+    applyFx([{ k: 'nosparks' }], party, bank, 1);
+    expect(party[0].sparks).toBe(0);
+    party[1].up.pw = 2;
+    const top = party[0].max;
+    applyFx([{ k: 'down' }], party, bank, 1);
+    expect([party[0].max, party[1].up.pw]).toEqual([top - 3, 1]);
+  });
+
+  it('the guard\'s stolen discs give one more disc a turn in the next fight only', () => {
+    const g = new Game();
+    g.party = newParty([0]);
+    const h = g.party[0], hand = g.handOf(h);
+    applyFx([{ k: 'extra' }], g.party, g.bank, 1);
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    expect(h.hand).toBe(hand + 1);
+    g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' });
+    expect(h.hand).toBe(hand);
   });
 });
 

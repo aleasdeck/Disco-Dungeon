@@ -7,6 +7,7 @@ import { mulberry32 } from './rng';
 import { has, type ArtKey, type Kept } from './artifacts';
 import type { Sfx } from './audio/sfx';
 import { TRINKET_R } from './trinkets';
+import { BET_TURNS, FLOOR_FR, settleBet, type Bet, type Floor } from './events';
 import { CASTS, caveTurns, cellAt, cellCentre, generate, hazKey, inPit, isFloor, muAt, newMob, partyScale, pitAt, standing, type Intent, type Layout, type Mob, type RoomSpec, type Zone } from './room';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
@@ -324,6 +325,9 @@ type Pt = { x: number; y: number };
  * throws a light spot off a bounce at the nearest enemy, «Ракушка» shields every turn, «Ёж» pricks back, «Клыки» heal
  * a kill, «Чай» puts the rage off, «Энергетик» makes the ability cheaper, «Рентген» shows the bounces.
  */
+/** The foam party's slick discs keep their speed off every wall: as many sure bounces as no throw ever takes. */
+const SLICK_ALL = 99;
+
 export const ART = {
   trayR: 1.33, polishFr: 0.67, slick: 2, insolesE: 0.75, springMax: 4, beamDmg: 1, beamReach: 5 * TILE, beamMax: 3,
   cup: 3, hedgehog: 3, fangs: 2, tea: 3, energyCost: 2, xrayBounces: 3, critBig: 2, bells: 3,
@@ -349,9 +353,14 @@ export function pointAt(w: Pt[], d: number): Pt {
  * Sparks are each hero's own to spend (`HeroState.sparks`), though a crystal fills everyone's, and last the whole run; the
  * altar's gift tops every hero up to `boon` of them at the next fight (usually none). An event may also leave the next fight a `shield`
  * for every hero, `rage`: that much harder blows from its enemies, or a curse that room's spec carries: `smoke` over the
- * floor, a `strobe` that hides the aiming line.
+ * floor, a `strobe` that hides the aiming line, a `ground` from the foam party, one `extra` disc a turn; and the bookie's `bet`,
+ * which waits for a fight (the ore cave has nobody to fight).
  */
-export interface Bank { ore: number; boon?: number; shield?: number; rage?: number; smoke?: boolean; strobe?: boolean }
+export interface Bank {
+  ore: number; boon?: number; shield?: number; rage?: number; smoke?: boolean; strobe?: boolean;
+  /** The next fight's floor, its bet and one disc a turn more in it: they go with the room's spec too. */
+  ground?: Floor; bet?: Bet; extra?: number;
+}
 
 export function newBank(): Bank {
   return { ore: 0, boon: 0 };
@@ -412,6 +421,8 @@ export class Game {
   mined = 0;
   /** Host: ore the room paid for nobody losing any health in it («Без царапины»), for the room's result. */
   clean = 0;
+  /** Host: how the bookie's bet came out in this room, a line for the room's result; empty without one. */
+  betLine = '';
   /** Host: each hero's health as the floor's boss fell, before it gave half back: the run's album shows them beaten so. */
   wounds: { i: number; hp: number; max: number }[] | null = null;
   /** A blow in the warm-up room that would have laid the hero down left it standing: the hero says so (tutor.ts). */
@@ -439,11 +450,16 @@ export class Game {
     // an event's curse on the fight goes with the room, so every screen and a reloaded game have it too
     if (this.bank.smoke) spec.smoke = true;
     if (this.bank.strobe) spec.strobe = true;
+    if (this.bank.ground) spec.ground = this.bank.ground;
+    if (this.bank.extra) spec.extra = this.bank.extra;
+    const bet = this.bank.bet && spec.type !== 'treasure' && !spec.tut ? this.bank.bet : undefined;
+    if (bet) spec.bet = bet;
     const L = generate(spec);
     this.forge = 0;
     this.whet = false;
     this.mined = 0;
     this.clean = 0;
+    this.betLine = '';
     this.walked = { key: '', n: 0 };
     this.hopped.clear();
     this.passing = -1;
@@ -455,7 +471,7 @@ export class Game {
       if (h.hp > 0 && full > boon && h.sparks < AB_COST) this.pop(h, 'battery');
       if (h.hp > 0 && cup) this.pop(h, 'cup');
       Object.assign(h, {
-        pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? this.handOf(h) : 0, thrown: false, shield: h.hp > 0 ? shield + cup : 0, flash: 0, chill: 0, daze: 0, fire: 0,
+        pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? this.handOf(h, spec) : 0, thrown: false, shield: h.hp > 0 ? shield + cup : 0, flash: 0, chill: 0, daze: 0, fire: 0,
         boost: false, sparks: Math.min(AB_COST, Math.max(h.sparks, full)), boomed: 0, lucky: false,
       });
       delete h.cuffing;
@@ -468,6 +484,9 @@ export class Game {
     delete this.bank.rage;
     delete this.bank.smoke;
     delete this.bank.strobe;
+    delete this.bank.ground;
+    delete this.bank.extra;
+    if (bet) delete this.bank.bet;
     this.S = { ...L, spec, turn: 1, phase: 'place', timer: 0, actor: -1, clock: 0, attacked: false, discs: [], food: [], bombs: [], gas: [], cuffs: null, zaps: [], floats: [], sparks: [], heroes: this.party, shake: 0, ready: [], done: [], log: [], away: this.online ? this.S?.away ?? [] : [] };
     // every rune starts empty: the players put their heroes on them before the fight
     this.pickActive();
@@ -533,11 +552,13 @@ export class Game {
 
   /** Sparks the hero's ability costs: fewer with «Энергетик». */
   abCost(h: HeroState) { return has(h, 'energy') ? ART.energyCost : AB_COST; }
-  /** Discs the hero throws a turn: the ones bought, and one more with «Третья рука». */
-  handOf(h: HeroState) { return h.discs + (has(h, 'hand') ? 1 : 0); }
-  /** The size of the hero's disc and its friction on the floor, as the trophies change them. */
+  /** Discs the hero throws a turn: the ones bought, one more with «Третья рука», and one more in a fight an event gave one. */
+  handOf(h: HeroState, spec: RoomSpec | undefined = this.S?.spec) { return h.discs + (has(h, 'hand') ? 1 : 0) + (spec?.extra ?? 0); }
+  /** The size of the hero's disc and its friction on the floor, as the trophies and the foam party's floor change them. */
   discR(h: HeroState) { return h.def.r * (has(h, 'tray') ? ART.trayR : 1); }
-  discFr(h: HeroState) { return h.def.fr * (has(h, 'polish') ? ART.polishFr : 1); }
+  discFr(h: HeroState) { return h.def.fr * (has(h, 'polish') ? ART.polishFr : 1) * (this.S?.spec.ground ? FLOOR_FR[this.S.spec.ground] : 1); }
+  /** Bounces off walls and blocks the hero's disc takes without losing speed: «Смазка»'s first two, every one on the foam party's slick discs. */
+  slickOf(h: HeroState) { return this.S?.spec.ground === 'slick' ? SLICK_ALL : has(h, 'lube') ? ART.slick : 0; }
 
   select(i: number) {
     const h = this.party.find(o => o.i === i);
@@ -710,7 +731,7 @@ export class Game {
         id: next(), vol, hero: h, x: p.x + ux * 6, y: p.y + uy * 6, vx: ux * L * s, vy: uy * L * s,
         r: this.discR(h) * (fan ? FAN_R : 1), m: this.stat(h, 'm') * (fan ? FAN_M : 1), e: this.stat(h, 'e'), fr: this.discFr(h),
         fall: 0, gone: false, charged: false, bounces: 0, spin: 0, hits: 0,
-        ab: h.boost, rico: h.boost && h.def.key === 'ricochet' ? AB_BOUNCES : 0, ...(fan ? { fan } : {}), ...(has(h, 'lube') ? { slick: ART.slick } : {}),
+        ab: h.boost, rico: h.boost && h.def.key === 'ricochet' ? AB_BOUNCES : 0, ...(fan ? { fan } : {}), ...(this.slickOf(h) ? { slick: this.slickOf(h) } : {}),
       };
     };
     // the card sharp's fan: a disc out of each sleeve first, the one he aimed last, so he goes after that one
@@ -753,7 +774,7 @@ export class Game {
     const s = this.power(h);
     const d = {
       hero: h, x: p.x + (dx / L) * 6, y: p.y + (dy / L) * 6, vx: dx * s, vy: dy * s, r: this.discR(h), e: this.stat(h, 'e'), fr: this.discFr(h), spin: 0,
-      ab: h.boost, rico: h.boost && h.def.key === 'ricochet' ? AB_BOUNCES : 0, slick: has(h, 'lube') ? ART.slick : 0,
+      ab: h.boost, rico: h.boost && h.def.key === 'ricochet' ? AB_BOUNCES : 0, slick: this.slickOf(h),
     } as Disc;
     const boxes = [...standing(S.blocks), ...S.rock, ...this.fixtures()], over = has(h, 'undies') || this.wild(d);
     // a bounce that costs no speed spends one of the disc's sure bounces, as in play
@@ -3361,6 +3382,12 @@ export class Game {
       this.clean = CLEAN_ORE * this.party.length;
       this.bank.ore += this.clean;
       this.float(S.Wx / 2, S.Wy / 2, `БЕЗ ЦАРАПИНЫ +${this.clean}`, '#ffd34d');
+    }
+    // the bookie's bet: a trophy on a fight without a scratch, a level on one won in three turns
+    if (win && S.spec.bet) {
+      const ok = S.spec.bet === 'art' ? !S.hurt : S.turn <= BET_TURNS;
+      this.betLine = settleBet(S.spec.bet, ok, this.party, S.spec.seed);
+      this.float(S.Wx / 2, S.Wy / 2 + 26, ok ? 'ПАРИ ВЫИГРАНО' : 'ПАРИ ПРОИГРАНО', ok ? '#7fe08a' : '#ff4d6a');
     }
     this.sfx(win ? 'win' : 'lose');
     this.onChange();
