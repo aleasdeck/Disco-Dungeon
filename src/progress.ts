@@ -116,7 +116,8 @@ interface Progress {
 }
 
 const KEY = stored('discodungeon.progress');
-const ALL = typeof location !== 'undefined' && new URLSearchParams(location.search).get('progress') === 'full';
+/** `?progress=full` in the address: everything open for a test, nothing written down. */
+export const ALL = typeof location !== 'undefined' && new URLSearchParams(location.search).get('progress') === 'full';
 
 /**
  * Read the progress; a player who played before there was any keeps every hero they have played and gets a whole

@@ -706,6 +706,13 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .card.shut .col-ev-pic img { filter: blur(5px) brightness(0.4) saturate(0.4); scale: 1.15; }
 .card.shut h3 { color: var(--muted); }
 .col-feat { margin-top: 4px; font-weight: 700; color: var(--gold); }
+/* the enemies' dossier (src/dossier.ts): a shape until met, then its two lines, the shut ones saying how far */
+.card img.dark { filter: brightness(0) opacity(0.55); }
+.dos-n { font-weight: 700; color: var(--gold) !important; }
+.dos-lines { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.dos-lines li { font-size: 13px; color: #f0e5d0; padding-left: 10px; border-left: 2px solid var(--gold); }
+.dos-lines q { quotes: none; font-style: italic; }
+.dos-lines li.off { color: var(--muted); border-left-color: rgba(255, 255, 255, 0.15); font-size: 12px; }
 .tr-card { grid-template-columns: 84px minmax(0, 1fr); }
 .tr-card h3 small { margin-left: 6px; font: 500 14px Oswald, sans-serif; color: var(--muted); }
 .tr-pic { display: grid; place-items: center; width: 84px; height: 84px; background: #2a2019; clip-path: var(--cut-tile); }
