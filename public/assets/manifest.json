@@ -51,7 +51,7 @@
     "dragon2": { "file": "mobs/dragon2.png", "facing": "left" },
     "dummy": { "file": "mobs/dummy.png", "facing": "left" },
     "dummy_lady": { "file": "mobs/dummy_lady.png", "facing": "left" },
-    "dummy_boxer": { "file": "mobs/dummy_boxer.png", "facing": "left" }
+    "dummy_boxer": { "file": "mobs/dummy_boxer.png", "facing": "right" }
   },
   "env": {
     "anvil": "env/anvil.webp",
