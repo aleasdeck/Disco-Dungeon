@@ -4335,7 +4335,7 @@ describe('enemies by map row, the new enemies and the elite\'s reward', () => {
     expect([b.up.pw, g.bank.ore]).toEqual([2, 50 - UP_COST[1]]);
   });
 
-  it('a fight won without a scratch pays ore for every hero; a scratch or the ore cave pays nothing', () => {
+  it('a fight won without a scratch pays the party ore, as much for any party; a scratch or the ore cave pays nothing', () => {
     for (const hurt of [false, true]) {
       const g = room(0, [['skel', 2, 2]]);
       if (hurt) g.hurtHero(g.party[0], 1);
@@ -4343,7 +4343,8 @@ describe('enemies by map row, the new enemies and the elite\'s reward', () => {
       g.hurtMob(g.S.mobs[0], 99);
       g.update(1 / 60);
       expect(g.S.phase).toBe('over');
-      expect(g.bank.ore - ore).toBe(hurt ? 0 : CLEAN_ORE * g.party.length);
+      expect(g.party.length).toBeGreaterThan(1);
+      expect(g.bank.ore - ore).toBe(hurt ? 0 : CLEAN_ORE);
     }
     const cave = new Game();
     cave.loadRoom({ seed: 3, depth: LAYERS + 2, floor: 1, type: 'treasure' });
