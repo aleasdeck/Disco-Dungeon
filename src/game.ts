@@ -8,7 +8,7 @@ import { has, type ArtKey, type Kept } from './artifacts';
 import type { Sfx } from './audio/sfx';
 import { TRINKET_R } from './trinkets';
 import { BET_TURNS, FLOOR_FR, settleBet, type Bet, type Floor } from './events';
-import { CASTS, caveTurns, cellAt, cellCentre, generate, hazKey, inPit, isFloor, mobDmg, muAt, newMob, partyScale, pitAt, standing, volBlow, type Intent, type Layout, type Mob, type RoomSpec, type Zone } from './room';
+import { CASTS, caveTurns, cellAt, cellCentre, clearLine, fireCells, generate, hazKey, inPit, isFloor, mobDmg, muAt, newMob, partyScale, pitAt, standing, volBlow, type Intent, type Layout, type Mob, type RoomSpec, type Zone } from './room';
 import { VOL, loud } from './volume';
 import type { StandMat } from './stands';
 
@@ -1757,24 +1757,7 @@ export class Game {
    * or a corner of a block goes past it.
    */
   clearShot(a: Pt, b: Pt) {
-    const S = this.S, dx = b.x - a.x, dy = b.y - a.y, E = 0.01;
-    for (const o of [...S.rock, ...standing(S.blocks), ...this.fixtures()]) {
-      let t0 = 0, t1 = 1;
-      for (const [p, d, lo, hi] of [[a.x, dx, o.x0 + E, o.x1 - E], [a.y, dy, o.y0 + E, o.y1 - E]]) {
-        if (Math.abs(d) < 1e-9) { if (p <= lo || p >= hi) t1 = -1; continue; }
-        const u = (lo - p) / d, v = (hi - p) / d;
-        t0 = Math.max(t0, Math.min(u, v));
-        t1 = Math.min(t1, Math.max(u, v));
-      }
-      if (t1 > t0) return false;
-    }
-    const L2 = dx * dx + dy * dy;
-    for (const n of S.nodes) {
-      if (n.left <= 0) continue;
-      const t = L2 ? Math.max(0, Math.min(1, ((n.x - a.x) * dx + (n.y - a.y) * dy) / L2)) : 0;
-      if (Math.hypot(a.x + dx * t - n.x, a.y + dy * t - n.y) < n.r) return false;
-    }
-    return true;
+    return clearLine(this.S, a, b, this.fixtures());
   }
 
   /** Whether a mob standing at `from` (where it stands now, by default) sees hero h: a shooter fires only then. */
@@ -2302,15 +2285,7 @@ export class Game {
 
   /** The dragon's belch: a line of fire from its middle through the point p on to the wall or a block. */
   private fireLine(m: Mob, p: Pt): Pt[] {
-    const S = this.S, sz = mobSize(m.k), [i0, j0] = cellAt(m.x, m.y, sz), blocks = this.blockCells(), L = Math.hypot(p.x - m.x, p.y - m.y) || 1;
-    const ux = (p.x - m.x) / L, uy = (p.y - m.y) / L, seen = new Set<string>(), out: Pt[] = [];
-    for (let t = 0; t < 40 * TILE; t += 4) {
-      const i = Math.floor((m.x + ux * t) / TILE), j = Math.floor((m.y + uy * t) / TILE), k = hazKey(i, j);
-      if (i >= i0 && i < i0 + sz && j >= j0 && j < j0 + sz) continue;
-      if (!isFloor(S, i, j) || blocks.has(k)) break;
-      if (!seen.has(k)) { seen.add(k); out.push(cellCentre(i, j)); }
-    }
-    return out;
+    return fireCells(this.S, m, p);
   }
 
   /**

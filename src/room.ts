@@ -336,6 +336,49 @@ export function clearOfRock(L: Pick<Layout, 'gw' | 'gh' | 'floor' | 'rock' | 'Wx
   return x > r && y > r && x < L.Wx - r && y < L.Wy - r && floorAt(L, x, y) && L.rock.every(b => boxDist(x, y, b) >= r);
 }
 
+type Pt = { x: number; y: number };
+type Box = { x0: number; y0: number; x1: number; y1: number };
+
+/**
+ * Whether a shot from a to b flies clear: no wall, block or icicle still standing (nor any of `more`) and no resource
+ * left in between. Holes in the floor, the heroes and the enemies don't stand in the way; a line that only grazes an
+ * edge or a corner of a block goes past it.
+ */
+export function clearLine(L: Pick<Layout, 'rock' | 'blocks' | 'nodes'>, a: Pt, b: Pt, more: Box[] = []) {
+  const dx = b.x - a.x, dy = b.y - a.y, E = 0.01;
+  for (const o of [...L.rock, ...standing(L.blocks), ...more]) {
+    let t0 = 0, t1 = 1;
+    for (const [p, d, lo, hi] of [[a.x, dx, o.x0 + E, o.x1 - E], [a.y, dy, o.y0 + E, o.y1 - E]]) {
+      if (Math.abs(d) < 1e-9) { if (p <= lo || p >= hi) t1 = -1; continue; }
+      const u = (lo - p) / d, v = (hi - p) / d;
+      t0 = Math.max(t0, Math.min(u, v));
+      t1 = Math.min(t1, Math.max(u, v));
+    }
+    if (t1 > t0) return false;
+  }
+  const L2 = dx * dx + dy * dy;
+  for (const n of L.nodes) {
+    if (n.left <= 0) continue;
+    const t = L2 ? Math.max(0, Math.min(1, ((n.x - a.x) * dx + (n.y - a.y) * dy) / L2)) : 0;
+    if (Math.hypot(a.x + dx * t - n.x, a.y + dy * t - n.y) < n.r) return false;
+  }
+  return true;
+}
+
+/** The dragon's belch: the cells of a line of fire from the middle of m through the point p on to the wall or a block. */
+export function fireCells(L: Pick<Layout, 'gw' | 'gh' | 'floor' | 'blocks'>, m: Pick<Mob, 'k' | 'x' | 'y'>, p: Pt): Pt[] {
+  const sz = mobSize(m.k), [i0, j0] = cellAt(m.x, m.y, sz), len = Math.hypot(p.x - m.x, p.y - m.y) || 1;
+  const blocks = new Set(standing(L.blocks).map(b => hazKey(Math.floor(b.x0 / TILE), Math.floor(b.y0 / TILE))));
+  const ux = (p.x - m.x) / len, uy = (p.y - m.y) / len, seen = new Set<string>(), out: Pt[] = [];
+  for (let t = 0; t < 40 * TILE; t += 4) {
+    const i = Math.floor((m.x + ux * t) / TILE), j = Math.floor((m.y + uy * t) / TILE), k = hazKey(i, j);
+    if (i >= i0 && i < i0 + sz && j >= j0 && j < j0 + sz) continue;
+    if (!isFloor(L, i, j) || blocks.has(k)) break;
+    if (!seen.has(k)) { seen.add(k); out.push(cellCentre(i, j)); }
+  }
+  return out;
+}
+
 type Range = [number, number];
 
 /** How a room is built at one step of a floor: rooms near the entrance are small and plain, the ones before the boss big and tangled. */
@@ -361,8 +404,12 @@ export const TIERS: Tier[] = [
   { gw: [13, 14], gh: [10, 11], shapes: ['alcove', 'funnel', 'corner'], blocks: [2, 2], blockKinds: 4, pits: [0, 1], pitCells: 4, haz: [2, 3], mobs: [2, 3] },
   { gw: [14, 15], gh: [11, 12], shapes: ['funnel', 'cross', 'alcove'], blocks: [2, 3], blockKinds: 5, pits: [1, 2], pitCells: 9, haz: [3, 3], mobs: [2, 3] },
 ];
-/** The boss fights among as many columns, holes and hazards as the last room before it; its holes stay small enough to walk round. */
-export const BOSS_TIER: Tier = { gw: [14, 15], gh: [12, 12], shapes: ['rect', 'cross'], blocks: [3, 3], blockKinds: 5, pits: [1, 2], pitCells: 4, haz: [3, 3], mobs: [3, 3] };
+/**
+ * The boss's arena (thread «Размер комнаты босса»): bigger than any room before it and plainer, always a rectangle with
+ * fewer columns and holes and no strip of spikes, so a boss that rolls, breathes fire or throws from its bunk has the room
+ * to. The rat swarm keeps its burrows and the disco ball its extra column; ARENA adds what each boss needs on top.
+ */
+export const BOSS_TIER: Tier = { gw: [16, 17], gh: [13, 13], shapes: ['rect'], blocks: [2, 2], blockKinds: 5, pits: [0, 1], pitCells: 4, haz: [3, 3], mobs: [3, 3] };
 
 /** Most floor cells the holes of one room take: next to a 3 × 3 hole there is room only for a 1 × 1. */
 export const PIT_CELLS = 10;
@@ -677,9 +724,102 @@ function warmRoom(): Layout {
   };
 }
 
+/** Rooms a boss's arena is built over at most before the best of them is taken. */
+export const ARENA_TRIES = 20;
+
+/** How far apart the swarm's burrows lie at the least, and how close to a rune one of them, in cells (either way). */
+export const BURROW_APART = 4, BURROW_NEAR = 3;
+
+/** Cells walkers can't stand on as the fight starts: blocks, resources, holes and (with `mobs`) every enemy but `self`. */
+function shutAtStart(L: Layout, self: Mob | null, mobs = true) {
+  const out = new Uint8Array(L.gw * L.gh);
+  const mark = (i: number, j: number, s = 1) => {
+    for (let b = 0; b < s; b++) for (let a = 0; a < s; a++) if (isFloor(L, i + a, j + b)) out[(j + b) * L.gw + i + a] = 1;
+  };
+  for (const b of standing(L.blocks)) mark(Math.floor(b.x0 / TILE), Math.floor(b.y0 / TILE));
+  for (const n of L.nodes) mark(...cellAt(n.x, n.y, n.s ?? 1), n.s ?? 1);
+  for (const p of L.pits) for (const [i, j] of p.cells) mark(i, j);
+  if (mobs) for (const m of L.mobs) if (m !== self) mark(...cellAt(m.x, m.y, mobSize(m.k)), mobSize(m.k));
+  return out;
+}
+
+/** How many cells m gets in a straight line each way (right, left, down, up) before something stops it, like the disco ball rolling. */
+export function lanesOf(L: Layout, m: Mob) {
+  const s = mobSize(m.k), [i0, j0] = cellAt(m.x, m.y, s), shut = shutAtStart(L, m);
+  const fits = (i: number, j: number) => {
+    for (let b = 0; b < s; b++) for (let a = 0; a < s; a++) if (!isFloor(L, i + a, j + b) || shut[(j + b) * L.gw + i + a]) return false;
+    return true;
+  };
+  return [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([di, dj]) => {
+    let n = 0;
+    for (let i = i0 + di, j = j0 + dj; fits(i, j); i += di, j += dj) n++;
+    return n;
+  });
+}
+
+/** Throw runes m sees from where it stands. */
+const runesSeen = (L: Layout, m: Mob) => L.pads.filter(p => clearLine(L, m, p)).length;
+
+/** Cells of the 4 × 4 square in the middle of the room free of rock, columns, holes and resources: the dancer's floor (enemies walk off it). */
+function danceFloor(L: Layout) {
+  const shut = shutAtStart(L, null, false), i0 = Math.floor(L.gw / 2) - 2, j0 = Math.floor(L.gh / 2) - 2;
+  let n = 0;
+  for (let j = j0; j < j0 + 4; j++) for (let i = i0; i < i0 + 4; i++) if (isFloor(L, i, j) && !shut[j * L.gw + i]) n++;
+  return n;
+}
+
+/** The swarm's burrows: half for lying apart, half for one close to a rune. */
+function burrows(L: Layout) {
+  const cheb = (a: [number, number], b: [number, number]) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]));
+  let apart = Infinity;
+  for (let a = 0; a < L.pits.length; a++) for (let b = a + 1; b < L.pits.length; b++) {
+    for (const p of L.pits[a].cells) for (const q of L.pits[b].cells) apart = Math.min(apart, cheb(p, q));
+  }
+  const near = L.pads.some(p => L.pits.some(q => q.cells.some(c => cheb(c, cellAt(p.x, p.y)) <= BURROW_NEAR)));
+  return Math.min(1, apart / BURROW_APART) / 2 + (near ? 0.5 : 0);
+}
+
+/**
+ * What each floor boss needs from its room (thread «Размер комнаты босса»), as a share: 1 or more and the room will do.
+ * Пахан on his bunk, the lich and the fridge throw only at whom they see; the swarm comes up by a burrow near its hero;
+ * the dancer gets an open dancefloor in the middle; the disco ball has two straight runs of five cells to roll down; the
+ * dragon's fire reaches three runes. The king and the forge lord only walk, and any arena lets them.
+ */
+export const ARENA: Partial<Record<MobKind, (L: Layout, boss: Mob) => number>> = {
+  ratswarm: L => burrows(L),
+  pahan: (L, b) => runesSeen(L, b) / 3,
+  lich: (L, b) => runesSeen(L, b) / 2,
+  fridge: (L, b) => runesSeen(L, b) / 2,
+  dancer: L => danceFloor(L) / 16,
+  discoball: (L, b) => lanesOf(L, b).filter(n => n >= 5).length / 2,
+  dragon: (L, b) => L.pads.filter(p => fireCells(L, b, p).some(c => Math.hypot(c.x - p.x, c.y - p.y) < 1)).length / 3,
+};
+
+/** How well a room suits its boss: 1 or more when it does (ARENA). */
+export function arenaFit(L: Layout, boss: MobKind) {
+  const m = L.mobs.find(o => o.k === boss), need = ARENA[boss];
+  return m && need ? need(L, m) : 1;
+}
+
+/**
+ * The room a spec stands for. A boss's room is still random: it is built again, from the seed and the try, until it
+ * suits the boss (arenaFit), and after ARENA_TRIES the best try stands. The boss is the one its seed picks, whatever the try.
+ */
 export function generate(spec: RoomSpec): Layout {
   if (spec.tut) return warmRoom();
-  const R = makeRng(spec.seed * 31 + spec.depth);
+  if (spec.type !== 'boss') return build(spec, 0);
+  const boss = bossOf(spec), at = { ...spec, boss };
+  let best = build(at, 0), top = arenaFit(best, boss);
+  for (let k = 1; k < ARENA_TRIES && top < 1; k++) {
+    const L = build(at, k), fit = arenaFit(L, boss);
+    if (fit > top) { best = L; top = fit; }
+  }
+  return best;
+}
+
+/** One try at the room: the first is the seed's own, a boss's arena may take more (generate). */
+function build(spec: RoomSpec, attempt: number): Layout {
+  const R = makeRng(spec.seed * 31 + spec.depth + attempt * 7919);
   const { int: ri, pick } = R;
   const type = spec.type, f = spec.floor;
   const { tier, t } = tierOf(spec);
@@ -964,8 +1104,8 @@ export function generate(spec: RoomSpec): Layout {
     return isFloor(geo, tx, ty) && !haz.has(hazKey(tx, ty)) && mid(cx, cy) && pads.every(p => Math.hypot(p.x - cx, p.y - cy) > 26) && objs.every(o => Math.hypot(o.x - cx, o.y - cy) > o.r + 4);
   };
   const nHaz = roll(tier.haz) + (t === 0 ? Math.min(f, 1) : f) + extra.haz;
-  // before the boss and around it a strip of three tiles cuts the room
-  if (t >= TIERS.length - 1 && type !== 'treasure') {
+  // before the boss a strip of three tiles cuts the room; the boss's own arena stays open
+  if (t >= TIERS.length - 1 && type !== 'treasure' && type !== 'boss') {
     for (let tr = 0; tr < 60; tr++) {
       const tx = ri(2, gw - 4), ty = ri(2, gh - 4), hor = R.next() < 0.5;
       const cells = [0, 1, 2].map(k => (hor ? [tx + k, ty] : [tx, ty + k]));
