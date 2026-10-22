@@ -164,7 +164,7 @@ export class MapView {
         const pg = el(g, 'g', { class: 'pip' });
         el(pg, 'title', {}).textContent = p.name;
         el(el(el(pg, 'defs', {}), 'clipPath', { id }), 'circle', { cx: px, cy: py, r: 11 });
-        el(pg, 'circle', { cx: px, cy: py, r: 13, fill: p.col, class: p.hero === party.me?.i ? 'me' : '' });
+        el(pg, 'circle', { cx: px, cy: py, r: 13, fill: p.col });
         el(pg, 'image', { href: p.face, x: px - 11, y: py - 11, width: 22, height: 22, 'clip-path': `url(#${id})` });
       });
       g.setAttribute('tabindex', '0');
@@ -183,7 +183,7 @@ export class MapView {
       const tx = at[0] + (k - (hs.length - 1) / 2) * 15, ty = at[1] - (path.length ? 2 : 8), id = 'tokFace' + k;
       const clip = el(el(tok, 'defs', {}), 'clipPath', { id });
       el(clip, 'circle', { cx: tx, cy: ty, r: 13 });
-      el(tok, 'circle', { cx: tx, cy: ty, r: 15, fill: h.def.col, class: 'tk-rim' + (h === party.me ? ' me' : '') });
+      el(tok, 'circle', { cx: tx, cy: ty, r: 15, fill: h.def.col, class: 'tk-rim' });
       el(tok, 'image', { href: faceUrl(h), x: tx - 13, y: ty - 13, width: 26, height: 26, 'clip-path': `url(#${id})`, opacity: h.hp > 0 ? 1 : 0.4 });
     });
     $('mapVotes').textContent = votes?.note ?? '';
