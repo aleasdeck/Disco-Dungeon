@@ -343,6 +343,9 @@
     "loot_ratswarm": "events/loot_ratswarm.webp",
     "loot_pahan": "events/loot_pahan.webp",
     "loot_fridge": "events/loot_fridge.webp",
-    "loot_dancer": "events/loot_dancer.webp"
+    "loot_dancer": "events/loot_dancer.webp",
+    "loot_forgelord": "events/loot_forgelord.webp",
+    "loot_discoball": "events/loot_discoball.webp",
+    "loot_dragon": "events/loot_dragon.webp"
   }
 }

@@ -412,6 +412,8 @@ export class Game {
   mined = 0;
   /** Host: ore the room paid for nobody losing any health in it («Без царапины»), for the room's result. */
   clean = 0;
+  /** Host: each hero's health as the floor's boss fell, before it gave half back: the run's album shows them beaten so. */
+  wounds: { i: number; hp: number; max: number }[] | null = null;
   /** A blow in the warm-up room that would have laid the hero down left it standing: the hero says so (tutor.ts). */
   spared = false;
   private acc = 0;
@@ -3352,6 +3354,7 @@ export class Game {
   private finish() {
     const S = this.S, win = this.alive().length > 0;
     S.phase = 'over';
+    this.wounds = win && S.spec.type === 'boss' ? S.heroes.map(h => ({ i: h.i, hp: Math.max(0, h.hp), max: h.max })) : null;
     if (win && S.spec.type === 'boss') this.bossHeal();
     // a fight won without a scratch pays ore for every hero; the ore cave has nobody to scratch them
     if (win && S.spec.type !== 'treasure' && !S.hurt) {

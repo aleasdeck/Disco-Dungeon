@@ -1601,3 +1601,100 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
   .pc-ab p { font-size: calc(14px * var(--fit, 1)); line-height: 1.05; margin-top: 4px; }
   .pc-ab .pc-more { font-size: calc(11px * var(--fit, 1)); }
 }
+
+/* ---------- the end of the run (src/albumview.ts): the album's prints pegged on a line to dry, ДО, the bosses beaten and
+   ПОСЛЕ, under the congratulation, with the run in numbers on a board below (Vladislav's pick of three layouts, 2026-10-22) */
+.overlay.run-end { background: rgba(10, 7, 5, 0.8); place-items: start center; padding: 14px 16px calc(16px + var(--safe-b)); }
+.re-wrap { width: min(1280px, 100%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.re-head { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding-top: 6px; }
+.re-ribbon {
+  font: 600 14px Oswald, sans-serif; letter-spacing: 0.16em; text-transform: uppercase; color: #1c120a;
+  background: var(--gold); padding: 4px 14px; transform: rotate(-1.5deg); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
+}
+.re-ribbon.lose { background: #b9ab90; }
+.re-head h2 {
+  margin: 0; font: 700 clamp(40px, 6.4vw, 66px)/0.95 Oswald, sans-serif; color: var(--gold); text-transform: uppercase;
+  letter-spacing: 0.02em; text-shadow: 0 3px 0 #1a120d, 0 0 20px rgba(0, 0, 0, 0.6);
+}
+.re-head h2.lose { color: #eadfc8; }
+.re-gag { margin: 0; max-width: 760px; font: 700 clamp(19px, 2.2vw, 26px)/1.1 var(--hand); color: var(--text); text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8); }
+.re-ropes { width: 100%; }
+.re-tall { display: none; }
+.re-line { position: relative; width: 100%; padding-top: 14px; }
+/* the string from edge to edge of the screen, sagging in the middle */
+.re-rope { position: absolute; left: -16px; top: 6px; width: calc(100% + 32px); height: 40px; overflow: visible; pointer-events: none; }
+.re-rope path { fill: none; stroke: #c9b08a; stroke-width: 3; vector-effect: non-scaling-stroke; filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.6)); }
+.re-prints { position: relative; display: flex; justify-content: center; align-items: flex-start; gap: 2%; padding-bottom: 14px; }
+/* a print in its white edge, hung by a wooden peg; it swings in after the one before it */
+.pol {
+  position: relative; margin: 0; flex: none; padding: 0; background: #f3ead8; cursor: zoom-in;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.6); transform-origin: 50% -10px;
+  transform: translateY(var(--dy)) rotate(var(--r));
+  animation: re-hang 0.7s cubic-bezier(0.2, 1.5, 0.45, 1) both; animation-delay: calc(0.15s + var(--i) * 0.22s);
+}
+.pol img { display: block; width: 92%; margin: 4% 4% 0; aspect-ratio: 1; }
+.pol figcaption {
+  font: 700 clamp(14px, 1.45vw, 21px)/1 var(--hand); color: #2a1a0d; text-align: center; padding: 6px 4px 8px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.peg {
+  position: absolute; top: -18px; left: 50%; width: 14px; height: 34px; margin-left: -7px; border-radius: 3px;
+  background: linear-gradient(90deg, #b88a54, #d8ac70 50%, #a87a46); box-shadow: 0 2px 2px rgba(0, 0, 0, 0.5);
+}
+.peg::after { content: ""; position: absolute; left: 1px; right: 1px; top: 13px; height: 3px; background: #5a3d1e; }
+@keyframes re-hang {
+  from { opacity: 0; transform: translateY(calc(var(--dy) - 60px)) rotate(calc(var(--r) - 14deg)); }
+}
+/* the numbers' board */
+.re-panel { width: min(1180px, 100%); display: flex; flex-direction: column; gap: 14px; animation: re-up 0.5s 1.2s ease-out both; }
+@keyframes re-up { from { opacity: 0; transform: translateY(24px); } }
+.re-tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+.re-tile {
+  position: relative; display: flex; flex-direction: column; justify-content: center; min-height: 58px; padding: 6px 6px 6px 48px;
+  color: #2a1a0d; background: #e6d3ad var(--grain) 0 0 / 160px; background-blend-mode: multiply; clip-path: var(--cut-card);
+}
+.art-opt .re-tile { clip-path: none; background: var(--ui-opt) center / 100% 100% no-repeat; }
+.re-tile img { position: absolute; left: 8px; top: 50%; translate: 0 -50%; width: 32px; height: 32px; object-fit: contain; }
+.re-tile b { font: 700 23px/1 Oswald, sans-serif; }
+.re-tile span { font: 700 16px/1 var(--hand); color: #4a3520; }
+.re-foot { display: flex; gap: 20px; align-items: center; justify-content: space-between; }
+.re-noms { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 14px; }
+.re-nom { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.re-nom img { width: 44px; height: 44px; flex: none; clip-path: var(--cut-face); background: var(--c); }
+.re-nom div { min-width: 0; }
+.re-nom b { display: block; font: 600 13px/1.1 Oswald, sans-serif; color: var(--gold); text-transform: uppercase; letter-spacing: 0.08em; }
+.re-nom span { display: block; font: 700 17px/1.05 var(--hand); color: var(--text); }
+.re-btns { flex: none; display: flex; gap: 14px; align-items: center; margin-left: auto; }
+.re-btns .muted { margin: 0; max-width: 220px; }
+/* a print at full size */
+.re-lb { position: fixed; inset: 0; z-index: 1; display: grid; place-items: center; padding: 16px; background: rgba(8, 5, 3, 0.9); cursor: zoom-out; }
+.re-lb figure { margin: 0; width: min(92vw, 82dvh, 860px); background: #f3ead8; box-shadow: 0 10px 40px #000; }
+.re-lb img { display: block; width: 94%; margin: 3% 3% 0; aspect-ratio: 1; }
+.re-lb figcaption { font: 700 30px/1 var(--hand); color: #2a1a0d; text-align: center; padding: 10px 0 14px; }
+/* an upright phone: ДО and ПОСЛЕ on one line, the bosses on a second, the numbers three to a row */
+@media (orientation: portrait) and (max-width: 700px) {
+  .overlay.run-end { padding: 10px 8px calc(12px + var(--safe-b)); }
+  .re-wide { display: none; }
+  .re-tall { display: block; }
+  .re-line { padding-top: 12px; }
+  .pol img { width: 90%; margin: 5% 5% 0; }
+  .pol figcaption { font-size: 15px; padding: 4px 2px 6px; }
+  .peg { width: 10px; height: 26px; margin-left: -5px; top: -14px; }
+  .art-panel .re-panel { padding: 18px 16px; border-image-width: 30px 22px; }
+  .re-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .re-tile { min-height: 46px; padding: 4px 4px 4px 32px; }
+  .re-tile img { left: 4px; width: 24px; height: 24px; }
+  .re-tile b { font-size: 17px; }
+  .re-tile span { font-size: 13px; }
+  .re-foot { flex-direction: column; align-items: stretch; gap: 12px; }
+  .re-noms { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .re-nom { gap: 6px; }
+  .re-nom img { width: 34px; height: 34px; }
+  .re-nom b { font-size: 11px; }
+  .re-nom span { font-size: 15px; }
+  .re-btns { margin: 0; justify-content: space-between; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pol, .re-panel { animation: none; }
+}
+.overlay.run-end.win { overflow: auto; }

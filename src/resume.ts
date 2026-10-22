@@ -9,6 +9,7 @@ import type { EventState } from './events';
 import type { Run, Votes } from './run';
 import type { Snapshot } from './sync';
 import type { Cur } from './stats';
+import type { Album } from './album';
 
 /** A room's result screen; `again` and `win` (the whole run beaten) lead back to the lobby, `map` to the map. */
 export interface Ending {
@@ -17,6 +18,8 @@ export interface Ending {
   kind: 'again' | 'map' | 'win';
   /** After an elite the screen leads to the sharpening window instead of the map. */
   next?: 'whet';
+  /** The end of the run: its album, shown instead of the plain result screen (src/albumview.ts). */
+  album?: Album;
 }
 
 /** Which online room this browser is in, and the secret it rejoins its seat with. */
