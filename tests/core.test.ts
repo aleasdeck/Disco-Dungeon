@@ -4,7 +4,7 @@ import { Camera, FIT, KEEP, type Vec } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, CUFF_TURNS, FOOD_HEAL, FOOD_PER_DISC, CLEAN_ORE, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, KISS_TURNS, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, KINDS, RAGE_FROM, SHOVE_DMG, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize } from '../src/data';
 import { ART, DOOR_MUL, FOOD_FLY, FOOD_TOSS, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { BOSS_UP, CASTS, CAVE, MOB_CAP, bossOf, mobPool, caveStock, PARTY_SCALE, SPK_AREA, caveTurns, crystals, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob, type ResNode } from '../src/room';
+import { BOSS_UP, CASTS, CAVE, MOB_CAP, bossOf, mobPool, caveStock, PARTY_SCALE, RUNE_AREA, SPK_AREA, caveTurns, crystals, runes, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, floorAt, generate, hazKey, inPit, isFloor, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob, type ResNode } from '../src/room';
 import { ELITES, FIGHTS, FLOORS, FORGE_ROWS, LAYERS, REST_ROW, agreed, floorOk, genFloor, isFight, newRun, nodeById, reachable, routes, runDone } from '../src/run';
 import { makeRng } from '../src/rng';
 import { BOTTLE, CUPS, EVENTS, PULL_ODDS, RIDDLES, ROB_MIN, SELL, applyFx, canPick, choicesOf, cupPick, doneOf, eventDef, eventOf, fxParts, heroPick, redrawn, riddleOf, rolled, sellDone, sellPick, settleBet, shuffleOf, shutWhy, stageOf, take, type EventState, type Table } from '../src/events';
@@ -23,10 +23,10 @@ describe('room generator', () => {
     expect(JSON.stringify({ ...a, haz: [...a.haz] })).toBe(JSON.stringify({ ...b, haz: [...b.haz] }));
   });
 
-  it('always has four throw runes and at least one mob', () => {
+  it('always has three to five throw runes by the size of the room and at least one mob', () => {
     for (let seed = 1; seed < 60; seed++) {
       const f = seed % 3, L = generate({ seed, depth: f * LAYERS + 1 + (seed % 6), floor: f, type: seed % 5 ? 'fight' : 'boss' });
-      expect(L.pads).toHaveLength(4);
+      expect(L.pads).toHaveLength(runes(L.floor.reduce((a, b) => a + b, 0)));
       expect(L.mobs.length).toBeGreaterThan(0);
       for (const m of L.mobs) expect(clearOfRock(L, m.x, m.y, m.r)).toBe(true);
       for (const n of L.nodes) expect(clearOfRock(L, n.x, n.y, n.r)).toBe(true);
@@ -192,9 +192,33 @@ describe('difficulty along a floor', () => {
         const spec = { seed, depth: f * LAYERS + row + 1, floor: f, type }, L = generate(spec);
         expect(L.mobs.length).toBeGreaterThanOrEqual(Math.min(tierOf(spec).tier.mobs[0] + f, MOB_CAP));
         expect(L.mobs.length).toBeLessThanOrEqual(MOB_CAP);
-        expect(L.pads).toHaveLength(4);
+        expect(L.pads).toHaveLength(runes(L.floor.reduce((a, b) => a + b, 0)));
       }
     }
+  });
+
+  it('lays three to five throw runes by the size of the room, apart along its near edges, always enough for the party', () => {
+    expect([runes(80), runes(RUNE_AREA[0]), runes(RUNE_AREA[0] + 1), runes(RUNE_AREA[1]), runes(RUNE_AREA[1] + 1), runes(200)]).toEqual([3, 3, 4, 4, 5, 5]);
+    const seen: Record<number, number[]> = {};
+    for (let seed = 1; seed < 60; seed++)
+      for (let row = 0; row < LAYERS; row++) {
+        const f = seed % FLOORS, type = row === LAYERS - 1 ? 'boss' : seed % 4 ? 'fight' : 'treasure';
+        const L = generate({ seed, depth: f * LAYERS + row + 1, floor: f, type, heroes: 1 + (seed % 3) });
+        const cells = L.pads.map(p => cellAt(p.x, p.y, 1)), area = L.floor.reduce((a, b) => a + b, 0);
+        expect(L.pads).toHaveLength(runes(area));
+        expect(L.pads.length).toBeGreaterThanOrEqual(MAX_PLAYERS);
+        // each on its own cell of floor, two cells apart at least, on the near side of the room
+        for (const [k, [i, j]] of cells.entries()) {
+          expect(isFloor(L, i, j)).toBe(true);
+          expect((i + 0.5) / L.gw + (j + 0.5) / L.gh).toBeGreaterThan(1);
+          for (const [a, b] of cells.slice(k + 1)) expect(Math.max(Math.abs(a - i), Math.abs(b - j))).toBeGreaterThanOrEqual(2);
+        }
+        (seen[row] ??= []).push(L.pads.length);
+      }
+    // the first room of a floor is small, the middle rows mostly four, the boss's big
+    expect(seen[0].every(n => n === 3)).toBe(true);
+    expect(seen[3].filter(n => n === 4).length).toBeGreaterThan(seen[3].length / 2);
+    expect(seen[LAYERS - 1].every(n => n === 5)).toBe(true);
   });
 
   it('puts one to three spark crystals in a fight by the size of the room, each holding one ability for any party', () => {
@@ -1344,10 +1368,10 @@ describe('boss trophies', () => {
 describe('placement and discs', () => {
   const fresh = () => { const g = new Game(); g.loadRoom({ seed: 7, depth: 2, floor: 0, type: 'fight' }); return g; };
 
-  it('starts with four empty runes and every hero waiting with one disc', () => {
+  it('starts with empty runes and every hero waiting with one disc', () => {
     const g = fresh();
     expect(g.S.phase).toBe('place');
-    expect(g.S.pads).toHaveLength(4);
+    expect(g.S.pads.length).toBeGreaterThanOrEqual(g.party.length);
     for (const h of g.party) { expect(h.pad).toBeNull(); expect(h.discs).toBe(HAND_START); expect(h.hand).toBe(1); }
   });
 
@@ -1360,14 +1384,14 @@ describe('placement and discs', () => {
     expect(g.act).toBe(b.i);
     expect(g.movePad(b, 0)).toBe(false);
     g.movePad(b, 1);
-    g.movePad(c, 3);
+    g.movePad(c, 2);
     // a placed hero dragged onto a taken rune swaps with the hero there
     expect(g.movePad(a, 1)).toBe(true);
     expect([a.pad, b.pad]).toEqual([1, 0]);
     g.startFight();
     expect(g.S.phase).toBe('throw');
     expect(g.movePad(a, 2)).toBe(false);
-    expect(a.pad).toBe(1);
+    expect([a.pad, c.pad]).toEqual([1, 2]);
   });
 
   it('hands the party 0 to 3 ore at the blacksmith\'s, the same on every screen, and each amount turns up', () => {
@@ -3610,7 +3634,7 @@ describe('enemy walking', () => {
   // routes every walker in 80 rooms: a few seconds locally, more on a busy CI runner
   it('routes walkers cell by cell around blocks and resources to the rune they go for and says when they strike', () => {
     let detours = 0, shots = 0;
-    for (let seed = 1; seed < 80; seed++) {
+    for (let seed = 1; seed < 200; seed++) {
       const g = new Game();
       g.loadRoom({ seed, depth: 1 + (seed % 12), floor: seed % 3, type: 'fight' });
       placeAll(g); g.startFight();

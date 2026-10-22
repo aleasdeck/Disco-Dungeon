@@ -436,9 +436,20 @@ function buildEdges(gw: number, gh: number, floor: Uint8Array) {
   return { edges, rock };
 }
 
-/** Throw runes: spread along the near boundary of the floor. */
+/**
+ * Throw runes by the size of the room: three up to the first of these many floor cells, four up to the second, five
+ * past it. The first rooms of a floor have three, the middle ones mostly four, the last rooms and the boss's mostly five.
+ * A party is three heroes at most, so every hero always has one.
+ */
+export const RUNE_AREA = [100, 130];
+
+/** Throw runes for a room with this many cells of floor. */
+export const runes = (cells: number) => 3 + RUNE_AREA.filter(a => cells > a).length;
+
+/** Throw runes: spread along the near boundary of the floor, as many as the room's size asks for. */
 function pickPads(gw: number, gh: number, floor: Uint8Array, R: ReturnType<typeof makeRng>): Pad[] {
   const L = { gw, gh, floor };
+  const n = runes(floor.reduce((a, b) => a + b, 0));
   const cand: [number, number][] = [];
   for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) {
     if (!isFloor(L, i, j)) continue;
@@ -447,8 +458,8 @@ function pickPads(gw: number, gh: number, floor: Uint8Array, R: ReturnType<typeo
   }
   cand.sort((p, q) => q[0] + q[1] - (p[0] + p[1]));
   const chosen: [number, number][] = [cand[0]];
-  for (let minD = 3.5; chosen.length < OPEN_PADS && minD > 0.9; minD -= 0.5) {
-    while (chosen.length < OPEN_PADS) {
+  for (let minD = 3.5; chosen.length < n && minD > 0.9; minD -= 0.5) {
+    while (chosen.length < n) {
       let best: [number, number] | null = null, bd = -1;
       for (const c of cand) {
         const d = Math.min(...chosen.map(o => Math.hypot(o[0] - c[0], o[1] - c[1])));
@@ -458,13 +469,11 @@ function pickPads(gw: number, gh: number, floor: Uint8Array, R: ReturnType<typeo
       chosen.push(best);
     }
   }
-  // a rune sits in the middle of its cell, so the hero's stand fits inside it; the two draws that once nudged it
-  // off centre stay, so a seed still lays out the rest of the room the same
-  return chosen.map(([i, j]) => (R.next(), R.next(), { x: i * TILE + 8, y: j * TILE + 8 }));
+  // a rune sits in the middle of its cell, so the hero's stand fits inside it; the eight draws that once nudged the
+  // four runes off centre stay, whatever the count, so a seed still lays out the rest of the room the same
+  for (let k = 0; k < 8; k++) R.next();
+  return chosen.map(([i, j]) => ({ x: i * TILE + 8, y: j * TILE + 8 }));
 }
-
-/** Throw runes in every room; heroes are put on them before the fight and stay there. */
-export const OPEN_PADS = 4;
 
 /** Block clusters from plain to awkward: single, pairs, an L, a diagonal pair. */
 const BLOCK_SHAPES = [[[0, 0]], [[0, 0], [1, 0]], [[0, 0], [0, 1]], [[0, 0], [1, 0], [0, 1]], [[0, 0], [1, 1]]];
