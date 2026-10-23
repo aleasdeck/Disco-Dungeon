@@ -903,7 +903,7 @@ export class Game {
     tallyOf(h).abs++;
     const p = this.spot(h);
     if (p) {
-      this.float(p.x, p.y - 8, h.def.ab + '!', h.def.abCol);
+      this.float(p.x, p.y - 8, M('{0}!', h.def.ab), h.def.abCol);
       this.burst(p.x, p.y, h.def.abCol, 16);
     }
     this.onChange();
