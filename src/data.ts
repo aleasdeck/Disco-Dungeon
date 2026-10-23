@@ -255,9 +255,13 @@ export type MobKind =
  * get tougher; cone: the fridge's freezer blows cold three cells ahead; dance: the dancer's floor lights up in a pattern;
  * lights: the disco ball's beams cross the room along its rows and columns; roll: the fallen ball rolls down a row or
  * a column; belch: the dragon breathes fire in a line through a hero to the wall.
+ * Theirs since the arena grew (thread «Арена босса посложнее»): crown: the king's crown flies at a hero and bounces off the
+ * walls and columns twice; wall: the lich puts up three small icicles in front of a hero who sees it; draft: the fridge
+ * pulls the heroes it sees nearby two cells over to it and bites one it pulled right up; cast: the forge's lord pours metal
+ * in a line through a hero from wall to wall, and it stays lava through the fight.
  */
 export interface MobAct {
-  k: 'summon' | 'heal' | 'slam' | 'heat' | 'execute' | 'scream' | 'smash' | 'dive' | 'brew' | 'cone' | 'dance' | 'lights' | 'roll' | 'belch';
+  k: 'summon' | 'heal' | 'slam' | 'heat' | 'execute' | 'scream' | 'smash' | 'dive' | 'brew' | 'cone' | 'dance' | 'lights' | 'roll' | 'belch' | 'crown' | 'wall' | 'draft' | 'cast';
   every: number;
   at: number;
   n?: number;
@@ -332,8 +336,17 @@ export interface MobDef {
   toss?: boolean;
   /** Runs from the heroes instead of going for them, and bites only when cornered (the last three rats of the swarm). */
   flees?: boolean;
-  /** The dancer: a hero who comes right up to it sends it moonwalking away, `moon` cells. */
+  /** The dancer: a hero who comes `shy` cells close (right up to it, 1, if not set) sends it moonwalking away, `moon` cells. */
   moon?: number;
+  shy?: number;
+  /** The dancer: the cells it moonwalks over light up with the next beat's pattern. */
+  trail?: boolean;
+  /** The rat swarm: going down, it digs a new 1 × 1 burrow by the hero it is after, at most this many in a fight. */
+  digs?: number;
+  /** Пахан's шестёрка: with mushrooms or a crystal nearer than any hero it goes and takes their charges («шмон»). */
+  loots?: boolean;
+  /** The dragon: its belch leaves the room in smoke through the heroes' next turn, clear only round them. */
+  smog?: boolean;
   /** The dragon: dragon eggs round it at the start (fewer for a smaller party); breaking one sends it after whoever broke it. */
   nest?: number;
   txt: string;
@@ -373,8 +386,8 @@ export const MOBS: Record<MobKind, MobDef> = {
   },
   king: {
     size: 2, name: 'Король-в-короне', acc: 'Короля-в-короне', floor: 0, boss: true, hp: 60, r: 15, speed: 10, reach: 40, dmg: 9, armor: 3, fig: 50,
-    acts: [{ k: 'slam', every: 3, at: 0 }],
-    txt: 'Босс казематов. Каждый третий ход бьёт скипетром об пол и задевает весь отряд.',
+    acts: [{ k: 'slam', every: 3, at: 0 }, { k: 'crown', every: 3, at: 1 }],
+    txt: 'Босс казематов. Каждый третий ход бьёт скипетром об пол и задевает весь отряд, а следом мечет корону-бумеранг: она дважды отскакивает от стен и колонн и бьёт всех на своём пути.',
   },
   ghoul: { name: 'Ледяной упырь', floor: 1, hp: 10, r: 7, speed: 36, reach: 30, dmg: 4, fig: 30, chill: true, txt: 'Бьёт вблизи и морозит: следующий бросок героя слабее.', acc: 'Ледяного упыря' },
   ghost: { name: 'Призрак', floor: 1, hp: 7, r: 7, speed: 32, reach: 999, dmg: 3, fig: 30, ghost: true, txt: 'Стреляет издалека в того, кого видит. Каждый второй ход бесплотен: диски пролетают насквозь.', acc: 'Призрака' },
@@ -386,8 +399,8 @@ export const MOBS: Record<MobKind, MobDef> = {
   },
   lich: {
     size: 2, name: 'Ледяной лич', acc: 'Ледяного лича', floor: 1, boss: true, hp: 64, r: 14, speed: 10, reach: 999, dmg: 6, armor: 2, fig: 52,
-    acts: [{ k: 'summon', every: 3, at: 2, n: 2, kind: 'ghoul', cap: 4 }, { k: 'slam', every: 3, at: 0, chill: true }],
-    txt: 'Босс склепа. Призывает упырей из ледяных кругов, а следом насылает метель на весь отряд.',
+    acts: [{ k: 'summon', every: 3, at: 2, n: 2, kind: 'ghoul', cap: 4 }, { k: 'slam', every: 3, at: 0, chill: true }, { k: 'wall', every: 3, at: 1 }],
+    txt: 'Босс склепа. Призывает упырей из ледяных кругов, а следом насылает метель на весь отряд. После метели ставит ледяную стену из трёх сосулек перед героем, который его видит.',
   },
   undertaker: { name: 'Гробовщик', floor: 1, hp: 11, r: 7, speed: 22, reach: 30, dmg: 3, fig: 36, coffins: 2, txt: 'Павшего рядом врага кладёт в гроб: через два хода тот встаёт снова, если гроб не разбить.', acc: 'Гробовщика' },
   banshee: {
@@ -408,19 +421,19 @@ export const MOBS: Record<MobKind, MobDef> = {
   },
   forgelord: {
     size: 2, name: 'Владыка кузни', acc: 'Владыку кузни', floor: 2, boss: true, hp: 70, r: 15, speed: 12, reach: 44, dmg: 9, armor: 4, fig: 54, rage: true,
-    acts: [{ k: 'heat', every: 3, at: 0, n: 2 }, { k: 'smash', every: 3, at: 2 }],
-    txt: 'Босс кузни, броня 4. Каждый третий ход раскаляет пол перед рунами, а за ход до этого бьёт молотом по квадрату 3 × 3 вокруг героя: клетки краснеют за ход до удара. Раненый впадает в ярость (+3 к удару).',
+    acts: [{ k: 'heat', every: 3, at: 0, n: 2 }, { k: 'cast', every: 3, at: 1 }, { k: 'smash', every: 3, at: 2 }],
+    txt: 'Босс кузни, броня 4. Каждый третий ход раскаляет пол перед рунами, а за ход до этого бьёт молотом по квадрату 3 × 3 вокруг героя: клетки краснеют за ход до удара. После жара льёт металл через героя от стены до стены: кто на линии, получает удар, а линия остаётся лавой до конца боя. Раненый впадает в ярость (+3 к удару).',
   },
   // the floors' other bosses (thread «Новые боссы этажей»): one of three meets the party, by the run's seed
   ratswarm: {
     size: 2, name: 'Крысиная свора', acc: 'Крысиную свору', fem: true, floor: 0, boss: true, hp: 56, r: 15, speed: 10, reach: 40, dmg: 8, armor: 1, fig: 40,
-    acts: [{ k: 'dive', every: 2, at: 1 }], next: { at: 0.66, k: 'ratswarm2' }, sheds: 3,
-    txt: 'Босс казематов: куча крыс, связанных хвостами, броня 1. Через ход ныряет в нору, а вылезает у ямы с глазами и кусает всех вокруг. Диск в яму с глазами бьёт её вдвое. Битая, теряет крыс, мельчает и шустреет.',
+    acts: [{ k: 'dive', every: 2, at: 1 }], next: { at: 0.66, k: 'ratswarm2' }, sheds: 3, digs: 6,
+    txt: 'Босс казематов: куча крыс, связанных хвостами, броня 1. Через ход роет новую нору у героя и ныряет, а вылезает у ямы с глазами и кусает всех вокруг. Диск в яму с глазами бьёт её вдвое. Битая, теряет крыс, мельчает и шустреет.',
   },
   ratswarm2: {
     of: 'ratswarm', name: 'Крысиная свора', acc: 'Крысиную свору', fem: true, floor: 0, boss: true, hp: 56, r: 10, speed: 32, reach: 30, dmg: 7, armor: 1, fig: 26,
-    acts: [{ k: 'dive', every: 2, at: 1 }], next: { at: 0.33, k: 'ratswarm3' }, sheds: 3,
-    txt: 'Поредевшая свора: куча меньше и вдвое шустрее, кусает на 7. Ныряет в нору, как раньше.',
+    acts: [{ k: 'dive', every: 2, at: 1 }], next: { at: 0.33, k: 'ratswarm3' }, sheds: 3, digs: 6,
+    txt: 'Поредевшая свора: куча меньше и вдвое шустрее, кусает на 7. Роет норы и ныряет, как раньше.',
   },
   ratswarm3: {
     of: 'ratswarm', name: 'Крысиная свора', acc: 'Крысиную свору', fem: true, floor: 0, boss: true, hp: 56, r: 7, speed: 64, reach: 26, dmg: 6, armor: 1, fig: 18, flees: true,
@@ -436,8 +449,8 @@ export const MOBS: Record<MobKind, MobDef> = {
     txt: 'Беспредел: Пахан встал со шконки и идёт к ближайшему герою, бьёт вблизи на 9, и каждое попадание уносит 3 руды в общак. Шестёрки больше не прикрывают.',
   },
   six: {
-    name: 'Шестёрка', acc: 'Шестёрку', fem: true, floor: 0, hp: 6, r: 7, speed: 34, reach: 30, dmg: 3, fig: 31,
-    txt: 'Скелет на побегушках у Пахана. Бежит к ближайшему герою и бьёт вблизи. Пока стоит вплотную к Пахану, диск по Пахану попадает в неё.',
+    name: 'Шестёрка', acc: 'Шестёрку', fem: true, floor: 0, hp: 6, r: 7, speed: 34, reach: 30, dmg: 3, fig: 31, loots: true,
+    txt: 'Скелет на побегушках у Пахана. Бежит к ближайшему герою и бьёт вблизи, а если грибы или кристалл ближе героя, устраивает шмон и отжимает их заряды. Пока стоит вплотную к Пахану, диск по Пахану попадает в неё.',
   },
   bunk: {
     size: 2, name: 'Шконка', acc: 'Шконку', fem: true, floor: 0, hp: 1, r: 15, speed: 0, reach: 0, dmg: 0, fig: 24, prop: true, fixed: true,
@@ -445,13 +458,13 @@ export const MOBS: Record<MobKind, MobDef> = {
   },
   fridge: {
     size: 2, name: 'Холодильник-людоед', acc: 'Холодильника-людоеда', floor: 1, boss: true, hp: 62, r: 15, speed: 10, reach: 40, dmg: 8, armor: 3, fig: 50, toss: true,
-    acts: [{ k: 'cone', every: 2, at: 0 }],
-    txt: 'Босс склепа, броня 3. Каждый второй ход дует морозилкой на 3 клетки вперёд: кого задело, получает удар и примерзает. Издалека кидается закусью, вблизи кусает дверцей. Пока дверца открыта, диск в неё бьёт вдвое и мимо брони.',
+    acts: [{ k: 'cone', every: 2, at: 0 }, { k: 'draft', every: 4, at: 1 }],
+    txt: 'Босс склепа, броня 3. Каждый второй ход дует морозилкой на 3 клетки вперёд: кого задело, получает удар и примерзает. Через раз после морозилки сквозняком тянет к себе на 2 клетки тех, кого видит в 6 клетках, и кусает дверцей того, кто окажется рядом. Издалека кидается закусью, вблизи кусает дверцей. Пока дверца открыта, диск в неё бьёт вдвое и мимо брони.',
   },
   dancer: {
-    size: 2, name: 'Мёртвый танцор диско', acc: 'Мёртвого танцора диско', floor: 1, boss: true, hp: 54, r: 15, speed: 26, reach: 999, dmg: 6, fig: 52, moon: 3,
+    size: 2, name: 'Мёртвый танцор диско', acc: 'Мёртвого танцора диско', floor: 1, boss: true, hp: 54, r: 15, speed: 26, reach: 999, dmg: 6, fig: 52, moon: 3, shy: 2, trail: true,
     acts: [{ k: 'dance', every: 2, at: 0 }], next: { at: 0.5, k: 'dancer2' },
-    txt: 'Босс склепа. Каждый второй ход пол загорается узором: кто стоит на горящей клетке, когда грянет бит, получает удар. Мечет пластинку в того, кого видит, а от героя вплотную уходит лунной походкой. На половине здоровья его накрывает диско-лихорадка.',
+    txt: 'Босс склепа. Каждый второй ход пол загорается узором: кто стоит на горящей клетке, когда грянет бит, получает удар. Мечет пластинку в того, кого видит, а от героя в двух клетках уходит лунной походкой, и его след загорается на следующий бит. На половине здоровья его накрывает диско-лихорадка.',
   },
   dancer2: {
     of: 'dancer', size: 2, name: 'Мёртвый танцор диско', acc: 'Мёртвого танцора диско', floor: 1, boss: true, hp: 54, r: 15, speed: 26, reach: 999, dmg: 9, fig: 52, moon: 3,
@@ -469,14 +482,14 @@ export const MOBS: Record<MobKind, MobDef> = {
     txt: 'Сорвался с цепи и треснул: ранят и прямые удары. Каждый второй ход катится по ряду или столбцу и давит всех на пути, осколков сыплет вдвое больше.',
   },
   dragon: {
-    size: 2, name: 'Дракон Дымыч', acc: 'Дракона Дымыча', floor: 2, boss: true, hp: 66, r: 15, speed: 0, reach: 40, dmg: 9, armor: 3, fig: 54, nest: 3,
+    size: 2, name: 'Дракон Дымыч', acc: 'Дракона Дымыча', floor: 2, boss: true, hp: 66, r: 15, speed: 0, reach: 40, dmg: 9, armor: 3, fig: 54, nest: 3, smog: true,
     acts: [{ k: 'belch', every: 2, at: 0 }], next: { at: 0.5, k: 'dragon2' },
-    txt: 'Босс кузни, броня 3. Высиживает яйца: каждый третий ход из одного вылупляется бес-кочегар. Кто разбил яйцо, за тем дракон идёт и бьёт вдвое. Через ход рыгает огнём по прямой до стены: кто на линии, получает удар и загорается. На половине здоровья слезает с яиц.',
+    txt: 'Босс кузни, броня 3. Высиживает яйца: каждый третий ход из одного вылупляется бес-кочегар. Кто разбил яйцо, за тем дракон идёт и бьёт вдвое. Через ход рыгает огнём по прямой до стены: кто на линии, получает удар и загорается, а комнату на ход затягивает дымом. На половине здоровья слезает с яиц.',
   },
   dragon2: {
-    of: 'dragon', size: 2, name: 'Дракон Дымыч', acc: 'Дракона Дымыча', floor: 2, boss: true, hp: 66, r: 15, speed: 16, reach: 40, dmg: 9, armor: 3, fig: 56,
+    of: 'dragon', size: 2, name: 'Дракон Дымыч', acc: 'Дракона Дымыча', floor: 2, boss: true, hp: 66, r: 15, speed: 16, reach: 40, dmg: 9, armor: 3, fig: 56, smog: true,
     acts: [{ k: 'belch', every: 2, at: 0 }],
-    txt: 'Слез с яиц: все целые яйца вылупились разом. Ходит и бьёт лапой, через ход рыгает огнём по прямой: удар и пожар.',
+    txt: 'Слез с яиц: все целые яйца вылупились разом. Ходит и бьёт лапой, через ход рыгает огнём по прямой: удар, пожар и дым.',
   },
   egg: {
     name: 'Драконье яйцо', acc: 'Драконье яйцо', floor: 2, hp: 9, r: 6, speed: 0, reach: 0, dmg: 0, fig: 16, prop: true,

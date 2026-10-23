@@ -8,7 +8,7 @@ import { has, type ArtKey, type Kept } from './artifacts';
 import type { Sfx } from './audio/sfx';
 import { TRINKET_R } from './trinkets';
 import { BET_TURNS, FLOOR_FR, settleBet, type Bet, type Floor } from './events';
-import { CASTS, caveTurns, cellAt, cellCentre, clearLine, fireCells, generate, hazKey, inPit, isFloor, mobDmg, muAt, newMob, partyScale, pitAt, standing, volBlow, type Intent, type Layout, type Mob, type RoomSpec, type Zone } from './room';
+import { CASTS, caveTurns, cellAt, cellCentre, clearLine, fireCells, generate, hazKey, ICICLE_HP, inPit, isFloor, mobDmg, muAt, newMob, partyScale, pitAt, standing, stops, volBlow, type Intent, type Layout, type Mob, type RoomSpec, type Zone } from './room';
 import { VOL, loud } from './volume';
 import { M } from './i18n';
 import type { StandMat } from './stands';
@@ -243,6 +243,8 @@ export interface State extends Layout {
   log: { turn: number; txt: string }[];
   /** Some hero has lost health in this room: no ore «Без царапины» for it. */
   hurt?: boolean;
+  /** The dragon has belched the room full of smoke: it hangs there through the heroes' next turn, clear only round them. */
+  smog?: boolean;
 }
 
 /** What a player can do to the shared game; online clients send these to the host instead of applying them. */
@@ -288,15 +290,21 @@ const LOG_MAX = 40;
 const SPECIAL = {
   summon: 'призыв', heal: 'лечение', heat: 'жар', charge: 'фитиль', execute: 'казнь', scream: 'визг', smash: 'удар молотом', rise: 'подъём',
   dive: 'в нору', emerge: 'из норы', brew: 'подогрев', cone: 'морозилка', dance: 'танцпол', lights: 'светомузыка', roll: 'каток', belch: 'отрыжка',
-  toss: 'закусь', hatch: 'вылупление',
+  toss: 'закусь', hatch: 'вылупление', crown: 'корона', wall: 'ледяная стена', draft: 'сквозняк', cast: 'литьё',
 };
 /** What the HUD calls a floor boss's marked cells, by what they do. */
-const ZONE_NAME: Record<Zone, string> = { cold: 'морозилка', dance: 'танцпол', beam: 'светомузыка', roll: 'каток', fire: 'отрыжка' };
+const ZONE_NAME: Record<Zone, string> = {
+  cold: 'морозилка', dance: 'танцпол', beam: 'светомузыка', roll: 'каток', fire: 'отрыжка', crown: 'корона', wall: 'ледяная стена', draft: 'сквозняк', cast: 'литьё',
+};
 const specialName = (k: keyof typeof SPECIAL | 'slam' | 'zone', chill?: boolean, z?: Zone) =>
   k === 'slam' ? (chill ? 'метель' : 'удар по всем') : k === 'zone' ? ZONE_NAME[z ?? 'cold'] : SPECIAL[k];
 /** The cry over a floor boss as its marked cells go off, and the colour of the cells. */
-export const ZONE_CRY: Record<Zone, string> = { cold: 'МОРОЗИЛКА!', dance: 'БИТ!', beam: 'СВЕТОМУЗЫКА!', roll: 'КАТИТСЯ!', fire: 'ОТРЫЖКА!' };
-export const ZONE_COL: Record<Zone | 'bite', string> = { bite: '#ff3a2a', cold: '#7fd8ff', dance: '#ff5ad1', beam: '#ffe27a', roll: '#ff9a3a', fire: '#ff6a1a' };
+export const ZONE_CRY: Record<Zone, string> = {
+  cold: 'МОРОЗИЛКА!', dance: 'БИТ!', beam: 'СВЕТОМУЗЫКА!', roll: 'КАТИТСЯ!', fire: 'ОТРЫЖКА!', crown: 'КОРОНА!', wall: 'ЛЕДЯНАЯ СТЕНА!', draft: 'СКВОЗНЯК!', cast: 'ЛИТЬЁ!',
+};
+export const ZONE_COL: Record<Zone | 'bite', string> = {
+  bite: '#ff3a2a', cold: '#7fd8ff', dance: '#ff5ad1', beam: '#ffe27a', roll: '#ff9a3a', fire: '#ff6a1a', crown: '#ffd34d', wall: '#4a86ff', draft: '#3ddc84', cast: '#ff8a2a',
+};
 /** The cry over a floor boss as it turns into its next phase. */
 const PHASE_CRY: Partial<Record<MobKind, string>> = { ratswarm2: 'свора редеет!', ratswarm3: 'разбегаются!', pahan2: 'БЕСПРЕДЕЛ!', dancer2: 'ЛИХОРАДКА!', discoball2: 'сорвался!', dragon2: 'слез с яиц!' };
 /** How the journal tells a shooter's shot when it isn't an arrow: Пахан's shiv, the dancer's record, the disco ball's beam. */
@@ -332,6 +340,8 @@ export const SHIELD_COS = 0.7;
 export const DOOR_MUL = 0.5;
 /** The hammer's blow on its square hits this much harder than a plain strike. */
 export const SMASH_MUL = 1.5;
+/** The fridge's draft: how far out it reaches (cells, kingwise from the fridge) and how many cells it pulls a hero over. */
+export const DRAFT = { reach: 6, pull: 2 };
 
 type Pt = { x: number; y: number };
 
@@ -1475,7 +1485,7 @@ export class Game {
       const it = m.intent;
       if (!it || this.acted(m) || this.frozen(m)) continue;
       if (((it.t === 'hit' || it.t === 'toss') && it.hero === h.i) || it.t === 'slam') n += it.dmg;
-      else if ((it.t === 'smash' || it.t === 'zone' || it.t === 'emerge') && this.underHammer(h, it.spots!)) n += it.dmg;
+      else if ((it.t === 'smash' || it.t === 'zone' || it.t === 'emerge') && this.underHammer(h, it.spots!) && (it.z !== 'draft' || this.within(m, this.spot(h)!, DRAFT.pull + 1))) n += it.dmg;
     }
     return Math.max(0, n - h.shield);
   }
@@ -1565,15 +1575,16 @@ export class Game {
 
   /**
    * A mob's move on a turn without a special act: the dragon goes after whoever broke its egg, the fridge bites or throws
-   * food, the swarm's last rats run, the dancer moonwalks off a hero right by it; a shooter fires (taking the heroes in
-   * turn by `k`), a walker goes after its hero.
+   * food, the swarm's last rats run, the dancer moonwalks off a hero close by, a шестёрка goes on «шмон»; a shooter fires
+   * (taking the heroes in turn by `k`), a walker goes after its hero.
    */
   private basic(m: Mob, hs: HeroState[], k: number): Intent {
     const d = MOBS[m.k], mad = m.mad !== undefined ? hs.find(h => h.i === m.mad) : undefined;
     if (mad) return this.chase(m, mad, this.route(m, this.spot(mad)!));
     if (d.toss) return this.snack(m, hs);
     if (d.flees) return this.runOff(m, hs);
-    if (d.moon && hs.some(h => this.beside(m, this.spot(h)!))) return this.backOff(m, hs, k);
+    if (d.moon && hs.some(h => this.within(m, this.spot(h)!, d.shy ?? 1))) return this.backOff(m, hs, k);
+    if (d.loots) { const it = this.shmon(m, hs); if (it) return it; }
     if (isRanged(m.k)) return this.shoot(m, hs, k);
     return this.goAfter(m, hs);
   }
@@ -1741,8 +1752,8 @@ export class Game {
         else if (hs.length) m.intent = this.basic(m, hs, this.S.turn + i);
         return;
       }
-      // the fridge, the swarm's last rats and the dancer weigh things up afresh from where everybody stands now
-      if (hs.length && m.mad === undefined && (d.toss || d.flees || d.moon)) { m.intent = this.basic(m, hs, 0); return; }
+      // the fridge, the swarm's last rats, the dancer and a шестёрка weigh things up afresh from where everybody stands now
+      if (hs.length && m.mad === undefined && (d.toss || d.flees || d.moon || d.loots)) { m.intent = this.basic(m, hs, 0); return; }
       const h = this.heroOf(it.hero), p = this.spot(h);
       if (h.hp <= 0 || !p) return;
       if (isRanged(m.k)) m.intent = this.shoot(m, it.t === 'charge' ? hs : [h], 0, false);
@@ -1783,6 +1794,11 @@ export class Game {
     if (a.k === 'dance') return { t: 'zone', z: 'dance', hero: -1, dmg: this.zoneDmg(m), spots: this.pattern(m) };
     if (a.k === 'lights') return { t: 'zone', z: 'beam', hero: -1, dmg: this.zoneDmg(m), spots: this.beams(m) };
     if (a.k === 'roll') return this.rollPlan(m, hs);
+    if (a.k === 'crown') { const h = aim(); return { t: 'zone', z: 'crown', hero: h.i, dmg: this.zoneDmg(m), spots: this.crownPath(m, at(h)) }; }
+    if (a.k === 'cast') { const h = aim(); return { t: 'zone', z: 'cast', hero: h.i, dmg: this.zoneDmg(m), spots: this.castLine(m, at(h)) }; }
+    // the wall and the draft only when there is something for them to do, else the boss's usual move
+    if (a.k === 'wall') { const spots = this.iceWall(m, hs); return spots.length ? { t: 'zone', z: 'wall', hero: -1, dmg: 0, spots } : null; }
+    if (a.k === 'draft') { const spots = this.draftCells(m); return hs.some(h => this.underHammer(h, spots)) ? { t: 'zone', z: 'draft', hero: -1, dmg: this.blow(m), spots } : null; }
     if (a.k === 'smash') {
       // the square round the hero it would go after: it stays where it is marked, so a throw that lands outside dodges it
       const p = this.spot(this.heroOf(this.goAfter(m, hs, false).hero)) ?? this.spot(hs[0])!;
@@ -2260,7 +2276,10 @@ export class Game {
     return out;
   }
 
-  /** The dancefloor's lit cells this turn: a checkerboard, stripes either way or rings round the dancer, as the turn's beat falls. */
+  /**
+   * The dancefloor's lit cells this turn: a checkerboard, stripes either way or rings round the dancer, as the turn's beat
+   * falls, and the trail of its last moonwalk.
+   */
   private pattern(m: Mob): Pt[] {
     const S = this.S, R = mulberry32(S.spec.seed * 31 + S.turn), kind = Math.floor(R() * 4), par = R() < 0.5 ? 0 : 1;
     const sz = mobSize(m.k), [i0, j0] = cellAt(m.x, m.y, sz), blocks = this.blockCells(), out: Pt[] = [];
@@ -2269,7 +2288,8 @@ export class Game {
       const ring = Math.max(i0 - i, i - i0 - sz + 1, j0 - j, j - j0 - sz + 1);
       if (ring <= 0) continue;
       const lit = kind === 0 ? (i + j) % 2 : kind === 1 ? j % 2 : kind === 2 ? i % 2 : ring % 2;
-      if (lit === par) out.push(cellCentre(i, j));
+      // the cells it has just moonwalked over light up whatever the pattern
+      if (lit === par || m.trail?.includes(hazKey(i, j))) out.push(cellCentre(i, j));
     }
     return out;
   }
@@ -2287,6 +2307,173 @@ export class Game {
   /** The dragon's belch: a line of fire from its middle through the point p on to the wall or a block. */
   private fireLine(m: Mob, p: Pt): Pt[] {
     return fireCells(this.S, m, p);
+  }
+
+  /**
+   * The king's crown: thrown from its middle toward the point p, it bounces off the walls and the columns twice and drops
+   * where it hits a third time. The cells it flies over, past the king's own.
+   */
+  private crownPath(m: Mob, p: Pt): Pt[] {
+    const S = this.S, sz = mobSize(m.k), [i0, j0] = cellAt(m.x, m.y, sz), blocks = this.blockCells(), out = new Map<string, Pt>();
+    const solid = (x: number, y: number) => { const i = Math.floor(x / TILE), j = Math.floor(y / TILE); return !isFloor(S, i, j) || blocks.has(hazKey(i, j)); };
+    const L = Math.hypot(p.x - m.x, p.y - m.y) || 1;
+    let x = m.x, y = m.y, dx = ((p.x - m.x) / L) * 2, dy = ((p.y - m.y) / L) * 2;
+    for (let n = 0, k = 0; k < 2000; k++) {
+      if (solid(x + dx, y + dy)) {
+        if (n++ === 2) break;
+        // off a side it turns one way, into a corner straight back
+        const fx = solid(x + dx, y), fy = solid(x, y + dy);
+        if (fx || !fy) dx = -dx;
+        if (fy || !fx) dy = -dy;
+        continue;
+      }
+      x += dx;
+      y += dy;
+      const i = Math.floor(x / TILE), j = Math.floor(y / TILE);
+      if (i < i0 || i >= i0 + sz || j < j0 || j >= j0 + sz) out.set(hazKey(i, j), cellCentre(i, j));
+    }
+    return [...out.values()];
+  }
+
+  /**
+   * The forge's lord pours metal: across its way to the point p, a column when the hero is off to its side, a row when above
+   * or below, through the hero's cell out to the walls and the blocks.
+   */
+  private castLine(m: Mob, p: Pt): Pt[] {
+    const S = this.S, blocks = this.blockCells(), [ci, cj] = cellAt(p.x, p.y), out: Pt[] = [cellCentre(ci, cj)];
+    const [di, dj] = Math.abs(p.x - m.x) >= Math.abs(p.y - m.y) ? [0, 1] : [1, 0];
+    for (const s of [1, -1]) for (let i = ci + di * s, j = cj + dj * s; isFloor(S, i, j) && !blocks.has(hazKey(i, j)); i += di * s, j += dj * s) out.push(cellCentre(i, j));
+    return out;
+  }
+
+  /** The metal poured stays as lava through the fight, but not on the runes, under the heroes or down the holes. */
+  private pour(m: Mob, spots: Pt[]) {
+    const S = this.S, stands = this.standCells();
+    for (const p of spots) {
+      const k = hazKey(...cellAt(p.x, p.y));
+      if (!stands.has(k) && !pitAt(S.pits, p.x, p.y)) S.haz.add(k);
+    }
+    this.note(M('{0} {1?залила|залил} пол металлом: там теперь лава', m.name, MOBS[m.k].fem));
+  }
+
+  /**
+   * Where the lich's ice wall grows: three cells across the way from it to the nearest hero who sees it (else the nearest
+   * hero), two cells out in front of that hero, on open floor off the runes. None for a hero right by the lich.
+   */
+  private iceWall(m: Mob, hs: HeroState[]): Pt[] {
+    const seen = hs.filter(h => this.sees(m, h)), p = this.spot(this.nearestOf(m, seen.length ? seen : hs))!;
+    const L = Math.hypot(m.x - p.x, m.y - p.y);
+    if (L < TILE * 4) return [];
+    const ux = (m.x - p.x) / L, uy = (m.y - p.y) / L, [ci, cj] = cellAt(p.x + ux * TILE * 2, p.y + uy * TILE * 2);
+    // across the way: square to it, the nearest of the eight ways a piece goes
+    const a = Math.round(Math.atan2(uy, ux) / (Math.PI / 4)) * (Math.PI / 4) + Math.PI / 2, ai = Math.round(Math.cos(a)), aj = Math.round(Math.sin(a));
+    const taken = this.occupied(null, true), stands = this.standCells(), out: Pt[] = [];
+    for (const k of [0, -1, 1]) {
+      const i = ci + ai * k, j = cj + aj * k;
+      if (this.cellFree(i, j, taken) && !stands.has(hazKey(i, j))) out.push(cellCentre(i, j));
+    }
+    return out;
+  }
+
+  /** The lich's ice wall grows: a small icicle on each of its cells still free. */
+  private iceUp(m: Mob, spots: Pt[]) {
+    const S = this.S, taken = this.occupied(null, true), stands = this.standCells();
+    let n = 0;
+    for (const p of spots) {
+      const [i, j] = cellAt(p.x, p.y);
+      if (!this.cellFree(i, j, taken) || stands.has(hazKey(i, j))) continue;
+      S.blocks.push({ x0: i * TILE, y0: j * TILE, x1: (i + 1) * TILE, y1: (j + 1) * TILE, v: 1 + 2 * ((i + j) % 4), ice: true, big: false, hp: ICICLE_HP.small, max: ICICLE_HP.small, made: true });
+      this.burst(p.x, p.y, '#bfe6ff', 10);
+      n++;
+    }
+    this.note(n ? M('{0} {1?поставила|поставил} ледяную стену', m.name, MOBS[m.k].fem) : M('{0}: ледяной стене негде встать', m.name));
+  }
+
+  /** The fridge's draft: the cells within DRAFT.reach of it that it sees, where it pulls a hero over. */
+  private draftCells(m: Mob): Pt[] {
+    const S = this.S, sz = mobSize(m.k), [i0, j0] = cellAt(m.x, m.y, sz), blocks = this.blockCells(), r = DRAFT.reach, out: Pt[] = [];
+    for (let j = j0 - r; j < j0 + sz + r; j++) for (let i = i0 - r; i < i0 + sz + r; i++) {
+      if ((i >= i0 && i < i0 + sz && j >= j0 && j < j0 + sz) || !isFloor(S, i, j) || blocks.has(hazKey(i, j))) continue;
+      const c = cellCentre(i, j);
+      if (this.clearShot(m, c)) out.push(c);
+    }
+    return out;
+  }
+
+  /**
+   * The draft pulls the heroes on its cells DRAFT.pull cells over to the fridge, the nearest first, a cell at a time the way
+   * a piece goes on the board, short of whatever stands in the way; spikes, lava or mirror tiles where one ends up hurt as
+   * under a disc. Then the fridge bites the nearest hero right by it with its door.
+   */
+  private draft(m: Mob, hs: HeroState[], dmg: number) {
+    const S = this.S, d = MOBS[m.k], gw = S.gw, sz = mobSize(m.k), [i0, j0] = cellAt(m.x, m.y, sz);
+    const dist = (h: HeroState) => { const p = this.spot(h)!; return Math.hypot(p.x - m.x, p.y - m.y); };
+    for (const h of hs.slice().sort((a, b) => dist(a) - dist(b))) {
+      const p = this.spot(h)!, taken = this.occupied(null, true);
+      for (const o of S.heroes) { const q = this.spot(o); if (o !== h && q) taken[Math.floor(q.y / TILE) * gw + Math.floor(q.x / TILE)] = 1; }
+      let [i, j] = cellAt(p.x, p.y);
+      for (let k = 0; k < DRAFT.pull && !this.nextTo(i0, j0, sz, i, j); k++) {
+        const c = cellCentre(i, j), dx = m.x - c.x, dy = m.y - c.y;
+        const di = Math.abs(dx) >= TILE / 2 ? Math.sign(dx) : 0, dj = Math.abs(dy) >= TILE / 2 ? Math.sign(dy) : 0;
+        if ((!di && !dj) || !this.cellFree(i + di, j + dj, taken) || (di && dj && (!this.cellFree(i + di, j, taken) || !this.cellFree(i, j + dj, taken)))) break;
+        i += di;
+        j += dj;
+      }
+      const to = cellCentre(i, j);
+      if (to.x === p.x && to.y === p.y) continue;
+      h.from = { x: p.x, y: p.y };
+      h.leap = 0;
+      h.at = to;
+      this.float(to.x, to.y - 16, 'сквозняк!', ZONE_COL.draft);
+      this.note(M('{0} {2?протащила|протащил} {1} сквозняком', m.name, h.def.acc, d.fem));
+      const haz = S.haz.has(hazKey(i, j));
+      if (!haz && !this.shardAt(i, j)) continue;
+      if (has(h, 'undies')) { this.pop(h, 'undies'); continue; }
+      this.float(to.x, to.y, !haz ? 'осколки!' : S.biome.haz === 'lava' ? 'лава!' : 'шипы!', '#ff4d6a');
+      this.hurtHero(h, S.biome.hazDmg);
+    }
+    const by = this.alive().filter(h => { const p = this.spot(h); return !!p && this.beside(m, p); }).sort((a, b) => dist(a) - dist(b))[0];
+    if (!by || !dmg) return;
+    const p = this.spot(by)!;
+    this.knock(m, p.x, p.y, m.x, m.y, 0.5);
+    delete m.open;
+    const blk = this.hurtHero(by, dmg, '', m);
+    this.noteBlow(M('{0} {3?куснула|куснул} дверцей {1} на {2}', m.name, by.def.acc, dmg, d.fem), by, blk);
+  }
+
+  /** The cells the dancer has just moonwalked over, but the ones it stands on now: they light up with its next beat. */
+  private trail(m: Mob, walk: Pt[]) {
+    const sz = mobSize(m.k), cells = (p: Pt) => this.footprint(...cellAt(p.x, p.y, sz), sz).map(c => hazKey(c.x, c.y));
+    const now = new Set(cells(walk[walk.length - 1]));
+    m.trail = [...new Set(walk.flatMap(cells))].filter(k => !now.has(k));
+    this.note(M('{0} {1?ушла|ушёл} лунной походкой: след загорится на бит', m.name, MOBS[m.k].fem));
+  }
+
+  /**
+   * A шестёрка's «шмон»: to the mushrooms or the crystal with charges left, the nearest by its way, when they are nearer
+   * than any hero. Null when a hero is as near.
+   */
+  private shmon(m: Mob, hs: HeroState[]): Intent | null {
+    const S = this.S, near = this.nearestOf(m, hs), hw = this.route(m, this.spot(near)!);
+    let best: Intent | null = null, bd = hw ? hw.length : Infinity;
+    S.nodes.forEach((n, k) => {
+      if (n.left <= 0 || (n.k !== 'herb' && n.k !== 'spk')) return;
+      const w = this.route(m, n);
+      if (w && w.length < bd) { bd = w.length; best = { t: 'move', hero: near.i, dmg: 0, way: w, go: wayLen(w.slice(0, this.stopAt(m, w) + 1)), loot: k }; }
+    });
+    return best;
+  }
+
+  /** «Шмон»: a шестёрка right by the mushrooms or the crystal takes one of their charges. */
+  private loot(m: Mob, k: number) {
+    const n = this.S.nodes[k], d = MOBS[m.k];
+    if (!n || n.left <= 0 || !this.beside(m, n)) return;
+    n.left--;
+    n.hit = 0.2;
+    this.float(n.x, n.y - 10, 'шмон!', '#ffb070');
+    this.sfx(n.k === 'spk' ? 'sparks' : 'herb');
+    this.note(n.k === 'herb' ? M('{0} {1?отжала|отжал} грибы', m.name, d.fem) : M('{0} {1?отжала|отжал} искру из кристалла', m.name, d.fem));
+    if (n.left <= 0) this.float(n.x, n.y - 6, 'истощено', '#c7cbe0');
   }
 
   /**
@@ -2420,9 +2607,34 @@ export class Game {
     return out.sort((p, q) => Math.hypot(p.x - near.x, p.y - near.y) - Math.hypot(q.x - near.x, q.y - near.y))[0] ?? null;
   }
 
+  /**
+   * The rat swarm digs a new burrow by the hero it is after as it goes down (up to `digs` in a fight): a 1 × 1 hole two
+   * cells out from the hero, on the side nearest the swarm, on open floor away from the other holes, the runes and the heroes.
+   */
+  private dig(m: Mob, p: Pt) {
+    const S = this.S, d = MOBS[m.k];
+    if (!d.digs || S.pits.filter(q => q.dug).length >= d.digs) return;
+    const taken = this.occupied(null, true), stands = this.standCells();
+    let best: Pt | null = null, bd = Infinity;
+    for (const c of this.around([{ x: Math.floor(p.x / TILE), y: Math.floor(p.y / TILE) }], 2)) {
+      const k = hazKey(c.x, c.y);
+      if (!this.cellFree(c.x, c.y, taken) || stands.has(k) || S.haz.has(k) || this.shardAt(c.x, c.y)) continue;
+      if (S.pits.some(q => q.cells.some(([i, j]) => Math.max(Math.abs(i - c.x), Math.abs(j - c.y)) < 2))) continue;
+      const o = cellCentre(c.x, c.y), far = Math.hypot(o.x - m.x, o.y - m.y);
+      if (far < bd) { bd = far; best = c; }
+    }
+    if (!best) return;
+    S.pits.push({ k: '1x1', cells: [[best.x, best.y]], dug: true });
+    const c = cellCentre(best.x, best.y);
+    this.burst(c.x, c.y, '#b7a07a', 12);
+    this.float(c.x, c.y - 10, 'новая нора!', '#b7a07a');
+    this.note(M('{0} {1?вырыла|вырыл} новую нору', m.name, d.fem));
+  }
+
   /** The rat swarm goes down the hole nearest the hero it is after: its eyes glow there through the heroes' turn. */
   private dive(m: Mob, it: Intent) {
-    const S = this.S, d = MOBS[m.k], p = this.spot(this.heroOf(it.hero)) ?? m;
+    const S = this.S, d = MOBS[m.k], at = this.spot(this.heroOf(it.hero)), p = at ?? m;
+    if (at) this.dig(m, at);
     const dist = (k: number) => Math.min(...S.pits[k].cells.map(([i, j]) => { const c = cellCentre(i, j); return Math.hypot(c.x - p.x, c.y - p.y); }));
     const k = S.pits.map((_, k) => k).sort((a, b) => dist(a) - dist(b))[0];
     if (k === undefined) return;
@@ -2523,10 +2735,19 @@ export class Game {
     }
     m.flash = 0.12;
     S.shake = Math.max(S.shake, z === 'roll' ? 0.35 : 0.2);
-    this.sfx(z === 'cold' ? 'freeze' : z === 'fire' ? 'boom' : 'slam');
+    this.sfx(z === 'cold' || z === 'wall' || z === 'draft' ? 'freeze' : z === 'fire' || z === 'cast' ? 'boom' : 'slam');
     this.float(m.x, m.y - 12, ZONE_CRY[z], col);
     // a spark or two over the cells, not too many for a phone
     for (let k = 0; k < spots.length; k += Math.max(1, Math.floor(spots.length / 24))) this.burst(spots[k].x, spots[k].y, col, 2);
+    if (z === 'dance') delete m.trail;
+    if (z === 'wall') return this.iceUp(m, spots);
+    if (z === 'draft') return this.draft(m, hit, it.dmg);
+    if (z === 'fire' && d.smog) {
+      // the belch leaves smoke behind: it hangs through the heroes' next turn
+      S.smog = true;
+      this.float(m.x, m.y - 24, 'ДЫМ!', '#c9c2d8');
+      this.note(M('{0}: комнату затянуло дымом', m.name));
+    }
     if (!hit.length) this.note(M('{0}: {1} мимо', m.name, ZONE_NAME[z]));
     for (const h of hit) {
       // the freezer and the belch hit as well (thread «Сложность боссов»), then freeze or set on fire whoever is still up
@@ -2550,6 +2771,7 @@ export class Game {
       }
     }
     if (z === 'roll') this.tremor(m.x, m.y, 1, m);
+    if (z === 'cast') this.pour(m, spots);
   }
 
   // ------------------------------------------------------------ physics
@@ -2976,6 +3198,8 @@ export class Game {
   private mobsStart() {
     const S = this.S;
     this.sfx('enemyTurn');
+    // the dragon's smoke has hung through the heroes' turn
+    delete S.smog;
     for (const h of this.alive()) {
       if (h.fire <= 0) continue;
       h.fire--;
@@ -3041,6 +3265,13 @@ export class Game {
     // the fallen disco ball rolls down its lane as far as it gets now; one running from the heroes runs from where they stand now
     if (it.t === 'zone' && it.z === 'roll') { this.setWalk(m, this.rollWay(m, it.way ?? [])); return; }
     if (it.flee) { this.setWalk(m, this.fleeWay(m, MOBS[m.k].flees ? this.steps(m) : MOBS[m.k].moon ?? 3)); return; }
+    // a шестёрка on «шмон» goes to the resource, as long as it still has charges
+    const node = it.loot !== undefined ? this.S.nodes[it.loot] : null;
+    if (node) {
+      const way = node.left > 0 && m.speed > 0 ? this.route(m, node) : null;
+      if (way) this.setWalk(m, way.slice(0, this.stopAt(m, way) + 1));
+      return;
+    }
     const foe = it.foe !== undefined ? this.S.mobs[it.foe] : null;
     if ((it.t !== 'hit' && it.t !== 'move' && it.t !== 'charge') || (it.hero < 0 && !foe) || m.speed === 0) return;
     // one drawn by a firecracker runs to where it crackled, even when another enemy has set it off on the way; a kissed one
@@ -3070,7 +3301,8 @@ export class Game {
     if (m.k === 'egg') return it.eta !== 1;
     if (it.t === 'brew') return !this.sixes(m).length;
     if (it.foe !== undefined) { const o = this.S.mobs[it.foe]; return !o || o.hp <= 0 || (it.t === 'move' && !m.walk); }
-    if (it.t === 'move') return !m.walk;
+    // a шестёрка on «шмон» right by the resource takes its charge where it stands
+    if (it.t === 'move') return !m.walk && it.loot === undefined;
     if (it.t === 'hit') { const h = this.heroOf(it.hero); return h.hp <= 0 || !this.spot(h); }
     if (it.t === 'heal') { const o = this.S.mobs[it.mob!]; return !o || o.hp <= 0; }
     return false;
@@ -3118,8 +3350,8 @@ export class Game {
   }
 
   /**
-   * Cells nobody can step on: under blocks, resources, pits and (with `mobs`) the enemies other than `self`,
-   * at the cells they will stand on this turn. 1 = taken, row-major gw × gh.
+   * Cells nobody can step on: under blocks, resources, pits (a 2 × 2 `self` steps over the small ones) and (with `mobs`)
+   * the enemies other than `self`, at the cells they will stand on this turn. 1 = taken, row-major gw × gh.
    */
   occupied(self: Mob | null, mobs: boolean) {
     const S = this.S, gw = S.gw, out = new Uint8Array(gw * S.gh);
@@ -3128,7 +3360,7 @@ export class Game {
     };
     for (const b of standing(S.blocks)) mark(Math.floor(b.x0 / TILE), Math.floor(b.y0 / TILE));
     for (const n of S.nodes) if (n.left > 0) mark(...cellAt(n.x, n.y, n.s), n.s);
-    for (const p of S.pits) for (const [i, j] of p.cells) mark(i, j);
+    for (const p of S.pits) if (stops(p, self ? mobSize(self.k) : 1)) for (const [i, j] of p.cells) mark(i, j);
     if (mobs) for (const o of S.mobs) {
       // the swarm down a burrow stands nowhere
       if (o === self || o.hp <= 0 || o.under !== undefined) continue;
@@ -3164,6 +3396,12 @@ export class Game {
   private beside(m: Mob, p: Pt) {
     const sz = mobSize(m.k), [i, j] = cellAt(m.x, m.y, sz);
     return this.nextTo(i, j, sz, Math.floor(p.x / TILE), Math.floor(p.y / TILE));
+  }
+
+  /** Whether the point p lies within r cells of the mob, kingwise from its footprint: 1 is right by it. */
+  private within(m: Mob, p: Pt, r: number) {
+    const sz = mobSize(m.k), [i, j] = cellAt(m.x, m.y, sz), ti = Math.floor(p.x / TILE), tj = Math.floor(p.y / TILE);
+    return Math.max(i - ti, ti - i - sz + 1, j - tj, tj - j - sz + 1) <= r;
   }
 
   /**
@@ -3309,6 +3547,10 @@ export class Game {
       this.note(by ? M('{0} вздыхает по {1} и никого не бьёт', m.name, by.def.dat) : M('{0} вздыхает и никого не бьёт', m.name));
     } else if (it.foe !== undefined) {
       this.charmed(m);
+    } else if (it.loot !== undefined) {
+      this.loot(m, it.loot);
+    } else if (it.flee && d.trail && m.walk) {
+      this.trail(m, m.walk);
     } else if (it.t === 'move') {
       // walled off, it stayed put: nothing to tell
       if (m.walk) this.note(it.bang ? M('{0} {1?побежала|побежал} на треск петарды', m.name, d.fem) : M('{0} идёт к {1}', m.name, this.heroOf(it.hero).def.dat));

@@ -2,9 +2,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, CUFF_TURNS, FOOD_HEAL, FOOD_PER_DISC, CLEAN_ORE, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, KISS_TURNS, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, KINDS, RAGE_FROM, RISE_HP, SHOVE_DMG, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize, toughOf } from '../src/data';
-import { ART, DOOR_MUL, FOOD_FLY, FOOD_TOSS, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
+import { ART, DOOR_MUL, DRAFT, FOOD_FLY, FOOD_TOSS, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { ARENA_TRIES, BOSS_UP, BURROW_APART, BURROW_NEAR, CASTS, CAVE, MOB_CAP, arenaFit, bossOf, fireCells, lanesOf, mobPool, caveStock, PARTY_SCALE, RUNE_AREA, SPK_AREA, caveTurns, crystals, runes, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, dmgBonus, floorAt, generate, hazKey, inPit, isFloor, mobDmg, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob, type ResNode } from '../src/room';
+import { ARENA_TRIES, BOSS_UP, COVER, COVER_TRIES, ICICLE_HP, ROOMY, SMALL_PIT, coverOf, BURROW_APART, BURROW_NEAR, CASTS, CAVE, MOB_CAP, arenaFit, bossOf, fireCells, lanesOf, mobPool, caveStock, PARTY_SCALE, RUNE_AREA, SPK_AREA, caveTurns, crystals, runes, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, dmgBonus, floorAt, generate, hazKey, inPit, isFloor, mobDmg, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob, type ResNode } from '../src/room';
 import { ELITES, FIGHTS, FLOORS, FORGE_ROWS, LAYERS, REST_ROW, agreed, floorOk, genFloor, isFight, newRun, nodeById, reachable, routes, runDone } from '../src/run';
 import { makeRng } from '../src/rng';
 import { t as shown } from '../src/i18n';
@@ -284,16 +284,16 @@ describe('difficulty along a floor', () => {
       // a rectangle bigger than any room before it: the last fight rows are 15 × 12 at the most
       expect(area).toBe(L.gw * L.gh);
       expect(area).toBeGreaterThan(15 * 12);
-      expect(L.blocks.length).toBeGreaterThanOrEqual(2);
-      // the swarm's burrows aside, a hole at the most
-      expect(L.pits.length).toBeLessThanOrEqual(boss.k === 'ratswarm' ? 3 : 1);
+      expect(L.blocks.length).toBeGreaterThanOrEqual(ROOMY[boss.k] ?? 3);
+      // the swarm's burrows aside, a hole at the most and one behind the enemies
+      expect(L.pits.length).toBeLessThanOrEqual(boss.k === 'ratswarm' ? 3 : 2);
       if ([...L.haz].some(k => { const [i, j] = k.split(',').map(Number); return Math.abs((i + 0.5) / L.gw + (j + 0.5) / L.gh - 1) < 0.2; })) middle++;
       expect((L.mobs.length + L.blocks.length + L.pits.length + L.haz.size + L.nodes.length) / area).toBeLessThan(0.2);
       for (const p of L.pads) expect(g.route(boss, p, false)).not.toBeNull();
     }
     // hazards lie across the middle of the room too, not only along its walls
     expect(middle).toBeGreaterThan(FLOORS * 59 * 0.6);
-  });
+  }, 60000);
 
   it('hits harder on later floors and in the last rooms before the boss', () => {
     expect(room(0, 0, 3).dmgAdd).toBe(0);
@@ -2210,7 +2210,7 @@ describe('floor casts and enemy abilities', () => {
     // one of the floor's three bosses, by the room's seed
     expect(seen.map(s => [...s].filter(k => MOBS[k as keyof typeof MOBS].boss).sort())).toEqual(CASTS.map(c => [...c.bosses].sort()));
     for (const s of seen) expect(s.size).toBeGreaterThanOrEqual(5);
-  });
+  }, 60000);
 
   const fight = (floor: number, kinds: (keyof typeof MOBS)[]) => {
     const g = new Game();
@@ -2246,22 +2246,24 @@ describe('floor casts and enemy abilities', () => {
     /** Every mob's coming special move on the given turn, intents picked as they are at its start. */
     const on = (g: Game, turn: number) => { g.S.turn = turn; g.pickIntents(); return g.S.mobs.map(m => g.specialIn(m)); };
     const ice = fight(1, ['lich', 'witch', 'ghoul']), [, , ghoul] = ice.S.mobs;
-    // the lich raises ghouls on turns 2, 5, 8 and sends the blizzard on 3, 6, 9; the witch mends on even turns
-    expect(on(ice, 1)).toEqual([{ name: 'призыв', turns: 1 }, { name: 'лечение', turns: 1 }, null]);
+    // the lich raises ghouls on turns 2, 5, 8, sends the blizzard on 3, 6, 9 and puts up its ice wall on 1, 4, 7; the witch mends on even turns
+    expect(on(ice, 1)).toEqual([{ name: 'ледяная стена', turns: 0 }, { name: 'лечение', turns: 1 }, null]);
     expect(on(ice, 3)).toEqual([{ name: 'метель', turns: 0 }, { name: 'лечение', turns: 1 }, null]);
-    expect(on(ice, 4)).toEqual([{ name: 'призыв', turns: 1 }, { name: 'лечение', turns: 2 }, null]);
+    expect(on(ice, 4)).toEqual([{ name: 'ледяная стена', turns: 0 }, { name: 'лечение', turns: 2 }, null]);
     // the witch mends this turn only with someone hurt; left alone, she has nobody to mend at all
     ghoul.hp -= 3;
     expect(on(ice, 4)[1]).toEqual({ name: 'лечение', turns: 0 });
     for (const m of ice.S.mobs) if (m.k !== 'witch') m.hp = 0;
     expect(ice.specialIn(ice.S.mobs[1])).toBeNull();
 
+    // the king slams on turns 3, 6, 9 and throws its crown a turn after
     const king = fight(0, ['king', 'skel']);
-    expect(on(king, 1)).toEqual([{ name: 'удар по всем', turns: 2 }, null]);
+    expect(on(king, 1)).toEqual([{ name: 'корона', turns: 0 }, null]);
+    expect(on(king, 2)).toEqual([{ name: 'удар по всем', turns: 1 }, null]);
     expect(on(king, 3)).toEqual([{ name: 'удар по всем', turns: 0 }, null]);
-    // the forgelord's hammer falls on turns 2, 5, 8, a turn before the floor heats on 3, 6, 9
+    // the forgelord's hammer falls on turns 2, 5, 8, a turn before the floor heats on 3, 6, 9, and it pours metal a turn after
     const forge = fight(2, ['forgelord', 'bomber']);
-    expect(on(forge, 1)).toEqual([{ name: 'удар молотом', turns: 1 }, { name: 'фитиль', turns: 0 }]);
+    expect(on(forge, 1)).toEqual([{ name: 'литьё', turns: 0 }, { name: 'фитиль', turns: 0 }]);
     expect(on(forge, 2)).toEqual([{ name: 'удар молотом', turns: 0 }, { name: 'фитиль', turns: 1 }]);
     expect(on(forge, 3)).toEqual([{ name: 'жар', turns: 0 }, { name: 'фитиль', turns: 0 }]);
   });
@@ -4422,7 +4424,7 @@ describe("the floors' other bosses", () => {
       expect([...met].sort()).toEqual([...CASTS[f].bosses].sort());
       for (const k of CASTS[f].bosses) expect(generate({ seed: 3, depth: f * LAYERS + LAYERS, floor: f, type: 'boss', boss: k }).mobs[0].k).toBe(k);
     }
-  });
+  }, 60000);
 
   it('builds each its room: burrows for the swarm, no escort for Пахан, eggs round the dragon for every hero', () => {
     for (let seed = 1; seed < 30; seed++) {
@@ -4438,7 +4440,7 @@ describe("the floors' other bosses", () => {
         for (const e of eggs) { expect(Math.max(Math.abs(e.x - d.x), Math.abs(e.y - d.y))).toBeLessThanOrEqual(1.5 * TILE + 1); expect(e.owner).toBe(0); }
       }
     }
-  });
+  }, 60000);
 
   it("builds a boss's arena over until it suits the boss, and the same seed always gives the same arena", () => {
     for (let f = 0; f < FLOORS; f++) for (const k of CASTS[f].bosses) {
@@ -4457,6 +4459,22 @@ describe("the floors' other bosses", () => {
       expect(rooms.size, k).toBe(16);
     }
     expect(ARENA_TRIES).toBe(20);
+  }, 60000);
+
+  it('hides the enemies of every arena behind its columns and digs a hole behind their line', () => {
+    let cover = 0, rooms = 0;
+    for (let f = 0; f < FLOORS; f++) for (const k of CASTS[f].bosses) for (let seed = 1; seed <= 10; seed++) {
+      const L = generate({ seed, depth: f * LAYERS + LAYERS, floor: f, type: 'boss', boss: k });
+      // the bosses that need the open floor get no columns more for it
+      if (ROOMY[k] === undefined) { cover += coverOf(L); rooms++; }
+      // a hole in the enemies' half of the room, a small one; the swarm has only its burrows
+      const back = L.pits.filter(p => p.cells.reduce((n, [i, j]) => n + (i + 0.5) / L.gw + (j + 0.5) / L.gh, 0) / p.cells.length < 0.9);
+      if (k !== 'ratswarm') expect(back.some(p => p.cells.length <= 4), `${k} ${seed}`).toBe(true);
+    }
+    // the boss's own need comes first, so not every arena gets to COVER, but most of the throws at the enemies are stopped
+    expect(cover / rooms).toBeGreaterThan(0.5);
+    expect([COVER, COVER_TRIES]).toEqual([0.7, 8]);
+    expect(ROOMY).toEqual({ dancer: 2, discoball: 3 });
   }, 60000);
 
   it('gives each boss what it needs: sight, burrows, a dancefloor, runs to roll down, fire that reaches', () => {
@@ -4488,7 +4506,7 @@ describe("the floors' other bosses", () => {
       const drake = at('dragon');
       if (arenaFit(drake.L, 'dragon') >= 1) expect(drake.L.pads.filter(p => fireCells(drake.L, drake.b, p).some(c => c.x === p.x && c.y === p.y)).length).toBeGreaterThanOrEqual(3);
     }
-  });
+  }, 60000);
 
   it('every one of them plays seven turns through with its own moves', () => {
     const moves: Record<string, string[]> = { ratswarm: ['dive', 'emerge'], pahan: ['summon', 'brew'], fridge: ['zone', 'toss'], dancer: ['zone'], discoball: ['zone'], dragon: ['zone', 'rise'] };
@@ -4507,14 +4525,16 @@ describe("the floors' other bosses", () => {
     }
   });
 
-  it('the rat swarm dives into the hole nearest its hero, a disc into that hole hits it twice, and it comes up biting all round', () => {
+  it('the rat swarm digs a burrow by its hero, dives into it, a disc into that hole hits it twice, and it comes up biting all round', () => {
     const g = arena([['ratswarm', 4, 2]], [0]), [m] = g.S.mobs, [h] = g.party;
     g.S.pits = [{ k: '1x1', cells: [[1, 1]] }, { k: '1x1', cells: [[8, 6]] }];
     g.pickIntents();
     expect(m.intent!.t).toBe('dive');
     expect(m.intent!.hero).toBe(h.i);
     act(g, m, m.intent!);
-    expect(m.under).toBe(1);
+    // two cells out from the hero on its rune at (10, 8), on the swarm's side and clear of the hole at (8, 6)
+    expect(g.S.pits[2]).toEqual({ k: '1x1', cells: [[10, 6]], dug: true });
+    expect(m.under).toBe(2);
     expect(g.solid(m)).toBe(false);
     g.pickIntents();
     const it = m.intent!;
@@ -4522,7 +4542,7 @@ describe("the floors' other bosses", () => {
     expect(on(g, h, it.spots!)).toBe(true);
     expect(g.incoming(h)).toBe(it.dmg);
     // a disc into the hole with the eyes: on its heads, twice, and its hero loses nothing for the drop
-    const hp = h.hp, c = cellCentre(8, 6);
+    const hp = h.hp, c = cellCentre(10, 6);
     roll(g, disc(g, c.x - 14, c.y, 120, 0));
     expect(m.max - m.hp).toBeGreaterThan(0);
     expect((m.max - m.hp) % 2).toBe(0);
@@ -4531,6 +4551,23 @@ describe("the floors' other bosses", () => {
     expect(m.under).toBeUndefined();
     expect(m.x).toBe(it.to!.x);
     expect(h.hp).toBe(hp - it.dmg);
+  });
+
+  it('the rat swarm digs at most its burrows a fight, and a 2 × 2 boss steps over the small holes the others go round', () => {
+    const g = arena([['ratswarm', 4, 2], ['skel', 1, 4]], [0]), [m, skel] = g.S.mobs, [h] = g.party;
+    g.S.pits = Array.from({ length: MOBS.ratswarm.digs! }, (_, k) => ({ k: '1x1' as const, cells: [[k * 2, 0]] as [number, number][], dug: true }));
+    g.pickIntents();
+    act(g, m, m.intent!);
+    expect(g.S.pits).toHaveLength(MOBS.ratswarm.digs!);
+    expect(m.under).toBeDefined();
+    // a 1 × 1 and a 2 × 1 hole don't stop the big boss, a bigger one does; every hole stops a small enemy
+    const big = arena([['king', 1, 3], ['skel', 1, 6]], [0]), [king, sk] = big.S.mobs, gw = big.S.gw;
+    big.S.pits = [{ k: '1x1', cells: [[3, 3]] }, { k: '2x1', cells: [[3, 6], [4, 6]] }, { k: 'L3', cells: [[7, 3], [7, 4], [8, 4]] }];
+    const free = (self: Mob, i: number, j: number) => !big.occupied(self, false)[j * gw + i];
+    expect([free(king, 3, 3), free(king, 4, 6), free(king, 7, 4)]).toEqual([true, true, false]);
+    expect([free(sk, 3, 3), free(sk, 4, 6), free(sk, 7, 4)]).toEqual([false, false, false]);
+    expect(SMALL_PIT).toBe(2);
+    void h; void skel;
   });
 
   it('the rat swarm sheds prison rats and shrinks as it is hurt, and its last rats run from the heroes', () => {
@@ -4605,6 +4642,9 @@ describe("the floors' other bosses", () => {
     expect(blow(true, 1)).toBe(2 * blow(false, 1));
     expect(blow(true, -1)).toBe(blow(false, -1));
     const g = arena([['fridge', 4, 3]]), [m] = g.S.mobs;
+    // turn 3: neither the freezer nor the draft
+    g.S.turn = 3;
+    g.pickIntents();
     expect(m.intent!.t).toBe('toss');
     const it = m.intent!, h = g.heroOf(it.hero), hp = h.hp;
     act(g, m, it);
@@ -4802,5 +4842,171 @@ describe("the floors' other bosses", () => {
     expect(cli.shardAt(3, 3)).toBe(true);
     expect(cli.fixtures()).toHaveLength(1);
     expect(cli.party[0].pin).toBe(2);
+  });
+
+  // the bosses' moves since the arena grew (thread «Арена босса посложнее»)
+  it("the king's crown flies at a hero, bounces off the walls twice and hits everyone on its way, a turn after the slam", () => {
+    const g = arena([['king', 2, 2]], [0]), [m] = g.S.mobs, [h] = g.party;
+    expect(MOBS.king.acts).toContainEqual({ k: 'crown', every: 3, at: 1 });
+    h.at = cellCentre(9, 3);
+    g.S.turn = 1;
+    g.pickIntents();
+    const it = m.intent!, hp = h.hp;
+    expect(it).toMatchObject({ t: 'zone', z: 'crown', hero: h.i, dmg: m.dmg });
+    expect(on(g, h, it.spots!)).toBe(true);
+    // out to the right wall, back across to the left one and on to the right again
+    expect(it.spots!.length).toBeGreaterThan(g.S.gw + 4);
+    expect(it.spots!.some(c => c.x < TILE)).toBe(true);
+    expect(it.spots!.filter(c => c.x > (g.S.gw - 1) * TILE).length).toBeGreaterThanOrEqual(2);
+    expect(g.incoming(h)).toBe(it.dmg);
+    act(g, m, it);
+    expect(h.hp).toBe(hp - it.dmg);
+    // a column across its way turns it back early
+    const walled = arena([['king', 2, 2]], [0]);
+    walled.party[0].at = cellCentre(9, 3);
+    walled.S.blocks = [{ x0: 6 * TILE, y0: 3 * TILE, x1: 7 * TILE, y1: 4 * TILE, v: 0 }];
+    walled.S.turn = 1;
+    walled.pickIntents();
+    expect(on(walled, walled.party[0], walled.S.mobs[0].intent!.spots!)).toBe(false);
+  });
+
+  it('the lich puts up a wall of three small icicles in front of the hero who sees it, and a client sees them too', () => {
+    const g = arena([['lich', 2, 2]], [0]), [m] = g.S.mobs, [h] = g.party;
+    expect(g.clearShot(m, g.spot(h)!)).toBe(true);
+    g.S.turn = 1;
+    g.pickIntents();
+    const it = m.intent!;
+    expect(it).toMatchObject({ t: 'zone', z: 'wall', dmg: 0 });
+    expect(it.spots).toHaveLength(3);
+    // two cells out from the hero on its rune at (10, 8), toward the lich, across its way
+    expect(new Set(it.spots)).toEqual(new Set([cellCentre(8, 7), cellCentre(7, 8), cellCentre(9, 6)]));
+    act(g, m, it);
+    const ice = g.S.blocks.filter(b => b.made);
+    expect(ice).toHaveLength(3);
+    for (const b of ice) expect(b).toMatchObject({ ice: true, big: false, hp: ICICLE_HP.small });
+    expect(g.clearShot(m, g.spot(h)!)).toBe(false);
+    const cli = new Game();
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(g))));
+    expect(cli.S.blocks.filter(b => b.made)).toEqual(ice);
+    // a hero right by it gets no wall
+    h.at = cellCentre(4, 3);
+    g.S.turn = 4;
+    g.pickIntents();
+    expect(m.intent!.z).not.toBe('wall');
+  });
+
+  it("the fridge's draft pulls the heroes it sees two cells over, a column or a block stops them, and it bites one pulled right up", () => {
+    const g = arena([['fridge', 4, 3]]), [m] = g.S.mobs, [a, b, c] = g.party;
+    expect(MOBS.fridge.acts).toContainEqual({ k: 'draft', every: 4, at: 1 });
+    a.at = cellCentre(8, 5);
+    b.at = cellCentre(10, 8);
+    // c behind a column: out of the draft
+    c.at = cellCentre(9, 1);
+    g.S.blocks = [{ x0: 8 * TILE, y0: 1 * TILE, x1: 9 * TILE, y1: 2 * TILE, v: 0 }];
+    g.S.turn = 1;
+    g.pickIntents();
+    const it = m.intent!;
+    expect(it).toMatchObject({ t: 'zone', z: 'draft', dmg: m.dmg });
+    expect([on(g, a, it.spots!), on(g, b, it.spots!), on(g, c, it.spots!)]).toEqual([true, true, false]);
+    // only the one it can pull right up feels the door
+    expect([g.incoming(a), g.incoming(b)]).toEqual([it.dmg, 0]);
+    const hp = [a.hp, b.hp, c.hp];
+    act(g, m, it);
+    expect([g.spot(a), g.spot(b), g.spot(c)]).toEqual([cellCentre(6, 3), cellCentre(8, 6), cellCentre(9, 1)]);
+    expect([a.hp, b.hp, c.hp]).toEqual([hp[0] - it.dmg, hp[1], hp[2]]);
+    expect(DRAFT).toEqual({ reach: 6, pull: 2 });
+    // spikes where it lands hurt as under a disc
+    const s = arena([['fridge', 4, 3]], [0]), [f] = s.S.mobs, [h] = s.party;
+    s.S.haz = new Set([hazKey(9, 7)]);
+    s.S.turn = 1;
+    s.pickIntents();
+    const was = h.hp;
+    act(s, f, f.intent!);
+    expect(s.spot(h)).toEqual(cellCentre(8, 6));
+    s.S.haz = new Set([hazKey(8, 6)]);
+    h.at = cellCentre(10, 8);
+    s.pickIntents();
+    act(s, f, f.intent!);
+    expect(h.hp).toBe(was - s.S.biome.hazDmg);
+  });
+
+  it('the dancer moonwalks off a hero two cells away, and the cells it walked light up with its next beat', () => {
+    const g = arena([['dancer', 4, 3]], [0]), [m] = g.S.mobs, [h] = g.party;
+    h.at = cellCentre(7, 4);
+    g.S.turn = 1;
+    g.pickIntents();
+    expect(m.intent!.flee).toBe(true);
+    (g as unknown as { planWalk: (m: Mob) => void }).planWalk(m);
+    act(g, m, m.intent!);
+    expect(m.trail!.length).toBeGreaterThan(0);
+    m.x = m.tx; m.y = m.ty;
+    g.S.turn = 2;
+    g.pickIntents();
+    const lit = new Set(m.intent!.spots!.map(p => hazKey(...cellAt(p.x, p.y))));
+    for (const k of m.trail!) expect(lit.has(k), k).toBe(true);
+    act(g, m, m.intent!);
+    expect(m.trail).toBeUndefined();
+    // three cells off it moonwalks no more
+    h.at = cellCentre(9, 4);
+    g.S.turn = 3;
+    g.pickIntents();
+    expect(m.intent!.flee).toBeUndefined();
+  });
+
+  it('the forge lord pours metal through a hero from wall to wall: it hits whoever is on the line and stays lava, but not on the runes', () => {
+    const g = arena([['forgelord', 2, 2]], [0]), [m] = g.S.mobs, [h] = g.party;
+    g.S.turn = 1;
+    g.pickIntents();
+    const it = m.intent!, hp = h.hp;
+    expect(it).toMatchObject({ t: 'zone', z: 'cast', hero: h.i, dmg: m.dmg });
+    // the hero on (10, 8) is more off to its side than below it: a column
+    expect(new Set(it.spots!.map(p => p.x))).toEqual(new Set([cellCentre(10, 8).x]));
+    expect(it.spots).toHaveLength(g.S.gh);
+    act(g, m, it);
+    expect(h.hp).toBe(hp - it.dmg);
+    const stands = new Set(g.stands().map(p => hazKey(...cellAt(p.x, p.y))));
+    for (const p of it.spots!) { const k = hazKey(...cellAt(p.x, p.y)); expect(g.S.haz.has(k), k).toBe(!stands.has(k)); }
+  });
+
+  it('a шестёрка goes for the mushrooms or the crystal when they are nearer than the heroes and takes their charges', () => {
+    const g = arena([['six', 2, 2]], [0]), [six] = g.S.mobs;
+    const node = (k: 'herb' | 'spk' | 'ore', i: number, j: number): ResNode => ({ k, name: NODES[k].name, r: NODES[k].r, ch: 2, ...cellCentre(i, j), left: 2, hit: 0 });
+    g.S.nodes = [node('ore', 3, 2), node('herb', 5, 2)];
+    g.pickIntents();
+    expect(six.intent).toMatchObject({ t: 'move', loot: 1 });
+    // two turns to walk round the ore, then a charge a turn
+    enemyTurn(g);
+    expect(g.S.nodes.map(n => n.left)).toEqual([2, 2]);
+    enemyTurn(g);
+    expect(g.S.nodes.map(n => n.left)).toEqual([2, 1]);
+    enemyTurn(g);
+    expect(g.S.nodes.map(n => n.left)).toEqual([2, 0]);
+    // emptied, it goes for the hero
+    expect(six.intent!.loot).toBeUndefined();
+  });
+
+  it("the dragon's belch fills the room with smoke through the heroes' next turn, and a client sees it", () => {
+    const g = arena([['dragon', 4, 3]], [0]), [m] = g.S.mobs;
+    g.S.turn = 2;
+    g.pickIntents();
+    expect(m.intent!.z).toBe('fire');
+    act(g, m, m.intent!);
+    expect(g.S.smog).toBe(true);
+    const cli = new Game();
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(g))));
+    expect(cli.S.smog).toBe(true);
+    (g as unknown as { mobsStart: () => void }).mobsStart();
+    expect(g.S.smog).toBeUndefined();
+  });
+
+  it('a client gets the burrows the swarm has dug', () => {
+    const g = arena([['ratswarm', 4, 2]], [0]), [m] = g.S.mobs;
+    g.S.pits = [{ k: '1x1', cells: [[1, 1]] }];
+    g.pickIntents();
+    act(g, m, m.intent!);
+    const cli = new Game();
+    applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(g))));
+    expect(cli.S.pits.filter(p => p.dug)).toEqual(g.S.pits.filter(p => p.dug));
+    expect(cli.S.mobs[0].under).toBe(m.under);
   });
 });

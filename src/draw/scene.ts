@@ -481,7 +481,7 @@ export class SceneRenderer {
 
     this.drawOmens();
     this.drawPuffs();
-    if (S.spec.smoke && S.phase !== 'over') this.drawSmoke(view);
+    if ((S.spec.smoke || S.smog) && S.phase !== 'over') this.drawSmoke(view);
     this.drawAimPull(aim);
     this.drawFx();
     this.drawIntroOver();
