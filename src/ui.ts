@@ -563,6 +563,10 @@ export class Hud {
         beam: () => t('Светомузыка: лучи по жёлтым клеткам через всю комнату, на {0}', n),
         roll: () => t('Покатится по оранжевой дорожке и задавит всех на ней на {0}', n),
         fire: () => t('Отрыжка: кто останется на огненной линии, получит удар на {0} и загорится', n),
+        crown: () => t('Корона-бумеранг: полетит по золотой дорожке, дважды отскочит и ударит всех на ней на {0}', n),
+        wall: () => t('Ледяная стена: на голубых клетках вырастут сосульки'),
+        draft: () => t('Сквозняк: кого видит на бледно-голубых клетках, протащит к себе на 2 клетки, а кто окажется вплотную, получит дверцей на {0}', n),
+        cast: () => t('Литьё: кто останется на оранжевой линии, получит удар на {0}, а линия станет лавой до конца боя', n),
       }[z]();
       return { badge: n ? `<span class="ib hit" style="--c:${ZONE_COL[z]}">${n}</span>` : `<span class="ib sp">${icon(z === 'fire' ? 'fire' : 'chill')}</span>`, txt };
     }
@@ -573,6 +577,8 @@ export class Hud {
       if (!it.dmg) return { badge: `<span class="ib sp">${icon('daze')}</span>`, txt: t('Наденет {0} на голову {1}: следующий ход без линии прицела', tgt!.def.dat, f.acc) };
       return { badge: `<span class="ib hit" style="--c:${tgt!.def.col}">${it.dmg}</span>`, txt: f.chill ? t('Швырнёт {0} в {1} на {2}, морозит', f.acc, acc, it.dmg) : t('Швырнёт {0} в {1} на {2}', f.acc, acc, it.dmg) };
     }
+    // a шестёрка goes to take the charges of the mushrooms or the crystal
+    if (it.loot !== undefined) return { badge: `<span class="ib sp">${icon('move')}</span>`, txt: g.S.nodes[it.loot]?.k === 'herb' ? t('Шмон: идёт отжать грибы') : t('Шмон: идёт отжать искры у кристалла') };
     // the swarm's last rats run, the dancer moonwalks off
     if (it.flee) return { badge: `<span class="ib sp">${icon('move')}</span>`, txt: d.moon ? t('Лунной походкой уходит от героя рядом') : t('Удирает от героев') };
     // drawn by the kid's firecracker: it runs to the noise and strikes nobody this turn

@@ -3,7 +3,7 @@
 
 import { AB_COST, HEROES } from './data';
 import type { Bank, Bomb, Cue, Cuffs, Disc, Float, Food, Game, Gas, HeroState, Phase, Spark, State } from './game';
-import type { Mob, RoomSpec, Trinket } from './room';
+import type { Block, Mob, Pit, RoomSpec, Trinket } from './room';
 import type { CampState } from './camp';
 import type { LootState } from './artifacts';
 import type { EventState } from './events';
@@ -34,6 +34,10 @@ export interface Snapshot {
   nodes: [number, number][];
   /** Hit points left on each icicle, in block order. */
   ice?: number[];
+  /** What the bosses have changed in the room since it was built: the rat swarm's new burrows, the lich's icicles, the dragon's smoke; older saves have none. */
+  dug?: Pit[];
+  made?: Block[];
+  smog?: boolean;
   discs: (Omit<Disc, 'hero'> & { hero: number })[];
   /** The cook's dishes on the floor; older saves have none. */
   food?: Food[];
@@ -72,6 +76,9 @@ export function snapshot(g: Game): Snapshot {
     mobs: S.mobs,
     nodes: S.nodes.map(n => [n.left, n.hit]),
     ice: S.blocks.filter(b => b.ice).map(b => b.hp!),
+    dug: S.pits.filter(p => p.dug),
+    made: S.blocks.filter(b => b.made),
+    smog: S.smog,
     discs: S.discs.filter(d => !d.gone).map(d => ({ ...d, hero: d.hero.i })),
     food: S.food,
     bombs: S.bombs,
@@ -137,6 +144,10 @@ export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boo
     ready: s.ready, done: s.done ?? [], away: s.away ?? [], log: s.log ?? [], shake: s.shake, mobs: s.mobs, floats: s.floats, sparks: s.sparks,
   });
   S.nodes.forEach((n, k) => { if (s.nodes[k]) [n.left, n.hit] = s.nodes[k]; });
+  // the room's own holes and blocks first, then what the bosses have added, in the host's order
+  S.pits = [...S.pits.filter(p => !p.dug), ...(s.dug ?? []).map(p => ({ ...p, cells: p.cells.map(([i, j]): [number, number] => [i, j]) }))];
+  S.blocks = [...S.blocks.filter(b => !b.made), ...(s.made ?? []).map(b => ({ ...b }))];
+  S.smog = s.smog;
   if (s.ice) S.blocks.filter(b => b.ice).forEach((b, k) => { if (s.ice![k] !== undefined) b.hp = s.ice![k]; });
   S.discs = s.discs.map(d => ({ ...d, hero: g.heroOf(d.hero) }));
   S.food = (s.food ?? []).map(f => ({ ...f }));
