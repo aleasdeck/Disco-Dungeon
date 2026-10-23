@@ -44,6 +44,11 @@ export const FOOD_HEAL = 3;
 export const FOOD_MAX = 9;
 /** Beating a floor's boss gives every hero back this share of their most health, up to the top; a fallen hero gets up with it. */
 export const BOSS_HEAL = 0.5;
+/**
+ * A hero who fell in a room the rest of the party won gets up as the next room begins, with this much health; the camp's fire
+ * and a beaten boss get the fallen up sooner, with half.
+ */
+export const RISE_HP = 1;
 /** An elite beaten: every hero gets this many stat levels free, picked in the blacksmith's sharpening window right after the fight. */
 export const ELITE_UPS = 1;
 /**

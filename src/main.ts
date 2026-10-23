@@ -1,5 +1,5 @@
 import './style.css';
-import { AB_COST, BOOT_GAGS, COMBAT_ROOMS, HEROES, MAX_PLAYERS, MOBS, WALL_H, forgeOre, type MobKind } from './data';
+import { AB_COST, BOOT_GAGS, COMBAT_ROOMS, HEROES, MAX_PLAYERS, MOBS, RISE_HP, WALL_H, forgeOre, type MobKind } from './data';
 import { Camera } from './camera';
 import { Game, newBank, newParty, newTally, type HeroState } from './game';
 import { Net, type Player } from './net';
@@ -943,6 +943,10 @@ game.onRoomEnd = win => {
     // the boss gave every hero back half their health as it fell (Game.bossHeal)
     const solo = game.party.length === 1 && game.party[0].def;
     const healed = !boss ? '' : solo ? M('{0} {1?восстановила|восстановил} половину здоровья.', solo.name, solo.fem) : 'Герои восстановили половину здоровья.';
+    // a hero who fell in a room the others won gets up as the next fight begins (Game.loadRoom), or with half by the fire
+    const down = game.party.filter(h => h.hp <= 0).map(h => h.def.name);
+    const rise = !down.length ? '' : down.length === 1 ? M('{0} встанет с {1} HP к следующему бою, у костра с половиной.', down[0], RISE_HP)
+      : M('{0} и {1} встанут с {2} HP к следующему бою, у костра с половиной.', down.slice(0, -1), down[down.length - 1], RISE_HP);
     const clean = game.clean ? M('Без царапины: +{0} руды.', game.clean) : '';
     // an elite pays a stat level for every hero, taken in the sharpening window the result screen leads to
     const elite = S.spec.type === 'elite';
@@ -950,7 +954,7 @@ game.onRoomEnd = win => {
     showEnd({ title: boss ? M('Этаж {0} пройден', run.floor) : cave ? (game.cleared() ? 'Пещера выбрана дочиста' : 'Ходы кончились') : elite ? 'Элита повержена' : 'Комната зачищена',
       // the bookie's bet comes after the ore
       text: cave ? Mjoin(M('Добыто руды: {0}.', game.mined), rooms)
-        : Mjoin(M('Ходов: {0}.', S.turn), healed, clean, game.betLine, elite ? 'Гном-кузнец бесплатно заточит каждому диск.' : '', rooms),
+        : Mjoin(M('Ходов: {0}.', S.turn), healed, rise, clean, game.betLine, elite ? 'Гном-кузнец бесплатно заточит каждому диск.' : '', rooms),
       kind: 'map', next: elite ? 'whet' : undefined });
     shareMap();
   }, 900);
