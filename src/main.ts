@@ -35,6 +35,10 @@ import { creditRun, demoLocked, dueEvents, locked, openEvents, openedBy, runGain
 import { STAND_MATS, type StandMat } from './stands';
 import { noteRoom } from './dossier';
 import { setOut } from './volume';
+import { LANGS, M, Mjoin, detectLang, isLang, lang, onLang, scanDom, setLang, t, type Lang } from './i18n';
+
+// the page's own Russian text, found before the game writes anything into the page
+scanDom();
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -197,7 +201,7 @@ let ending: HostSave['ending'] = null;
 /** Client: bumped to cancel a reconnect in progress. */
 let reconnecting = 0;
 
-const playerName = () => settings.name || 'Игрок';
+const playerName = () => settings.name || t('Игрок');
 const ownerOf = (i: number) => players.find(p => p.hero === i)?.id ?? 'host';
 
 /** A player who drops out mid-game is waited for this long before the others go on without them: a reload is back sooner. */
@@ -257,8 +261,8 @@ function wait(title: string, text = '', away = false, win = false, lose = false)
   $('waitScreen').hidden = !title;
   victory($('waitScreen'), win && !!title);
   $('waitScreen').classList.toggle('lose', lose);
-  $('waitTitle').textContent = title;
-  $('waitText').innerHTML = text;
+  $('waitTitle').textContent = t(title);
+  $('waitText').textContent = t(text);
   $('waitNote').hidden = away || mode !== 'client';
   $('waitLeave').hidden = !away;
 }
@@ -456,7 +460,7 @@ function showCamp() {
   $('campScreen').hidden = !open;
   liftStrip();
   if (!open) return;
-  const nameOf = game.online ? (h: HeroState) => players.find(p => p.hero === h.i)?.name ?? h.def.name : team() ? (h: HeroState) => h.def.name : undefined;
+  const nameOf = game.online ? (h: HeroState) => players.find(p => p.hero === h.i)?.name ?? t(h.def.name) : team() ? (h: HeroState) => t(h.def.name) : undefined;
   campView.render(camp!, campHero(), game.party, nameOf, campAsked, team());
 }
 
@@ -620,19 +624,20 @@ function eventVotes(): EventVotes | undefined {
   const table = mode === 'host' ? atTable() : mode === 'client' ? voters : [];
   if (!ev || table.length < 2) return undefined;
   const me = myHero(), cast = ev.votes;
-  const nameOf = (h: number) => players.find(p => p.hero === h)?.name ?? HEROES[h].name;
+  const nameOf = (h: number) => players.find(p => p.hero === h)?.name ?? t(HEROES[h].name);
   const faces: EventVotes['faces'] = {};
   if (stageOf(ev) === 'sell') {
     // at the pawnshop nobody votes: each hands over their own
-    const left = sellersLeft(ev, game.party, table).map(h => (h.i === me ? 'ты' : nameOf(h.i)));
-    return { faces, mine: null, note: left.length ? `Ещё выбирают: ${left.join(', ')}.` : '' };
+    const left = sellersLeft(ev, game.party, table).map(h => (h.i === me ? t('ты') : nameOf(h.i)));
+    return { faces, mine: null, note: left.length ? t('Ещё выбирают: {0}.', left) : '' };
   }
   for (const h of table) if (cast[h] !== undefined) (faces[cast[h]] ??= []).push({ col: HEROES[h].col, name: nameOf(h), me: h === me, face: faceUrl(game.party.find(o => o.i === h) ?? { i: h, def: HEROES[h] }) });
-  const idle = table.filter(h => cast[h] === undefined).map(h => (h === me ? 'ты' : nameOf(h)));
-  const what = stageOf(ev) === 'hero' ? 'одного героя' : stageOf(ev) === 'cups' ? 'один стакан' : 'одно и то же';
-  const note = idle.length === table.length ? `Выбор общий: отряд сделает то, что нажмут все.`
-    : idle.length ? `Ещё не выбрали: ${idle.join(', ')}.`
-    : `Голоса разошлись. Договоритесь и нажмите ${what}.`;
+  const idle = table.filter(h => cast[h] === undefined).map(h => (h === me ? t('ты') : nameOf(h)));
+  const stage = stageOf(ev);
+  const note = idle.length === table.length ? t('Выбор общий: отряд сделает то, что нажмут все.')
+    : idle.length ? t('Ещё не выбрали: {0}.', idle)
+    : t(stage === 'hero' ? 'Голоса разошлись. Договоритесь и нажмите одного героя.' : stage === 'cups' ? 'Голоса разошлись. Договоритесь и нажмите один стакан.'
+      : 'Голоса разошлись. Договоритесь и нажмите одно и то же.');
   return { faces, mine: me !== null ? cast[me] ?? null : null, note };
 }
 
@@ -648,7 +653,7 @@ function showLoot() {
   lootShows = open ? 'loot' : mine ? 'kept' : null;
   $('lootScreen').hidden = !lootShows;
   if (!lootShows) return;
-  const nameOf = game.online ? (h: HeroState) => players.find(p => p.hero === h.i)?.name ?? h.def.name : team() ? (h: HeroState) => h.def.name : undefined;
+  const nameOf = game.online ? (h: HeroState) => players.find(p => p.hero === h.i)?.name ?? t(h.def.name) : team() ? (h: HeroState) => t(h.def.name) : undefined;
   if (mine) lootView.render(mine, meHero(), game.party, undefined, nameOf, false, true);
   else lootView.render(loot!, lootHero(), game.party, lootVotes(), nameOf, team());
 }
@@ -797,14 +802,14 @@ function lootVotes(): LootVotes | undefined {
   const table = mode === 'host' ? atTable() : mode === 'client' ? voters : [];
   if (!loot || table.length < 2) return undefined;
   const me = myHero(), picks = loot.picks;
-  const nameOf = (h: number) => players.find(p => p.hero === h)?.name ?? HEROES[h].name;
+  const nameOf = (h: number) => players.find(p => p.hero === h)?.name ?? t(HEROES[h].name);
   const faces: LootVotes['faces'] = {};
   for (const h of table) if (picks[h] !== undefined) (faces[picks[h]] ??= []).push({ col: HEROES[h].col, name: nameOf(h), me: h === me, face: faceUrl(game.party.find(o => o.i === h) ?? { i: h, def: HEROES[h] }) });
-  const idle = table.filter(h => picks[h] === undefined).map(h => (h === me ? 'ты' : nameOf(h)));
+  const idle = table.filter(h => picks[h] === undefined).map(h => (h === me ? t('ты') : nameOf(h)));
   const clash = Object.values(faces).some(f => f.length > 1);
-  const note = clash ? 'Двое тянут один трофей. Договоритесь, кому что.'
-    : idle.length === table.length ? (table.length < loot.offer.length ? 'Каждый берёт свой трофей, лишний останется лежать.' : 'Каждый берёт свой трофей, один на двоих не взять.')
-    : `Ещё не выбрали: ${idle.join(', ')}.`;
+  const note = clash ? t('Двое тянут один трофей. Договоритесь, кому что.')
+    : idle.length === table.length ? t(table.length < loot.offer.length ? 'Каждый берёт свой трофей, лишний останется лежать.' : 'Каждый берёт свой трофей, один на двоих не взять.')
+    : t('Ещё не выбрали: {0}.', idle);
   return { faces, mine: me !== null ? picks[me] ?? null : null, note };
 }
 
@@ -872,14 +877,14 @@ function mapVotes(): MapVotes | undefined {
   // this player's hero has fallen: the others pick the room, and the map says so
   const out = me !== null && (mode === 'host' ? atTable() : mode === 'client' ? voters : []).includes(me) && !table.includes(me);
   if (!choosing || (table.length < 2 && !out)) return undefined;
-  const nameOf = (h: number) => players.find(p => p.hero === h)?.name ?? HEROES[h].name;
+  const nameOf = (h: number) => players.find(p => p.hero === h)?.name ?? t(HEROES[h].name);
   const pips: MapVotes['pips'] = {};
   for (const h of table) if (votes[h]) (pips[votes[h]] ??= []).push({ hero: h, col: HEROES[h].col, name: nameOf(h), face: faceUrl(game.party.find(o => o.i === h) ?? { i: h, def: HEROES[h] }) });
-  const idle = table.filter(h => !votes[h]).map(h => (h === me ? 'ты' : nameOf(h)));
-  const note = out ? `Ты ${HEROES[me].fem ? 'пала' : 'пал'}: комнату выбирают живые, ты идёшь с ними.`
-    : idle.length === table.length ? 'Идём, когда все нажмут одну и ту же комнату.'
-    : idle.length ? `Ещё не выбрали: ${idle.join(', ')}.`
-    : 'Голоса разошлись. Договоритесь и нажмите одну комнату.';
+  const idle = table.filter(h => !votes[h]).map(h => (h === me ? t('ты') : nameOf(h)));
+  const note = out ? t('Ты {0?пала|пал}: комнату выбирают живые, ты идёшь с ними.', HEROES[me].fem)
+    : idle.length === table.length ? t('Идём, когда все нажмут одну и ту же комнату.')
+    : idle.length ? t('Ещё не выбрали: {0}.', idle)
+    : t('Голоса разошлись. Договоритесь и нажмите одну комнату.');
   return { pips, mine: me !== null ? votes[me] ?? null : null, note };
 }
 
@@ -909,12 +914,14 @@ game.onRoomEnd = win => {
       runOver = true;
       if (mode === 'solo') clearCampaign();
     }
-    if (!win) return showEnd({ title: game.party.length > 1 ? 'Отряд пал' : 'Герой пал', text: `Забег окончен на этаже ${run.floor + 1}, сложность ${S.spec.depth}.`, kind: 'again', album: albumOf(false) });
+    // the lines of the result are kept as they are and put in each player's language on their own screen
+    if (!win) return showEnd({ title: game.party.length > 1 ? 'Отряд пал' : 'Герой пал', text: M('Забег окончен на этаже {0}, сложность {1}.', run.floor + 1, S.spec.depth), kind: 'again', album: albumOf(false) });
     if (last) {
-      const left = game.alive().map(h => h.def.name).join(', '), fell = MOBS[bossOf(S.spec)];
+      const fell = MOBS[bossOf(S.spec)], went = run.path.reduce((a, p) => a + p.length, 0);
       return showEnd({ title: 'Вы победили!', kind: 'win',
-        text: `${fell.name} ${fell.fem ? 'повержена' : 'повержен'}, ${DEMO ? 'демо пройдено' : 'все три этажа позади'}. Комнат пройдено: ${run.path.reduce((a, p) => a + p.length, 0)}.`
-          + (game.party.length > 1 ? ` Дошли до конца: ${left}.` : ''),
+        text: Mjoin(DEMO ? M('{0} {1?повержена|повержен}, демо пройдено. Комнат пройдено: {2}.', fell.name, fell.fem, went)
+          : M('{0} {1?повержена|повержен}, все три этажа позади. Комнат пройдено: {2}.', fell.name, fell.fem, went),
+        game.party.length > 1 ? M('Дошли до конца: {0}.', game.alive().map(h => h.def.name)) : ''),
         album: albumOf(true) });
     }
     if (boss) run.floor++;
@@ -932,21 +939,22 @@ game.onRoomEnd = win => {
     }
     choosing = true;
     // the ore cave ends when its turns are up or everything in it is spent: it tells how much ore it gave
-    const cave = game.cave(), rooms = `Пройдено комнат: ${run.path.reduce((a, p) => a + p.length, 0)} из ${FLOORS * LAYERS}.`;
+    const cave = game.cave(), rooms = M('Пройдено комнат: {0} из {1}.', run.path.reduce((a, p) => a + p.length, 0), FLOORS * LAYERS);
     // the boss gave every hero back half their health as it fell (Game.bossHeal)
     const solo = game.party.length === 1 && game.party[0].def;
-    const healed = !boss ? '' : solo ? `${solo.name} ${solo.fem ? 'восстановила' : 'восстановил'} половину здоровья. ` : 'Герои восстановили половину здоровья. ';
+    const healed = !boss ? '' : solo ? M('{0} {1?восстановила|восстановил} половину здоровья.', solo.name, solo.fem) : 'Герои восстановили половину здоровья.';
     // a hero who fell in a room the others won gets up as the next fight begins (Game.loadRoom), or with half by the fire
     const down = game.party.filter(h => h.hp <= 0).map(h => h.def.name);
-    const rise = !down.length ? '' : `${down.join(' и ')} ${down.length > 1 ? 'встанут' : 'встанет'} с ${RISE_HP} HP к следующему бою, у костра с половиной. `;
-    const clean = game.clean ? `Без царапины: +${game.clean} руды. ` : '';
-    // the bookie's bet
-    const bet = game.betLine ? game.betLine + ' ' : '';
+    const rise = !down.length ? '' : down.length === 1 ? M('{0} встанет с {1} HP к следующему бою, у костра с половиной.', down[0], RISE_HP)
+      : M('{0} и {1} встанут с {2} HP к следующему бою, у костра с половиной.', down.slice(0, -1), down[down.length - 1], RISE_HP);
+    const clean = game.clean ? M('Без царапины: +{0} руды.', game.clean) : '';
     // an elite pays a stat level for every hero, taken in the sharpening window the result screen leads to
     const elite = S.spec.type === 'elite';
     if (elite) game.sharpen(S.spec.depth);
-    showEnd({ title: boss ? `Этаж ${run.floor} пройден` : cave ? (game.cleared() ? 'Пещера выбрана дочиста' : 'Ходы кончились') : elite ? 'Элита повержена' : 'Комната зачищена',
-      text: cave ? `Добыто руды: ${game.mined}. ${rooms}` : `Ходов: ${S.turn}. ${healed}${rise}${clean}${bet}${elite ? 'Гном-кузнец бесплатно заточит каждому диск. ' : ''}${rooms}`,
+    showEnd({ title: boss ? M('Этаж {0} пройден', run.floor) : cave ? (game.cleared() ? 'Пещера выбрана дочиста' : 'Ходы кончились') : elite ? 'Элита повержена' : 'Комната зачищена',
+      // the bookie's bet comes after the ore
+      text: cave ? Mjoin(M('Добыто руды: {0}.', game.mined), rooms)
+        : Mjoin(M('Ходов: {0}.', S.turn), healed, rise, clean, game.betLine, elite ? 'Гном-кузнец бесплатно заточит каждому диск.' : '', rooms),
       kind: 'map', next: elite ? 'whet' : undefined });
     shareMap();
   }, 900);
@@ -962,7 +970,7 @@ function showEnd(e: Ending) {
     if (mode === 'client') wait('');
     showAlbum(e.album, {
       gains: runGains(run),
-      button: mode === 'client' ? null : mode === 'host' ? 'В лобби' : 'Новый забег',
+      button: mode === 'client' ? null : t(mode === 'host' ? 'В лобби' : 'Новый забег'),
       onButton: mode === 'host' ? backToLobby : () => { hideEnd(); openHeroSelect(); },
     });
     victory($('runEnd'), e.album.win);
@@ -972,9 +980,9 @@ function showEnd(e: Ending) {
   $('roomEnd').hidden = false;
   victory($('roomEnd'), e.kind === 'win');
   $('roomEnd').classList.toggle('lose', e.kind === 'again');
-  $('endTitle').textContent = e.title;
-  $('endText').textContent = e.text;
-  $('endBtn').textContent = e.next === 'whet' ? 'К заточке' : e.kind === 'map' ? 'К карте' : mode === 'host' ? 'В лобби' : 'Новый забег';
+  $('endTitle').textContent = t(e.title);
+  $('endText').textContent = t(e.text);
+  $('endBtn').textContent = t(e.next === 'whet' ? 'К заточке' : e.kind === 'map' ? 'К карте' : mode === 'host' ? 'В лобби' : 'Новый забег');
   // after an elite the sharpening window is under the result screen: the map opens once the hero has taken its level
   $('endBtn').onclick = e.next === 'whet' ? () => { hideEnd(); hud.refresh(); }
     : e.kind === 'map' ? () => { hideEnd(); showMap(true); }
@@ -1046,7 +1054,9 @@ document.querySelectorAll<HTMLButtonElement>('#help .tab').forEach(b => b.addEve
 
 /** v<major.minor>.<build>, put in by vite.config.ts at the build. */
 declare const __VERSION__: string;
-$('menuVer').textContent = __VERSION__ + (DEMO ? ' · демо' : '');
+const showVer = () => { $('menuVer').textContent = DEMO ? t('{0} · демо', __VERSION__) : __VERSION__; };
+showVer();
+onLang(showVer);
 document.body.classList.toggle('demo', DEMO);
 
 /** A campaign to go on with: the one on screen, or after the game was closed (or played online) the one this browser kept. */
@@ -1063,7 +1073,7 @@ $('heroBack').addEventListener('click', openMenu);
 $('heroGo').addEventListener('click', () => {
   if (settings.party.length !== settings.size) return;
   // the run under way would be gone
-  if (unfinished() && !confirm('Начать новый забег? Начатый забег пропадёт.')) return;
+  if (unfinished() && !confirm(t('Начать новый забег? Начатый забег пропадёт.'))) return;
   if (tutor.offers) startWarmup(settings.party);
   else startCampaign(settings.party);
 });
@@ -1120,7 +1130,7 @@ $('pHelp').addEventListener('click', () => {
 $('pMenu').addEventListener('click', () => {
   // the campaign waits behind the menu as it is, the map or a window between rooms included, until «Продолжить»
   if (mode === 'solo') { keepRun(performance.now(), true); openMenu(); return; }
-  if (game.online && !confirm('Выйти из сетевой игры?')) return;
+  if (game.online && !confirm(t('Выйти из сетевой игры?'))) return;
   leaveOnline();
   showMap(false);
   hideEnd();
@@ -1350,6 +1360,7 @@ net.onJoin = id => setTimeout(() => { if (!players.some(p => p.id === id)) net.k
 function welcome(id: string, name: string, key: string, demo: boolean) {
   // the demo and the full game play different runs: a room lets in only its own version
   if (demo !== DEMO) {
+    // a line the player who is let in or not reads in their own language
     net.sendTo(id, { t: 'deny', text: DEMO ? 'Это комната демо-версии. Зайди по ссылке хозяина.' : 'Это комната полной версии, а у тебя демо. Зайди по ссылке хозяина.' });
     setTimeout(() => net.kick(id), 300);
     return;
@@ -1369,7 +1380,7 @@ function welcome(id: string, name: string, key: string, demo: boolean) {
       shareMap();
       net.sendTo(id, { t: 'screen', ...lastScreen });
       if (ending?.kind === 'map' || ending?.album) net.sendTo(id, { t: 'end', e: ending });
-      game.float(game.S.Wx / 2, 20, `${name} вернулся`, '#c7cbe0');
+      game.float(game.S.Wx / 2, 20, M('{0} вернулся', name), '#c7cbe0');
       if (back.hero !== null) leftAt.delete(back.hero);
       setOnline('host');
       seatAway();
@@ -1399,7 +1410,7 @@ net.onLeave = id => {
   // mid-game the hero stays; the host may play it until its player comes back, and the others wait a little for them
   const p = players.find(o => o.id === id);
   if (!p) return;
-  game.float(game.S.Wx / 2, 20, `${p.name} отключился`, '#c7cbe0');
+  game.float(game.S.Wx / 2, 20, M('{0} отключился', p.name), '#c7cbe0');
   if (p.hero !== null) leftAt.set(p.hero, Date.now());
   setOnline('host');
   hud.buildAllies();
@@ -1531,7 +1542,7 @@ async function reopen(code: string) {
     wait('');
     leaveOnline();
     openMenu();
-    alert(`Не удалось вернуть комнату. ${(e as Error).message}`);
+    alert(t('Не удалось вернуть комнату. {0}', (e as Error).message));
     return;
   }
   wait('');
@@ -1612,7 +1623,7 @@ function resumeCampaign() {
     hud.buildAllies();
     controls.fit();
     openMenu();
-    alert('Не удалось продолжить сохранённый забег.');
+    alert(t('Не удалось продолжить сохранённый забег.'));
     return;
   }
   runOver = false;
@@ -1846,20 +1857,66 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) { kee
 const GAG_TIME = 2800;
 /** The loading screen is gone. */
 let booted = false;
+/** Every picture and font is in. */
+let loaded = false;
 
-// the loading screen's gags, in a fresh order each time, faded from one to the next
+// the language: the one picked before, or for a new player the browser's until they pick one on the loading screen; its
+// table comes in beside the pictures
+let langIn = setLang(isLang(settings.lang) ? settings.lang : detectLang());
+
+/** The languages on the loading screen, each by its own name, the one on (or just tapped) lit. */
+function bootLangs(on: Lang = lang()) {
+  $('bootLangs').innerHTML = LANGS.map(l =>
+    `<button type="button" role="radio" lang="${l.tag}" data-lang="${l.code}" aria-checked="${l.code === on}">${l.name}</button>`).join('');
+}
+bootLangs();
+$('bootLangs').addEventListener('click', e => {
+  const code = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-lang]')?.dataset.lang;
+  if (!isLang(code)) return;
+  settings.lang = code;
+  saveSettings();
+  bootLangs(code);
+  langIn = setLang(code);
+  go();
+});
+
+// the loading screen's gags, in a fresh order each time, faded from one to the next, in the language once its table is in
 const gags = BOOT_GAGS.slice();
 for (let i = gags.length - 1; i > 0; i--) {
   const j = Math.floor(Math.random() * (i + 1));
   [gags[i], gags[j]] = [gags[j], gags[i]];
 }
 let gagAt = 0;
-$('bootGag').textContent = gags[0];
+langIn.then(() => { $('bootGag').textContent = t(gags[gagAt]); });
 const gagTimer = setInterval(() => {
   const note = $('bootGag');
   note.classList.add('out');
-  setTimeout(() => { note.textContent = gags[(gagAt = (gagAt + 1) % gags.length)]; note.classList.remove('out'); }, 300);
+  setTimeout(() => { note.textContent = t(gags[(gagAt = (gagAt + 1) % gags.length)]); note.classList.remove('out'); }, 300);
 }, GAG_TIME);
+
+/**
+ * Once everything is in, the game goes on in the language picked. On the first start it waits for the pick: the bar and the
+ * gags make way for the languages alone.
+ */
+function go() {
+  if (!loaded) return;
+  if (!isLang(settings.lang)) { $('boot').classList.add('pick'); return; }
+  langIn.then(start);
+}
+
+// a change of language writes again what the game wrote itself; the page's own text is put in it by src/i18n.ts
+onLang(() => {
+  bootLangs();
+  hud.relang();
+  if (!booted) { $('bootGag').textContent = t(gags[gagAt]); return; }
+  showEvent();
+  showCamp();
+  showLoot();
+  if (!$('mapScreen').hidden) showMap(true);
+  if (!$('lobby').hidden) lobbyView();
+  stale = true;
+  dirty = true;
+});
 
 /** Leaves the loading screen for the menu, or for the lobby of a shared link or a room this browser dropped out of. */
 function start() {
@@ -1896,7 +1953,8 @@ loadAll(part => {
   hud.buildAllies();
   hud.refresh();
   stale = true;
-  start();
+  loaded = true;
+  go();
   // the offline cache, filled once the game has what it needs, so the two don't share the first download
   if (import.meta.env.PROD && 'serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 });

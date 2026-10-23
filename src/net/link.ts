@@ -3,6 +3,7 @@ import type { Msg } from '.';
 import { logMqttTo } from './mqtt';
 import { Channel, relayHost, relayJoin } from './relay';
 import { directLink, rtcAllowed, type Direct, type Signal } from './rtc';
+import { M } from '../i18n';
 
 /*
  * Links between the host and each player, the same way Dark Realm does it. The host registers a
@@ -35,7 +36,7 @@ const SHORT_MS = 60000;
 const IN_FLIGHT = 2;
 const BACKLOG = 256 * 1024;
 
-/** Connection events for the console: which way the link goes and why it dropped. */
+/** Connection events for the console, in English like the browser's own: which way the link goes and why it dropped. */
 export function note(text: string) {
   console.info(`[net] ${text}`);
 }
@@ -138,13 +139,13 @@ function wrap(
   const lost = (why: string) => {
     if (closed) return;
     const now = Date.now();
-    note(`связь (${label}) потеряна: ${why}, жила ${Math.round((now - opened) / 1000)} с`);
-    if (why === 'тишина') onSilent?.(now - opened);
+    note(`link (${label}) lost: ${why}, lived ${Math.round((now - opened) / 1000)} s`);
+    if (why === 'silence') onSilent?.(now - opened);
     stop();
     h.onClose();
   };
   const beat = setInterval(() => {
-    if (Date.now() - heard > SILENT_MS) lost('тишина');
+    if (Date.now() - heard > SILENT_MS) lost('silence');
     else send({ t: 'ping' });
   }, PING_MS);
   const take = (msg: Wire) => {
@@ -169,8 +170,8 @@ function wrap(
         // The last word over the relay: what follows comes the direct way.
         conn.send({ t: 'rtc', go: 1 });
         sendDirect = true;
-        note(`связь (${label}) переведена напрямую`);
-        label = 'напрямую';
+        note(`link (${label}) moved to direct`);
+        label = 'direct';
       },
       onData: (d) => {
         if (closed) return;
@@ -181,7 +182,7 @@ function wrap(
       },
       onClose: () => {
         direct = null;
-        if (sendDirect || theyDirect) lost('прямая связь закрыта');
+        if (sendDirect || theyDirect) lost('direct link closed');
       },
     });
   };
@@ -195,8 +196,8 @@ function wrap(
     if (!direct && upgrade === 'answer' && rtcAllowed()) goDirect();
     direct?.take({ sdp: msg.sdp });
   });
-  conn.on('close', () => lost('закрыта'));
-  conn.on('error', () => lost('ошибка'));
+  conn.on('close', () => lost('closed'));
+  conn.on('error', () => lost('error'));
   if (upgrade === 'offer' && rtcAllowed()) goDirect();
   return {
     send,
@@ -217,7 +218,7 @@ function peerError(err: unknown): string {
   if (type === 'peer-unavailable') return 'Комната не найдена. Проверь код, и чтобы хозяин комнаты был в лобби.';
   if (type === 'network' || type === 'server-error' || type === 'socket-error') return 'Нет связи с сервером комнат. Проверь интернет.';
   if (type === 'browser-incompatible') return 'Браузер не поддерживает WebRTC.';
-  return 'Ошибка соединения: ' + (type ?? String(err));
+  return M('Ошибка соединения: {0}', type ?? String(err));
 }
 
 /** An error opening a room or joining one, with PeerJS's error type kept for retries. */
@@ -279,7 +280,7 @@ export const hostRoom: OpenRoom = (code, onConnection) =>
     };
     const ready = (via: string) => {
       if (opened || closed) return;
-      note(`комната ${code} открыта (${via})`);
+      note(`room ${code} open (${via})`);
       opened = true;
       clearTimeout(giveUp);
       resolve(room);
@@ -322,8 +323,8 @@ export const hostRoom: OpenRoom = (code, onConnection) =>
       p.on('close', later);
       p.on('connection', (conn) => {
         conn.on('open', () => {
-          note('игрок подключился напрямую');
-          onConnection((h) => wrap(conn, h, 'напрямую'));
+          note('player joined directly');
+          onConnection((h) => wrap(conn, h, 'direct'));
         });
       });
     };
@@ -331,10 +332,10 @@ export const hostRoom: OpenRoom = (code, onConnection) =>
     const relay = relayHost(
       code,
       (ch) => {
-        note(`игрок подключился через ретранслятор ${ch.via}`);
-        onConnection((h) => wrap(ch, h, `ретранслятор ${ch.via}`, undefined, 'answer'));
+        note(`player joined through relay ${ch.via}`);
+        onConnection((h) => wrap(ch, h, `relay ${ch.via}`, undefined, 'answer'));
       },
-      () => ready('ретранслятор'),
+      () => ready('relay'),
     );
     const stopFront = onFront(() => {
       relay.wake();
@@ -412,9 +413,9 @@ export const joinRoom: JoinRoom = (code, h) =>
       if (via === 'direct') relay.cancel();
       else direct.cancel();
       if (parked && parked !== pipe) parked.close();
-      const label = via === 'direct' ? 'напрямую' : `ретранслятор ${(pipe as Channel).via}`;
+      const label = via === 'direct' ? 'direct' : `relay ${(pipe as Channel).via}`;
       // Why PeerJS didn't get there first, for the log.
-      const why = via === 'direct' ? '' : ` (PeerJS: ${directErr ? directErr.type || 'ошибка' : 'не успел'})`;
+      const why = via === 'direct' ? '' : ` (PeerJS: ${directErr ? directErr.type || 'error' : 'too slow'})`;
       note(`${code}: ${label}${why}`);
       const way = via === 'direct' ? 'direct' : 'relay';
       resolve(

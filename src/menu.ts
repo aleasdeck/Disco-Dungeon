@@ -20,6 +20,7 @@ import { nextStand, standDef } from './stands';
 import { dossierOf, inDossier } from './dossier';
 import { EVENTS, eventDef } from './events';
 import { renderKnob } from './volview';
+import { LANGS, isLang, lang, langTag, setLang, t } from './i18n';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -49,16 +50,16 @@ export function renderCollection(tab: 'heroes' | 'mobs' | 'arts' | 'events' | 't
       if (locked(def.key)) {
         drawShadow(cv, { i, def });
         card.classList.add('shut');
-        card.innerHTML = `<div></div><div><h3>???</h3><p>${DEMO ? '' : KINDS[kindAt(def.key)].one + '. '}${howToOpen(def.key)}</p>${shutStars(def.key)}</div>`;
+        card.innerHTML = `<div></div><div><h3>???</h3><p>${DEMO ? '' : `${t(KINDS[kindAt(def.key)].one)}. `}${howToOpen(def.key)}</p>${shutStars(def.key)}</div>`;
         card.firstElementChild!.replaceWith(cv);
         grid.appendChild(card);
         return;
       }
       drawPortrait(cv, { i, def });
       // starting health, then the same words as the disc upgrades: damage of a full straight throw, speed next to Ash's, speed kept off a wall
-      const stats = `<dt>HP</dt><dd>${def.hp}</dd><dt>Урон</dt><dd>${fullHit(def.m, def.pw)}</dd><dt>Скорость</dt><dd>${Math.round(def.pw * 100)}%</dd><dt>Отскок</dt><dd>${Math.round(def.e * 100)}%</dd>`;
-      card.innerHTML = `<div></div><div><h3 style="color:${def.col}">${def.name}</h3><p>${kindOf(def)}. Способность «${def.ab}»: ${def.abTxt} ${def.abMore}</p>`
-        + `<dl>${stats}<dt>Диск</dt><dd>${def.r * 2}</dd></dl></div>`;
+      const stats = `<dt>HP</dt><dd>${def.hp}</dd><dt>${t('Урон')}</dt><dd>${fullHit(def.m, def.pw)}</dd><dt>${t('Скорость')}</dt><dd>${Math.round(def.pw * 100)}%</dd><dt>${t('Отскок')}</dt><dd>${Math.round(def.e * 100)}%</dd>`;
+      card.innerHTML = `<div></div><div><h3 style="color:${def.col}">${t(def.name)}</h3><p>${t('{0}. Способность «{1}»: {2} {3}', kindOf(def), def.ab, def.abTxt, def.abMore)}</p>`
+        + `<dl>${stats}<dt>${t('Диск')}</dt><dd>${def.r * 2}</dd></dl></div>`;
       card.firstElementChild!.replaceWith(cv);
       grid.appendChild(card);
     });
@@ -70,8 +71,8 @@ export function renderCollection(tab: 'heroes' | 'mobs' | 'arts' | 'events' | 't
       const card = document.createElement('article'), feat = artLocked(a.key) && featOf(a.key);
       card.className = 'card col-art' + (feat ? ' shut' : '');
       card.innerHTML = `<span class="col-art-ico">${artIcon(a.key)}</span>`
-        + (feat ? `<div><h3>???</h3><p><b>Подвиг.</b> ${feat.how}</p>${feat.need ? `<p class="col-feat">${num(feat.now ?? 0)} из ${num(feat.need)}</p>` : ''}</div>`
-          : `<div><h3>${a.name}</h3><p><b>${a.txt}.</b> ${a.gag}</p></div>`);
+        + (feat ? `<div><h3>???</h3><p><b>${t('Подвиг.')}</b> ${t(feat.how)}</p>${feat.need ? `<p class="col-feat">${t('{0} из {1}', num(feat.now ?? 0), num(feat.need))}</p>` : ''}</div>`
+          : `<div><h3>${t(a.name)}</h3><p><b>${t(a.txt)}.</b> ${t(a.gag)}</p></div>`);
       grid.appendChild(card);
     }
   } else if (tab === 'events') {
@@ -90,25 +91,26 @@ function renderMobs(grid: HTMLElement) {
   const kinds = (Object.keys(MOBS) as MobKind[]).filter(inDossier), files = kinds.map(dossierOf);
   const head = document.createElement('p');
   head.className = 'tr-head';
-  head.innerHTML = `Встречено врагов: <b>${files.filter(f => f.met).length}</b> из ${kinds.length}. Строчек досье: <b>${files.reduce((n, f) => n + f.open, 0)}</b> из ${kinds.length * 2}. `
-    + `Строчки открываются победами: над обычным врагом 10 и 50 раз, над боссом 1 и 5 раз.`;
+  head.innerHTML = t('Встречено врагов: <b>{0}</b> из {1}. Строчек досье: <b>{2}</b> из {3}. Строчки открываются победами: над обычным врагом 10 и 50 раз, над боссом 1 и 5 раз.',
+    files.filter(f => f.met).length, kinds.length, files.reduce((n, f) => n + f.open, 0), kinds.length * 2);
   grid.append(head);
   kinds.forEach((k, at) => {
     const d = MOBS[k], f = files[at], card = document.createElement('article');
-    const where = `${FLOOR_NAMES[d.floor]}${d.boss ? ', босс' : CASTS.some(c => c.elite === k) ? ', элита' : ''}`;
+    const where = d.boss ? t('{0}, босс', FLOOR_NAMES[d.floor]) : CASTS.some(c => c.elite === k) ? t('{0}, элита', FLOOR_NAMES[d.floor]) : t(FLOOR_NAMES[d.floor]);
     card.className = 'card' + (f.met ? '' : ' shut');
     if (!f.met) {
-      card.innerHTML = `<img class="dark" src="${mobIcon(k)}" alt=""><div><h3>???</h3><p><b>${where}.</b> Ещё не ${d.fem ? 'встречалась' : 'встречался'}.</p></div>`;
+      card.innerHTML = `<img class="dark" src="${mobIcon(k)}" alt=""><div><h3>???</h3><p><b>${where}.</b> ${d.fem ? t('Ещё не встречалась.') : t('Ещё не встречался.')}</p></div>`;
       grid.appendChild(card);
       return;
     }
     // a boss as a party of three meets it, its extra health and blow (BOSS_UP) included
-    const up = BOSS_UP[k], won = d.fem ? 'Побеждена' : 'Побеждён';
-    const lines = (f.lines ?? []).map((line, i) => (i < f.open ? `<li><q>${line}</q></li>`
-      : `<li class="off">${d.boss ? (f.need[i] === 1 ? 'Откроется после первой победы' : `Откроется после ${f.need[i]} побед: ${f.n} из ${f.need[i]}`) : `Откроется после ${f.need[i]} побед над ${d.fem ? 'ней' : 'ним'}: ${f.n} из ${f.need[i]}`}</li>`)).join('');
-    card.innerHTML = `<img src="${mobIcon(k)}" alt=""><div><h3>${d.name}</h3><p><b>${where}.</b> ${d.txt}</p>`
-      + `<dl><dt>HP</dt><dd>${Math.round(d.hp * MOB_HP_MUL * toughOf(k) * (up?.hp[2] ?? 1))}</dd><dt>Удар</dt><dd>${Math.round((d.dmg + (up?.dmg[2] ?? 0)) * toughOf(k))}</dd>${d.armor ? `<dt>Броня</dt><dd>${d.armor}</dd>` : ''}</dl>`
-      + (d.boss && f.n ? `<p class="dos-n">${won} ${f.n} ${plural(f.n, 'раз', 'раза', 'раз')}</p>` : '')
+    const up = BOSS_UP[k];
+    const lines = (f.lines ?? []).map((line, i) => (i < f.open ? `<li><q>${t(line)}</q></li>`
+      : `<li class="off">${d.boss ? (f.need[i] === 1 ? t('Откроется после первой победы') : t('Откроется после {0} {0|победы|побед|побед}: {1} из {0}', f.need[i], f.n))
+        : d.fem ? t('Откроется после {0} {0|победы|побед|побед} над ней: {1} из {0}', f.need[i], f.n) : t('Откроется после {0} {0|победы|побед|побед} над ним: {1} из {0}', f.need[i], f.n)}</li>`)).join('');
+    card.innerHTML = `<img src="${mobIcon(k)}" alt=""><div><h3>${t(d.name)}</h3><p><b>${where}.</b> ${t(d.txt)}</p>`
+      + `<dl><dt>HP</dt><dd>${Math.round(d.hp * MOB_HP_MUL * toughOf(k) * (up?.hp[2] ?? 1))}</dd><dt>${t('Удар')}</dt><dd>${Math.round((d.dmg + (up?.dmg[2] ?? 0)) * toughOf(k))}</dd>${d.armor ? `<dt>${t('Броня')}</dt><dd>${d.armor}</dd>` : ''}</dl>`
+      + (d.boss && f.n ? `<p class="dos-n">${d.fem ? t('Побеждена {0} {0|раз|раза|раз}', f.n) : t('Побеждён {0} {0|раз|раза|раз}', f.n)}</p>` : '')
       + (lines ? `<ul class="dos-lines">${lines}</ul>` : '') + '</div>';
     grid.appendChild(card);
   });
@@ -122,15 +124,15 @@ function renderEvents(grid: HTMLElement) {
   const keys = EVENTS.map(e => e.key).sort((a, b) => +eventLocked(a) - +eventLocked(b));
   const head = document.createElement('p');
   head.className = 'tr-head';
-  head.innerHTML = `Открыто событий: <b>${keys.filter(k => !eventLocked(k)).length}</b> из ${keys.length}. Новые открываются знакомствами: кто-нибудь в одном событии знает кого-нибудь из другого.`;
+  head.innerHTML = t('Открыто событий: <b>{0}</b> из {1}. Новые открываются знакомствами: кто-нибудь в одном событии знает кого-нибудь из другого.', keys.filter(k => !eventLocked(k)).length, keys.length);
   grid.append(head);
   for (const k of keys) {
     const e = eventDef(k), shut = eventLocked(k), m = meetOf(k), card = document.createElement('article'), pic = eventArt.get(k);
     card.className = 'card col-ev' + (shut ? ' shut' : '');
     // the one before it in its chain is shut too: whom it knows stays a secret
-    const how = DEMO ? 'Это событие ждёт в полной версии игры.' : !m ? '' : eventLocked(m.from) ? 'Сначала открой событие, которое к нему ведёт.' : m.how;
+    const how = DEMO ? t('Это событие ждёт в полной версии игры.') : !m ? '' : eventLocked(m.from) ? t('Сначала открой событие, которое к нему ведёт.') : t(m.how);
     card.innerHTML = `<span class="col-ev-pic">${pic ? `<img src="${pic.src}" alt="">` : ''}</span>`
-      + (shut ? `<div><h3>???</h3><p>${how}</p></div>` : `<div><h3>${e.title}</h3><p>${e.txt}</p></div>`);
+      + (shut ? `<div><h3>???</h3><p>${how}</p></div>` : `<div><h3>${t(e.title)}</h3><p>${t(e.txt)}</p></div>`);
     grid.appendChild(card);
   }
 }
@@ -141,23 +143,23 @@ function renderEvents(grid: HTMLElement) {
  */
 function renderTrinkets(grid: HTMLElement) {
   // the demo: its floor's trinkets and its heroes' lines
-  const list = TRINKETS.filter(t => t.drawn && t.floor < FLOORS), order = heroesByKind().flat().filter(i => !locked(HEROES[i].key));
-  const all = list.length * order.length, open = list.reduce((n, t) => n + order.filter(i => opened(t.key, HEROES[i].key)).length, 0);
+  const list = TRINKETS.filter(it => it.drawn && it.floor < FLOORS), order = heroesByKind().flat().filter(i => !locked(HEROES[i].key));
+  const all = list.length * order.length, open = list.reduce((n, it) => n + order.filter(i => opened(it.key, HEROES[i].key)).length, 0);
   const head = document.createElement('p');
   head.className = 'tr-head';
-  head.innerHTML = `Открыто фраз: <b>${open}</b> из ${all}. Прокати диск по безделушке в комнате, и герой скажет о ней своё. Каждый герой — свою фразу.`;
+  head.innerHTML = t('Открыто фраз: <b>{0}</b> из {1}. Прокати диск по безделушке в комнате, и герой скажет о ней своё. Каждый герой — свою фразу.', open, all);
   grid.append(head);
-  const pic = (t: TrinketDef, found: boolean) => `<span class="tr-pic${found ? '' : ' dark'}">${envArt.get(t.art) ? `<img src="${envArt.get(t.art)!.src}" alt="">` : ''}</span>`;
-  const card = (t: TrinketDef) => {
-    const got = order.filter(i => opened(t.key, HEROES[i].key)), found = got.length > 0, el = document.createElement('article');
+  const pic = (it: TrinketDef, found: boolean) => `<span class="tr-pic${found ? '' : ' dark'}">${envArt.get(it.art) ? `<img src="${envArt.get(it.art)!.src}" alt="">` : ''}</span>`;
+  const card = (it: TrinketDef) => {
+    const got = order.filter(i => opened(it.key, HEROES[i].key)), found = got.length > 0, el = document.createElement('article');
     el.className = 'card tr-card';
     const lines = order.map(i => {
-      const def = HEROES[i], on = opened(t.key, def.key);
-      return `<li class="${on ? 'on' : 'off'}" style="--c:${def.col}"><img src="${faceUrl({ i, def })}" alt="${def.name}">`
-        + (on ? `<b>${def.name}</b><q>${t.lines[def.key]}</q>` : `<span>???</span>`) + '</li>';
+      const def = HEROES[i], on = opened(it.key, def.key);
+      return `<li class="${on ? 'on' : 'off'}" style="--c:${def.col}"><img src="${faceUrl({ i, def })}" alt="${t(def.name)}">`
+        + (on ? `<b>${t(def.name)}</b><q>${t(it.lines[def.key])}</q>` : `<span>???</span>`) + '</li>';
     }).join('');
-    el.innerHTML = pic(t, found) + `<div><h3>${found ? t.name : '???'} <small>${got.length} из ${order.length}</small></h3>`
-      + `<p><b>${FLOOR_NAMES[t.floor]}.</b> ${found ? t.txt : 'Ещё не попадалась.'}</p></div>${found ? `<ul class="tr-lines">${lines}</ul>` : ''}`;
+    el.innerHTML = pic(it, found) + `<div><h3>${found ? t(it.name) : '???'} <small>${t('{0} из {1}', got.length, order.length)}</small></h3>`
+      + `<p><b>${t(FLOOR_NAMES[it.floor])}.</b> ${found ? t(it.txt) : t('Ещё не попадалась.')}</p></div>${found ? `<ul class="tr-lines">${lines}</ul>` : ''}`;
     return el;
   };
   // tiles: the picture, the name and how many lines are open; one tapped opens its card under them, the first found to begin with
@@ -165,94 +167,89 @@ function renderTrinkets(grid: HTMLElement) {
   box.className = 'tr-open';
   const tiles = document.createElement('div');
   tiles.className = 'tr-tiles';
-  const pickT = (t: TrinketDef) => { box.replaceChildren(card(t)); tiles.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.k === t.key)); };
-  for (const t of list) {
-    const n = order.filter(i => opened(t.key, HEROES[i].key)).length, b = document.createElement('button');
+  const pickT = (it: TrinketDef) => { box.replaceChildren(card(it)); tiles.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.k === it.key)); };
+  for (const it of list) {
+    const n = order.filter(i => opened(it.key, HEROES[i].key)).length, b = document.createElement('button');
     b.className = 'tr-tile';
-    b.dataset.k = t.key;
-    b.innerHTML = pic(t, n > 0) + `<b>${n ? t.name : '???'}</b><small>${n} из ${order.length}</small>`;
-    b.addEventListener('click', () => pickT(t));
+    b.dataset.k = it.key;
+    b.innerHTML = pic(it, n > 0) + `<b>${n ? t(it.name) : '???'}</b><small>${t('{0} из {1}', n, order.length)}</small>`;
+    b.addEventListener('click', () => pickT(it));
     tiles.append(b);
   }
   grid.append(tiles, box);
-  pickT(list.find(t => order.some(i => opened(t.key, HEROES[i].key))) ?? list[0]);
+  pickT(list.find(it => order.some(i => opened(it.key, HEROES[i].key))) ?? list[0]);
 }
 
 // ------------------------------------------------------------ statistics
 
-/** The Russian word for `n` things: 1 забег, 2 забега, 5 забегов. */
-export function plural(n: number, one: string, few: string, many: string) {
-  const a = n % 10, b = n % 100;
-  return a === 1 && b !== 11 ? one : a >= 2 && a <= 4 && (b < 12 || b > 14) ? few : many;
-}
-
 /** Seconds as hours and minutes. */
 function clock(sec: number) {
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
-  return h ? `${h} ч ${m} мин` : m ? `${m} мин` : sec >= 1 ? `${Math.round(sec)} с` : '0 мин';
+  return h ? t('{0} ч {1} мин', h, m) : m || sec < 1 ? t('{0} мин', m) : t('{0} с', Math.round(sec));
 }
 
-const num = (n: number) => Math.round(n).toLocaleString('ru-RU');
+const num = (n: number) => Math.round(n).toLocaleString(langTag());
 const heroByKey = (key: string) => HEROES.findIndex(h => h.key === key);
 
 /** The player's own statistics: the runs and their time, the favourite hero, every hero's runs, the totals and the records. */
 export function renderStats() {
   const s = stats, box = $('statsBody');
   if (!s.runs) {
-    box.innerHTML = '<p class="st-empty">Пока ни одного забега. Сыграй кампанию или сетевую игру, и здесь появятся твои забеги, время, любимый герой и рекорды.</p>';
+    box.innerHTML = `<p class="st-empty">${t('Пока ни одного забега. Сыграй кампанию или сетевую игру, и здесь появятся твои забеги, время, любимый герой и рекорды.')}</p>`;
     return;
   }
   const tile = (big: string, label: string, sub: string) => `<div class="st-tile"><b>${big}</b><span>${label}</span><small>${sub}</small></div>`;
   let html = '<div class="st-tiles">'
-    + tile(num(s.runs), plural(s.runs, 'забег', 'забега', 'забегов'), s.online ? `из них по сети ${num(s.online)}` : 'все в одиночку')
-    + tile(clock(s.time), 'в забегах', `в среднем ${clock(s.time / s.runs)} на забег`)
-    + tile(num(s.wins), plural(s.wins, 'победа', 'победы', 'побед'), s.losses ? `и ${num(s.losses)} ${plural(s.losses, 'поражение', 'поражения', 'поражений')}` : 'без поражений')
+    + tile(num(s.runs), t('{0|забег|забега|забегов}', s.runs), s.online ? t('из них по сети {0}', num(s.online)) : t('все в одиночку'))
+    + tile(clock(s.time), t('в забегах'), t('в среднем {0} на забег', clock(s.time / s.runs)))
+    + tile(num(s.wins), t('{0|победа|победы|побед}', s.wins), s.losses ? t('и {0} {1|поражение|поражения|поражений}', num(s.losses), s.losses) : t('без поражений'))
     + '</div>';
 
   const fav = favourite(), fi = fav ? heroByKey(fav) : -1;
   if (fi >= 0) {
     const def = HEROES[fi], h = s.heroes[fav!];
-    html += `<div class="st-fav" style="--c:${def.col}"><canvas></canvas><div><small>${def.fem ? 'Любимая героиня' : 'Любимый герой'}</small>`
-      + `<b style="color:${def.col}">${def.name}</b>`
-      + `<span>${num(h.runs)} ${plural(h.runs, 'забег', 'забега', 'забегов')} из ${num(s.runs)}, ${num(h.wins)} ${plural(h.wins, 'победа', 'победы', 'побед')}, `
-      + `${clock(h.time)} в забегах, ${num(h.kills)} ${plural(h.kills, 'враг повержен', 'врага повержено', 'врагов повержено')}</span></div></div>`;
+    html += `<div class="st-fav" style="--c:${def.col}"><canvas></canvas><div><small>${def.fem ? t('Любимая героиня') : t('Любимый герой')}</small>`
+      + `<b style="color:${def.col}">${t(def.name)}</b>`
+      + `<span>${t('{0} {1|забег|забега|забегов} из {2}, {3} {4|победа|победы|побед}, {5} в забегах, {6} {7|враг повержен|врага повержено|врагов повержено}',
+        num(h.runs), h.runs, num(s.runs), num(h.wins), h.wins, clock(h.time), num(h.kills), h.kills)}</span></div></div>`;
   }
 
   // every hero played here, the favourite first: a bar for the runs, then the wins and the time
   const played = Object.entries(s.heroes).filter(([k, h]) => h.runs && heroByKey(k) >= 0).sort((a, b) => b[1].runs - a[1].runs || b[1].time - a[1].time);
   if (played.length > 1) {
     const most = played[0][1].runs;
-    html += '<h3>По героям</h3><ul class="st-heroes">' + played.map(([k, h]) => {
+    html += `<h3>${t('По героям')}</h3><ul class="st-heroes">` + played.map(([k, h]) => {
       const i = heroByKey(k), def = HEROES[i];
-      return `<li style="--c:${def.col}"><img src="${faceUrl({ i, def })}" alt=""><b>${def.name}</b>`
+      return `<li style="--c:${def.col}"><img src="${faceUrl({ i, def })}" alt=""><b>${t(def.name)}</b>`
         + `<span class="st-bar"><i style="width:${(h.runs / most) * 100}%"></i></span>`
-        + `<em>${num(h.runs)} ${plural(h.runs, 'забег', 'забега', 'забегов')}${h.wins ? `, ${num(h.wins)} ${plural(h.wins, 'победа', 'победы', 'побед')}` : ''}, ${clock(h.time)}</em></li>`;
+        + `<em>${h.wins ? t('{0} {1|забег|забега|забегов}, {2} {3|победа|победы|побед}, {4}', num(h.runs), h.runs, num(h.wins), h.wins, clock(h.time))
+          : t('{0} {1|забег|забега|забегов}, {2}', num(h.runs), h.runs, clock(h.time))}</em></li>`;
     }).join('') + '</ul>';
   }
 
-  const t = s.sum, row = (k: string, v: string) => `<dt>${k}</dt><dd>${v}</dd>`;
+  const sum = s.sum, row = (k: string, v: string) => `<dt>${t(k)}</dt><dd>${v}</dd>`;
   const topBy = heroByKey(s.best.topBy);
-  html += '<div class="st-cols"><section><h3>За всё время</h3><dl>'
+  html += `<div class="st-cols"><section><h3>${t('За всё время')}</h3><dl>`
     + row('Комнат пройдено', num(s.rooms))
     + row('Боссов повержено', num(s.bosses))
-    + row('Врагов повержено', num(t.kills))
-    + row('Урона нанесено', num(t.dmg))
-    + row('Бросков', num(t.throws))
-    + row('Точных бросков', t.throws ? `${num(t.crits)} (${Math.round((t.crits / t.throws) * 100)}%)` : '0')
-    + row('Умений применено', num(t.abs))
-    + row('Руды добыто', num(t.ore))
+    + row('Врагов повержено', num(sum.kills))
+    + row('Урона нанесено', num(sum.dmg))
+    + row('Бросков', num(sum.throws))
+    + row('Точных бросков', sum.throws ? `${num(sum.crits)} (${Math.round((sum.crits / sum.throws) * 100)}%)` : '0')
+    + row('Умений применено', num(sum.abs))
+    + row('Руды добыто', num(sum.ore))
     + row('Трофеев взято', num(s.arts))
-    + row('Урона получено', num(t.hurt))
-    + row('Герой падал', `${num(t.falls)} ${plural(t.falls, 'раз', 'раза', 'раз')}`)
-    + '</dl></section><section><h3>Рекорды</h3><dl>'
-    + row('Сильнейший удар', t.top ? `${num(t.top)}${topBy >= 0 ? `, ${HEROES[topBy].name}` : ''}` : '—')
+    + row('Урона получено', num(sum.hurt))
+    + row('Герой падал', t('{0} {1|раз|раза|раз}', num(sum.falls), sum.falls))
+    + `</dl></section><section><h3>${t('Рекорды')}</h3><dl>`
+    + row('Сильнейший удар', !sum.top ? '—' : topBy >= 0 ? `${num(sum.top)}, ${t(HEROES[topBy].name)}` : num(sum.top))
     + row('Врагов за забег', num(s.best.kills))
-    + row('Дальше всего', s.wins ? 'всё подземелье' : `этаж ${Math.max(1, s.best.floor)}, ${num(s.best.rooms)} ${plural(s.best.rooms, 'комната', 'комнаты', 'комнат')} из ${FLOORS * LAYERS}`)
-    + row('Быстрейшая победа', s.best.fast ? clock(s.best.fast) : 'ещё впереди')
-    + row('Отскоков до удара', num(t.rico))
+    + row('Дальше всего', s.wins ? t('всё подземелье') : t('этаж {0}, {1} {2|комната|комнаты|комнат} из {3}', Math.max(1, s.best.floor), num(s.best.rooms), s.best.rooms, FLOORS * LAYERS))
+    + row('Быстрейшая победа', s.best.fast ? clock(s.best.fast) : t('ещё впереди'))
+    + row('Отскоков до удара', num(sum.rico))
     + '</dl></section></div>';
 
-  if (s.since) html += `<p class="st-since">Считается на этом устройстве с ${new Date(s.since).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}</p>`;
+  if (s.since) html += `<p class="st-since">${t('Считается на этом устройстве с {0}', new Date(s.since).toLocaleDateString(langTag(), { day: 'numeric', month: 'long', year: 'numeric' }))}</p>`;
   box.innerHTML = html;
   const cv = box.querySelector<HTMLCanvasElement>('.st-fav canvas');
   if (cv && fi >= 0) drawPortrait(cv, { i: fi, def: HEROES[fi] });
@@ -260,31 +257,32 @@ export function renderStats() {
 
 // ------------------------------------------------------------ campaign party
 
-/** The campaign's party size in words: who to pick, and how many are still missing. */
-const SIZE_WORDS = ['', 'одного героя', 'двух героев', 'трёх героев'];
+/** The campaign's party size in words: how many heroes are still missing. */
+const SIZE_WORDS = ['', 'Выбери ещё одного героя', 'Выбери ещё двух героев', 'Выбери ещё трёх героев'];
 
 // ------------------------------------------------------------ the pick screens: the party photo, the heroes, the card
 
 const icon = (key: string) => uiArt.get(key)?.src ?? '';
 
-/** A kind in the words «до нового …», by its place in KINDS. */
-const KIND_OF = ['толстяка', 'чувака', 'дрища'];
+/** What a shut hero's card says of the hero before it on its kind's ladder, and how far its stars go, by the kind's place in KINDS. */
+const KIND_FIRST = ['Сначала открой толстяка перед ним.', 'Сначала открой чувака перед ним.', 'Сначала открой дрища перед ним.'];
+const KIND_NEXT = ['до нового толстяка', 'до нового чувака', 'до нового дрища'];
 const STARS_WHY = 'Босс этажа даёт каждому герою отряда звёзды по номеру этажа: 1, 2 и 3.';
 
 /** Stars toward the next hero as a row of STARS_TO_OPEN: the ones got in gold, the rest hollow. */
 export function starRow(n: number) {
   const k = Math.min(n, STARS_TO_OPEN);
-  return `<span class="stars" role="img" aria-label="${k} из ${STARS_TO_OPEN} звёзд">${'★'.repeat(k)}<i>${'★'.repeat(STARS_TO_OPEN - k)}</i></span>`;
+  return `<span class="stars" role="img" aria-label="${t('{0} из {1} {1|звезды|звёзд|звёзд}', k, STARS_TO_OPEN)}">${'★'.repeat(k)}<i>${'★'.repeat(STARS_TO_OPEN - k)}</i></span>`;
 }
 
 /** How a hero not opened yet opens: the hero before it on its ladder gathers the stars, once that one is open itself. */
 function howToOpen(key: string) {
-  if (DEMO) return 'Этот герой ждёт в полной версии игры.';
+  if (DEMO) return t('Этот герой ждёт в полной версии игры.');
   const prev = prevOf(key);
   if (!prev) return '';
   // the one before is shut too: its name stays a secret
-  if (locked(prev)) return `Сначала открой ${KIND_OF[kindAt(key)]} перед ним.`;
-  return `Откроется, когда ${HEROES.find(h => h.key === prev)!.name} наберёт ${STARS_TO_OPEN}&nbsp;★. ${STARS_WHY}`;
+  if (locked(prev)) return t(KIND_FIRST[kindAt(key)]);
+  return `${t('Откроется, когда {0} наберёт {1}&nbsp;★.', HEROES.find(h => h.key === prev)!.name, STARS_TO_OPEN)} ${t(STARS_WHY)}`;
 }
 
 /** The stars the hero before a shut one has gathered toward it, when that one is open. */
@@ -292,14 +290,14 @@ function shutStars(key: string) {
   const prev = prevOf(key);
   if (DEMO || !prev || locked(prev)) return '';
   const n = starsOf(prev);
-  return `<p class="pc-next">${starRow(n)}<span>${Math.min(n, STARS_TO_OPEN)} из ${STARS_TO_OPEN}</span></p>`;
+  return `<p class="pc-next">${starRow(n)}<span>${t('{0} из {1}', Math.min(n, STARS_TO_OPEN), STARS_TO_OPEN)}</span></p>`;
 }
 /** What the hero's stand is made of and how many more wins with it make the next one; nothing in the demo. */
 function standLine(key: string, col: string) {
   if (DEMO) return '';
   const mat = standFor(key), next = nextStand(mat), left = next ? next.wins - (stats.heroes[key]?.wins ?? 0) : 0;
-  const tail = !next ? 'выше некуда' : left > 0 ? `до ${next.gen} ${left} ${plural(left, 'победа', 'победы', 'побед')}` : '';
-  return `<p class="pc-stand"><img src="${standIcon(mat, col)}" alt=""><span>Подставка: ${standDef(mat).name}${tail ? `, ${tail}` : ''}</span></p>`;
+  const tail = !next ? t('выше некуда') : left > 0 ? t('до {0} {1} {1|победа|победы|побед}', next.gen, left) : '';
+  return `<p class="pc-stand"><img src="${standIcon(mat, col)}" alt=""><span>${tail ? t('Подставка: {0}, {1}', standDef(mat).name, tail) : t('Подставка: {0}', standDef(mat).name)}</span></p>`;
 }
 
 /** Mice can point at a hero to read it without taking it; fingers take it with a tap. */
@@ -313,22 +311,23 @@ function heroCard(box: HTMLElement, i: number, shut = locked(HEROES[i].key)) {
   const d = HEROES[i];
   if (shut) {
     box.style.setProperty('--c', '#a8916f');
-    box.innerHTML = `<div class="pc-top"><h3>???<em>${KINDS[kindAt(d.key)].one}</em></h3></div>`
+    box.innerHTML = `<div class="pc-top"><h3>???<em>${t(KINDS[kindAt(d.key)].one)}</em></h3></div>`
       + `<div class="pc-ab pc-shut"><p>${howToOpen(d.key)}</p>${shutStars(d.key)}</div>`;
     fitCard(box);
     return;
   }
   box.style.setProperty('--c', d.col);
   // the name and the numbers on one line, so the ability fits whole without scrolling
-  box.innerHTML = `<div class="pc-top"><h3>${d.name}<em>${kindOf(d)}</em></h3>`
-    + `<ul class="pc-stats"><li title="Здоровье"><img src="${icon('ico_hp')}" alt="Здоровье">${d.hp}</li>`
-    + `<li title="Урон"><img src="${icon('up_dmg')}" alt="Урон">${fullHit(d.m, d.pw)}</li>`
-    + `<li title="Скорость"><img src="${icon('up_speed')}" alt="Скорость">${Math.round(d.pw * 100)}%</li>`
-    + `<li title="Отскок"><img src="${icon('up_bounce')}" alt="Отскок">${Math.round(d.e * 100)}%</li></ul></div>`
-    + (opening(d.key) ? `<p class="pc-next" title="${STARS_WHY}">${starRow(starsOf(d.key))}<span>до нового ${KIND_OF[kindAt(d.key)]}</span></p>` : '')
+  const hp = t('Здоровье'), dmg = t('Урон'), speed = t('Скорость'), bounce = t('Отскок');
+  box.innerHTML = `<div class="pc-top"><h3>${t(d.name)}<em>${t(kindOf(d))}</em></h3>`
+    + `<ul class="pc-stats"><li title="${hp}"><img src="${icon('ico_hp')}" alt="${hp}">${d.hp}</li>`
+    + `<li title="${dmg}"><img src="${icon('up_dmg')}" alt="${dmg}">${fullHit(d.m, d.pw)}</li>`
+    + `<li title="${speed}"><img src="${icon('up_speed')}" alt="${speed}">${Math.round(d.pw * 100)}%</li>`
+    + `<li title="${bounce}"><img src="${icon('up_bounce')}" alt="${bounce}">${Math.round(d.e * 100)}%</li></ul></div>`
+    + (opening(d.key) ? `<p class="pc-next" title="${t(STARS_WHY)}">${starRow(starsOf(d.key))}<span>${t(KIND_NEXT[kindAt(d.key)])}</span></p>` : '')
     + standLine(d.key, d.col)
-    + `<div class="pc-ab"><div class="pc-abname"><span class="pc-gem" style="--ab:${d.abCol}"><img src="${icon('ab_' + d.key)}" alt=""></span><b>«${d.ab}»</b></div>`
-    + `<p>${d.abTxt}</p><p class="pc-more">${d.abMore}</p></div>`;
+    + `<div class="pc-ab"><div class="pc-abname"><span class="pc-gem" style="--ab:${d.abCol}"><img src="${icon('ab_' + d.key)}" alt=""></span><b>${t('«{0}»', d.ab)}</b></div>`
+    + `<p>${t(d.abTxt)}</p><p class="pc-more">${t(d.abMore)}</p></div>`;
   fitCard(box);
 }
 
@@ -385,7 +384,7 @@ function heroRow(box: HTMLElement, o: {
     // each kind on its own piece of cardboard, its name over its faces
     const group = document.createElement('div'), faces = document.createElement('div');
     group.className = 'pick-kind';
-    group.innerHTML = `<span class="pk-name">${KINDS[r].row}</span>`;
+    group.innerHTML = `<span class="pk-name">${t(KINDS[r].row)}</span>`;
     faces.className = 'pk-faces';
     group.append(faces);
     for (const i of list) {
@@ -394,7 +393,7 @@ function heroRow(box: HTMLElement, o: {
       if (demoLocked(def.key)) {
         b.className = 'pick shut';
         b.disabled = true;
-        b.setAttribute('aria-label', 'Герой из полной версии');
+        b.setAttribute('aria-label', t('Герой из полной версии'));
         b.innerHTML = `<img src="${shadowUrl({ i, def })}" alt=""><span>?</span><b class="pick-q" aria-hidden="true">?</b>`;
         faces.append(b);
         continue;
@@ -405,10 +404,10 @@ function heroRow(box: HTMLElement, o: {
       b.className = 'pick' + (shut ? ' shut' : '') + (m.cls ? ' ' + m.cls : '');
       if (!shut) b.style.setProperty('--c', def.col);
       b.dataset.i = String(i);
-      b.setAttribute('aria-label', (shut ? `Закрытый герой, ${KINDS[r].one}` : def.name) + (m.label ? `, ${m.label}` : ''));
+      b.setAttribute('aria-label', [shut ? t('Закрытый герой, {0}', KINDS[r].one) : t(def.name), m.label].filter(Boolean).join(', '));
       b.setAttribute('aria-pressed', String(!!m.cls?.includes('mine')));
       b.innerHTML = (shut ? `<img src="${shadowUrl({ i, def })}" alt=""><span>?</span><b class="pick-q" aria-hidden="true">?</b>`
-        : `<img src="${faceUrl({ i, def })}" alt=""><span>${def.name}</span>`) + (m.badge ? `<b class="pick-n">${m.badge}</b>` : '');
+        : `<img src="${faceUrl({ i, def })}" alt=""><span>${t(def.name)}</span>`) + (m.badge ? `<b class="pick-n">${m.badge}</b>` : '');
       b.addEventListener('click', () => o.onTap(i));
       if (canPoint()) {
         b.addEventListener('mouseenter', () => o.onPeek(i));
@@ -441,7 +440,7 @@ export const campPhotoBg = () => campBg;
  * hero under the mouse pale, as a try-on.
  */
 export function renderHeroSelect(o: { size: number; party: number[]; shown: number; vol: number; onPick: (hero: number) => void; onSize: (n: number) => void; onVol: (n: number) => void }) {
-  $('heroSize').innerHTML = [1, 2, 3].map(n => `<button class="btn tab${n === o.size ? ' on' : ''}" data-n="${n}" aria-pressed="${n === o.size}">${n} ${plural(n, 'герой', 'героя', 'героев')}</button>`).join('');
+  $('heroSize').innerHTML = [1, 2, 3].map(n => `<button class="btn tab${n === o.size ? ' on' : ''}" data-n="${n}" aria-pressed="${n === o.size}">${t('{0} {0|герой|героя|героев}', n)}</button>`).join('');
   $('heroSize').querySelectorAll<HTMLButtonElement>('button').forEach(b => b.addEventListener('click', () => o.onSize(Number(b.dataset.n))));
   campPeek = -1;
   const photo = $<HTMLCanvasElement>('heroPhoto');
@@ -453,12 +452,12 @@ export function renderHeroSelect(o: { size: number; party: number[]; shown: numb
     const tryOn = campPeek >= 0 && !o.party.includes(campPeek) && !locked(HEROES[campPeek].key) ? campPeek : null;
     const seats: PhotoSeat[] = Array.from({ length: o.size }, (_, k) => ({ hero: o.party[k] ?? null, look: k === o.party.length ? tryOn : null }));
     drawPhoto(photo, seats, { bg: campBg, names: false });
-    photo.setAttribute('aria-label', 'Фото отряда: ' + (o.party.map(h => HEROES[h].name).join(', ') || 'пока никого'));
+    photo.setAttribute('aria-label', t('Фото отряда: {0}', o.party.map(h => t(HEROES[h].name)).join(', ') || t('пока никого')));
   };
   heroRow($('heroPicks'), {
     mark: i => {
       const at = o.party.indexOf(i);
-      return at < 0 ? {} : { cls: 'mine', badge: o.size > 1 ? String(at + 1) : '', label: 'в отряде' };
+      return at < 0 ? {} : { cls: 'mine', badge: o.size > 1 ? String(at + 1) : '', label: t('в отряде') };
     },
     onTap: i => o.onPick(i),
     onPeek: i => { campPeek = i; paint(); },
@@ -469,23 +468,32 @@ export function renderHeroSelect(o: { size: number; party: number[]; shown: numb
   paint();
   const left = o.size - o.party.length;
   // no line under the screen for it: the button itself says how many heroes are still missing
-  $('heroLeft').textContent = left > 0 ? `Выбери ещё ${SIZE_WORDS[left]}` : '';
+  $('heroLeft').textContent = left > 0 ? t(SIZE_WORDS[left]) : '';
   const go = $<HTMLButtonElement>('heroGo');
   go.disabled = left > 0;
-  go.textContent = left > 0 ? `Ещё ${left} ${plural(left, 'герой', 'героя', 'героев')}` : 'В путь';
+  go.textContent = left > 0 ? t('Ещё {0} {0|герой|героя|героев}', left) : t('В путь');
   renderKnob($('heroVol'), { vol: o.vol, top: volTop(), onVol: o.onVol });
 }
 
 // ------------------------------------------------------------ settings
 
 export function bindSettings(onChange: () => void) {
-  const name = $<HTMLInputElement>('setName');
+  const name = $<HTMLInputElement>('setName'), pick = $<HTMLSelectElement>('setLang');
   const vols = [[$<HTMLInputElement>('setMusic'), 'music'], [$<HTMLInputElement>('setSfx'), 'sfx']] as const;
+  // every language by its own name
+  pick.innerHTML = LANGS.map(l => `<option value="${l.code}" lang="${l.tag}">${l.name}</option>`).join('');
   const sync = () => {
+    pick.value = lang();
     name.value = settings.name;
     for (const [el, k] of vols) el.value = String(Math.round(settings[k] * 100));
     document.querySelectorAll<HTMLInputElement>('input[name=quality]').forEach(r => { r.checked = r.value === settings.quality; });
   };
+  pick.addEventListener('change', () => {
+    if (!isLang(pick.value)) return;
+    settings.lang = pick.value;
+    saveSettings();
+    void setLang(pick.value);
+  });
   name.addEventListener('input', () => { settings.name = name.value.trim(); saveSettings(); });
   for (const [el, k] of vols) {
     el.addEventListener('input', () => { settings[k] = Number(el.value) / 100; sound.volumes(); });
@@ -499,8 +507,9 @@ export function bindSettings(onChange: () => void) {
 
 // ------------------------------------------------------------ lobby
 
+/** The line under the lobby: a line of the game, translated here (t). */
 export function lobbyStatus(text: string) {
-  $('lobbyStatus').textContent = text;
+  $('lobbyStatus').textContent = t(text);
 }
 
 /** The host may start once every player has a hero and everyone but the host has pressed «Готов». */
@@ -537,15 +546,15 @@ export function renderLobby(o: {
       name: p.name, host: p.id === 'host', ready: !!p.ready,
     }));
     drawPhoto(photo, seats, { bg: o.bg, names: true });
-    photo.setAttribute('aria-label', 'Фото отряда: ' + o.players.map(p => `${p.name}: ${p.hero !== null ? HEROES[p.hero].name : 'выбирает'}`).join(', '));
+    photo.setAttribute('aria-label', t('Фото отряда: {0}', o.players.map(p => `${p.name}: ${p.hero !== null ? t(HEROES[p.hero].name) : t('выбирает')}`).join(', ')));
   };
   let sent: number | null = null, timer = 0;
   heroRow($('lobbyHeroes'), {
     mark: i => {
       const by = ownerOf(i);
-      if (by) return by.id === o.me ? { cls: 'mine', badge: '', label: 'твой' } : { cls: 'taken', badge: escapeHtml(by.name.slice(0, 1).toUpperCase()), label: `взял ${by.name}` };
+      if (by) return by.id === o.me ? { cls: 'mine', badge: '', label: t('твой') } : { cls: 'taken', badge: escapeHtml(by.name.slice(0, 1).toUpperCase()), label: t('взял {0}', by.name) };
       const eye = o.players.find(p => p.hero === null && p.id !== o.me && p.look === i);
-      return eye ? { cls: 'eyed', badge: escapeHtml(eye.name.slice(0, 1).toUpperCase()) + '?', label: `смотрит ${eye.name}` } : {};
+      return eye ? { cls: 'eyed', badge: escapeHtml(eye.name.slice(0, 1).toUpperCase()) + '?', label: t('смотрит {0}', eye.name) } : {};
     },
     onTap: i => {
       lobbyShown = i;
@@ -572,8 +581,8 @@ export function renderLobby(o: {
   $('lobbyPlayers').innerHTML = o.players.map(p => {
     const def = p.hero !== null ? HEROES[p.hero] : null;
     // the host has no «Готов» of its own: it starts the game when the rest are ready
-    const ready = p.id === 'host' ? '' : p.ready ? '<span class="rdy on">готов</span>' : '<span class="rdy">не готов</span>';
-    return `<li><b>${escapeHtml(p.name)}</b>${p.id === 'host' ? ' · хозяин' : ''}${p.id === o.me ? ' · ты' : ''}<span class="muted">${def ? def.name : 'выбирает героя'}</span>${ready}</li>`;
+    const ready = p.id === 'host' ? '' : p.ready ? `<span class="rdy on">${t('готов')}</span>` : `<span class="rdy">${t('не готов')}</span>`;
+    return `<li><b>${escapeHtml(p.name)}</b>${p.id === 'host' ? ` · ${t('хозяин')}` : ''}${p.id === o.me ? ` · ${t('ты')}` : ''}<span class="muted">${def ? t(def.name) : t('выбирает героя')}</span>${ready}</li>`;
   }).join('');
   // the host turns the knob for the table, the rest see where it stands
   renderKnob($('lobbyVol'), { vol: o.vol, top: volTop(), ...(o.host ? { onVol: o.onVol } : {}) });
@@ -583,15 +592,15 @@ export function renderLobby(o: {
   const rb = $<HTMLButtonElement>('lobbyReadyBtn');
   rb.hidden = o.host;
   rb.disabled = mine === null;
-  rb.textContent = me?.ready ? 'Не готов' : 'Готов';
+  rb.textContent = me?.ready ? t('Не готов') : t('Готов');
   rb.classList.toggle('big', !me?.ready);
   rb.setAttribute('aria-pressed', String(!!me?.ready));
   $('lobbyHint').textContent = o.host
-    ? go ? `Игроков: ${o.players.length}. Можно начинать: враги подстроятся под число героев.`
-      : !o.players.every(p => p.hero !== null) ? 'Начать можно, когда все выберут героя и нажмут «Готов».'
-      : `Ждём, пока нажмут «Готов»: ${waiting.map(p => p.name).join(', ')}.`
-    : mine === null ? 'Выбери героя и нажми «Готов».'
-    : me?.ready ? 'Игру начнёт хозяин комнаты.' : 'Нажми «Готов», когда соберёшься.';
+    ? go ? t('Игроков: {0}. Можно начинать: враги подстроятся под число героев.', o.players.length)
+      : !o.players.every(p => p.hero !== null) ? t('Начать можно, когда все выберут героя и нажмут «Готов».')
+      : t('Ждём, пока нажмут «Готов»: {0}.', waiting.map(p => p.name).join(', '))
+    : mine === null ? t('Выбери героя и нажми «Готов».')
+    : me?.ready ? t('Игру начнёт хозяин комнаты.') : t('Нажми «Готов», когда соберёшься.');
 }
 
 export function resetLobby() {

@@ -11,6 +11,7 @@ import { artDef, artsLeft, drop, give, room, type ArtKey } from './artifacts';
 import { REST_ROW, nodeById, type MapNode, type Run } from './run';
 import { makeRng } from './rng';
 import { DEMO, DEMO_EVENTS } from './demo';
+import { M, t, type Arg } from './i18n';
 
 /** The floor of the next fight, from the foam party: discs keep their speed off the walls, or roll twice as far, or stick. */
 export type Floor = 'slick' | 'soap' | 'sticky';
@@ -450,7 +451,7 @@ export const EVENTS: EventDef[] = [
     txt: 'За решёткой окошка скелет с лупой в глазнице пробует на зуб чью-то корону. На полках чужие трофеи с бирками и ценниками. «Покупаю всё, продаю всё. Души не беру, у меня их полный подвал, и все ноют».',
     choices: [
       { label: 'Купить трофей', pay: 20, win: { fx: [{ k: 'art' }], txt: 'Скелет долго пробовал руду на зуб, потом кивнул на полку: «Выбирай, только не лапай». Ценники он отрывает с мясом.' } },
-      { label: 'Сдать трофей', arts: true, then: 'sell', win: { fx: [{ k: 'note', t: `Каждый сдаёт один свой трофей: +${SELL} руды за каждый` }], txt: 'Скелет рассмотрел каждую вещицу в лупу, понюхал, лизнул и отсчитал руду. «Приходите ещё. Желательно с чужим».' } },
+      { label: 'Сдать трофей', arts: true, then: 'sell', win: { fx: [{ k: 'note', t: M('Каждый сдаёт один свой трофей: +{0} руды за каждый', SELL) }], txt: 'Скелет рассмотрел каждую вещицу в лупу, понюхал, лизнул и отсчитал руду. «Приходите ещё. Желательно с чужим».' } },
       { label: 'Поглазеть и уйти', win: { fx: [], txt: 'На витрине пылятся чужие трофеи с бирками «Не выкуплено». Скелет провожает вас взглядом, полным сострадания к вашей бедности.' } },
     ],
   },
@@ -570,20 +571,20 @@ export const canPick = (c: Choice, bank: Bank) => bank.ore >= (c.pay ?? 0);
 const KIND_NONE = ['Толстяка в отряде нет', 'Чувака в отряде нет', 'Дрища в отряде нет'];
 const MAP_NONE: Record<Redraw, string> = { cave: 'Впереди негде рисовать', beer: 'Впереди нет элиты', camp: 'Костёр и так за углом' };
 
-/** Why a choice is shut now, in a line on its slab; null while it can be taken. */
-export function shutWhy(c: Choice, t: Table): string | null {
-  const solo = t.party.length === 1;
-  if (!canPick(c, t.bank)) return `Нужно ${c.pay} руды`;
-  if (c.ore && t.bank.ore < c.ore) return `Нужно ${c.ore} руды`;
-  if (c.kind !== undefined && !t.party.some(h => h.hp > 0 && h.def.r === KINDS[c.kind!].r)) return KIND_NONE[c.kind];
-  if (c.arts && !t.party.some(h => h.arts?.length)) return solo ? 'У тебя нет трофеев' : 'Трофеев ни у кого нет';
+/** Why a choice is shut now, in a line on its slab in the player's language; null while it can be taken. */
+export function shutWhy(c: Choice, tb: Table): string | null {
+  const solo = tb.party.length === 1;
+  if (!canPick(c, tb.bank)) return t('Нужно {0} руды', c.pay);
+  if (c.ore && tb.bank.ore < c.ore) return t('Нужно {0} руды', c.ore);
+  if (c.kind !== undefined && !tb.party.some(h => h.hp > 0 && h.def.r === KINDS[c.kind!].r)) return t(KIND_NONE[c.kind]);
+  if (c.arts && !tb.party.some(h => h.arts?.length)) return t(solo ? 'У тебя нет трофеев' : 'Трофеев ни у кого нет');
   const m = c.win.fx.find(f => f.k === 'map');
-  if (m?.k === 'map' && t.run && !redrawn(t.run, m.m, 0).length) return MAP_NONE[m.m];
+  if (m?.k === 'map' && tb.run && !redrawn(tb.run, m.m, 0).length) return t(MAP_NONE[m.m]);
   return null;
 }
 
 /** The kind a choice wants in the party, for its slab: «Толстяк в отряде». */
-export const needOf = (c: Choice) => (c.kind !== undefined ? `${KINDS[c.kind].one} в отряде` : '');
+export const needOf = (c: Choice) => (c.kind !== undefined ? t('{0} в отряде', KINDS[c.kind].one) : '');
 
 /** How a choice turns out: a toss-up is rolled from the room's seed, so the host and a reloaded game agree. */
 export const rolled = (c: Choice, seed: number, opt: number) => !c.odds || makeRng(seed * 31 + opt * 7919).next() < c.odds;
@@ -615,14 +616,17 @@ export function take(ev: EventState, opt: number, t: Table): boolean {
     while (k < c.spread.length - 1 && (x -= c.spread[k].odds) >= 0) k++;
     const s = c.spread[k], alive = t.party.filter(h => h.hp > 0), who = s.one ? R.pick(alive.length ? alive : t.party).i : undefined;
     if (c.cost) applyFx(c.cost, t.party, t.bank, ev.seed, t.run);
-    settle(ev, opt, s.out.fx.every(f => f.k !== 'hp' || f.n > 0), `${c.label}: ${s.name}`, s.out, t,
+    settle(ev, opt, s.out.fx.every(f => f.k !== 'hp' || f.n > 0), M('{0}: {1}', c.label, s.name), s.out, t,
       { pay: c.pay, who, slice: BOTTLE.findIndex(b => b.name === s.name) }, c.cost);
     return true;
   }
   const won = rolled(c, ev.seed, opt);
-  settle(ev, opt, won, c.label + (c.odds ? (won ? ': повезло' : ': не повезло') : ''), won ? c.win : c.lose!, t, { pay: c.pay });
+  settle(ev, opt, won, luck(c, won), won ? c.win : c.lose!, t, { pay: c.pay });
   return true;
 }
+
+/** The line over a choice's outcome: a toss-up says how it fell. */
+const luck = (c: Choice, won: boolean) => (c.odds ? M(won ? '{0}: повезло' : '{0}: не повезло', c.label) : c.label);
 
 /** «Жадная Люська»: a pull that comes off puts the next rung in the bank; the last rung is the jackpot, a bust burns the bank. */
 function pull(ev: EventState, c: Choice, t: Table) {
@@ -644,7 +648,7 @@ export function heroPick(ev: EventState, hero: number, t: Table): boolean {
 export function cupPick(ev: EventState, cup: number, t: Table): boolean {
   if (stageOf(ev) !== 'cups' || !(cup >= 0 && cup < 3)) return false;
   const c = choicesOf(ev)[ev.step!], ball = shuffleOf(ev.seed, c.cups ?? 0).ball, won = cup === ball;
-  settle(ev, ev.step!, won, c.label + (won ? ': угадал' : ': мимо'), won ? c.win : c.lose!, t, { pay: c.pay, cup, ball });
+  settle(ev, ev.step!, won, M(won ? '{0}: угадал' : '{0}: мимо', c.label), won ? c.win : c.lose!, t, { pay: c.pay, cup, ball });
   return true;
 }
 
@@ -667,7 +671,7 @@ export function sellDone(ev: EventState, t: Table, table: number[]): boolean {
   const notes = sold.map(([i, a]) => {
     const o = t.party.find(p => p.i === Number(i))!;
     drop(o, a as ArtKey);
-    return `${o.def.name}: «${artDef(a).name}»`;
+    return M('{0}: «{1}»', o.def.name, artDef(a).name);
   });
   settle(ev, ev.step!, true, c.label, { fx: [{ k: 'ore', n: SELL * sold.length }], txt: c.win.txt }, t, { pay: c.pay, notes });
   return true;
@@ -677,7 +681,8 @@ export function sellDone(ev: EventState, t: Table, table: number[]): boolean {
 function settle(ev: EventState, opt: number, won: boolean, head: string, out: Outcome, t: Table, at: Partial<Done>, cost?: Fx[]) {
   const h = at.who !== undefined ? t.party.find(o => o.i === at.who) : undefined;
   const notes = [...(at.notes ?? []), ...applyFx(out.fx, h ? [h] : t.party, t.bank, ev.seed, t.run)];
-  const txt = h ? out.txt.replace('{acc}', h.def.acc).replace('{dat}', h.def.dat).replace('{name}', h.def.name) : out.txt;
+  // the hero's name goes in on each screen, in its own language
+  const txt = h ? M(out.txt, { acc: h.def.acc, dat: h.def.dat, name: h.def.name }) : out.txt;
   delete ev.step;
   ev.votes = {};
   ev.done = { opt, won, head, out: { fx: out.fx, txt }, ...at, ...(notes.length ? { notes } : {}), ...(cost ? { cost } : {}) };
@@ -689,7 +694,7 @@ export function doneOf(ev: EventState): { head: string; out: Outcome; pay: numbe
   if (!d) return null;
   if (d.out) return { head: d.head ?? '', out: d.out, pay: d.pay ?? 0, who: d.who };
   const c = eventDef(ev.key).choices[d.opt];
-  return { head: c.label + (c.odds ? (d.won ? ': повезло' : ': не повезло') : ''), out: d.won ? c.win : c.lose!, pay: c.pay ?? 0 };
+  return { head: luck(c, d.won), out: d.won ? c.win : c.lose!, pay: c.pay ?? 0 };
 }
 
 /** One level more of a stat the hero can still grow (`stat`, or one picked at random); false when there is none. */
@@ -705,11 +710,11 @@ function levelDown(h: HeroState, R: ReturnType<typeof makeRng>) {
   if (ks.length) {
     const u = R.pick(ks);
     h.up[u.k]--;
-    return `${h.def.name}: −1 «${u.name}»`;
+    return M('{0}: −1 «{1}»', h.def.name, u.name);
   }
   h.max = Math.max(1, h.max - DOWN_MAX);
   h.hp = Math.min(h.hp, h.max);
-  return `${h.def.name}: уровней нет, −${DOWN_MAX} к макс. HP`;
+  return M('{0}: уровней нет, −{1} к макс. HP', h.def.name, DOWN_MAX);
 }
 
 /** A trophy for every hero with room for one, picked at random among those nobody in the party has. Says who got what. */
@@ -719,7 +724,7 @@ export function giftArts(party: HeroState[], seed: number) {
     if (!room(h) || !left.length) continue;
     const k = left.splice(R.int(0, left.length - 1), 1)[0];
     give(h, k);
-    notes.push(`${h.def.name}: «${artDef(k).name}»`);
+    notes.push(M('{0}: «{1}»', h.def.name, artDef(k).name));
   }
   return notes;
 }
@@ -731,7 +736,7 @@ export function loseArts(party: HeroState[], seed: number) {
     if (!h.arts?.length) continue;
     const k = R.pick(h.arts) as ArtKey;
     drop(h, k);
-    notes.push(`${h.def.name} без «${artDef(k).name}»`);
+    notes.push(M('{0} без «{1}»', h.def.name, artDef(k).name));
   }
   return notes;
 }
@@ -741,13 +746,14 @@ export function loseArts(party: HeroState[], seed: number) {
  * each. A line for the room's result.
  */
 export function settleBet(b: Bet, ok: boolean, party: HeroState[], seed: number) {
-  const R = makeRng(seed * 29 + 1), each = party.length > 1 ? ' каждому' : '';
+  const R = makeRng(seed * 29 + 1);
   if (b === 'art') {
     const notes = ok ? giftArts(party, seed) : loseArts(party, seed);
-    return ok ? `Пари выиграно, букмекер отдал трофеи: ${notes.join(', ') || 'свободных гнёзд не было'}.` : `Пари проиграно, букмекер забрал трофеи: ${notes.join(', ') || 'забирать было нечего'}.`;
+    if (ok) return notes.length ? M('Пари выиграно, букмекер отдал трофеи: {0}.', notes) : 'Пари выиграно, букмекер отдал трофеи: свободных гнёзд не было.';
+    return notes.length ? M('Пари проиграно, букмекер забрал трофеи: {0}.', notes) : 'Пари проиграно, букмекер забрал трофеи: забирать было нечего.';
   }
-  if (ok) { for (const h of party) levelUp(h, R); return `Пари выиграно: +1 уровень${each}.`; }
-  return `Пари проиграно: ${party.map(h => levelDown(h, R)).join(', ')}.`;
+  if (ok) { for (const h of party) levelUp(h, R); return party.length > 1 ? 'Пари выиграно: +1 уровень каждому.' : 'Пари выиграно: +1 уровень.'; }
+  return M('Пари проиграно: {0}.', party.map(h => levelDown(h, R)));
 }
 
 /** Do what an outcome does to the party, the pool and the map; says what the dice picked that the line of it can't tell. */
@@ -766,7 +772,7 @@ export function applyFx(fx: Fx[], party: HeroState[], bank: Bank, seed: number, 
     else if (f.k === 'rob') {
       const n = Math.min(bank.ore, Math.max(ROB_MIN, Math.ceil(bank.ore / 2)));
       bank.ore -= n;
-      notes.push(`Забрали ${n} руды`);
+      notes.push(M('Забрали {0} руды', n));
     } else if (f.k === 'nosparks') {
       bank.boon = 0;
       for (const h of party) h.sparks = 0;
@@ -837,37 +843,44 @@ export interface Part { t: string; good: boolean; mid?: boolean }
 
 /**
  * A line of what a choice does, split into the good and the bad bits; `solo` words it for a lone hero, `to` names whom it
- * falls on when that is one hero («тому, на кого покажет»).
+ * falls on when that is one hero («тому, на кого покажет»). The lines come in the player's language.
  */
 export function fxParts(fx: Fx[], solo: boolean, to?: string): Part[] {
-  const each = to ? ' ' + to : solo ? '' : ' каждому';
+  // the same line for a lone hero, for each hero of the party, and for the one it falls on (its name comes last)
+  const w = (one: string, all: string, him: string, ...vals: Arg[]) => (to ? t(him, ...vals, to) : solo ? t(one, ...vals) : t(all, ...vals));
+  const sn = (n: number) => (n > 0 ? '+' : '−') + Math.abs(n);
   return fx.flatMap((f): Part[] => {
-    if (f.k === 'hp') return [{ t: `${f.n > 0 ? '+' : '−'}${Math.abs(f.n)} HP${each}`, good: f.n > 0 }];
-    if (f.k === 'heal') return [{ t: solo ? 'Полное здоровье' : 'Полное здоровье всем, павшие встают', good: true }];
-    if (f.k === 'max') return [{ t: `${f.n > 0 ? '+' : '−'}${Math.abs(f.n)} к макс. HP${each}`, good: f.n > 0 }];
-    if (f.k === 'ore') return [{ t: `${f.n > 0 ? '+' : '−'}${Math.abs(f.n)} руды`, good: f.n > 0 }];
-    if (f.k === 'sparks') return [{ t: 'Полные искры в следующем бою', good: true }];
-    if (f.k === 'shield') return [{ t: `Щит ${f.n}${each} в начале следующего боя`, good: true }];
-    if (f.k === 'rage') return [{ t: `Враги следующего боя бьют на ${f.n} сильнее`, good: false }];
-    if (f.k === 'smoke') return [{ t: 'Дым-машина: следующий бой в дыму', good: false }];
-    if (f.k === 'strobe') return [{ t: 'Стробоскоп: следующий бой без прицела', good: false }];
-    if (f.k === 'disc') return [{ t: `Второй диск за ход${each}`, good: true }];
-    if (f.k === 'extra') return [{ t: `+1 диск за ход в следующем бою${each}`, good: true }];
-    if (f.k === 'art') return [{ t: solo ? 'Трофей: один из трёх на выбор' : 'Трофей каждому: три на выбор', good: true }];
-    if (f.k === 'gift') return [{ t: `Случайный трофей в свободное гнездо${each}`, good: true }];
-    if (f.k === 'unart') return [{ t: solo ? 'Теряешь случайный свой трофей' : 'Каждый теряет случайный свой трофей', good: false }];
-    if (f.k === 'down') return [{ t: `−1 случайный уровень${each}, без уровней −${DOWN_MAX} к макс. HP`, good: false }];
-    if (f.k === 'nosparks') return [{ t: 'Все искры сгорят', good: false }];
-    if (f.k === 'rob') return [{ t: `Половина руды отряда, не меньше ${ROB_MIN}`, good: false }];
-    if (f.k === 'floor') { const w = WHO_FLOOR[f.f]; return [{ t: w.t, good: !!w.good, ...(w.mid ? { mid: true } : {}) }]; }
-    if (f.k === 'note') return [{ t: f.t, good: !!f.good, ...(f.good === undefined ? { mid: true } : {}) }];
+    if (f.k === 'hp') return [{ t: to ? t('{0} HP {1}', sn(f.n), to) : solo ? `${sn(f.n)} HP` : t('{0} HP каждому', sn(f.n)), good: f.n > 0 }];
+    if (f.k === 'heal') return [{ t: t(solo ? 'Полное здоровье' : 'Полное здоровье всем, павшие встают'), good: true }];
+    if (f.k === 'max') return [{ t: w('{0} к макс. HP', '{0} к макс. HP каждому', '{0} к макс. HP {1}', sn(f.n)), good: f.n > 0 }];
+    if (f.k === 'ore') return [{ t: t('{0} руды', sn(f.n)), good: f.n > 0 }];
+    if (f.k === 'sparks') return [{ t: t('Полные искры в следующем бою'), good: true }];
+    if (f.k === 'shield') return [{ t: w('Щит {0} в начале следующего боя', 'Щит {0} каждому в начале следующего боя', 'Щит {0} {1} в начале следующего боя', f.n), good: true }];
+    if (f.k === 'rage') return [{ t: t('Враги следующего боя бьют на {0} сильнее', f.n), good: false }];
+    if (f.k === 'smoke') return [{ t: t('Дым-машина: следующий бой в дыму'), good: false }];
+    if (f.k === 'strobe') return [{ t: t('Стробоскоп: следующий бой без прицела'), good: false }];
+    if (f.k === 'disc') return [{ t: w('Второй диск за ход', 'Второй диск за ход каждому', 'Второй диск за ход {0}'), good: true }];
+    if (f.k === 'extra') return [{ t: w('+1 диск за ход в следующем бою', '+1 диск за ход в следующем бою каждому', '+1 диск за ход в следующем бою {0}'), good: true }];
+    if (f.k === 'art') return [{ t: t(solo ? 'Трофей: один из трёх на выбор' : 'Трофей каждому: три на выбор'), good: true }];
+    if (f.k === 'gift') return [{ t: w('Случайный трофей в свободное гнездо', 'Случайный трофей в свободное гнездо каждому', 'Случайный трофей в свободное гнездо {0}'), good: true }];
+    if (f.k === 'unart') return [{ t: t(solo ? 'Теряешь случайный свой трофей' : 'Каждый теряет случайный свой трофей'), good: false }];
+    if (f.k === 'down') return [{ t: w('−1 случайный уровень, без уровней −{0} к макс. HP', '−1 случайный уровень каждому, без уровней −{0} к макс. HP', '−1 случайный уровень {1}, без уровней −{0} к макс. HP', DOWN_MAX), good: false }];
+    if (f.k === 'nosparks') return [{ t: t('Все искры сгорят'), good: false }];
+    if (f.k === 'rob') return [{ t: t('Половина руды отряда, не меньше {0}', ROB_MIN), good: false }];
+    if (f.k === 'floor') { const o = WHO_FLOOR[f.f]; return [{ t: t(o.t), good: !!o.good, ...(o.mid ? { mid: true } : {}) }]; }
+    if (f.k === 'note') return [{ t: t(f.t), good: !!f.good, ...(f.good === undefined ? { mid: true } : {}) }];
     if (f.k === 'bet') return f.b === 'art'
-      ? [{ t: 'Итог после следующего боя', good: true, mid: true }, { t: `Без царапины: случайный трофей в свободное гнездо${each}`, good: true }, { t: solo ? 'Иначе теряешь случайный свой трофей' : 'Иначе каждый теряет случайный свой трофей', good: false }]
-      : [{ t: 'Итог после следующего боя', good: true, mid: true }, { t: `Победа за ${BET_TURNS} хода: +1 случайный уровень${each}`, good: true }, { t: `Иначе −1 случайный уровень${each}`, good: false }];
-    if (f.k === 'map') return f.m === 'cave' ? [{ t: 'Комната следующего ряда на пути станет рудной пещерой', good: true }]
-      : f.m === 'beer' ? [{ t: 'Элиты этого этажа станут обычными боями', good: true }, { t: 'Бесплатных уровней с них не будет', good: false }]
-      : [{ t: 'Следующая комната: костёр или кузнец', good: true }, { t: 'Комнаты между ними пропускаете', good: false }];
-    const u = f.stat && UPS.find(o => o.k === f.stat), n = f.n ?? 1, lv = n === 1 ? 'уровень' : 'уровня';
-    return [{ t: u ? `+${n} ${lv} «${u.name}»${each}` : `+${n} ${lv} случайного улучшения${each}`, good: true }];
+      ? [{ t: t('Итог после следующего боя'), good: true, mid: true },
+        { t: w('Без царапины: случайный трофей в свободное гнездо', 'Без царапины: случайный трофей в свободное гнездо каждому', 'Без царапины: случайный трофей в свободное гнездо {0}'), good: true },
+        { t: t(solo ? 'Иначе теряешь случайный свой трофей' : 'Иначе каждый теряет случайный свой трофей'), good: false }]
+      : [{ t: t('Итог после следующего боя'), good: true, mid: true },
+        { t: w('Победа за {0} {0|ход|хода|ходов}: +1 случайный уровень', 'Победа за {0} {0|ход|хода|ходов}: +1 случайный уровень каждому', 'Победа за {0} {0|ход|хода|ходов}: +1 случайный уровень {1}', BET_TURNS), good: true },
+        { t: w('Иначе −1 случайный уровень', 'Иначе −1 случайный уровень каждому', 'Иначе −1 случайный уровень {0}'), good: false }];
+    if (f.k === 'map') return f.m === 'cave' ? [{ t: t('Комната следующего ряда на пути станет рудной пещерой'), good: true }]
+      : f.m === 'beer' ? [{ t: t('Элиты этого этажа станут обычными боями'), good: true }, { t: t('Бесплатных уровней с них не будет'), good: false }]
+      : [{ t: t('Следующая комната: костёр или кузнец'), good: true }, { t: t('Комнаты между ними пропускаете'), good: false }];
+    const u = f.stat && UPS.find(o => o.k === f.stat), n = f.n ?? 1;
+    return [{ t: u ? w('+{0} {0|уровень|уровня|уровней} «{1}»', '+{0} {0|уровень|уровня|уровней} «{1}» каждому', '+{0} {0|уровень|уровня|уровней} «{1}» {2}', n, u.name)
+      : w('+{0} {0|уровень|уровня|уровней} случайного улучшения', '+{0} {0|уровень|уровня|уровней} случайного улучшения каждому', '+{0} {0|уровень|уровня|уровней} случайного улучшения {1}', n), good: true }];
   });
 }

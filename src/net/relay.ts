@@ -262,7 +262,7 @@ class Line {
     const now = Date.now();
     if (this.closed || this.next || now - this.renewed < STALL_MS) return;
     this.renewed = now;
-    if (this.mq) mqttLog(`${this.name} молчит, переподключаюсь`);
+    if (this.mq) mqttLog(`${this.name} is silent, reconnecting`);
     this.dial();
   }
 

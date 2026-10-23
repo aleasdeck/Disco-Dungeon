@@ -8,6 +8,7 @@ import type { HeroState } from './game';
 import { CAMP_HEAL, DIG_MAX, canCamp, healOf, type CampDid, type CampPick, type CampState } from './camp';
 import { fillIcons } from './icons';
 import { faceUrl } from './ui';
+import { t } from './i18n';
 
 const $ = (id: string) => document.getElementById(id)!;
 
@@ -16,27 +17,27 @@ export const CAMP_TXT = 'Скелет жарит сосиски на чьём-т
 
 /** What came of a hero's own pick, told to its player: the scene, what was picked, and what it gave. */
 function outcome(d: CampDid, party: HeroState[]) {
-  if (d.k === 'rest') return { txt: 'Сосиска, тепло и полчаса храпа под треск поленьев. Раны затянулись.', label: 'Отдохнуть у огня', fx: `+${d.hp} HP`, good: true };
+  if (d.k === 'rest') return { txt: t('Сосиска, тепло и полчаса храпа под треск поленьев. Раны затянулись.'), label: t('Отдохнуть у огня'), fx: `+${d.hp} HP`, good: true };
   if (d.k === 'mend') {
-    const t = party.find(h => h.i === d.to)!;
-    return { txt: 'Бинт нашёлся в чьих-то запасных труселях, но держит крепко.', label: `Перевязать ${t.def.acc}`, fx: `+${d.hp} HP ${t.def.dat}`, good: true };
+    const o = party.find(h => h.i === d.to)!;
+    return { txt: t('Бинт нашёлся в чьих-то запасных труселях, но держит крепко.'), label: t('Перевязать {0}', o.def.acc), fx: t('+{0} HP {1}', d.hp, o.def.dat), good: true };
   }
   return d.ore
-    ? { txt: 'Пара взмахов кирки, пара крепких слов, и руда твоя.', label: 'Добыть руду', fx: `+${d.ore} руды`, good: true }
-    : { txt: 'Кирка звякнула, искры полетели, а руды ни крошки: сверху лежала одна позолоченная галька. Зато размялись.', label: 'Добыть руду', fx: 'Ни крошки руды', good: false };
+    ? { txt: t('Пара взмахов кирки, пара крепких слов, и руда твоя.'), label: t('Добыть руду'), fx: t('+{0} руды', d.ore), good: true }
+    : { txt: t('Кирка звякнула, искры полетели, а руды ни крошки: сверху лежала одна позолоченная галька. Зато размялись.'), label: t('Добыть руду'), fx: t('Ни крошки руды'), good: false };
 }
 
 /** A teammate's pick in a few words, for the row under the outcome. */
 function brief(d: CampDid | undefined, party: HeroState[]) {
-  if (!d) return 'ещё у костра';
-  if (d.k === 'rest') return `отдых, +${d.hp} HP`;
-  if (d.k === 'mend') return `бинт ${party.find(h => h.i === d.to)!.def.dat}, +${d.hp} HP`;
-  return d.ore ? `руда, +${d.ore}` : 'руда, пусто';
+  if (!d) return t('ещё у костра');
+  if (d.k === 'rest') return t('отдых, +{0} HP', d.hp);
+  if (d.k === 'mend') return t('бинт {0}, +{1} HP', party.find(h => h.i === d.to)!.def.dat, d.hp);
+  return d.ore ? t('руда, +{0}', d.ore) : t('руда, пусто');
 }
 
 const hpBar = (h: HeroState) => {
   const hp = Math.max(0, h.hp);
-  return `<span class="mp-hp"><i style="width:${(hp / h.max) * 100}%"></i><u>${h.hp > 0 ? `${hp}/${h.max}` : 'пал'}</u></span>`;
+  return `<span class="mp-hp"><i style="width:${(hp / h.max) * 100}%"></i><u>${h.hp > 0 ? `${hp}/${h.max}` : t(h.def.fem ? 'пала' : 'пал')}</u></span>`;
 };
 
 export class CampView {
@@ -87,7 +88,7 @@ export class CampView {
     const others = party.filter(h => h !== me);
     if (team && done) {
       // the whole party has picked: what the last pick came to, and a line for every hero
-      $('campText').textContent = mine ? outcome(mine, party).txt : CAMP_TXT;
+      $('campText').textContent = mine ? outcome(mine, party).txt : t(CAMP_TXT);
       $('campOpts').innerHTML = party.map(h => {
         const o = outcome(camp.did[h.i], party);
         return `<div class="ev-out camp-out" style="--c:${h.def.col}"><img src="${faceUrl(h)}" alt=""><b>${o.label}</b><span class="ev-fx"><em class="${o.good ? 'good' : 'none'}">${o.fx}</em></span></div>`;
@@ -97,13 +98,13 @@ export class CampView {
       $('campText').textContent = o.txt;
       $('campOpts').innerHTML = `<div class="ev-out"><b>${o.label}</b><span class="ev-fx"><em class="${o.good ? 'good' : 'none'}">${o.fx}</em></span></div>`;
     } else if (me) {
-      $('campText').textContent = CAMP_TXT;
+      $('campText').textContent = t(CAMP_TXT);
       const mates = this.mates === `${camp.seed}:${me.i}` && others.length > 0;
       // for a party the window says whose pick it asks for
-      const ask = !team ? '' : `<p class="camp-ask camp-for" style="--c:${me.def.col}"><img src="${faceUrl(me)}" alt="">${mates ? `Кого перевяжет ${me.def.name}?` : `Что сделает ${me.def.name}?`}</p>`;
+      const ask = !team ? '' : `<p class="camp-ask camp-for" style="--c:${me.def.col}"><img src="${faceUrl(me)}" alt="">${t(mates ? 'Кого перевяжет {0}?' : 'Что сделает {0}?', me.def.name)}</p>`;
       $('campOpts').innerHTML = ask + (mates ? this.matePick(me, party, others, asked, team) : this.options(me, party, others, asked));
     } else {
-      $('campText').textContent = CAMP_TXT;
+      $('campText').textContent = t(CAMP_TXT);
       $('campOpts').innerHTML = '';
     }
     // online: what each of the others does by the fire, and who is still deciding; for a party a tap on a hero still by the
@@ -132,17 +133,17 @@ export class CampView {
   private options(me: HeroState, party: HeroState[], others: HeroState[], asked?: CampPick) {
     const fallen = me.hp <= 0;
     const rest = fallen
-      ? this.opt(me, party, { k: 'rest' }, 'camp_rest', 'Встать на ноги', `<em class="good">Половина здоровья</em>`, '', asked)
-      : this.opt(me, party, { k: 'rest' }, 'camp_rest', 'Отдохнуть у огня', `<em class="good">+${Math.min(this.heal, me.max - me.hp)} HP</em>`, 'Здоровье и так полное', asked);
+      ? this.opt(me, party, { k: 'rest' }, 'camp_rest', t('Встать на ноги'), `<em class="good">${t('Половина здоровья')}</em>`, '', asked)
+      : this.opt(me, party, { k: 'rest' }, 'camp_rest', t('Отдохнуть у огня'), `<em class="good">+${Math.min(this.heal, me.max - me.hp)} HP</em>`, t('Здоровье и так полное'), asked);
     // one bandage slab, which opens the pick of whom to bandage, for a party of two or three
     let mend = '';
     if (others.length) {
-      const can = others.some(t => canCamp(me, { k: 'mend', to: t.i }, party));
+      const can = others.some(o => canCamp(me, { k: 'mend', to: o.i }, party));
       mend = `<button class="ev-opt camp-opt${asked?.k === 'mend' ? ' mine' : ''}" data-mates${can && !asked ? '' : ' disabled'}>`
-        + `<i data-art="camp_mend" aria-hidden="true"></i><b>Перевязать товарища</b>`
-        + (can ? `<span class="ev-fx"><em class="good">+${this.heal} HP, кому выберешь</em></span>` : `<small>${fallen ? 'Сначала встань сам' : 'Все и так целы'}</small>`) + '</button>';
+        + `<i data-art="camp_mend" aria-hidden="true"></i><b>${t('Перевязать товарища')}</b>`
+        + (can ? `<span class="ev-fx"><em class="good">${t('+{0} HP, кому выберешь', this.heal)}</em></span>` : `<small>${t(fallen ? 'Сначала встань сам' : 'Все и так целы')}</small>`) + '</button>';
     }
-    const dig = this.opt(me, party, { k: 'dig' }, 'camp_dig', 'Добыть руду', `<em class="good">+0–${DIG_MAX} руды, как повезёт</em>`, 'Сначала встань на ноги', asked);
+    const dig = this.opt(me, party, { k: 'dig' }, 'camp_dig', t('Добыть руду'), `<em class="good">${t('+0–{0} руды, как повезёт', DIG_MAX)}</em>`, t('Сначала встань на ноги'), asked);
     return rest + mend + dig;
   }
 
@@ -150,10 +151,10 @@ export class CampView {
   private matePick(me: HeroState, party: HeroState[], others: HeroState[], asked?: CampPick, team = false) {
     const fallen = me.hp <= 0;
     // for a party the question over the slabs already names who bandages
-    return (team ? '' : '<p class="camp-ask">Кого перевязать?</p>') + others.map(t => this.opt(me, party, { k: 'mend', to: t.i }, 'camp_mend', t.hp > 0 ? `Перевязать ${t.def.acc}` : `Поднять ${t.def.acc}`,
-      `<em class="good">${t.hp > 0 ? `+${Math.min(this.heal, t.max - t.hp)} HP ${t.def.dat}` : 'Встанет с половиной здоровья'}</em>`,
-      fallen ? 'Сначала встань сам' : 'Здоровье и так полное', asked,
-      `<span class="camp-mate" style="--c:${t.def.col}"><img src="${faceUrl(t)}" alt="">${hpBar(t)}</span>`)).join('')
-      + `<button class="ev-opt camp-back" data-back${asked ? ' disabled' : ''}><b>Назад</b></button>`;
+    return (team ? '' : `<p class="camp-ask">${t('Кого перевязать?')}</p>`) + others.map(o => this.opt(me, party, { k: 'mend', to: o.i }, 'camp_mend', t(o.hp > 0 ? 'Перевязать {0}' : 'Поднять {0}', o.def.acc),
+      `<em class="good">${o.hp > 0 ? t('+{0} HP {1}', Math.min(this.heal, o.max - o.hp), o.def.dat) : t('Встанет с половиной здоровья')}</em>`,
+      t(fallen ? 'Сначала встань сам' : 'Здоровье и так полное'), asked,
+      `<span class="camp-mate" style="--c:${o.def.col}"><img src="${faceUrl(o)}" alt="">${hpBar(o)}</span>`)).join('')
+      + `<button class="ev-opt camp-back" data-back${asked ? ' disabled' : ''}><b>${t('Назад')}</b></button>`;
   }
 }
