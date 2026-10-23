@@ -392,6 +392,8 @@ export interface Tier {
   /** How many holes, and how many cells the biggest one may take; the holes in one room are all of different shapes. */
   pits: Range;
   pitCells: number;
+  /** Holes more in the enemies' half of the room, behind their line: a disc that runs past them drops in. */
+  back?: number;
   haz: Range;
   mobs: Range;
 }
@@ -406,13 +408,18 @@ export const TIERS: Tier[] = [
 ];
 /**
  * The boss's arena (thread «Размер комнаты босса»): bigger than any room before it and plainer, always a rectangle with
- * fewer columns and holes and no strip of spikes, so a boss that rolls, breathes fire or throws from its bunk has the room
- * to. The rat swarm keeps its burrows and the disco ball its extra column; ARENA adds what each boss needs on top.
+ * no strip of spikes, so a boss that rolls, breathes fire or throws from its bunk has the room to. The rat swarm keeps its
+ * burrows; ARENA adds what each boss needs on top. So that the open floor doesn't make the boss easy (thread «Арена босса
+ * посложнее»), it has three clusters of columns to hide the enemies behind (COVER) and to bank the discs off the disco
+ * ball, and a hole behind the enemies' line.
  */
-export const BOSS_TIER: Tier = { gw: [16, 17], gh: [13, 13], shapes: ['rect'], blocks: [2, 2], blockKinds: 5, pits: [0, 1], pitCells: 4, haz: [3, 3], mobs: [3, 3] };
+export const BOSS_TIER: Tier = { gw: [16, 17], gh: [13, 13], shapes: ['rect'], blocks: [3, 3], blockKinds: 5, pits: [0, 1], pitCells: 4, back: 1, haz: [3, 3], mobs: [3, 3] };
 
 /** Most floor cells the holes of one room take: next to a 3 × 3 hole there is room only for a 1 × 1. */
 export const PIT_CELLS = 10;
+
+/** Shapes of the hole behind the enemies (Tier.back), the likeliest first: small, so it catches a disc but walls nothing off. */
+const BACK_PITS: PitKind[] = ['2x1', 'L3', '1x1', '3x1', '2x2'];
 
 /** Most enemies a room starts with: past this a room is a crowd, not a fight. */
 export const MOB_CAP = 5;
@@ -795,6 +802,20 @@ export const ARENA: Partial<Record<MobKind, (L: Layout, boss: Mob) => number>> =
   dragon: (L, b) => L.pads.filter(p => fireCells(L, b, p).some(c => Math.hypot(c.x - p.x, c.y - p.y) < 1)).length / 3,
 };
 
+/** Share of the straight throws from the runes at the enemies (eggs aside) that a column, a resource or the rock stops. */
+export function coverOf(L: Layout) {
+  const ms = L.mobs.filter(m => m.k !== 'egg');
+  let n = 0, shut = 0;
+  for (const p of L.pads) for (const m of ms) { n++; if (!clearLine(L, p, m)) shut++; }
+  return n ? shut / n : 1;
+}
+
+/**
+ * How much of the boss arena's straight throws at the enemies its columns should stop, once the boss has what it needs;
+ * for that the arena is built over only up to COVER_TRIES times in all, so the boss's room still comes in a blink.
+ */
+export const COVER = 0.7, COVER_TRIES = 8;
+
 /** How well a room suits its boss: 1 or more when it does (ARENA). */
 export function arenaFit(L: Layout, boss: MobKind) {
   const m = L.mobs.find(o => o.k === boss), need = ARENA[boss];
@@ -803,15 +824,17 @@ export function arenaFit(L: Layout, boss: MobKind) {
 
 /**
  * The room a spec stands for. A boss's room is still random: it is built again, from the seed and the try, until it
- * suits the boss (arenaFit), and after ARENA_TRIES the best try stands. The boss is the one its seed picks, whatever the try.
+ * suits the boss (arenaFit), and after ARENA_TRIES the best try stands; within the first COVER_TRIES it also looks
+ * for one that hides the enemies well enough (COVER), the boss's need first. The boss is the one its seed picks, whatever the try.
  */
 export function generate(spec: RoomSpec): Layout {
   if (spec.tut) return warmRoom();
   if (spec.type !== 'boss') return build(spec, 0);
   const boss = bossOf(spec), at = { ...spec, boss };
-  let best = build(at, 0), top = arenaFit(best, boss);
-  for (let k = 1; k < ARENA_TRIES && top < 1; k++) {
-    const L = build(at, k), fit = arenaFit(L, boss);
+  const score = (L: Layout) => Math.min(1, arenaFit(L, boss)) * 10 + Math.min(COVER, coverOf(L));
+  let best = build(at, 0), top = score(best);
+  for (let k = 1; k < ARENA_TRIES && (top < 10 || (k < COVER_TRIES && top < 10 + COVER)); k++) {
+    const L = build(at, k), fit = score(L);
     if (fit > top) { best = L; top = fit; }
   }
   return best;
@@ -928,13 +951,13 @@ function build(spec: RoomSpec, attempt: number): Layout {
    * so no wall or rune touches it, stays two cells clear of the other holes, and never cuts off a way across the room,
    * even for big 2 × 2 enemies.
    */
-  const placePit = (k: PitKind): Pit | null => {
+  const placePit = (k: PitKind, zone = mid): Pit | null => {
     const ways = pitTurns(k);
     for (let tr = 0; tr < 200; tr++) {
       const way = ways[ri(0, ways.length - 1)], w = Math.max(...way.map(c => c[0])) + 1, h = Math.max(...way.map(c => c[1])) + 1;
       const i0 = ri(1, gw - w - 1), j0 = ri(1, gh - h - 1), cells = way.map(([a, b]): [number, number] => [i0 + a, j0 + b]);
       const cx = cells.reduce((n, c) => n + c[0] + 0.5, 0) / cells.length * TILE, cy = cells.reduce((n, c) => n + c[1] + 0.5, 0) / cells.length * TILE;
-      let ok = mid(cx, cy) && pits.every(q => q.cells.every(([a, b]) => cells.every(([i, j]) => Math.max(Math.abs(a - i), Math.abs(b - j)) >= 3)));
+      let ok = zone(cx, cy) && pits.every(q => q.cells.every(([a, b]) => cells.every(([i, j]) => Math.max(Math.abs(a - i), Math.abs(b - j)) >= 3)));
       for (const [i, j] of cells) for (let b = -1; b <= 1 && ok; b++) for (let a = -1; a <= 1 && ok; a++) ok = isFloor(geo, i + a, j + b) && !taken.has(hazKey(i + a, j + b));
       if (ok && !splits(new Set(cells.map(([i, j]) => hazKey(i, j)))) && !cuts(cells)) return { k, cells };
     }
@@ -961,6 +984,19 @@ function build(spec: RoomSpec, attempt: number): Layout {
       pits.push(p);
       // the cells of a hole are taken, and blocks, enemies and resources keep clear of its edge
       for (const [i, j] of p.cells) { holes.add(hazKey(i, j)); take(i, j); objs.push({ ...cellCentre(i, j), r: 8 }); }
+    }
+  }
+  // a small hole behind the enemies' line, of a shape not in the room yet; the swarm's burrows are its own
+  const behind = (x: number, y: number) => x / Wx + y / Wy < 0.9;
+  for (let n = burrows ? 0 : tier.back ?? 0; n > 0; n--) {
+    const used = new Set(pits.map(p => p.k));
+    for (const k of BACK_PITS) {
+      if (used.has(k) || pits.reduce((c, p) => c + p.cells.length, PIT_SHAPES[k].length) > PIT_CELLS) continue;
+      const p = placePit(k, behind);
+      if (!p) continue;
+      pits.push(p);
+      for (const [i, j] of p.cells) { holes.add(hazKey(i, j)); take(i, j); objs.push({ ...cellCentre(i, j), r: 8 }); }
+      break;
     }
   }
 
@@ -1000,8 +1036,7 @@ function build(spec: RoomSpec, attempt: number): Layout {
   // ice caves get one cluster more, and most of them are icicles, big and small, rising from the floor:
   // same one-tile footprint and bounce as stone, but discs can shatter them
   const icy = biome.iceMu !== undefined;
-  // the disco ball's room has a column more to bank the discs off
-  const nBlocks = roll(tier.blocks) + extra.blocks + (icy ? 1 : 0) + (boss === 'discoball' ? 1 : 0), nIce = icy ? Math.ceil(nBlocks / 2) : 0;
+  const nBlocks = roll(tier.blocks) + extra.blocks + (icy ? 1 : 0), nIce = icy ? Math.ceil(nBlocks / 2) : 0;
   for (let k = 0; k < nBlocks - nIce; k++) cluster(stone);
   for (let k = 0; k < nIce; k++) cluster(icicle);
 

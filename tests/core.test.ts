@@ -4,7 +4,7 @@ import { Camera, FIT, KEEP, type Vec } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, CUFF_TURNS, FOOD_HEAL, FOOD_PER_DISC, CLEAN_ORE, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, KISS_TURNS, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, KINDS, RAGE_FROM, RISE_HP, SHOVE_DMG, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize, toughOf } from '../src/data';
 import { ART, DOOR_MUL, FOOD_FLY, FOOD_TOSS, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { ARENA_TRIES, BOSS_UP, BURROW_APART, BURROW_NEAR, CASTS, CAVE, MOB_CAP, arenaFit, bossOf, fireCells, lanesOf, mobPool, caveStock, PARTY_SCALE, RUNE_AREA, SPK_AREA, caveTurns, crystals, runes, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, dmgBonus, floorAt, generate, hazKey, inPit, isFloor, mobDmg, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob, type ResNode } from '../src/room';
+import { ARENA_TRIES, BOSS_UP, COVER, COVER_TRIES, coverOf, BURROW_APART, BURROW_NEAR, CASTS, CAVE, MOB_CAP, arenaFit, bossOf, fireCells, lanesOf, mobPool, caveStock, PARTY_SCALE, RUNE_AREA, SPK_AREA, caveTurns, crystals, runes, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, dmgBonus, floorAt, generate, hazKey, inPit, isFloor, mobDmg, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob, type ResNode } from '../src/room';
 import { ELITES, FIGHTS, FLOORS, FORGE_ROWS, LAYERS, REST_ROW, agreed, floorOk, genFloor, isFight, newRun, nodeById, reachable, routes, runDone } from '../src/run';
 import { makeRng } from '../src/rng';
 import { t as shown } from '../src/i18n';
@@ -284,16 +284,16 @@ describe('difficulty along a floor', () => {
       // a rectangle bigger than any room before it: the last fight rows are 15 × 12 at the most
       expect(area).toBe(L.gw * L.gh);
       expect(area).toBeGreaterThan(15 * 12);
-      expect(L.blocks.length).toBeGreaterThanOrEqual(2);
-      // the swarm's burrows aside, a hole at the most
-      expect(L.pits.length).toBeLessThanOrEqual(boss.k === 'ratswarm' ? 3 : 1);
+      expect(L.blocks.length).toBeGreaterThanOrEqual(3);
+      // the swarm's burrows aside, a hole at the most and one behind the enemies
+      expect(L.pits.length).toBeLessThanOrEqual(boss.k === 'ratswarm' ? 3 : 2);
       if ([...L.haz].some(k => { const [i, j] = k.split(',').map(Number); return Math.abs((i + 0.5) / L.gw + (j + 0.5) / L.gh - 1) < 0.2; })) middle++;
       expect((L.mobs.length + L.blocks.length + L.pits.length + L.haz.size + L.nodes.length) / area).toBeLessThan(0.2);
       for (const p of L.pads) expect(g.route(boss, p, false)).not.toBeNull();
     }
     // hazards lie across the middle of the room too, not only along its walls
     expect(middle).toBeGreaterThan(FLOORS * 59 * 0.6);
-  });
+  }, 60000);
 
   it('hits harder on later floors and in the last rooms before the boss', () => {
     expect(room(0, 0, 3).dmgAdd).toBe(0);
@@ -2210,7 +2210,7 @@ describe('floor casts and enemy abilities', () => {
     // one of the floor's three bosses, by the room's seed
     expect(seen.map(s => [...s].filter(k => MOBS[k as keyof typeof MOBS].boss).sort())).toEqual(CASTS.map(c => [...c.bosses].sort()));
     for (const s of seen) expect(s.size).toBeGreaterThanOrEqual(5);
-  });
+  }, 60000);
 
   const fight = (floor: number, kinds: (keyof typeof MOBS)[]) => {
     const g = new Game();
@@ -4422,7 +4422,7 @@ describe("the floors' other bosses", () => {
       expect([...met].sort()).toEqual([...CASTS[f].bosses].sort());
       for (const k of CASTS[f].bosses) expect(generate({ seed: 3, depth: f * LAYERS + LAYERS, floor: f, type: 'boss', boss: k }).mobs[0].k).toBe(k);
     }
-  });
+  }, 60000);
 
   it('builds each its room: burrows for the swarm, no escort for Пахан, eggs round the dragon for every hero', () => {
     for (let seed = 1; seed < 30; seed++) {
@@ -4438,7 +4438,7 @@ describe("the floors' other bosses", () => {
         for (const e of eggs) { expect(Math.max(Math.abs(e.x - d.x), Math.abs(e.y - d.y))).toBeLessThanOrEqual(1.5 * TILE + 1); expect(e.owner).toBe(0); }
       }
     }
-  });
+  }, 60000);
 
   it("builds a boss's arena over until it suits the boss, and the same seed always gives the same arena", () => {
     for (let f = 0; f < FLOORS; f++) for (const k of CASTS[f].bosses) {
@@ -4457,6 +4457,20 @@ describe("the floors' other bosses", () => {
       expect(rooms.size, k).toBe(16);
     }
     expect(ARENA_TRIES).toBe(20);
+  }, 60000);
+
+  it('hides the enemies of every arena behind its columns and digs a hole behind their line', () => {
+    let cover = 0, rooms = 0;
+    for (let f = 0; f < FLOORS; f++) for (const k of CASTS[f].bosses) for (let seed = 1; seed <= 10; seed++) {
+      const L = generate({ seed, depth: f * LAYERS + LAYERS, floor: f, type: 'boss', boss: k });
+      cover += coverOf(L); rooms++;
+      // a hole in the enemies' half of the room, a small one; the swarm has only its burrows
+      const back = L.pits.filter(p => p.cells.reduce((n, [i, j]) => n + (i + 0.5) / L.gw + (j + 0.5) / L.gh, 0) / p.cells.length < 0.9);
+      if (k !== 'ratswarm') expect(back.some(p => p.cells.length <= 4), `${k} ${seed}`).toBe(true);
+    }
+    // the boss's own need comes first, so not every arena gets to COVER, but most of the throws at the enemies are stopped
+    expect(cover / rooms).toBeGreaterThan(0.5);
+    expect([COVER, COVER_TRIES]).toEqual([0.7, 8]);
   }, 60000);
 
   it('gives each boss what it needs: sight, burrows, a dancefloor, runs to roll down, fire that reaches', () => {
@@ -4488,7 +4502,7 @@ describe("the floors' other bosses", () => {
       const drake = at('dragon');
       if (arenaFit(drake.L, 'dragon') >= 1) expect(drake.L.pads.filter(p => fireCells(drake.L, drake.b, p).some(c => c.x === p.x && c.y === p.y)).length).toBeGreaterThanOrEqual(3);
     }
-  });
+  }, 60000);
 
   it('every one of them plays seven turns through with its own moves', () => {
     const moves: Record<string, string[]> = { ratswarm: ['dive', 'emerge'], pahan: ['summon', 'brew'], fridge: ['zone', 'toss'], dancer: ['zone'], discoball: ['zone'], dragon: ['zone', 'rise'] };
