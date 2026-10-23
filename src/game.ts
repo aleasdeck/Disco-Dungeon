@@ -303,7 +303,7 @@ export const ZONE_CRY: Record<Zone, string> = {
   cold: 'МОРОЗИЛКА!', dance: 'БИТ!', beam: 'СВЕТОМУЗЫКА!', roll: 'КАТИТСЯ!', fire: 'ОТРЫЖКА!', crown: 'КОРОНА!', wall: 'ЛЕДЯНАЯ СТЕНА!', draft: 'СКВОЗНЯК!', cast: 'ЛИТЬЁ!',
 };
 export const ZONE_COL: Record<Zone | 'bite', string> = {
-  bite: '#ff3a2a', cold: '#7fd8ff', dance: '#ff5ad1', beam: '#ffe27a', roll: '#ff9a3a', fire: '#ff6a1a', crown: '#ffd34d', wall: '#bfe6ff', draft: '#d6f1ff', cast: '#ff8a2a',
+  bite: '#ff3a2a', cold: '#7fd8ff', dance: '#ff5ad1', beam: '#ffe27a', roll: '#ff9a3a', fire: '#ff6a1a', crown: '#ffd34d', wall: '#4a86ff', draft: '#3ddc84', cast: '#ff8a2a',
 };
 /** The cry over a floor boss as it turns into its next phase. */
 const PHASE_CRY: Partial<Record<MobKind, string>> = { ratswarm2: 'свора редеет!', ratswarm3: 'разбегаются!', pahan2: 'БЕСПРЕДЕЛ!', dancer2: 'ЛИХОРАДКА!', discoball2: 'сорвался!', dragon2: 'слез с яиц!' };
