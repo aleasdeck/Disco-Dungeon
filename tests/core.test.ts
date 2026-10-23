@@ -7,6 +7,7 @@ import { applySnapshot, snapshot } from '../src/sync';
 import { ARENA_TRIES, BOSS_UP, BURROW_APART, BURROW_NEAR, CASTS, CAVE, MOB_CAP, arenaFit, bossOf, fireCells, lanesOf, mobPool, caveStock, PARTY_SCALE, RUNE_AREA, SPK_AREA, caveTurns, crystals, runes, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, dmgBonus, floorAt, generate, hazKey, inPit, isFloor, mobDmg, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob, type ResNode } from '../src/room';
 import { ELITES, FIGHTS, FLOORS, FORGE_ROWS, LAYERS, REST_ROW, agreed, floorOk, genFloor, isFight, newRun, nodeById, reachable, routes, runDone } from '../src/run';
 import { makeRng } from '../src/rng';
+import { t as shown } from '../src/i18n';
 import { BOTTLE, CUPS, EVENTS, PULL_ODDS, RIDDLES, ROB_MIN, SELL, applyFx, canPick, choicesOf, cupPick, doneOf, eventDef, eventOf, fxParts, heroPick, redrawn, riddleOf, rolled, sellDone, sellPick, settleBet, shuffleOf, shutWhy, stageOf, take, type EventState, type Table } from '../src/events';
 import { CAMP_HEAL, DIG_MAX, campDo, campLeave, canCamp, digOre, type CampState } from '../src/camp';
 import { ARTIFACTS, BELLY, OFFER, PASS, SOCKETS, lootAgreed, lootFor, newLoot, rollOffer, settleLoot, takeKept, type ArtKey } from '../src/artifacts';
@@ -1137,7 +1138,7 @@ describe('the second batch of events', () => {
     const p = newParty([0, 1]), tops = p.map(h => h.max), ev = at('bottle', s);
     take(ev, 0, tbl(p));
     expect(p.filter((h, k) => h.max === tops[k] + 5).map(h => h.i)).toEqual([ev.done!.who]);
-    expect(doneOf(ev)!.out.txt).toContain(HEROES[ev.done!.who!].acc);
+    expect(shown(doneOf(ev)!.out.txt)).toContain(HEROES[ev.done!.who!].acc);
   });
 
   it('«Наперсточник» shuffles the same on every screen and pays more the faster it goes', () => {
@@ -1598,7 +1599,7 @@ describe('trophies in play', () => {
       const g = arena(arts), a = disc(g, 100, 100, 150, 0), b = disc(g, 111, 100, -150, 0);
       g.S.discs = [a, b];
       g.step(1 / 120);
-      return { charged: a.charged && b.charged, txt: g.S.floats.map(f => f.txt) };
+      return { charged: a.charged && b.charged, txt: g.S.floats.map(f => shown(f.txt)) };
     };
     expect(clash([]).charged).toBe(false);
     const rung = clash(['bells']);
@@ -2346,7 +2347,7 @@ describe('pressure in a fight', () => {
       g.S.discs = [{ ...disc(g, n.x, n.y + n.r + 6.5, 0, -200), hero: h }];
       g.step(1 / 60);
       g.S.discs = [];
-      return g.S.floats.map(f => f.txt);
+      return g.S.floats.map(f => shown(f.txt));
     };
     // a fallen hero gets none; one nearly full gets only what is still missing
     c.hp = 0;
@@ -2424,7 +2425,7 @@ describe('pressure in a fight', () => {
     g.S.nodes = [n];
     g.S.discs = [{ ...disc(g, n.x, n.y + n.r + 6.5, 0, -200), hero: g.party[0] }];
     g.step(1 / 60);
-    expect(g.S.floats.map(f => f.txt)).toContain('+2 искры');
+    expect(g.S.floats.map(f => shown(f.txt))).toContain('+2 искры');
     expect(g.party[0].sparks).toBe(2);
   });
 
@@ -3450,7 +3451,7 @@ describe('the heroes past the first three', () => {
     expect(skel.intent).toMatchObject({ t: 'move', hero: -1, sigh: true });
     turn(g);
     expect(h.hp).toBe(99);
-    expect(g.S.log.some(l => l.txt.includes('вздыхает по Вешалке'))).toBe(true);
+    expect(g.S.log.some(l => shown(l.txt).includes('вздыхает по Вешалке'))).toBe(true);
     const g2 = arena([at('model')], [['king', 4, 4], ['skel', 1, 1]]), [king] = g2.S.mobs;
     g2.S.discs = []; into(g2, g2.party[0], king, true); g2.step(1 / 120);
     expect(king.kiss).toBeUndefined();
@@ -3559,7 +3560,7 @@ describe('enemy-turn journal', () => {
   };
   /** The enemy makes the given move at once. */
   const act = (g: Game, m: Mob, it: Intent) => { m.intent = it; (g as unknown as { mobAct: (m: Mob) => void }).mobAct(m); };
-  const lines = (g: Game) => g.S.log.map(l => l.txt);
+  const lines = (g: Game) => g.S.log.map(l => shown(l.txt));
 
   it('writes a line for every enemy move as it lands, burns and shields included', () => {
     const g = arena([['skel', 9, 7], ['skel', 5, 1], ['archer', 5, 0], ['rat', 2, 2]]), [b, a] = g.party, [near, far, archer, rat] = g.S.mobs;
@@ -4045,7 +4046,7 @@ describe('shooters fire only at a hero they see', () => {
     expect(cellAt(m.x, m.y)).not.toEqual([1, 4]);
     expect(g.sees(m, h)).toBe(true);
     expect(h.hp).toBe(99 - m.dmg);
-    expect(g.S.log.map(l => l.txt)).toContain(`Гоблин-лучник выстрелил в ${h.def.acc} на ${m.dmg}`);
+    expect(g.S.log.map(l => shown(l.txt))).toContain(`Гоблин-лучник выстрелил в ${h.def.acc} на ${m.dmg}`);
   });
 
   it('far out of sight it walks towards the hero, says when it will fire, and holds its shot', () => {
@@ -4060,7 +4061,7 @@ describe('shooters fire only at a hero they see', () => {
     enemyTurn(g);
     expect(h.hp).toBe(99);
     expect(cellAt(m.x, m.y)).not.toEqual([1, 1]);
-    expect(g.S.log.map(l => l.txt)).toContain(`Гоблин-лучник идёт к ${h.def.dat}`);
+    expect(g.S.log.map(l => shown(l.txt))).toContain(`Гоблин-лучник идёт к ${h.def.dat}`);
   });
 
   it('fires at a hero it sees rather than one hidden, whoever\'s turn it would be', () => {
@@ -4096,7 +4097,7 @@ describe('shooters fire only at a hero they see', () => {
     g.S.log = [];
     (g as unknown as { mobAct: (m: Mob) => void }).mobAct(m);
     expect(h.hp).toBe(99);
-    expect(g.S.log.map(l => l.txt)).toEqual([`Гоблин-лучник не увидел ${h.def.acc}`]);
+    expect(g.S.log.map(l => shown(l.txt))).toEqual([`Гоблин-лучник не увидел ${h.def.acc}`]);
   });
 
   it('a bomber out of sight lights its fuse on the way, and throws once it sees the hero', () => {
@@ -4105,7 +4106,7 @@ describe('shooters fire only at a hero they see', () => {
     expect(m.intent!.t).toBe('charge');
     enemyTurn(g);
     expect(g.sees(m, h)).toBe(true);
-    expect(g.S.log.map(l => l.txt)).toContain(`Гном-подрывник поджёг фитиль и пошёл к ${h.def.dat}`);
+    expect(g.S.log.map(l => shown(l.txt))).toContain(`Гном-подрывник поджёг фитиль и пошёл к ${h.def.dat}`);
     expect(m.intent).toMatchObject({ t: 'hit', hero: h.i, dmg: m.dmg * 2 });
     enemyTurn(g);
     expect(h.hp).toBe(99 - m.dmg * 2);

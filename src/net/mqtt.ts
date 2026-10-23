@@ -146,7 +146,7 @@ export function mqttConnect(url: string, h: MqttHandlers): Mqtt {
   };
   const shut = (why?: string) => {
     if (closed) return;
-    if (open && why) mqttLog(`брокер ${new URL(url).hostname} отключился: ${why}`);
+    if (open && why) mqttLog(`broker ${new URL(url).hostname} dropped: ${why}`);
     closed = true;
     open = false;
     clearInterval(beat);
@@ -163,7 +163,7 @@ export function mqttConnect(url: string, h: MqttHandlers): Mqtt {
   }, CONNECT_MS);
   const beat = setInterval(() => {
     // The broker answers every ping; one that has said nothing for two rounds is gone.
-    if (Date.now() - heard > PING_MS * 2 + 5000) return shut('не отвечает');
+    if (Date.now() - heard > PING_MS * 2 + 5000) return shut('not answering');
     if (open) write(new Uint8Array([0xc0, 0]));
   }, PING_MS);
 
@@ -192,8 +192,8 @@ export function mqttConnect(url: string, h: MqttHandlers): Mqtt {
       }
     }
   };
-  ws.onclose = (e) => shut(`закрыт (${e.code}${e.reason ? ' ' + e.reason : ''})`);
-  ws.onerror = () => shut('ошибка');
+  ws.onclose = (e) => shut(`closed (${e.code}${e.reason ? ' ' + e.reason : ''})`);
+  ws.onerror = () => shut('error');
 
   return {
     get open() {

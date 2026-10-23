@@ -7,6 +7,7 @@ import { BIOMES, HEROES, MOBS, type MobKind } from './data';
 import { envArt, eventArt, sprites, uiArt } from './assets';
 import { BACKDROPS, BACKDROP_COUNT, PHOTO, SPOTS, arrow, artOf, drawPhoto, finish, inLight, lightOf, marker, tallOf } from './photo';
 import type { Tally } from './game';
+import { t } from './i18n';
 
 type Pt = [number, number];
 type Look = 'left' | 'right';
@@ -495,11 +496,6 @@ const NOTES: Record<number, { x: number; y: number; rot: number; bend: number }[
   3: [{ x: 175, y: 160, rot: -6, bend: -0.22 }, { x: 512, y: 62, rot: 2, bend: 0.06 }, { x: 845, y: 160, rot: 5, bend: 0.22 }],
 };
 
-const plural = (n: number, one: string, few: string, many: string) => {
-  const t = n % 10, h = n % 100;
-  return t === 1 && h !== 11 ? one : t >= 2 && t <= 4 && (h < 10 || h >= 20) ? few : many;
-};
-
 /**
  * ПОСЛЕ: the same backdrop and places, the heroes as the run left them, beaten by their health and wearing their
  * trophies; the fallen lie in chalk outlines. A marker note over each says how it came out of it.
@@ -533,16 +529,16 @@ export function drawAfter(out: HTMLCanvasElement, a: Album) {
     }
   }
   finish(c, a.at);
-  for (const t of tops) {
-    const m = NOTES[n][t.k], h = seats[t.k]!, def = HEROES[h.i], st = stateOf(h.hp, h.max), falls = h.t.falls;
-    const word = st === 3 ? (def.fem ? 'пала' : 'пал') : st === 0 ? 'ни царапины!' : st === 1 ? (def.fem ? 'потрёпана' : 'потрёпан') : def.fem ? 'еле живая' : 'еле живой';
+  for (const o of tops) {
+    const m = NOTES[n][o.k], h = seats[o.k]!, def = HEROES[h.i], st = stateOf(h.hp, h.max), falls = h.t.falls;
+    const word = t(st === 3 ? (def.fem ? 'пала' : 'пал') : st === 0 ? 'ни царапины!' : st === 1 ? (def.fem ? 'потрёпана' : 'потрёпан') : def.fem ? 'еле живая' : 'еле живой');
     // the health, and under it how many times the hero fell on the way
-    const subs = [st === 3 ? '' : `${h.hp}/${h.max} HP`, falls ? `${def.fem ? 'падала' : 'падал'} ${falls} ${plural(falls, 'раз', 'раза', 'раз')}` : ''].filter(Boolean);
+    const subs = [st === 3 ? '' : `${h.hp}/${h.max} HP`, falls ? t('{0?падала|падал} {1} {1|раз|раза|раз}', def.fem, falls) : ''].filter(Boolean);
     const big = n === 3 ? 48 : 60, small = n === 3 ? 34 : 40;
     marker(c, word, m.x, m.y, big, m.rot);
     subs.forEach((t2, j) => marker(c, t2, m.x + 4, m.y + big * 0.85 + j * small * 1.05, small, m.rot, '#f6e7b8'));
     const y0 = m.y + big * 0.85 + subs.length * small * 1.05;
-    arrow(c, m.x, y0, t.x + (m.x < t.x ? -20 : m.x > t.x ? 20 : 0), Math.max(t.y, y0 + 70), m.bend);
+    arrow(c, m.x, y0, o.x + (m.x < o.x ? -20 : m.x > o.x ? 20 : 0), Math.max(o.y, y0 + 70), m.bend);
   }
 }
 

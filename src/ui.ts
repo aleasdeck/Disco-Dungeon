@@ -15,13 +15,11 @@ import { SOCKETS, artDef } from './artifacts';
 import { hl } from './hl';
 import { DEMO } from './demo';
 import { OreCounters } from './orefx';
+import { M, t } from './i18n';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
-
-/** "2 хода", "5 ходов". */
-const turns = (n: number) => n + ' ' + (n % 10 === 1 && n % 100 !== 11 ? 'ход' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'хода' : 'ходов');
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Small picture of a mob's miniature, drawn once per kind (and again once its art loads). */
 const mobIcons = new Map<string, string>();
@@ -155,22 +153,23 @@ const pips = (n: number, lv: number) => `<span class="lvl">${Array.from({ length
  * in a line under the name (the phone pop-up) or a tooltip (the desktop).
  */
 function upRows(g: Game, h: HeroState) {
-  const row = (k: string, name: string, txt: string, n: number, lv: number, val: string, tip: string) =>
-    `<div class="up" title="${tip}">${art(UP_ART[k], 'up-ico')}<span class="up-name">${name}</span>`
-    + `${pips(n, lv)}<b>${val}</b><small class="up-txt">${txt}</small></div>`;
+  const row = (k: string, name: string, txt: string, n: number, lv: number, val: string, tip: string[]) =>
+    `<div class="up" title="${tip.filter(Boolean).join(' ')}">${art(UP_ART[k], 'up-ico')}<span class="up-name">${t(name)}</span>`
+    + `${pips(n, lv)}<b>${val}</b><small class="up-txt">${t(txt)}</small></div>`;
   const dc = g.discCost(h), discTxt = 'Больше бросков за ход. Самое сильное улучшение';
   return row('n', 'Диски за ход', discTxt, HAND_MAX - HAND_START, h.discs - HAND_START, String(g.handOf(h)),
-    `${discTxt}. ` + (dc ? `Следующий диск у кузнеца за ${dc} руды.` : 'Больше двух кузнец не продаёт, третий диск даёт только трофей «Третья рука».'))
+    [`${t(discTxt)}.`, dc ? t('Следующий диск у кузнеца за {0} руды.', dc) : t('Больше двух кузнец не продаёт, третий диск даёт только трофей «Третья рука».')])
     + UPS.map(u => {
       const lv = h.up[u.k], cost = g.upCost(h, u.k), v = g.stat(h, u.k);
       return row(u.k, u.name, u.txt, UP_COST.length, lv, u.fmt(lv * u.step, v),
-        `${u.txt}. ${u.now?.(v) ?? ''}` + (cost ? `Следующий уровень у кузнеца за ${cost} руды.` : 'Больше не прокачать.'));
+        [`${t(u.txt)}.`, u.now?.(v) ?? '', cost ? t('Следующий уровень у кузнеца за {0} руды.', cost) : t('Больше не прокачать.')]);
     }).join('');
 }
 
 /** The smithy's scene in the blacksmith's window. */
-const forgeTxt = (ore: number) => 'Гном-кузнец закаляет раскалённый диск прямо в унитазе: шипит, парит, пахнет сталью и чем-то ещё. '
-  + (ore ? `На радостях он отсыпает отряду ${ore} руды, остальное за плату.` : 'Руды он сегодня не дарит: самому мало, так что всё за плату.');
+const forgeTxt = (ore: number) => ore
+  ? t('Гном-кузнец закаляет раскалённый диск прямо в унитазе: шипит, парит, пахнет сталью и чем-то ещё. На радостях он отсыпает отряду {0} руды, остальное за плату.', ore)
+  : t('Гном-кузнец закаляет раскалённый диск прямо в унитазе: шипит, парит, пахнет сталью и чем-то ещё. Руды он сегодня не дарит: самому мало, так что всё за плату.');
 
 /**
  * The blacksmith's slab for each of a hero's upgrades: what it is, its level, where the stat goes with the next level,
@@ -181,16 +180,16 @@ function forgeRows(g: Game, h: HeroState, team: boolean) {
   const free = g.freeUp(h);
   const row = (k: string, name: string, txt: string, n: number, lv: number, now: string, next: string, cost: number, gratis = false) => {
     const sold = !g.whet || gratis, short = !gratis && cost > g.bank.ore;
-    return `<button class="ev-opt fg-up" data-k="${k}" title="${txt}"${cost && sold && !short ? '' : ' disabled'}>`
-      + `<i data-art="${UP_ART[k]}" aria-hidden="true"></i><span class="fg-name"><b>${name}</b>${pips(n, lv)}</span>`
-      + `<span class="fg-fx">${cost ? `${now}<i>→</i>${next}` : `${now}, больше некуда`}</span>`
-      + (!cost || !sold ? '' : gratis ? '<span class="fg-cost free">даром</span>' : `<span class="fg-cost${short ? ' short' : ''}">${cost}${icon('ore')}</span>`) + '</button>';
+    return `<button class="ev-opt fg-up" data-k="${k}" title="${t(txt)}"${cost && sold && !short ? '' : ' disabled'}>`
+      + `<i data-art="${UP_ART[k]}" aria-hidden="true"></i><span class="fg-name"><b>${t(name)}</b>${pips(n, lv)}</span>`
+      + `<span class="fg-fx">${cost ? `${now}<i>→</i>${next}` : t('{0}, больше некуда', now)}</span>`
+      + (!cost || !sold ? '' : gratis ? `<span class="fg-cost free">${t('даром')}</span>` : `<span class="fg-cost${short ? ' short' : ''}">${cost}${icon('ore')}</span>`) + '</button>';
   };
   // alone with a party the window serves every hero: a tab with each face, the shown one lit, a free level marked on its tab
   const head = team
     ? `<div class="fg-team">${g.party.map(o => `<button class="fg-tab${o === h ? ' on' : ''}" data-hero="${o.i}" style="--c:${o.def.col}" aria-pressed="${o === h}">`
-      + `<img src="${faceUrl(o)}" alt=""><b>${o.def.name}</b>${g.freeUp(o) ? '<em>даром</em>' : ''}</button>`).join('')}</div>`
-    : `<div class="fg-me"><img src="${faceUrl(h)}" alt=""><b>${h.def.name}</b><span>${h.hp > 0 ? `${h.hp}/${h.max} HP` : 'пал'}</span></div>`;
+      + `<img src="${faceUrl(o)}" alt=""><b>${t(o.def.name)}</b>${g.freeUp(o) ? `<em>${t('даром')}</em>` : ''}</button>`).join('')}</div>`
+    : `<div class="fg-me"><img src="${faceUrl(h)}" alt=""><b>${t(h.def.name)}</b><span>${h.hp > 0 ? `${h.hp}/${h.max} HP` : t('пал')}</span></div>`;
   return head
     + (g.whet ? '' : row('n', 'Диски за ход', 'Больше бросков за ход. Самое сильное улучшение', HAND_MAX - HAND_START, h.discs - HAND_START, String(g.handOf(h)), String(g.handOf(h) + 1), g.discCost(h)))
     + UPS.map(u => {
@@ -201,15 +200,15 @@ function forgeRows(g: Game, h: HeroState, team: boolean) {
 
 /** The sharpening window's scene after an elite: the hero still owed a level picks it, then it is done. */
 const whetTxt = (free: boolean) => free
-  ? 'Гном-кузнец прибежал на грохот боя с элитой и бесплатно точит каждому один диск. Выбери, что подтянуть.'
-  : 'Диск заточен. Гном уже ворчит, что дальше только за руду.';
+  ? t('Гном-кузнец прибежал на грохот боя с элитой и бесплатно точит каждому один диск. Выбери, что подтянуть.')
+  : t('Диск заточен. Гном уже ворчит, что дальше только за руду.');
 
 /** Whose turn it is, as the HUD tells it: the heroes throw (and the discs settle), then the enemies go. */
 export type Side = 'place' | 'heroes' | 'enemies' | 'over';
 
 /** One status as a little icon with a number: on the portrait for heroes, on the card for enemies. */
 interface Status { k: string; n?: number; t: string }
-const statusHtml = (list: Status[]) => list.map(s => `<i class="st st-${s.k}" title="${s.t}">${icon(s.k)}${s.n ? `<b>${s.n}</b>` : ''}</i>`).join('');
+const statusHtml = (list: Status[]) => list.map(s => `<i class="st st-${s.k}" title="${t(s.t)}">${icon(s.k)}${s.n ? `<b>${s.n}</b>` : ''}</i>`).join('');
 
 /** The turn button's job right now. */
 type TurnAct = 'fight' | 'end' | 'cancel' | 'none';
@@ -222,7 +221,7 @@ const CHIPS: { on: (s: RoomSpec) => boolean; name: string; txt: string; ico?: st
   { on: s => s.ground === 'soap', name: 'мыльный пол', ico: 'ico_soap', txt: 'Мыльный пол: диски катятся вдвое дальше.' },
   { on: s => s.ground === 'sticky', name: 'липкий пол', ico: 'ico_sticky', txt: 'Липкий пол: диски тормозят быстрее.' },
   { on: s => s.bet === 'art', name: 'пари: без царапины', ico: 'ico_bet', txt: 'Пари с букмекером: победа без царапины даст каждому трофей, иначе каждый потеряет свой.' },
-  { on: s => s.bet === 'up', name: `пари: за ${BET_TURNS} хода`, ico: 'ico_bet', txt: `Пари с букмекером: победа за ${BET_TURNS} хода даст каждому уровень, иначе каждый потеряет уровень.` },
+  { on: s => s.bet === 'up', name: M('пари: за {0} {0|ход|хода|ходов}', BET_TURNS), ico: 'ico_bet', txt: M('Пари с букмекером: победа за {0} {0|ход|хода|ходов} даст каждому уровень, иначе каждый потеряет уровень.', BET_TURNS) },
   { on: s => !!s.extra, name: '+1 диск', txt: 'Краденые шайбы: в этом бою каждый бросает на диск больше.' },
 ];
 
@@ -380,6 +379,14 @@ export class Hud {
     b.classList.add('show');
   }
 
+  /** The language changed: what the HUD keeps drawn until the game changes is drawn again in it. */
+  relang() {
+    this.queueKey = this.whoKey = '';
+    delete $('fArts').dataset.k;
+    this.buildAllies();
+    this.refresh();
+  }
+
   /** The party's heads in the top strip: health under each, a tick once that player has ended the turn. */
   buildAllies() {
     const box = $('allies');
@@ -389,7 +396,7 @@ export class Hud {
       b.className = 'head';
       b.id = 'ally' + h.i;
       b.style.setProperty('--c', h.def.col);
-      b.setAttribute('aria-label', h.def.name);
+      b.setAttribute('aria-label', t(h.def.name));
       b.innerHTML = `<canvas></canvas><b class="who"></b><span class="a-hp"><i></i><s></s><em></em></span><span class="tick">${icon('check')}</span><span class="off">${icon('plug')}</span>`;
       drawPortrait(b.querySelector('canvas')!, h);
       // a face opens its hero's card, with the trophies on it (Vladislav: the allies' trophies are seen there); only in a
@@ -410,36 +417,41 @@ export class Hud {
     fillIcons();
     this.liftStrip();
     // the floor is laid out after the room's name (style.css): where the strip is narrow the floor gives way, never the room
-    $('locName').innerHTML = S.spec.tut && !this.at ? '<span>Разминка</span>'
-      : `<span class="fl">Этаж ${(this.at?.floor ?? S.spec.floor) + 1} · </span><span>${ROOM_TYPES[this.at?.type ?? S.spec.type].name}</span>`;
+    $('locName').innerHTML = S.spec.tut && !this.at ? `<span>${t('Разминка')}</span>`
+      : `<span class="fl">${t('Этаж {0}', (this.at?.floor ?? S.spec.floor) + 1)} · </span><span>${t(ROOM_TYPES[this.at?.type ?? S.spec.type].name)}</span>`;
     // the ore cave counts its turns down: «Ход 2 из 3»
     const max = g.turnsMax(), last = max > 0 && S.turn >= max;
-    $('hTurn').textContent = S.phase === 'place' ? 'Расстановка' : max ? `Ход ${S.turn} из ${max}` : `Ход ${S.turn}`;
+    $('hTurn').textContent = S.phase === 'place' ? t('Расстановка') : max ? t('Ход {0} из {1}', S.turn, max) : t('Ход {0}', S.turn);
     // enemies grow angrier every turn once a fight drags on; warn a turn ahead
     const rage = $('hRage'), fighting = S.phase !== 'place' && S.phase !== 'over' && !g.cave(), soon = g.rageFrom() - S.turn;
     rage.hidden = !fighting || (g.rage() === 0 && soon > 1);
     rage.classList.toggle('soon', g.rage() === 0);
-    rage.textContent = g.rage() ? `ярость +${g.rage()}` : 'ярость со след. хода';
-    rage.title = `С ${g.rageFrom()}-го хода каждый враг с каждым ходом бьёт на 1 сильнее.`;
+    rage.textContent = g.rage() ? t('ярость +{0}', g.rage()) : t('ярость со след. хода');
+    rage.title = t('С {0}-го хода каждый враг с каждым ходом бьёт на 1 сильнее.', g.rageFrom());
     // an event's curse on this fight
     // and what else an event left this fight: the foam party's floor, the bookie's bet, a disc more
     const curse = $('hCurse'), on = CHIPS.filter(c => c.on(S.spec));
     curse.hidden = !on.length || S.phase === 'over';
-    const chips = on.map(c => (c.ico ? art(c.ico, 'chip') : '') + c.name).join(' · ');
+    const chips = on.map(c => (c.ico ? art(c.ico, 'chip') : '') + t(c.name)).join(' · ');
     if (curse.dataset.k !== chips) { curse.dataset.k = chips; curse.innerHTML = chips; }
-    curse.title = on.map(c => c.txt).join(' ');
+    curse.title = on.map(c => t(c.txt)).join(' ');
 
     // in the ore cave nobody moves against the party: the heroes hop to their discs and throw again
     const side: Side = S.phase === 'place' || S.phase === 'over' ? S.phase : S.phase === 'enemy' || (S.phase === 'resolve' && !g.cave()) ? 'enemies' : 'heroes';
     const sd = $('hSide');
     sd.className = 'side ' + side;
-    sd.textContent = { place: max ? `${max} ${max === 1 ? 'ход' : 'хода'}` : '', heroes: last ? 'последний ход' : 'ваш ход', enemies: 'ход врагов', over: !g.alive().length ? (g.party.length > 1 ? 'отряд пал' : 'герой пал') : g.cave() ? 'пещера пройдена' : 'победа' }[side];
+    sd.textContent = {
+      place: () => (max ? t('{0} {0|ход|хода|ходов}', max) : ''),
+      heroes: () => (last ? t('последний ход') : t('ваш ход')),
+      enemies: () => t('ход врагов'),
+      over: () => (!g.alive().length ? (g.party.length > 1 ? t('отряд пал') : t('герой пал')) : g.cave() ? t('пещера пройдена') : t('победа')),
+    }[side]();
     document.body.dataset.turn = side;
     if (this.side !== side || (g.cave() && side === 'heroes' && this.bannerTurn !== S.turn)) {
       // the fight starts or the turn passes to the other side: a banner across the room says so
       if (this.side && (side === 'heroes' || side === 'enemies')) {
-        const sub = max ? `${last ? 'Последний ход' : `Ход ${S.turn} из ${max}`} · бросайте диски` : `Ход ${S.turn} · бросайте диски`;
-        this.banner(side === 'heroes' ? 'Ваш ход' : 'Ход врагов', side === 'heroes' ? sub : 'враги ходят по очереди', side);
+        const sub = !max ? t('Ход {0} · бросайте диски', S.turn) : last ? t('Последний ход · бросайте диски') : t('Ход {0} из {1} · бросайте диски', S.turn, max);
+        this.banner(side === 'heroes' ? t('Ваш ход') : t('Ход врагов'), side === 'heroes' ? sub : t('враги ходят по очереди'), side);
       }
       this.side = side;
       this.bannerTurn = S.turn;
@@ -465,29 +477,30 @@ export class Hud {
     // over an event or the camp the room behind has nothing to say: no blows coming, nobody ready or done
     const g = this.g, S = g.S, ev = !!this.at;
     for (const o of g.party) {
-      const t = $<HTMLButtonElement>('ally' + o.i);
-      if (!t) continue;
-      t.classList.toggle('me', o === g.hero);
-      t.classList.toggle('dead', o.hp <= 0);
+      const el = $<HTMLButtonElement>('ally' + o.i);
+      if (!el) continue;
+      el.classList.toggle('me', o === g.hero);
+      el.classList.toggle('dead', o.hp <= 0);
       // online: the player's name on their hero, greyed with a pulled plug while they are disconnected
       const who = this.nameOf(o.i), away = !g.here(o);
-      t.querySelector('.who')!.textContent = who ?? '';
-      t.classList.toggle('away', away);
+      el.querySelector('.who')!.textContent = who ?? '';
+      el.classList.toggle('away', away);
       const tot = Math.max(o.max, o.hp + o.shield), inc = ev ? 0 : g.incoming(o);
       const hpPct = (Math.max(0, o.hp) / tot) * 100, risk = (Math.min(inc, Math.max(0, o.hp)) / tot) * 100;
-      (t.querySelector('.a-hp i') as HTMLElement).style.width = hpPct + '%';
-      const sh = t.querySelector('.a-hp s') as HTMLElement;
+      (el.querySelector('.a-hp i') as HTMLElement).style.width = hpPct + '%';
+      const sh = el.querySelector('.a-hp s') as HTMLElement;
       sh.style.left = hpPct + '%';
       sh.style.width = (o.shield / tot) * 100 + '%';
-      const em = t.querySelector('.a-hp em') as HTMLElement;
+      const em = el.querySelector('.a-hp em') as HTMLElement;
       em.style.left = hpPct - risk + '%';
       em.style.width = risk + '%';
-      t.classList.toggle('lethal', o.hp > 0 && inc >= o.hp);
+      el.classList.toggle('lethal', o.hp > 0 && inc >= o.hp);
       // a tick: placed and ready (online placement), or done with the turn
       const done = !ev && (S.phase === 'place' ? g.online && S.ready.includes(o.i) : S.phase === 'throw' && g.ended(o));
-      t.classList.toggle('done', done);
-      t.title = (who ? `${who}, ` : '') + `${o.def.name}: ${Math.max(0, o.hp)}/${o.max}` + (o.shield ? `, щит ${o.shield}` : '')
-        + (o.hp <= 0 ? ', пал' : done ? (S.phase === 'place' ? ', готов' : ', закончил ход') : '') + (away ? '. Нет связи: пока играет хозяин комнаты, ход его не ждёт' : '');
+      el.classList.toggle('done', done);
+      el.title = [who, `${t(o.def.name)}: ${Math.max(0, o.hp)}/${o.max}`, o.shield ? t('щит {0}', o.shield) : '',
+        o.hp <= 0 ? t('пал') : done ? (S.phase === 'place' ? t('готов') : t('закончил ход')) : ''].filter(Boolean).join(', ')
+        + (away ? `. ${t('Нет связи: пока играет хозяин комнаты, ход его не ждёт')}` : '');
     }
   }
 
@@ -496,110 +509,132 @@ export class Hud {
    * so its words say whether it fires from where it stands, steps out to fire or is still walking to where it sees the hero.
    */
   private intent(m: Mob): { badge: string; txt: string } {
-    const g = this.g, it = m.intent;
-    if (!it || it.t === 'idle') return { badge: '', txt: MOBS[m.k].dummy ? 'Стоит столбом и ждёт, когда стукнут' : 'Ничего не делает' };
+    const g = this.g, it = m.intent, d = MOBS[m.k];
+    if (!it || it.t === 'idle') return { badge: '', txt: d.dummy ? t('Стоит столбом и ждёт, когда стукнут') : t('Ничего не делает') };
     // frozen stiff, whatever it meant to do
-    if (g.frozen(m) && !g.acted(m)) return { badge: `<span class="ib sp">${icon('chill')}</span>`, txt: `${MOBS[m.k].fem ? 'Заморожена' : 'Заморожен'}: пропустит ход` };
-    const tgt = it.hero >= 0 ? g.heroOf(it.hero) : null, far = isRanged(m.k), bomb = !!MOBS[m.k].charge;
+    if (g.frozen(m) && !g.acted(m)) return { badge: `<span class="ib sp">${icon('chill')}</span>`, txt: t('{0?Заморожена|Заморожен}: пропустит ход', d.fem) };
+    const tgt = it.hero >= 0 ? g.heroOf(it.hero) : null, far = isRanged(m.k), bomb = !!d.charge;
     // a shooter's blow and its walk to where it sees the hero carry a bow by the badge
     const acc = tgt?.def.acc ?? '', out = far && !!it.way && it.way.length > 1, bow = far ? icon('bow', 'qbow') : '';
+    // its blow at another enemy, the name of that one put in lower case
+    const atMob = (who: string) => {
+      const how = !far ? t('ударит {0:l} на {1}', who, it.dmg) : bomb ? t('бросит бомбу в {0:l} на {1}', who, it.dmg) : t('выстрелит в {0:l} на {1}', who, it.dmg);
+      return out ? t('выйдет на линию огня и {0}', how) : how;
+    };
     // kissed by the model: it goes for another enemy, or sighs with nobody left to go for
-    if (it.sigh) return { badge: `<span class="ib sp">${icon('kiss')}</span>`, txt: 'Поцелован: вздыхает и никого не ударит' };
+    if (it.sigh) return { badge: `<span class="ib sp">${icon('kiss')}</span>`, txt: t('Поцелован: вздыхает и никого не ударит') };
     // going for an enemy the model has kissed, as it would for a hero
     if (it.foe !== undefined && m.kiss === undefined && it.t !== 'charge') {
-      const o = MOBS[g.S.mobs[it.foe].k], who = o.acc.toLowerCase(), kissed = o.fem ? 'поцелована' : 'поцелован';
-      if (it.t === 'hit') {
-        const how = !far ? `ударит ${who}` : bomb ? `бросит бомбу в ${who}` : `выстрелит в ${who}`;
-        return { badge: `${bow}<span class="ib hit" style="--c:#ff5a8a">${it.dmg}</span>`, txt: cap(`${out ? 'выйдет на линию огня и ' : ''}${how} на ${it.dmg}: ${o.fem ? 'та' : 'тот'} ${kissed} Вешалкой, броня считается`) };
-      }
-      return { badge: `${bow}<span class="ib go" style="--c:#ff5a8a">${it.eta ?? icon('move')}</span>`, txt: `Идёт ${far ? 'стрелять в' : 'бить'} ${who}: ${o.fem ? 'та' : 'тот'} ${kissed} Вешалкой` };
+      const o = MOBS[g.S.mobs[it.foe].k];
+      if (it.t === 'hit') return { badge: `${bow}<span class="ib hit" style="--c:#ff5a8a">${it.dmg}</span>`, txt: cap(t('{0}: {1?та поцелована|тот поцелован} Вешалкой, броня считается', atMob(o.acc), o.fem)) };
+      return {
+        badge: `${bow}<span class="ib go" style="--c:#ff5a8a">${it.eta ?? icon('move')}</span>`,
+        txt: far ? t('Идёт стрелять в {0:l}: {1?та поцелована|тот поцелован} Вешалкой', o.acc, o.fem) : t('Идёт бить {0:l}: {1?та поцелована|тот поцелован} Вешалкой', o.acc, o.fem),
+      };
     }
     if (it.foe !== undefined && m.kiss !== undefined) {
-      const o = g.S.mobs[it.foe], who = MOBS[o.k].acc.toLowerCase(), kiss = icon('kiss', 'qbow');
-      if (it.t === 'hit') {
-        const how = !far ? `ударит ${who}` : bomb ? `бросит бомбу в ${who}` : `выстрелит в ${who}`;
-        return { badge: `${kiss}<span class="ib hit" style="--c:#ff5a8a">${it.dmg}</span>`, txt: `Поцелован: ${out ? 'выйдет на линию огня и ' : ''}${how} на ${it.dmg}, броня считается` };
-      }
-      return { badge: `${kiss}<span class="ib go" style="--c:#ff5a8a">${it.eta ?? icon('move')}</span>`, txt: `Поцелован: идёт ${far ? 'стрелять в' : 'бить'} ${who}, героев не тронет` };
+      const o = g.S.mobs[it.foe], who = MOBS[o.k].acc, kiss = icon('kiss', 'qbow');
+      if (it.t === 'hit') return { badge: `${kiss}<span class="ib hit" style="--c:#ff5a8a">${it.dmg}</span>`, txt: t('Поцелован: {0}, броня считается', atMob(who)) };
+      return {
+        badge: `${kiss}<span class="ib go" style="--c:#ff5a8a">${it.eta ?? icon('move')}</span>`,
+        txt: far ? t('Поцелован: идёт стрелять в {0:l}, героев не тронет', who) : t('Поцелован: идёт бить {0:l}, героев не тронет', who),
+      };
     }
     if (it.t === 'hit') {
-      const how = !far ? `ударит ${acc}` : bomb ? `бросит бомбу в ${acc}` : `выстрелит в ${acc}`;
-      return { badge: `${bow}<span class="ib hit" style="--c:${tgt!.def.col}">${it.dmg}</span>`, txt: (g.executes(m) ? 'Казнь: ' : '') + cap(out ? `выйдет на линию огня и ${how}` : how) + ` на ${it.dmg}` };
+      const how = !far ? t('ударит {0} на {1}', acc, it.dmg) : bomb ? t('бросит бомбу в {0} на {1}', acc, it.dmg) : t('выстрелит в {0} на {1}', acc, it.dmg);
+      const line = cap(out ? t('выйдет на линию огня и {0}', how) : how);
+      return { badge: `${bow}<span class="ib hit" style="--c:${tgt!.def.col}">${it.dmg}</span>`, txt: g.executes(m) ? t('Казнь: {0}', line) : line };
     }
     if (it.t === 'rise' && m.k === 'egg') {
-      return { badge: `<span class="ib go">${it.eta}</span>`, txt: (it.eta ?? 1) > 1 ? `Через ${turns(it.eta!)} вылупится бес-кочегар, если не разбить яйцо` : 'В этот ход вылупится бес-кочегар, если не разбить яйцо' };
+      return { badge: `<span class="ib go">${it.eta}</span>`, txt: (it.eta ?? 1) > 1 ? t('Через {0} {0|ход|хода|ходов} вылупится бес-кочегар, если не разбить яйцо', it.eta!) : t('В этот ход вылупится бес-кочегар, если не разбить яйцо') };
     }
     if (it.t === 'rise') {
-      const who = MOBS[m.hold ?? 'skel'].name.toLowerCase();
-      return { badge: `<span class="ib go">${it.eta}</span>`, txt: (it.eta ?? 1) > 1 ? `Через ${turns(it.eta!)} встанет ${who}, если не разбить гроб` : `В этот ход встанет ${who}, если не разбить гроб` };
+      const who = MOBS[m.hold ?? 'skel'].name;
+      return { badge: `<span class="ib go">${it.eta}</span>`, txt: (it.eta ?? 1) > 1 ? t('Через {0} {0|ход|хода|ходов} встанет {1:l}, если не разбить гроб', it.eta!, who) : t('В этот ход встанет {0:l}, если не разбить гроб', who) };
     }
-    if (it.t === 'smash') return { badge: `<span class="ib hit" style="--c:#d9434f">${it.dmg}</span>`, txt: `Ударит молотом по красному квадрату на ${it.dmg}: уходи оттуда броском` };
+    if (it.t === 'smash') return { badge: `<span class="ib hit" style="--c:#d9434f">${it.dmg}</span>`, txt: t('Ударит молотом по красному квадрату на {0}: уходи оттуда броском', it.dmg) };
     // the floor bosses' marked cells, coloured by what they do
     if (it.t === 'zone' || it.t === 'emerge') {
-      const z = it.t === 'emerge' ? 'bite' : it.z ?? 'cold', d = it.dmg;
+      const z = it.t === 'emerge' ? 'bite' : it.z ?? 'cold', n = it.dmg;
       const txt = {
-        bite: `Вылезет из норы у ямы с глазами и укусит всех на красных клетках вокруг на ${d}. Диск в яму с глазами бьёт вдвое`,
-        cold: `Морозилка: кто останется в голубом конусе, получит удар на ${d} и примёрзнет. Следующий ход бросает слабее и не переходит к диску`,
-        dance: `Танцпол: на бит ударит всех на розовых клетках на ${d}. Встань на тёмную`,
-        beam: `Светомузыка: лучи по жёлтым клеткам через всю комнату, на ${d}`,
-        roll: `Покатится по оранжевой дорожке и задавит всех на ней на ${d}`,
-        fire: `Отрыжка: кто останется на огненной линии, получит удар на ${d} и загорится`,
-      }[z];
-      return { badge: d ? `<span class="ib hit" style="--c:${ZONE_COL[z]}">${d}</span>` : `<span class="ib sp">${icon(z === 'fire' ? 'fire' : 'chill')}</span>`, txt };
+        bite: () => t('Вылезет из норы у ямы с глазами и укусит всех на красных клетках вокруг на {0}. Диск в яму с глазами бьёт вдвое', n),
+        cold: () => t('Морозилка: кто останется в голубом конусе, получит удар на {0} и примёрзнет. Следующий ход бросает слабее и не переходит к диску', n),
+        dance: () => t('Танцпол: на бит ударит всех на розовых клетках на {0}. Встань на тёмную', n),
+        beam: () => t('Светомузыка: лучи по жёлтым клеткам через всю комнату, на {0}', n),
+        roll: () => t('Покатится по оранжевой дорожке и задавит всех на ней на {0}', n),
+        fire: () => t('Отрыжка: кто останется на огненной линии, получит удар на {0} и загорится', n),
+      }[z]();
+      return { badge: n ? `<span class="ib hit" style="--c:${ZONE_COL[z]}">${n}</span>` : `<span class="ib sp">${icon(z === 'fire' ? 'fire' : 'chill')}</span>`, txt };
     }
-    if (it.t === 'dive') return { badge: `<span class="ib sp">${icon('move')}</span>`, txt: 'Нырнёт в нору, а в следующий ход вылезет у ямы с глазами и укусит всех вокруг' };
-    if (it.t === 'brew') return { badge: `<span class="ib sp">${icon('rage')}</span>`, txt: 'Подогрев: шестёрки бьют сильнее и держат больше' };
+    if (it.t === 'dive') return { badge: `<span class="ib sp">${icon('move')}</span>`, txt: t('Нырнёт в нору, а в следующий ход вылезет у ямы с глазами и укусит всех вокруг') };
+    if (it.t === 'brew') return { badge: `<span class="ib sp">${icon('rage')}</span>`, txt: t('Подогрев: шестёрки бьют сильнее и держат больше') };
     if (it.t === 'toss') {
       const f = FOOD_TOSS[it.item ?? 0];
-      if (!it.dmg) return { badge: `<span class="ib sp">${icon('daze')}</span>`, txt: `Наденет ${tgt!.def.dat} на голову ${f.acc}: следующий ход без линии прицела` };
-      return { badge: `<span class="ib hit" style="--c:${tgt!.def.col}">${it.dmg}</span>`, txt: `Швырнёт ${f.acc} в ${acc} на ${it.dmg}${f.chill ? ', морозит' : ''}` };
+      if (!it.dmg) return { badge: `<span class="ib sp">${icon('daze')}</span>`, txt: t('Наденет {0} на голову {1}: следующий ход без линии прицела', tgt!.def.dat, f.acc) };
+      return { badge: `<span class="ib hit" style="--c:${tgt!.def.col}">${it.dmg}</span>`, txt: f.chill ? t('Швырнёт {0} в {1} на {2}, морозит', f.acc, acc, it.dmg) : t('Швырнёт {0} в {1} на {2}', f.acc, acc, it.dmg) };
     }
     // the swarm's last rats run, the dancer moonwalks off
-    if (it.flee) return { badge: `<span class="ib sp">${icon('move')}</span>`, txt: MOBS[m.k].moon ? 'Лунной походкой уходит от героя рядом' : 'Удирает от героев' };
+    if (it.flee) return { badge: `<span class="ib sp">${icon('move')}</span>`, txt: d.moon ? t('Лунной походкой уходит от героя рядом') : t('Удирает от героев') };
     // drawn by the kid's firecracker: it runs to the noise and strikes nobody this turn
-    if (it.bang) return { badge: `<span class="ib sp">${icon('petard')}</span>`, txt: `Бежит на треск петарды и в этот ход ${!far ? 'никого не ударит' : bomb ? 'не бросит бомбу' : 'не выстрелит'}` };
+    if (it.bang) {
+      return {
+        badge: `<span class="ib sp">${icon('petard')}</span>`,
+        txt: !far ? t('Бежит на треск петарды и в этот ход никого не ударит') : bomb ? t('Бежит на треск петарды и в этот ход не бросит бомбу') : t('Бежит на треск петарды и в этот ход не выстрелит'),
+      };
+    }
     // the dragon on its eggs never leaves them: it waits for a hero to come right up
-    if (it.t === 'move' && !far && m.speed <= 0)
-      return { badge: `<span class="ib go" style="--c:${tgt!.def.col}">${icon('move')}</span>`, txt: `${MOBS[m.k].nest ? 'Сидит на яйцах' : 'Стоит на месте'}: ударит только того, кто подойдёт вплотную` };
+    if (it.t === 'move' && !far && m.speed <= 0) {
+      return {
+        badge: `<span class="ib go" style="--c:${tgt!.def.col}">${icon('move')}</span>`,
+        txt: d.nest ? t('Сидит на яйцах: ударит только того, кто подойдёт вплотную') : t('Стоит на месте: ударит только того, кто подойдёт вплотную'),
+      };
+    }
     if (it.t === 'move') {
-      const txt = !far ? `Идёт к ${tgt!.def.dat}` + (it.eta ? `, ударит через ${turns(it.eta)}` : '')
-        : `Не видит ${acc}` + (it.way ? ': идёт на линию огня' + (it.eta && !bomb ? `, выстрелит через ${turns(it.eta)}` : '') : '');
+      const txt = !far ? (it.eta ? t('Идёт к {0}, ударит через {1} {1|ход|хода|ходов}', tgt!.def.dat, it.eta) : t('Идёт к {0}', tgt!.def.dat))
+        : !it.way ? t('Не видит {0}', acc)
+        : it.eta && !bomb ? t('Не видит {0}: идёт на линию огня, выстрелит через {1} {1|ход|хода|ходов}', acc, it.eta) : t('Не видит {0}: идёт на линию огня', acc);
       return { badge: `${bow}<span class="ib go" style="--c:${tgt!.def.col}">${it.eta ?? icon('move')}</span>`, txt };
     }
     if (it.t === 'slam') {
       const cols = g.alive().map(o => o.def.col), n = cols.length;
       const pie = cols.map((c, k) => `${c} ${(k / n) * 360}deg ${((k + 1) / n) * 360}deg`).join(',');
-      return { badge: `<span class="ib all" style="--pie:conic-gradient(${pie})">${it.dmg}</span>`, txt: `${it.chill ? 'Метель' : 'Удар'} по всем на ${it.dmg}` + (it.chill ? ', морозит' : '') };
+      return { badge: `<span class="ib all" style="--pie:conic-gradient(${pie})">${it.dmg}</span>`, txt: it.chill ? t('Метель по всем на {0}, морозит', it.dmg) : t('Удар по всем на {0}', it.dmg) };
     }
-    const sp = { charge: ['fuse', `Поджигает фитиль${out ? ' и идёт на линию огня' : ''}: в следующий ход бомба на двойной урон`], heal: ['heal', `Лечит союзника на ${it.dmg}`], summon: ['summon', 'Призывает подмогу на светящийся круг'], heat: ['heat', 'Раскаляет пол: отмеченные клетки станут лавой'], scream: ['daze', 'Визг: в следующий ход у всего отряда нет линии прицела'] }[it.t];
+    const sp = {
+      charge: () => ['fuse', out ? t('Поджигает фитиль и идёт на линию огня: в следующий ход бомба на двойной урон') : t('Поджигает фитиль: в следующий ход бомба на двойной урон')],
+      heal: () => ['heal', t('Лечит союзника на {0}', it.dmg)],
+      summon: () => ['summon', t('Призывает подмогу на светящийся круг')],
+      heat: () => ['heat', t('Раскаляет пол: отмеченные клетки станут лавой')],
+      scream: () => ['daze', t('Визг: в следующий ход у всего отряда нет линии прицела')],
+    }[it.t as 'charge']?.();
     return sp ? { badge: `<span class="ib sp">${icon(sp[0])}</span>`, txt: sp[1] } : { badge: '', txt: '' };
   }
 
   private mobStatus(m: Mob): Status[] {
     const g = this.g, out: Status[] = [];
-    if (m.burn > 0) out.push({ k: 'fire', n: m.burn, t: `Горит: в начале своего хода потеряет ${Math.min(m.burn, m.hp)}` });
-    if (g.inGas(m)) out.push({ k: 'gas', t: `В газу: в начале своего хода потеряет ${Math.min(gasDmg(m.max), m.hp)} и ударит на ${Math.round(GAS_WEAK * 100)}% слабее` });
-    const brittle = `; урон от дисков и умений героев +${Math.round(frostVuln(m.frost) * 100)}%`;
-    if (g.frozen(m)) out.push({ k: 'chill', t: 'Заморожен: пропустит ход' + brittle });
-    else if (m.frost) out.push({ k: 'slow', t: `Замедлен: в свой ход пройдёт не больше ${FROST_STEPS === 1 ? 'клетки' : FROST_STEPS + ' клеток'}` + brittle });
-    if (m.kiss !== undefined) out.push({ k: 'kiss', n: m.kissLeft, t: `Поцелуй Вешалки: бьёт ближайшего другого врага, а не героев, и другие враги могут пойти на него; ещё ${turns(m.kissLeft ?? 1)}` });
+    if (m.burn > 0) out.push({ k: 'fire', n: m.burn, t: t('Горит: в начале своего хода потеряет {0}', Math.min(m.burn, m.hp)) });
+    if (g.inGas(m)) out.push({ k: 'gas', t: t('В газу: в начале своего хода потеряет {0} и ударит на {1}% слабее', Math.min(gasDmg(m.max), m.hp), Math.round(GAS_WEAK * 100)) });
+    const brittle = Math.round(frostVuln(m.frost) * 100);
+    if (g.frozen(m)) out.push({ k: 'chill', t: t('Заморожен: пропустит ход; урон от дисков и умений героев +{0}%', brittle) });
+    else if (m.frost) out.push({ k: 'slow', t: t('Замедлен: в свой ход пройдёт не больше {0} {0|клетки|клеток|клеток}; урон от дисков и умений героев +{1}%', FROST_STEPS, brittle) });
+    if (m.kiss !== undefined) out.push({ k: 'kiss', n: m.kissLeft, t: t('Поцелуй Вешалки: бьёт ближайшего другого врага, а не героев, и другие враги могут пойти на него; ещё {0} {0|ход|хода|ходов}', m.kissLeft ?? 1) });
     const mate = g.cuffedTo(m);
-    if (mate && mate.hp > 0) out.push({ k: 'cuffs', n: g.S.cuffs!.left, t: `В наручниках, в паре: ${MOBS[mate.k].name}. Урон по одному достаётся и другому, ещё ${turns(g.S.cuffs!.left)}` });
+    if (mate && mate.hp > 0) out.push({ k: 'cuffs', n: g.S.cuffs!.left, t: t('В наручниках, в паре: {0}. Урон по одному достаётся и другому, ещё {1} {1|ход|хода|ходов}', MOBS[mate.k].name, g.S.cuffs!.left) });
     if (isRanged(m.k)) out.push({ k: 'bow', t: 'Дальний бой: стреляет только в того, кого видит' });
-    if (m.armor) out.push({ k: 'armor', n: m.armor, t: `Броня ${m.armor}` });
+    if (m.armor) out.push({ k: 'armor', n: m.armor, t: t('Броня {0}', m.armor) });
     if (MOBS[m.k].shield) out.push({ k: 'shield', t: 'Дверь вместо щита: диск спереди ранит вполовину, бей сбоку или рикошетом' });
     const honed = g.honed(m);
-    if (honed) out.push({ k: 'hit', n: honed, t: `Наточен: точильщик рядом, бьёт на ${honed} сильнее` });
+    if (honed) out.push({ k: 'hit', n: honed, t: t('Наточен: точильщик рядом, бьёт на {0} сильнее', honed) });
     if (m.under !== undefined) out.push({ k: 'ghost', t: 'В норе: диски не достают. Попади диском в яму с глазами, удар вдвое' });
     else if (!g.solid(m) && !MOBS[m.k].fixed) out.push({ k: 'ghost', t: 'Бесплотен в этот ход: диски пролетают насквозь' });
     if (MOBS[m.k].mirror) out.push({ k: 'shield', t: 'На цепи: прямой удар отражается, ранит только рикошет. Огонь, газ, молния и мороз проходят' });
     if (m.open) out.push({ k: 'shield', t: 'Дверца открыта: диск в неё бьёт вдвое и мимо брони' });
     if (g.coverOf(m, m)) out.push({ k: 'shield', t: 'Шестёрка рядом прикрывает: диск по Пахану попадёт в неё' });
-    if (m.pot) out.push({ k: 'ore', n: m.pot, t: `Общак: ${m.pot} руды. Вернётся вдвое, когда Пахан падёт` });
+    if (m.pot) out.push({ k: 'ore', n: m.pot, t: t('Общак: {0} руды. Вернётся вдвое, когда Пахан падёт', m.pot) });
     if (m.brew) out.push({ k: 'rage', n: m.brew, t: 'Подогрета чифиром: бьёт сильнее' });
-    if (m.mad !== undefined) out.push({ k: 'rage', t: `Не трожь яйца: идёт за ${g.heroOf(m.mad).def.acc} и бьёт вдвое` });
+    if (m.mad !== undefined) out.push({ k: 'rage', t: t('Не трожь яйца: идёт за {0} и бьёт вдвое', g.heroOf(m.mad).def.acc) });
     if (m.intent?.t === 'charge') out.push({ k: 'fuse', t: 'Фитиль горит' });
-    if (g.rage() > 0) out.push({ k: 'rage', n: g.rage(), t: `Ярость: бьёт на ${g.rage()} сильнее` });
+    if (g.rage() > 0) out.push({ k: 'rage', n: g.rage(), t: t('Ярость: бьёт на {0} сильнее', g.rage()) });
     return out;
   }
 
@@ -621,7 +656,7 @@ export class Hud {
       li.classList.toggle('boss', !!MOBS[m.k].boss);
       const qi = li.querySelector('.qi')!;
       if (qi.innerHTML !== it.badge) qi.innerHTML = it.badge;
-      li.querySelector('button')!.setAttribute('aria-label', `${m.name}, ${m.hp} из ${m.max}. ${it.txt}`);
+      li.querySelector('button')!.setAttribute('aria-label', t('{0}, {1} из {2}. {3}', m.name, m.hp, m.max, it.txt));
     });
   }
 
@@ -631,11 +666,11 @@ export class Hud {
     if (!m || m.hp <= 0 || !li) { this.pinned = false; this.closeCard(); return; }
     const d = MOBS[m.k], it = this.intent(m), sp = g.specialIn(m), card = $('mobCard');
     const hpPct = (Math.max(0, m.hp) / m.max) * 100, burn = (Math.min(m.burn, Math.max(0, m.hp)) / m.max) * 100;
-    card.innerHTML = `<div class="mc-head"><img src="${mobFace(m.k)}" alt=""><div><b>${m.name}</b><span class="mc-hp"><i style="width:${hpPct}%"></i>`
+    card.innerHTML = `<div class="mc-head"><img src="${mobFace(m.k)}" alt=""><div><b>${t(m.name)}</b><span class="mc-hp"><i style="width:${hpPct}%"></i>`
       + (m.burn > 0 ? `<em style="left:${hpPct - burn}%;width:${burn}%"></em>` : '') + `<u>${m.hp}/${m.max}</u></span></div></div>`
       + `<p class="mc-act">${it.badge}<span>${it.txt}</span></p>`
-      + (sp && sp.turns > 0 ? `<p class="mc-cd">${sp.name[0].toUpperCase() + sp.name.slice(1)} через ${turns(sp.turns)}</p>` : '')
-      + `<div class="mc-st">${statusHtml(this.mobStatus(m))}</div><p class="mc-txt">${d.txt}</p>`;
+      + (sp && sp.turns > 0 ? `<p class="mc-cd">${t('{0:u} через {1} {1|ход|хода|ходов}', sp.name, sp.turns)}</p>` : '')
+      + `<div class="mc-st">${statusHtml(this.mobStatus(m))}</div><p class="mc-txt">${t(d.txt)}</p>`;
     card.hidden = false;
     const r = li.getBoundingClientRect(), w = card.offsetWidth;
     card.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
@@ -661,7 +696,7 @@ export class Hud {
       img.src = mobFace(m.k);
     }
     const hpPct = (Math.max(0, m.hp) / m.max) * 100, burn = (Math.min(m.burn, Math.max(0, m.hp)) / m.max) * 100;
-    bar.querySelector('b')!.textContent = m.name;
+    bar.querySelector('b')!.textContent = t(m.name);
     (bar.querySelector('.bb-hp i') as HTMLElement).style.width = hpPct + '%';
     const em = bar.querySelector('.bb-hp em') as HTMLElement;
     em.style.left = hpPct - burn + '%';
@@ -678,15 +713,16 @@ export class Hud {
     fr.classList.toggle('dead', h.hp <= 0);
     const pk = h.def.key + (sprites.has(h.def.key) ? '+img' : '');
     if (this.lastPortrait !== pk) { drawPortrait($<HTMLCanvasElement>('pf'), h); this.lastPortrait = pk; }
-    $('fName').textContent = h.def.name;
-    $('fName').classList.toggle('long', h.def.name.length > 8);
-    $('pfBtn').setAttribute('aria-label', `${h.def.name}: прокачка и умение`);
+    const name = t(h.def.name);
+    $('fName').textContent = name;
+    $('fName').classList.toggle('long', name.length > 8);
+    $('pfBtn').setAttribute('aria-label', t('{0}: прокачка и умение', h.def.name));
 
     const st: Status[] = [];
-    if (h.chill > 0) st.push({ k: 'chill', n: h.chill, t: `Озноб: бросок слабее ещё ${turns(h.chill)}` });
-    if (h.daze > 0) st.push({ k: 'daze', n: h.daze, t: `Звон в ушах: без линии прицела ещё ${turns(h.daze)}` });
-    if (h.fire > 0) st.push({ k: 'fire', n: 2, t: h.fire > 1 ? `Горит: в ход врагов потеряет 2, и так ещё ${turns(h.fire)}` : 'Горит: в ход врагов потеряет 2' });
-    if (h.pin) st.push({ k: 'slow', n: h.pin, t: `Примёрз: бросает, но не переходит к диску ещё ${turns(h.pin)}` });
+    if (h.chill > 0) st.push({ k: 'chill', n: h.chill, t: t('Озноб: бросок слабее ещё {0} {0|ход|хода|ходов}', h.chill) });
+    if (h.daze > 0) st.push({ k: 'daze', n: h.daze, t: t('Звон в ушах: без линии прицела ещё {0} {0|ход|хода|ходов}', h.daze) });
+    if (h.fire > 0) st.push({ k: 'fire', n: 2, t: h.fire > 1 ? t('Горит: в ход врагов потеряет 2, и так ещё {0} {0|ход|хода|ходов}', h.fire) : 'Горит: в ход врагов потеряет 2' });
+    if (h.pin) st.push({ k: 'slow', n: h.pin, t: t('Примёрз: бросает, но не переходит к диску ещё {0} {0|ход|хода|ходов}', h.pin) });
     $('fStatus').innerHTML = statusHtml(st);
 
     // the discs of this turn as chips in a row, the first on the left, only the ones the hero has: the ones still in hand
@@ -696,7 +732,7 @@ export class Hud {
     discs.innerHTML = Array.from({ length: per }, (_, k) => `<i class="${k < per - out ? 'on' : ''}"></i>`).join('');
     if (discPic) discs.style.setProperty('--disc', `url("${discPic.src}")`);
     else discs.style.removeProperty('--disc');
-    discs.title = `Диски: ${h.hand} из ${per} за ход`;
+    discs.title = t('Диски: {0} из {1} за ход', h.hand, per);
 
     // health and the shield on top of it: the bar holds both, squeezing when they add up to more than the most health
     const inc = g.incoming(h), dead = h.hp > 0 && inc >= h.hp, tot = Math.max(h.max, h.hp + h.shield);
@@ -716,14 +752,14 @@ export class Hud {
     wrap.classList.toggle('shielded', h.shield > 0);
     wrap.classList.toggle('lethal', dead);
     // the shield has no badge of its own: the blue chunk shows it, the number is in the hint
-    wrap.title = [h.shield > 0 ? `Щит ${h.shield}: снимается первым.` : '', inc ? `Враги в этот ход снимут ${inc} HP, если их не остановить.` : ''].filter(Boolean).join(' ');
+    wrap.title = [h.shield > 0 ? t('Щит {0}: снимается первым.', h.shield) : '', inc ? t('Враги в этот ход снимут {0} HP, если их не остановить.', inc) : ''].filter(Boolean).join(' ');
 
     // the sparks under the health: two pieces, the gem itself being the third; full, they light up and the gem pulses
     // «Энергетик» makes the ability cheaper: the button lights up as soon as there are enough
     const sp = Math.min(AB_COST, h.sparks), cost = g.abCost(h), full = sp >= cost;
     $('fSpk').querySelectorAll('i').forEach((c, k) => c.classList.toggle('on', k < sp));
     $('fSpk').classList.toggle('full', full);
-    $('abName').textContent = h.def.ab;
+    $('abName').textContent = t(h.def.ab);
     // each hero's ability has its own picture in the gem (ab_<hero>); the name stays for when it has not loaded
     const ico = $('abIco'), pic = 'ab_' + h.def.key;
     if (ico.dataset.art !== pic) { ico.dataset.art = pic; fillIcons($('abBtn')); }
@@ -732,7 +768,7 @@ export class Hud {
     ab.classList.toggle('full', full);
     ab.classList.toggle('on', h.boost);
     ab.style.setProperty('--ab', h.def.abCol);
-    ab.title = `${h.def.ab}: ${h.def.abTxt} ${h.def.abMore} Стоит ${cost} искры, включается до броска.` + (h.boost ? ' Включено до конца хода.' : '');
+    ab.title = [`${t(h.def.ab)}: ${t(h.def.abTxt)}`, t(h.def.abMore), t('Стоит {0} {0|искру|искры|искр}, включается до броска.', cost), h.boost ? t('Включено до конца хода.') : ''].filter(Boolean).join(' ');
   }
 
   /** My hero's card from the portrait: how hard the disc hits, its upgrades and the ability in full. */
@@ -744,18 +780,18 @@ export class Hud {
 
   private fillCard() {
     const h = this.g.hero;
-    $('ups').innerHTML = `<h3 style="color:${h.def.col}">${h.def.name}</h3>` + this.cardBody(h);
+    $('ups').innerHTML = `<h3 style="color:${h.def.col}">${t(h.def.name)}</h3>` + this.cardBody(h);
   }
 
   /** A hero's card under the name: how hard the disc hits, its upgrades, the ability in full and the bosses' trophies. */
   private cardBody(h: HeroState) {
     const g = this.g, hit = Math.round(fullHit(g.stat(h, 'm'), g.stat(h, 'pw')) * (h.chill > 0 ? 0.7 : 1));
-    return `<p class="hc-hit" title="Сильнее всего диск бьёт на полной натяжке; прямо в лоб урон в ${CRIT} раза больше">удар до ${hit}, в лоб ×${CRIT}</p>`
-      + upRows(g, h) + '<small class="ups-note">Прокачка у кузнеца на карте</small>'
-      + `<p class="hc-ab"><b>${h.def.ab}.</b> ${h.def.abTxt} ${h.def.abMore}</p>`
-      + (h.arts?.length ? `<div class="hc-arts"><small class="ups-note">Трофеи боссов</small>${h.arts.map(k => {
+    return `<p class="hc-hit" title="${t('Сильнее всего диск бьёт на полной натяжке; прямо в лоб урон в {0} раза больше', CRIT)}">${t('удар до {0}, в лоб ×{1}', hit, CRIT)}</p>`
+      + upRows(g, h) + `<small class="ups-note">${t('Прокачка у кузнеца на карте')}</small>`
+      + `<p class="hc-ab"><b>${t(h.def.ab)}.</b> ${t(h.def.abTxt)} ${t(h.def.abMore)}</p>`
+      + (h.arts?.length ? `<div class="hc-arts"><small class="ups-note">${t('Трофеи боссов')}</small>${h.arts.map(k => {
         const a = artDef(k);
-        return `<div class="hc-art" title="${a.gag}">${artIcon(k, 'hc-art-ico')}<b>${a.name}</b><small>${a.txt}</small></div>`;
+        return `<div class="hc-art" title="${t(a.gag)}">${artIcon(k, 'hc-art-ico')}<b>${t(a.name)}</b><small>${t(a.txt)}</small></div>`;
       }).join('')}</div>` : '');
   }
 
@@ -764,9 +800,9 @@ export class Hud {
     const h = this.g.party.find(o => o.i === i), head = $('ally' + i), card = $('heroPeek');
     if (!h || !head) { this.closeHero(); return; }
     const hp = Math.max(0, h.hp), tot = Math.max(h.max, h.hp + h.shield), hpPct = (hp / tot) * 100;
-    const html = `<div class="mc-head"><img src="${faceUrl(h)}" alt="" style="--c:${h.def.col}"><div><b style="color:${h.def.col}">${h.def.name}</b>`
+    const html = `<div class="mc-head"><img src="${faceUrl(h)}" alt="" style="--c:${h.def.col}"><div><b style="color:${h.def.col}">${t(h.def.name)}</b>`
       + `<span class="mc-hp"><i style="width:${hpPct}%"></i>${h.shield ? `<s style="left:${hpPct}%;width:${(h.shield / tot) * 100}%"></s>` : ''}`
-      + `<u>${h.hp > 0 ? `${hp}/${h.max}` : 'пал'}${h.shield ? ` +${h.shield} щит` : ''}</u></span></div></div>`
+      + `<u>${h.hp > 0 ? `${hp}/${h.max}` : t('пал')}${h.shield ? ` ${t('+{0} щит', h.shield)}` : ''}</u></span></div></div>`
       + this.cardBody(h);
     // in a fight the strip refreshes with every move: the card is rebuilt only when it changes, so it keeps its scroll
     if (card.dataset.html !== html) { card.innerHTML = html; card.dataset.html = html; }
@@ -801,8 +837,8 @@ export class Hud {
     if (box.dataset.k !== key) {
       box.dataset.k = key;
       box.innerHTML = Array.from({ length: n }, (_, k) => arts[k]
-        ? `<button class="sock" type="button" data-k="${k}" aria-label="${artDef(arts[k]).name}"><i class="tok">${artIcon(arts[k])}</i></button>`
-        : `<button class="sock empty" type="button" data-k="${k}" aria-label="Пустое место под трофей"><b aria-hidden="true">?</b></button>`).join('');
+        ? `<button class="sock" type="button" data-k="${k}" aria-label="${t(artDef(arts[k]).name)}"><i class="tok">${artIcon(arts[k])}</i></button>`
+        : `<button class="sock empty" type="button" data-k="${k}" aria-label="${t('Пустое место под трофей')}"><b aria-hidden="true">?</b></button>`).join('');
       if (this.tip >= n) this.closeTip();
     }
     const socks = box.querySelectorAll<HTMLElement>('.sock');
@@ -847,9 +883,9 @@ export class Hud {
     let html: string;
     if (key) {
       const a = artDef(key), st = this.spent(h, key);
-      html = `<div class="mc-head"><i class="tok">${artIcon(key)}</i><b>${a.name}</b></div><p>${a.txt}</p><small>${a.gag}</small>`
-        + (st ? `<span class="at-state">${st}</span>` : '');
-    } else html = `<div class="mc-head"><b>Пустое место</b></div><p>${DEMO ? 'Трофеи появятся в полной версии игры.' : 'Трофеи дают боссы первого и второго этажа, а иногда «Влюблённый сундук».'}</p>`;
+      html = `<div class="mc-head"><i class="tok">${artIcon(key)}</i><b>${t(a.name)}</b></div><p>${t(a.txt)}</p><small>${t(a.gag)}</small>`
+        + (st ? `<span class="at-state">${t(st)}</span>` : '');
+    } else html = `<div class="mc-head"><b>${t('Пустое место')}</b></div><p>${DEMO ? t('Трофеи появятся в полной версии игры.') : t('Трофеи дают боссы первого и второго этажа, а иногда «Влюблённый сундук».')}</p>`;
     if (tip.dataset.html !== html) { tip.innerHTML = html; tip.dataset.html = html; }
     tip.hidden = false;
     // beside the column of sockets, over the health, kept on the screen, its tail at the token
@@ -891,20 +927,20 @@ export class Hud {
     }
     if (S.phase === 'place') {
       const ready = S.ready.includes(h.i);
-      if (g.online && ready) { txt = 'Ждём'; sub = `готовы ${S.ready.filter(i => here.includes(i)).length} из ${alive}`; cls = 'wait'; }
+      if (g.online && ready) { txt = 'Ждём'; sub = t('готовы {0} из {1}', S.ready.filter(i => here.includes(i)).length, alive); cls = 'wait'; }
       else if (g.online ? g.placed(h) : g.placed()) { txt = g.online ? 'Готов' : 'В бой!'; cls = 'lit'; act = 'fight'; }
       else { txt = g.party.length > 1 && !g.online ? 'Поставь героев' : 'Поставь героя'; }
     } else if (S.phase === 'throw' && this.team()) {
       // alone with a party the one press ends the turn for every hero, and the discs left are counted over all of them
       const left = g.alive().reduce((n, o) => n + (g.ended(o) ? 0 : o.hand), 0);
       if (g.allDone()) { txt = 'Ждём…'; cls = 'wait'; act = 'cancel'; }
-      else if (left > 0 && performance.now() < this.confirmUntil) { txt = 'Точно?'; sub = `не брошено: ${left}`; cls = 'confirm'; act = 'end'; }
+      else if (left > 0 && performance.now() < this.confirmUntil) { txt = 'Точно?'; sub = t('не брошено: {0}', left); cls = 'confirm'; act = 'end'; }
       else { txt = 'Конец хода'; cls = left > 0 ? 'idle' : 'lit'; act = 'end'; }
     } else if (S.phase === 'throw') {
       const done = S.done.filter(i => here.includes(i)).length;
-      if (g.ended(h)) { txt = 'Ждём…'; sub = alive > 1 ? `готовы ${done} из ${alive}` : ''; cls = 'wait'; act = 'cancel'; }
-      else if (h.hand > 0 && performance.now() < this.confirmUntil) { txt = 'Точно?'; sub = `не брошено: ${h.hand}`; cls = 'confirm'; act = 'end'; }
-      else { txt = 'Конец хода'; cls = h.hand > 0 ? 'idle' : 'lit'; act = g.canEndTurn(h) ? 'end' : 'none'; sub = alive > 1 && done ? `готовы ${done} из ${alive}` : ''; }
+      if (g.ended(h)) { txt = 'Ждём…'; sub = alive > 1 ? t('готовы {0} из {1}', done, alive) : ''; cls = 'wait'; act = 'cancel'; }
+      else if (h.hand > 0 && performance.now() < this.confirmUntil) { txt = 'Точно?'; sub = t('не брошено: {0}', h.hand); cls = 'confirm'; act = 'end'; }
+      else { txt = 'Конец хода'; cls = h.hand > 0 ? 'idle' : 'lit'; act = g.canEndTurn(h) ? 'end' : 'none'; sub = alive > 1 && done ? t('готовы {0} из {1}', done, alive) : ''; }
     } else if (g.cave()) {
       // the ore cave: the heroes hop over to their discs, then the next turn comes
       txt = 'Ждём…';
@@ -921,12 +957,13 @@ export class Hud {
       $('turnWho').innerHTML = who.map(o => `<img src="${faceUrl(o)}" alt="" style="--c:${o.def.col}">`).join('');
     }
     b.hidden = false;
+    txt = t(txt);
     b.className = 'turn-btn ' + cls + (txt.length > 11 ? ' long' : '');
     b.disabled = act === 'none';
     $('turnTxt').textContent = txt;
     $('turnSub').textContent = sub;
     $('turnSub').hidden = !sub;
-    b.title = act === 'cancel' ? 'Нажми ещё раз, чтобы отменить' : '';
+    b.title = act === 'cancel' ? t('Нажми ещё раз, чтобы отменить') : '';
     this.act = act;
   }
 
@@ -966,7 +1003,7 @@ export class Hud {
     this.logSeen = list.length;
     const last = list.length ? list[list.length - 1].turn : 0;
     const rows = list.filter(e => e.turn >= last - 1).reverse();
-    $('logList').innerHTML = rows.length ? rows.map(e => `<li class="${e.turn === last ? '' : 'old'}"><small>ход ${e.turn}</small> ${e.txt}</li>`).join('') : '<li class="old">Враги ещё не ходили</li>';
+    $('logList').innerHTML = rows.length ? rows.map(e => `<li class="${e.turn === last ? '' : 'old'}"><small>${t('ход {0}', e.turn)}</small> ${t(e.txt)}</li>`).join('') : `<li class="old">${t('Враги ещё не ходили')}</li>`;
   }
 
   private toggleLog(open = $('logPanel').hidden) {
@@ -1004,7 +1041,7 @@ export class Hud {
     img.hidden = !pic;
     $('forgeArt').classList.toggle('stub', !eventArt.has('forge'));
     const h = this.forgeHero();
-    $('forgeTitle').textContent = g.whet ? 'Заточка' : 'Кузнец';
+    $('forgeTitle').textContent = g.whet ? t('Заточка') : t('Кузнец');
     $('forgeText').textContent = g.whet ? whetTxt(!!h && g.freeUp(h)) : forgeTxt(g.gift);
     const box = $('forgeMine'), html = h ? forgeRows(g, h, this.forgeTeam()) : '';
     if (html !== this.forgeHtml) {

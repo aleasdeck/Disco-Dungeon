@@ -4,6 +4,7 @@
 
 import type { HeroDef } from './data';
 import { faceUrl } from './ui';
+import { t } from './i18n';
 
 /** A box on screen, in CSS pixels. */
 export interface Box { x: number; y: number; w: number; h: number }
@@ -79,10 +80,10 @@ function arrows(r: Box, paper: DOMRect | null, phone: boolean) {
   return (clear.length ? clear : fit(false)).join('');
 }
 
-const word = (x: number, y: number, t: string, rot: number) => `<text class="chalk-t" x="${f1(x)}" y="${f1(y)}" transform="rotate(${rot} ${f1(x)} ${f1(y)})">${t}</text>`;
+const word = (x: number, y: number, s: string, rot: number) => `<text class="chalk-t" x="${f1(x)}" y="${f1(y)}" transform="rotate(${rot} ${f1(x)} ${f1(y)})">${s}</text>`;
 
-/** «В бой!» in a line comes out as the label of the button it names. */
-const words = (t: string) => t.replace(/«([^»]+)»/g, '<q>$1</q>');
+/** «В бой!» in a line comes out as the label of the button it names (a translation keeps the «» round it too). */
+const words = (s: string) => s.replace(/«([^»]+)»/g, '<q>$1</q>');
 
 export class Coach {
   private box: HTMLElement;
@@ -131,10 +132,10 @@ export class Coach {
     face.append(img);
     const paper = document.createElement('div');
     paper.className = 'coach-paper';
-    paper.innerHTML = `<p>${words(line.text)}</p>`;
+    paper.innerHTML = `<p>${words(t(line.text))}</p>`;
     const name = document.createElement('b');
     name.className = 'coach-name';
-    name.textContent = line.by.name;
+    name.textContent = t(line.by.name);
     if (line.btns) {
       const row = document.createElement('div');
       row.className = 'coach-btns';
@@ -142,7 +143,7 @@ export class Coach {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = k ? 'no' : 'go';
-        btn.textContent = b.text;
+        btn.textContent = t(b.text);
         btn.addEventListener('click', e => { e.stopPropagation(); b.on(); });
         row.append(btn);
       });
@@ -150,7 +151,7 @@ export class Coach {
     } else if (line.kind === 'tap') {
       const more = document.createElement('span');
       more.className = 'coach-more';
-      more.textContent = 'дальше ▸';
+      more.textContent = t('дальше ▸');
       paper.append(more);
     }
     el.append(paper, name, face);
@@ -216,7 +217,7 @@ export class Coach {
       svg += arrow([foot[0] + ux * 16, foot[1] + uy * 16], back, 0.12);
       // the word stands off the arrow's end to the side, below it rather than above, clear of the figure
       const nx = uy > 0 ? -uy : uy, ny = Math.abs(ux), side = nx < 0 ? -1 : 1;
-      svg += word(back[0] + nx * 26 + (side < 0 ? -40 : 0), back[1] + ny * 26 + 6, 'тяни', -8);
+      svg += word(back[0] + nx * 26 + (side < 0 ? -40 : 0), back[1] + ny * 26 + 6, t('тяни'), -8);
       svg += arrow([foot[0] - ux * 22, foot[1] - uy * 22], [to[0] + ux * 18, to[1] + uy * 18], -0.06, true);
       hole = [foot[0], foot[1], phone ? 120 : 170];
     }

@@ -8,6 +8,7 @@ import { MOB_TOP } from './draw/figures';
 import type { Camera } from './camera';
 import type { Game, HeroState } from './game';
 import { Coach, type Box, type Line } from './coach';
+import { srcOf } from './i18n';
 
 /** Where the player is: in a room, on the map, in a window between rooms, or in a menu over all that. */
 export type Where = 'room' | 'map' | 'event' | 'camp' | 'forge' | 'whet' | 'loot' | 'end' | 'menu';
@@ -304,7 +305,7 @@ export class Tutor {
   private whens(where: Where): [HintId, () => false | true | (() => Box | null)][] {
     // the hero on screen: online the player's own, in the campaign whichever of the party is picked
     const g = this.g, S = g.S, me = g.online ? this.me() : g.hero, room = where === 'room' && S.phase !== 'over';
-    const fight = room && S.phase !== 'place', said = (re: RegExp) => room && S.floats.some(f => re.test(f.txt));
+    const fight = room && S.phase !== 'place', said = (re: RegExp) => room && S.floats.some(f => re.test(srcOf(f.txt)));
     const at = (id: string) => () => this.domBox(id);
     const mine = (k: 'fire' | 'chill' | 'daze' | 'pin') => fight && !!me && me.hp > 0 && (me[k] ?? 0) > 0;
     return [
@@ -323,7 +324,7 @@ export class Tutor {
       ['crit', () => said(/^ТОЧНО!$/)],
       ['pit', () => said(/^провал$/)],
       ['spikes', () => said(/^(шипы|лава|осколки)!$/)],
-      ['ore', () => (said(/^\+\d+ руда$/) ? () => this.domBox(null, '.ore-chip') : false)],
+      ['ore', () => (said(/^\+(\d+|\{0\}) руда$/) ? () => this.domBox(null, '.ore-chip') : false)],
       ['clink', () => said(/^ЗВОН/)],
       ['fire', () => (mine('fire') ? at('fStatus') : false)],
       ['chill', () => (mine('chill') ? at('fStatus') : false)],

@@ -18,6 +18,7 @@ import { DEMO } from './demo';
 import { nextOf, opening, starsOf, type Gains } from './progress';
 import { VOL_RULES } from './volume';
 import { volToken } from './volview';
+import { langTag, t } from './i18n';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -39,10 +40,6 @@ const LOST = [
   'Кузня переплавит вас на диски. Кости срастутся, приходите ещё.',
 ];
 
-const plural = (n: number, one: string, few: string, many: string) => {
-  const t = n % 10, h = n % 100;
-  return t === 1 && h !== 11 ? one : t >= 2 && t <= 4 && (h < 10 || h >= 20) ? few : many;
-};
 const clock = (s: number) => {
   const m = Math.floor(s / 60), h = Math.floor(m / 60), dd = (v: number) => String(v).padStart(2, '0');
   return h ? `${h}:${dd(m % 60)}:${dd(Math.floor(s) % 60)}` : `${m}:${dd(Math.floor(s) % 60)}`;
@@ -109,7 +106,7 @@ function sheet(title: string) {
   c.quadraticCurveTo(out.width / 2, 230, out.width, 170);
   c.stroke();
   prints.forEach((p, k) => {
-    const x = gap + k * (W + m * 2 + gap), t = (k + 0.5) / n, y = 175 + 30 * 4 * t * (1 - t);
+    const x = gap + k * (W + m * 2 + gap), u = (k + 0.5) / n, y = 175 + 30 * 4 * u * (1 - u);
     c.save();
     c.translate(x + W / 2 + m, y);
     c.rotate((((k * 7) % 5) - 2) * 0.012);
@@ -137,18 +134,19 @@ function sheet(title: string) {
 export function showAlbum(a: Album, o: { gains?: Gains | null; button: string | null; onButton: () => void }) {
   const party = a.heroes, solo = party.length === 1 && HEROES[party[0].i], lastBoss = a.shots[a.shots.length - 1]?.boss;
   const killer = a.boss && MOBS[a.boss as MobKind];
-  $('reRibbon').textContent = (a.win ? (DEMO ? 'Демо пройдено' : 'Подземелье пройдено') : `Этаж ${a.floor + 1} · ${BIOMES[a.floor]?.name ?? ''}`) + (a.vol ? ` · громкость ${a.vol}` : '');
+  const where = a.win ? t(DEMO ? 'Демо пройдено' : 'Подземелье пройдено') : t('Этаж {0} · {1}', a.floor + 1, BIOMES[a.floor]?.name ?? '');
+  $('reRibbon').textContent = a.vol ? t('{0} · громкость {1}', where, a.vol) : where;
   $('reRibbon').classList.toggle('lose', !a.win);
-  $('reTitle').textContent = a.win ? (solo ? (solo.fem ? 'Ты победила!' : 'Ты победил!') : 'Вы победили!')
-    : solo ? (solo.fem ? 'Героиня пала' : 'Герой пал') : 'Отряд пал';
+  $('reTitle').textContent = t(a.win ? (solo ? (solo.fem ? 'Ты победила!' : 'Ты победил!') : 'Вы победили!')
+    : solo ? (solo.fem ? 'Героиня пала' : 'Герой пал') : 'Отряд пал');
   $('reTitle').classList.toggle('lose', !a.win);
-  $('reGag').textContent = a.win ? (DEMO ? 'Король остался без короны, казематы ваши. Дальше подземелье ждёт в полной версии.' : WON[lastBoss ?? ''] ?? 'Все три этажа позади. Диско продолжается.')
-    : killer ? `${killer.name} ${killer.fem ? 'оставила' : 'оставил'} вас себе. Кости срастутся, приходите ещё.` : LOST[a.floor] ?? LOST[0];
+  $('reGag').textContent = a.win ? t(DEMO ? 'Король остался без короны, казематы ваши. Дальше подземелье ждёт в полной версии.' : WON[lastBoss ?? ''] ?? 'Все три этажа позади. Диско продолжается.')
+    : killer ? t('{0} {1?оставила|оставил} вас себе. Кости срастутся, приходите ещё.', killer.name, killer.fem) : t(LOST[a.floor] ?? LOST[0]);
   // the prints: ДО, the bosses beaten floor by floor, ПОСЛЕ
   prints = [
-    paint(cv => drawStart(cv, a), 'ДО', true),
-    ...a.shots.map((s, f) => paint(cv => drawShot(cv, a, s), `${(MOBS[s.boss as MobKind]?.floor ?? f) + 1} · ${SHORT[s.boss] ?? MOBS[s.boss as MobKind]?.name ?? ''}`, false)),
-    paint(cv => drawAfter(cv, a), 'ПОСЛЕ', true),
+    paint(cv => drawStart(cv, a), t('ДО'), true),
+    ...a.shots.map((s, f) => paint(cv => drawShot(cv, a, s), `${(MOBS[s.boss as MobKind]?.floor ?? f) + 1} · ${t(SHORT[s.boss] ?? MOBS[s.boss as MobKind]?.name ?? '')}`, false)),
+    paint(cv => drawAfter(cv, a), t('ПОСЛЕ'), true),
   ];
   const ropes = $('reRopes'), bosses = prints.slice(1, -1), ends = [prints[0], prints[prints.length - 1]];
   ropes.innerHTML = '';
@@ -166,14 +164,14 @@ export function showAlbum(a: Album, o: { gains?: Gains | null; button: string | 
   // the run in numbers: the party's sums, the best blow and who dealt it
   const sumOf = (k: keyof Tally) => party.reduce((s, h) => s + h.t[k], 0);
   const best = (k: keyof Tally) => party.reduce((p, h) => (h.t[k] > p.t[k] ? h : p));
-  const top = best('top'), nameOf = (i: number) => HEROES[i].name;
+  const top = best('top'), nameOf = (i: number) => t(HEROES[i].name);
   const tiles: [string, string, string][] = [
-    ['ico_move', clock(a.time), 'время забега'],
-    ['ico_map', `${a.rooms}/${FLOORS * LAYERS}`, 'комнат'],
-    ['ico_rage', String(sumOf('kills')), 'врагов повержено'],
-    ['ico_hit', sumOf('dmg').toLocaleString('ru'), 'урона'],
-    ['ico_disc', String(top.t.top), party.length > 1 ? `лучший удар, ${nameOf(top.i)}` : 'лучший удар'],
-    ['ico_ore', String(sumOf('ore')), 'руды добыто'],
+    ['ico_move', clock(a.time), t('время забега')],
+    ['ico_map', `${a.rooms}/${FLOORS * LAYERS}`, t('комнат')],
+    ['ico_rage', String(sumOf('kills')), t('врагов повержено')],
+    ['ico_hit', sumOf('dmg').toLocaleString(langTag()), t('урона')],
+    ['ico_disc', String(top.t.top), party.length > 1 ? t('лучший удар, {0}', nameOf(top.i)) : t('лучший удар')],
+    ['ico_ore', String(sumOf('ore')), t('руды добыто')],
   ];
   $('reTiles').innerHTML = tiles.map(([ico, v, l]) => {
     const img = uiArt.get(ico);
@@ -186,14 +184,14 @@ export function showAlbum(a: Album, o: { gains?: Gains | null; button: string | 
   };
   const hurt = best('hurt'), rico = best('rico'), crit = best('crits');
   const noms = party.length < 2 ? [] : [
-    { t: 'Мясник', h: best('dmg'), v: `${best('dmg').t.dmg} урона` },
-    { t: 'Груша для битья', h: hurt, v: `${HEROES[hurt.i].fem ? 'приняла' : 'принял'} ${hurt.t.hurt}` },
-    { t: 'Шахтёр', h: best('ore'), v: `${best('ore').t.ore} руды` },
-    rico.t.rico > 0 ? { t: 'Бильярдист', h: rico, v: `${rico.t.rico} ${plural(rico.t.rico, 'отскок', 'отскока', 'отскоков')} в цель` }
-      : { t: 'Снайпер', h: crit, v: `${crit.t.crits} «ТОЧНО!»` },
+    { t: t('Мясник'), h: best('dmg'), v: t('{0} урона', best('dmg').t.dmg) },
+    { t: t('Груша для битья'), h: hurt, v: t('{0?приняла|принял} {1}', HEROES[hurt.i].fem, hurt.t.hurt) },
+    { t: t('Шахтёр'), h: best('ore'), v: t('{0} руды', best('ore').t.ore) },
+    rico.t.rico > 0 ? { t: t('Бильярдист'), h: rico, v: t('{0} {0|отскок|отскока|отскоков} в цель', rico.t.rico) }
+      : { t: t('Снайпер'), h: crit, v: t('{0} «ТОЧНО!»', crit.t.crits) },
   ];
   $('reNoms').innerHTML = noms.map(n => `<div class="re-nom"><img alt="" src="${faceUrl({ i: n.h.i, def: HEROES[n.h.i] })}" style="--c:${HEROES[n.h.i].col}">`
-    + `<div><b>${n.t}</b><span>${nameOf(n.h.i)}${player(n.h.i)}, ${n.v}</span></div></div>`).join('');
+    + `<div><b>${n.t}</b><span>${t('{0}{1}, {2}', nameOf(n.h.i), player(n.h.i), n.v)}</span></div></div>`).join('');
   $('reNoms').hidden = !noms.length;
   $('reSave').onclick = () => saveCanvas(sheet($('reTitle').textContent ?? ''), 'discodungeon-albom.png');
   const btn = $<HTMLButtonElement>('reBtn');
@@ -220,21 +218,21 @@ function showGains(g: Gains | null) {
   box.innerHTML = got.map(k => {
     const i = at(k), def = HEROES[i], next = nextOf(k);
     // the hero still gathering shows its row of stars; the one that just opened its next says so
-    const tail = g.opened.includes(next ?? '') ? `<span>Открыт новый герой</span>` : opening(k) ? starRow(starsOf(k)) : '';
-    return `<div class="re-gain" style="--c:${def.col}">${face(i)}<div><b>${def.name} +${g.got[k]} ★</b>${tail}</div></div>`;
+    const tail = g.opened.includes(next ?? '') ? `<span>${t('Открыт новый герой')}</span>` : opening(k) ? starRow(starsOf(k)) : '';
+    return `<div class="re-gain" style="--c:${def.col}">${face(i)}<div><b>${t(def.name)} +${g.got[k]} ★</b>${tail}</div></div>`;
   }).join('') + g.opened.map(k => {
     const i = at(k), def = HEROES[i];
-    return `<div class="re-gain re-new" style="--c:${def.col}">${face(i)}<div><em>Новый герой</em><b>${def.name}</b></div></div>`;
+    return `<div class="re-gain re-new" style="--c:${def.col}">${face(i)}<div><em>${t('Новый герой')}</em><b>${t(def.name)}</b></div></div>`;
   }).join('') + g.events.map(k => {
     const pic = eventArt.get(k);
-    return `<div class="re-gain re-new re-thing">${pic ? `<img alt="" src="${pic.src}">` : ''}<div><em>Новое событие</em><b>${eventDef(k).title}</b></div></div>`;
-  }).join('') + g.arts.map(k => `<div class="re-gain re-new re-thing"><i class="re-art">${artIcon(k)}</i><div><em>Новый трофей</em><b>${artDef(k).name}</b></div></div>`).join('')
+    return `<div class="re-gain re-new re-thing">${pic ? `<img alt="" src="${pic.src}">` : ''}<div><em>${t('Новое событие')}</em><b>${t(eventDef(k).title)}</b></div></div>`;
+  }).join('') + g.arts.map(k => `<div class="re-gain re-new re-thing"><i class="re-art">${artIcon(k)}</i><div><em>${t('Новый трофей')}</em><b>${t(artDef(k).name)}</b></div></div>`).join('')
     // the next «Громкость» step; the first one says where its knob is
-    + (g.vol ? `<div class="re-gain re-new re-thing re-vol">${volToken(g.vol)}<div><em>${g.vol === 1 ? 'Открыта громкость: выбирай перед забегом' : 'Новая громкость'}</em><b>Громкость ${g.vol}</b><span>${VOL_RULES[g.vol - 1]}</span></div></div>` : '')
+    + (g.vol ? `<div class="re-gain re-new re-thing re-vol">${volToken(g.vol)}<div><em>${t(g.vol === 1 ? 'Открыта громкость: выбирай перед забегом' : 'Новая громкость')}</em><b>${t('Громкость {0}', g.vol)}</b><span>${t(VOL_RULES[g.vol - 1])}</span></div></div>` : '')
     // the heroes the win put on a new stand
     + stands.map(([k, mat]) => {
       const def = HEROES[at(k)];
-      return `<div class="re-gain re-new re-thing re-stand" style="--c:${def.col}"><img alt="" src="${standIcon(mat, def.col)}"><div><em>Новая подставка</em><b>${def.name}: ${standDef(mat).name}</b></div></div>`;
+      return `<div class="re-gain re-new re-thing re-stand" style="--c:${def.col}"><img alt="" src="${standIcon(mat, def.col)}"><div><em>${t('Новая подставка')}</em><b>${t('{0}: {1}', def.name, standDef(mat).name)}</b></div></div>`;
     }).join('');
 }
 

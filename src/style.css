@@ -16,6 +16,15 @@
   size-adjust: 140%;
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
+/* the letters of Polish and the other Latin alphabets past the basic one */
+@font-face {
+  font-family: Hand;
+  src: url('./fonts/caveat-700-latin-ext.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: swap;
+  size-adjust: 140%;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
 
 :root {
   --bg: #16110d;
@@ -647,6 +656,18 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .boot-bar i { position: absolute; inset: 0 auto 0 0; width: 0; background: linear-gradient(#e8894a, #b4521f); transition: width 0.25s; }
 .boot-note { margin: 0 auto; max-width: 300px; min-height: 2.6em; color: var(--muted); transition: opacity 0.3s; }
 .boot-note.out { opacity: 0; }
+/* the languages, each in its own name, the one on now lit; picked here while the game loads */
+.boot-langs { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-width: 360px; margin: 16px auto 0; }
+.boot-langs button {
+  font: 500 13px/1.2 Oswald, Rubik, sans-serif; color: var(--text); background: rgba(0, 0, 0, 0.28); border: 1.5px solid var(--edge);
+  border-radius: 8px; padding: 5px 10px; cursor: pointer;
+}
+.boot-langs button[aria-checked='true'] { color: #2a1c10; background: var(--gold); border-color: var(--gold); }
+/* the first start, everything in: the languages alone wait for the pick */
+.boot.pick :is(.boot-bar, .boot-note) { display: none; }
+.boot.pick .boot-langs { gap: 8px; max-width: 420px; margin-top: 22px; }
+.boot.pick .boot-langs button { font-size: 16px; padding: 8px 14px; }
+.field select { font: 500 16px Rubik, sans-serif; color: #2a1c10; border: 0; border-radius: 0; clip-path: var(--cut-bar); padding: 9px 12px; background: #c9a877 var(--grain) 0 0 / 160px; background-blend-mode: overlay; }
 .menu-btns .btn.big { font-size: 20px; padding: 13px 22px; }
 .end-panel .menu-btns { margin-top: 14px; }
 
@@ -1900,3 +1921,10 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
   .pol, .re-panel { animation: none; }
 }
 .overlay.run-end.win { overflow: auto; }
+
+/* the quotes each language writes round a name it quotes (the button names in the hero's lines, the trinkets' lines) */
+:lang(en) :is(.coach-paper, .tr-lines li) q, :lang(pt) :is(.coach-paper, .tr-lines li) q, :lang(ko) :is(.coach-paper, .tr-lines li) q, :lang(zh) :is(.coach-paper, .tr-lines li) q { quotes: '“' '”'; }
+:lang(de) :is(.coach-paper, .tr-lines li) q { quotes: '„' '“'; }
+:lang(pl) :is(.coach-paper, .tr-lines li) q { quotes: '„' '”'; }
+:lang(fr) :is(.coach-paper, .tr-lines li) q { quotes: '« ' ' »'; }
+:lang(ja) :is(.coach-paper, .tr-lines li) q { quotes: '「' '」'; }

@@ -5,6 +5,7 @@
 import { MOBS, type MobKind } from './data';
 import { BOSS_LINES, type Intro } from './intro';
 import { sprites } from './assets';
+import { t } from './i18n';
 
 const $ = (id: string) => document.getElementById(id)!;
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -28,11 +29,11 @@ export function openIntro(onSkip: () => void) {
 
 /** The card: the boss's name, nickname, picture and line. */
 export function showCard(it: Intro, floor: number) {
-  const el = $('bossIntro'), name = MOBS[it.k as MobKind]?.name ?? '', art = sprites.get(it.k)?.img.src;
+  const el = $('bossIntro'), name = t(MOBS[it.k as MobKind]?.name ?? ''), art = sprites.get(it.k)?.img.src;
   el.querySelector('.bi-card')!.innerHTML = `<div class="bi-tc"><div class="bi-band"></div><div class="bi-in">`
-    + `<span class="bi-lbl">Босс этажа ${floor + 1}</span><b class="bi-name${name.length > 12 ? ' long' : ''}">${esc(name)}</b>`
-    + `<span class="bi-epi">${esc(BOSS_LINES[it.k]?.epi ?? '')}</span>${art ? `<img class="bi-art" src="${art}" alt="">` : ''}</div></div>`
-    + `<p class="bi-q">«${esc(it.line)}»</p>`;
+    + `<span class="bi-lbl">${t('Босс этажа {0}', floor + 1)}</span><b class="bi-name${name.length > 12 ? ' long' : ''}">${esc(name)}</b>`
+    + `<span class="bi-epi">${esc(t(BOSS_LINES[it.k]?.epi ?? ''))}</span>${art ? `<img class="bi-art" src="${art}" alt="">` : ''}</div></div>`
+    + `<p class="bi-q">${esc(t('«{0}»', it.line))}</p>`;
   el.classList.add('titled');
 }
 

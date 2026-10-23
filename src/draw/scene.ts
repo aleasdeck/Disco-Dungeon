@@ -13,6 +13,7 @@ import { hl } from '../hl';
 import { has } from '../artifacts';
 import { intro, bossKind } from '../intro';
 import { SAY_TIME, justOpened, trinketDef } from '../trinkets';
+import { t } from '../i18n';
 
 export interface Aim { hero: HeroState; dx: number; dy: number }
 /** A piece of the room kept as a picture (SceneRenderer.keep): the picture, what it shows, what the last frame asked for, where it lies, the brush it leaves. */
@@ -127,6 +128,7 @@ const fontsReady = () => {
   const now = performance.now();
   if (now - fontsAt < 250) return false;
   fontsAt = now;
+  // i18n-skip: a sample of the letters, not a line
   return (fontsOk = GRAFFITI_FONTS.every(f => document.fonts.check(f, 'WЖ')));
 };
 /** At most this many gags on the walls of one room, so each stays a find rather than wallpaper. */
@@ -1869,8 +1871,9 @@ export class SceneRenderer {
   private drawSay(view: { w: number; h: number; dpr: number }) {
     const g = this.g, tr = g.S.trinket;
     if (!tr || tr.by === undefined || tr.t >= SAY_TIME) return;
-    const h = g.heroOf(tr.by), p = h && g.figureAt(h), line = h && trinketDef(tr.k)?.lines[h.def.key];
-    if (!h || !p || !line) return;
+    const h = g.heroOf(tr.by), p = h && g.figureAt(h), said = h && trinketDef(tr.k)?.lines[h.def.key];
+    if (!h || !p || !said) return;
+    const line = t(said);
     const { c, cam } = this, [ix, iy] = this.P(p.x, p.y), [hx, hy] = cam.isoToScreen(ix, iy - BASE_TH - heroFig(h.def) - 3);
     const pop = Math.min(1, tr.t / 0.18), fade = Math.min(1, (SAY_TIME - tr.t) / 0.4);
     c.save();
@@ -1903,7 +1906,9 @@ export class SceneRenderer {
     // a line this screen has just opened gets a gold tag on the bubble's corner
     if (justOpened(tr.k, h.def.key)) {
       c.font = '600 11px Oswald, sans-serif';
-      const tag = 'В КОЛЛЕКЦИИ', tw = (this.tagW ??= c.measureText(tag).width) + 12, gx = bx + bw - tw + 4, gy = by - 9;
+      const tag = t('В КОЛЛЕКЦИИ');
+      if (this.tag?.s !== tag) this.tag = { s: tag, w: c.measureText(tag).width };
+      const tw = this.tag.w + 12, gx = bx + bw - tw + 4, gy = by - 9;
       rr(c, gx, gy, tw, 16, 4);
       c.fillStyle = '#ffd34d'; c.fill();
       c.lineWidth = 1.5; c.stroke();
@@ -1920,10 +1925,11 @@ export class SceneRenderer {
   private sayLines(line: string, maxW: number) {
     const key = `${maxW}|${fontsReady()}|${line}`;
     if (this.said?.key !== key) {
-      const c = this.c, lines: string[] = [];
-      for (const w of line.split(' ')) {
+      // words, or the characters of a line written without spaces (Chinese, Japanese)
+      const c = this.c, lines: string[] = [], gap = line.includes(' ') ? ' ' : '';
+      for (const w of gap ? line.split(' ') : [...line]) {
         const last = lines[lines.length - 1];
-        if (last !== undefined && c.measureText(last + ' ' + w).width <= maxW) lines[lines.length - 1] = last + ' ' + w;
+        if (last !== undefined && c.measureText(last + gap + w).width <= maxW) lines[lines.length - 1] = last + gap + w;
         else lines.push(w);
       }
       this.said = { key, lines, w: Math.max(...lines.map(l => c.measureText(l).width)) };
@@ -1931,8 +1937,8 @@ export class SceneRenderer {
     return this.said;
   }
   private said: { key: string; lines: string[]; w: number } | null = null;
-  /** The width of the «В КОЛЛЕКЦИИ» tag's word. */
-  private tagW: number | undefined;
+  /** The «В КОЛЛЕКЦИИ» tag's word in the player's language, and its width. */
+  private tag: { s: string; w: number } | undefined;
 
   /** A dish of the cook's: in flight it arcs from where the disc bounced, then sits on the floor with a little shadow. */
   private drawFood(f: Food) {
@@ -2751,8 +2757,9 @@ export class SceneRenderer {
       c.translate(sx, sy);
       c.scale(sc, sc);
       c.globalAlpha = Math.max(0, 1 - f.t / 1.6);
-      c.strokeStyle = INK; c.lineWidth = 2.6; c.strokeText(f.txt, 0, 0);
-      c.fillStyle = f.col; c.fillText(f.txt, 0, 0);
+      const txt = t(f.txt);
+      c.strokeStyle = INK; c.lineWidth = 2.6; c.strokeText(txt, 0, 0);
+      c.fillStyle = f.col; c.fillText(txt, 0, 0);
       c.restore();
     }
     c.globalAlpha = 1;

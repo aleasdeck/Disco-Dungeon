@@ -99,7 +99,7 @@ export async function loadAll(onProgress: (part: number) => void): Promise<void>
       .then(data => { if (data) music.set(key, { data, loop: t.loop }); })
       .catch(() => {})
       .then(() => tick(t.file))),
-    // Latin and Cyrillic letters both, the graffiti on the walls among them
+    // Latin and Cyrillic letters both, the graffiti on the walls among them (i18n-skip: a sample of the letters, not a line)
     ...fonts.map(f => Promise.race([document.fonts.load(f, 'WTF ЖОПА 0'), new Promise(r => setTimeout(r, FONT_WAIT))]).catch(() => {}).then(() => tick())),
   ]);
 }

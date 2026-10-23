@@ -1,5 +1,7 @@
 // Player settings, kept in this browser.
 
+import type { Lang } from './i18n';
+
 export interface Settings {
   name: string;
   /** Canvas sharpness: 'auto' lowers it on slow devices, 'low' always draws at one pixel per CSS pixel. */
@@ -15,10 +17,12 @@ export interface Settings {
   sfx: number;
   /** The «Громкость» step (src/volume.ts) the knob was last turned to for the campaign or a room this player hosts. */
   vol: number;
+  /** The language picked on the loading screen or in the settings; none yet on the first start (src/i18n.ts). */
+  lang: Lang | '';
 }
 
 const KEY = 'discodungeon.settings';
-const defaults: Settings = { name: '', quality: 'auto', hero: 0, size: 1, party: [], music: 0.7, sfx: 0.85, vol: 0 };
+const defaults: Settings = { name: '', quality: 'auto', hero: 0, size: 1, party: [], music: 0.7, sfx: 0.85, vol: 0, lang: '' };
 
 function load(): Settings {
   let s: Settings;

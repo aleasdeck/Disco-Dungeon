@@ -8,6 +8,7 @@ import { bossOf } from './room';
 import { FLOORS, reachable, roomSeed, type Run } from './run';
 import { faceUrl, mobFace } from './ui';
 import { renderKnob } from './volview';
+import { t } from './i18n';
 
 const NS = 'http://www.w3.org/2000/svg';
 const $ = (id: string) => document.getElementById(id)!;
@@ -84,8 +85,8 @@ export class MapView {
     const f = run.floor, layers = run.floors[f];
     // the floor, and the whole run as three gems: done, here, ahead (the demo's one floor has none)
     const dots = Array.from({ length: FLOORS }, (_, k) => `<i class="${k < f ? 'done' : k === f ? 'cur' : ''}"></i>`).join('');
-    $('mapFloor').innerHTML = `Этаж ${f + 1}${FLOORS > 1 ? `<em class="fl-dots" title="Этаж ${f + 1} из ${FLOORS}">${dots}</em>` : ''}<span>${BIOMES[f].name}</span>`;
-    renderKnob($('mapVol'), { vol: this.vol, top: this.vol, mini: true, head: `Забег на громкости ${this.vol}. Её правила складываются:` });
+    $('mapFloor').innerHTML = `${t('Этаж {0}', f + 1)}${FLOORS > 1 ? `<em class="fl-dots" title="${t('Этаж {0} из {1}', f + 1, FLOORS)}">${dots}</em>` : ''}<span>${t(BIOMES[f].name)}</span>`;
+    renderKnob($('mapVol'), { vol: this.vol, top: this.vol, mini: true, head: t('Забег на громкости {0}. Её правила складываются:', this.vol) });
     this.partyRow(party);
     const svg = $('map');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
@@ -121,7 +122,7 @@ export class MapView {
     const st = el(svg, 'g', { class: 'gate' });
     el(st, 'path', { d: `M${gate[0] - 15} ${gate[1] + 8}h30l-4-6h-22zM${gate[0] - 11} ${gate[1] + 2}h22l-4-6h-14z` });
     for (const n of layers.flat()) {
-      const [x, y] = pos[n.id], t = ROOM_TYPES[n.type], g = el(svg, 'g', {});
+      const [x, y] = pos[n.id], rt = ROOM_TYPES[n.type], name = t(rt.name), g = el(svg, 'g', {});
       const isR = reach.includes(n.id), isV = path.includes(n.id), isCur = path[path.length - 1] === n.id;
       const past = !isV && n.l <= atL;
       g.setAttribute('class', 'mnode' + (isR ? ' reach' : '') + (isV ? ' visited' : '') + (isCur ? ' cur' : '') + (past ? ' past' : '')
@@ -129,7 +130,7 @@ export class MapView {
       g.dataset.id = n.id;
       const boss = n.type === 'boss' ? bossOf({ seed: roomSeed(run, f, n), floor: f }) : null, r = rad[n.id], pic = boss ? undefined : uiArt.get('room_' + n.type);
       // what is in the room, for a mouse resting on it
-      el(g, 'title', {}).textContent = boss ? `${t.name}: ${MOBS[boss].name}.` : `${t.name}. ${t.txt}`;
+      el(g, 'title', {}).textContent = boss ? t('{0}: {1}.', name, MOBS[boss].name) : `${name}. ${t(rt.txt)}`;
       if (pic) {
         // a painted room is its own token: no disc under it, and it glows instead of a ring when it can be picked
         g.classList.add('art');
@@ -137,7 +138,7 @@ export class MapView {
         el(g, 'image', { href: pic.src, x: x - r - 6, y: y - r - 8, width: r * 2 + 12, height: r * 2 + 12, class: 'mart' });
       } else {
         el(g, 'circle', { cx: x, cy: y, r: r + 6, class: 'halo' });
-        el(g, 'circle', { cx: x, cy: y, r, fill: t.col, class: 'disc' });
+        el(g, 'circle', { cx: x, cy: y, r, fill: rt.col, class: 'disc' });
       }
       if (boss) {
         // who waits at the top: the floor's boss in a round frame, a crown on top
@@ -151,11 +152,11 @@ export class MapView {
       const beer = n.beer && uiArt.get('map_beer');
       if (beer) el(g, 'image', { href: beer.src, x: x + r - 14, y: y - r - 6, width: 26, height: 26, class: 'mbeer' });
       else if (n.beer) el(g, 'circle', { cx: x + r - 2, cy: y - r + 6, r: 9, class: 'mbeer ring' });
-      el(g, 'text', { x, y: y + r + (pic ? 17 : 14), class: 'mlabel' }).textContent = t.name;
+      el(g, 'text', { x, y: y + r + (pic ? 17 : 14), class: 'mlabel' }).textContent = name;
       if (this.fresh && n.type === 'event' && n.l > atL) {
         const sg = el(g, 'g', { class: 'mnew', transform: `rotate(-8 ${x - r} ${y - r})` });
         el(sg, 'rect', { x: x - r - 26, y: y - r - 9, width: 56, height: 18 });
-        el(sg, 'text', { x: x - r + 2, y: y - r + 4 }).textContent = 'НОВОЕ';
+        el(sg, 'text', { x: x - r + 2, y: y - r + 4 }).textContent = t('НОВОЕ');
       }
       // the players' heroes stand on the room's top rim, each face in its hero's colour
       const ps = votes?.pips[n.id] ?? [];
@@ -169,7 +170,7 @@ export class MapView {
       });
       g.setAttribute('tabindex', '0');
       g.setAttribute('role', 'button');
-      g.setAttribute('aria-label', t.name + (isR ? '' : isV ? ', пройдена' : ''));
+      g.setAttribute('aria-label', isV && !isR ? t('{0}, пройдена', name) : name);
       // one tap goes in; online it is the player's vote, and the party goes once everyone tapped the same room
       g.addEventListener('click', () => { if (isR) this.onChoose(n.id); });
       g.addEventListener('keydown', e => { if (isR && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); this.onChoose(n.id); } });
@@ -195,8 +196,8 @@ export class MapView {
     const box = $('mapParty');
     box.innerHTML = party.heroes.map(h => {
       const hp = Math.max(0, h.hp), pct = (hp / h.max) * 100;
-      return `<div class="mp-hero${h.hp <= 0 ? ' dead' : ''}${h === party.me ? ' me' : ''}" style="--c:${h.def.col}" title="${h.def.name}: ${hp} из ${h.max}">`
-        + `<img src="${faceUrl(h)}" alt=""><span class="mp-hp"><i style="width:${pct}%"></i><u>${h.hp > 0 ? `${hp}/${h.max}` : 'пал'}</u></span></div>`;
-    }).join('') + `<div class="mp-ore" title="Руда отряда">${ico('ore')}<b>${party.ore}</b></div>`;
+      return `<div class="mp-hero${h.hp <= 0 ? ' dead' : ''}${h === party.me ? ' me' : ''}" style="--c:${h.def.col}" title="${t('{0}: {1} из {2}', h.def.name, hp, h.max)}">`
+        + `<img src="${faceUrl(h)}" alt=""><span class="mp-hp"><i style="width:${pct}%"></i><u>${h.hp > 0 ? `${hp}/${h.max}` : t(h.def.fem ? 'пала' : 'пал')}</u></span></div>`;
+    }).join('') + `<div class="mp-ore" title="${t('Руда отряда')}">${ico('ore')}<b>${party.ore}</b></div>`;
   }
 }
