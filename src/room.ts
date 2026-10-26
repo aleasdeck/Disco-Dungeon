@@ -90,8 +90,8 @@ export const pitAt = (pits: Pit[], x: number, y: number) => {
  * A one-tile obstacle. `ice` marks an icicle growing from the floor: it collides exactly like a stone block,
  * but discs chip `hp` off it and it shatters at 0. `big` icicles take several hits, small ones one or two.
  */
-/** `made`: put up in the fight (the lich's ice wall), not the room's own. */
-export interface Block { x0: number; y0: number; x1: number; y1: number; v: number; ice?: boolean; big?: boolean; hp?: number; max?: number; made?: boolean }
+/** `made`: put up in the fight (the lich's ice wall), not the room's own; `rub`: rubble the ore cave's ceiling dropped (src/collapse.ts). */
+export interface Block { x0: number; y0: number; x1: number; y1: number; v: number; ice?: boolean; big?: boolean; hp?: number; max?: number; made?: boolean; rub?: boolean }
 
 /** Icicle toughness: a small one breaks to a fair hit, a big one needs two or three. */
 export const ICICLE_HP = { small: 3, big: 11 };
@@ -683,7 +683,7 @@ export const crystals = (cells: number) => 1 + SPK_AREA.filter(a => cells > a).l
  * discs a turn. Each throw goes for ore or for health. It ends once the turns run out or nothing is left
  * to hit. Its veins hold as many charges whatever the party: the turns already make up for its size.
  */
-export const CAVE = { turns: 4, clump: { r: 12, n: [0, 1] as Range }, small: { ch: 2, n: [2, 5] as Range }, herbs: [0, 2] as Range };
+export const CAVE = { clump: { r: 12, n: [0, 1] as Range }, small: { ch: 2, n: [2, 5] as Range }, herbs: [0, 2] as Range };
 
 /** What one ore cave holds, from its own stream of the seed, so the rest of the room is laid out as before. */
 export function caveStock(spec: Pick<RoomSpec, 'seed' | 'depth'>) {
@@ -691,9 +691,6 @@ export function caveStock(spec: Pick<RoomSpec, 'seed' | 'depth'>) {
   // the last roll: which cell of the clump's square stays free
   return { clump: roll(CAVE.clump.n), ore: roll(CAVE.small.n), herb: roll(CAVE.herbs), gap: R.int(0, 3) };
 }
-
-/** Turns the party has in the ore cave: 4 minus the heroes, at least one. */
-export const caveTurns = (spec: Pick<RoomSpec, 'heroes'>) => Math.max(1, CAVE.turns - Math.max(1, Math.min(3, spec.heroes ?? 3)));
 
 /** How much every enemy's HP grows per room of the run (on top of MOB_HP_MUL). */
 export const HP_STEP = 0.065;

@@ -17,6 +17,7 @@ import { DEMO } from './demo';
 import { OreCounters } from './orefx';
 import { M, t } from './i18n';
 import { oreOf, own } from './ore';
+import { FALL } from './collapse';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -301,6 +302,7 @@ export class Hud {
     new ResizeObserver(() => document.documentElement.style.setProperty('--top-h', top.offsetHeight + 'px')).observe(top);
     $('abBtn').addEventListener('click', () => g.useAbility());
     $('turnBtn').addEventListener('click', () => this.pressTurn());
+    $('leaveBtn').addEventListener('click', () => { for (const o of this.leavers()) this.g.leave(o); this.turnButton(); });
     $('pfBtn').addEventListener('click', e => { e.stopPropagation(); this.toggleCard(); });
     $('btnLog').addEventListener('click', e => { e.stopPropagation(); this.toggleLog(); });
     $('forgeMine').addEventListener('click', e => {
@@ -431,10 +433,19 @@ export class Hud {
     $('hTurn').textContent = S.phase === 'place' ? t('Расстановка') : max ? t('Ход {0} из {1}', S.turn, max) : t('Ход {0}', S.turn);
     // enemies grow angrier every turn once a fight drags on; warn a turn ahead
     const rage = $('hRage'), fighting = S.phase !== 'place' && S.phase !== 'over' && !g.cave(), soon = g.rageFrom() - S.turn;
-    rage.hidden = !fighting || (g.rage() === 0 && soon > 1);
-    rage.classList.toggle('soon', g.rage() === 0);
-    rage.textContent = g.rage() ? t('ярость +{0}', g.rage()) : t('ярость со след. хода');
-    rage.title = t('С {0}-го хода каждый враг с каждым ходом бьёт на 1 сильнее.', g.rageFrom());
+    if (g.cave()) {
+      // the ore cave counts down to its whole ceiling coming down instead
+      const left = FALL.end - S.turn;
+      rage.hidden = S.phase === 'place' || S.phase === 'over';
+      rage.classList.toggle('soon', left <= 1);
+      rage.textContent = t('обвал через {0}', left);
+      rage.title = t('На {0}-м ходу рушится весь потолок: кто внутри, получает −{1} HP и теряет половину добытой здесь руды.', FALL.end, FALL.endDmg);
+    } else {
+      rage.hidden = !fighting || (g.rage() === 0 && soon > 1);
+      rage.classList.toggle('soon', g.rage() === 0);
+      rage.textContent = g.rage() ? t('ярость +{0}', g.rage()) : t('ярость со след. хода');
+      rage.title = t('С {0}-го хода каждый враг с каждым ходом бьёт на 1 сильнее.', g.rageFrom());
+    }
     // an event's curse on this fight
     // and what else an event left this fight: the foam party's floor, the bookie's bet, a disc more
     const curse = $('hCurse'), on = CHIPS.filter(c => c.on(S.spec));
@@ -937,6 +948,8 @@ export class Hud {
     // «готовы N из M» counts the players at the table: the ones who dropped out hold nobody up
     const here = g.alive().filter(o => g.here(o)).map(o => o.i), alive = here.length;
     // alone with a party the button speaks for every hero, so it stays when the picked one has fallen
+    // the ore cave: «Уходим с рудой» over the turn button at the start of a turn, for this player's heroes still digging
+    $('leaveBtn').hidden = !this.leavers().length;
     if (S.phase === 'over' || h.hp <= 0 && S.phase !== 'enemy' && S.phase !== 'resolve' && !this.team()) {
       b.hidden = true;
       this.act = 'none';
@@ -953,6 +966,10 @@ export class Hud {
       if (g.allDone()) { txt = 'Ждём…'; cls = 'wait'; act = 'cancel'; }
       else if (left > 0 && performance.now() < this.confirmUntil) { txt = 'Точно?'; sub = t('не брошено: {0}', left); cls = 'confirm'; act = 'end'; }
       else { txt = 'Конец хода'; cls = left > 0 ? 'idle' : 'lit'; act = 'end'; }
+    } else if (S.phase === 'throw' && h.out) {
+      // walked out of the ore cave: the hero waits at the way out for the ones still digging
+      txt = 'У выхода';
+      cls = 'wait';
     } else if (S.phase === 'throw') {
       const done = S.done.filter(i => here.includes(i)).length;
       if (g.ended(h)) { txt = 'Ждём…'; sub = alive > 1 ? t('готовы {0} из {1}', done, alive) : ''; cls = 'wait'; act = 'cancel'; }
@@ -982,6 +999,13 @@ export class Hud {
     $('turnSub').hidden = !sub;
     b.title = act === 'cancel' ? t('Нажми ещё раз, чтобы отменить') : '';
     this.act = act;
+  }
+
+  /** This player's heroes that may walk out of the ore cave now: alone with a party all of them, online the player's own. */
+  private leavers() {
+    const g = this.g;
+    if (!g.cave()) return [];
+    return (this.team() ? g.alive() : [g.hero]).filter(o => g.canControl(o) && g.mayLeave(o));
   }
 
   /** One player plays the whole party (the campaign of two or three): the turn button speaks for every hero. */

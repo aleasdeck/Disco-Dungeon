@@ -8,6 +8,7 @@ import type { CampState } from './camp';
 import type { LootState } from './artifacts';
 import type { EventState } from './events';
 import type { Run, Votes } from './run';
+import type { Fall } from './collapse';
 
 type HeroSnap = Omit<HeroState, 'def'>;
 
@@ -38,6 +39,9 @@ export interface Snapshot {
   dug?: Pit[];
   made?: Block[];
   smog?: boolean;
+  /** The ore cave's ceiling coming down, and the ore each hero dug there; older saves have none. */
+  fall?: Fall | null;
+  took?: Record<number, number>;
   discs: (Omit<Disc, 'hero'> & { hero: number })[];
   /** The cook's dishes on the floor; older saves have none. */
   food?: Food[];
@@ -79,6 +83,8 @@ export function snapshot(g: Game): Snapshot {
     dug: S.pits.filter(p => p.dug),
     made: S.blocks.filter(b => b.made),
     smog: S.smog,
+    fall: S.fall,
+    took: S.took,
     discs: S.discs.filter(d => !d.gone).map(d => ({ ...d, hero: d.hero.i })),
     food: S.food,
     bombs: S.bombs,
@@ -148,6 +154,8 @@ export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boo
   S.pits = [...S.pits.filter(p => !p.dug), ...(s.dug ?? []).map(p => ({ ...p, cells: p.cells.map(([i, j]): [number, number] => [i, j]) }))];
   S.blocks = [...S.blocks.filter(b => !b.made), ...(s.made ?? []).map(b => ({ ...b }))];
   S.smog = s.smog;
+  S.fall = s.fall;
+  S.took = s.took;
   if (s.ice) S.blocks.filter(b => b.ice).forEach((b, k) => { if (s.ice![k] !== undefined) b.hp = s.ice![k]; });
   S.discs = s.discs.map(d => ({ ...d, hero: g.heroOf(d.hero) }));
   S.food = (s.food ?? []).map(f => ({ ...f }));
