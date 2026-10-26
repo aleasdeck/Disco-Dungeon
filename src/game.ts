@@ -252,8 +252,10 @@ export interface State extends Layout {
   hurt?: boolean;
   /** The ore cave's ceiling: where it comes down after this turn, and the rubble that fell last turn (src/collapse.ts). */
   fall?: Fall | null;
-  /** Ore each hero (by `i`) has dug in the ore cave, half of which it spills if buried there. */
+  /** Ore each hero (by `i`) has got in the ore cave, half of which it spills if buried there. */
   took?: Record<number, number>;
+  /** Online: the heroes whose players want to walk out of the ore cave this turn; the party goes once everyone at the table does. */
+  vote?: number[];
   /** The dragon has belched the room full of smoke: it hangs there through the heroes' next turn, clear only round them. */
   smog?: boolean;
 }
@@ -746,25 +748,52 @@ export class Game {
     if (S.phase !== 'throw' || !this.ended(h) || h.out) return;
     if (this.send) { this.send({ k: 'end', h: h.i, on: false }); return; }
     S.done = S.done.filter(i => i !== h.i);
+    // a player who wanted out of the ore cave takes it back: the hero digs on with its whole hand
+    if (S.vote?.includes(h.i)) { S.vote = S.vote.filter(i => i !== h.i); h.hand = this.handOf(h); }
     this.onChange();
   }
 
-  /** The hero may walk out of the ore cave with its ore: from the second turn on, at its start, before it has thrown. */
+  /** The hero may say «Уходим с рудой» in the ore cave: from the second turn on, at its start, before it has thrown. */
   mayLeave(h = this.hero) {
     const S = this.S;
     return this.cave() && S.phase === 'throw' && S.turn >= FALL.leaveFrom && h.hp > 0 && !h.out && !h.thrown && !this.ended(h);
   }
 
-  /** «Уходим с рудой»: the hero walks out of the ore cave with what it has, and waits at the way out for the ones still digging. */
+  /** The heroes still inside the ore cave whose players are at the table: they all have to want out for the party to go. */
+  voters = () => this.inside().filter(h => this.here(h));
+
+  /**
+   * «Уходим с рудой»: the party walks out of the ore cave together. The hero's player wants out and throws no more this
+   * turn; once every player at the table does, everyone goes at once, before the stones come. One who digs on holds the
+   * party, and the ones who waited stand where they are as the ceiling comes down; their wish is gone with the turn.
+   */
   leave(h = this.hero) {
     if (!this.mayLeave(h)) return;
     if (this.send) { this.send({ k: 'leave', h: h.i }); return; }
+    // alone with a party the one press takes every hero out, if none of them has thrown yet this turn
+    if (!this.online) { if (this.inside().every(o => this.mayLeave(o))) this.walkOut(); return; }
     const S = this.S, p = this.spot(h);
-    h.out = true;
+    (S.vote ??= []).push(h.i);
     h.hand = 0;
     S.done.push(h.i);
-    if (p) { this.float(p.x, p.y - 8, M('{0?ушла|ушёл} с рудой', h.def.fem), '#ffd34d'); this.burst(p.x, p.y, '#ffd34d', 8); }
+    if (this.voters().every(o => S.vote!.includes(o.i))) { this.walkOut(); return; }
+    if (p) this.float(p.x, p.y - 8, 'хочет уйти', '#ffd34d');
     this.onChange();
+  }
+
+  /** Every hero still inside walks out of the ore cave with the party's ore, and the cave is over. */
+  private walkOut() {
+    const S = this.S;
+    for (const h of this.inside()) {
+      const p = this.spot(h);
+      h.out = true;
+      h.hand = 0;
+      if (p) this.burst(p.x, p.y, '#ffd34d', 8);
+    }
+    S.vote = [];
+    S.fall = null;
+    this.float(S.Wx / 2, S.Wy / 2, 'УШЛИ С РУДОЙ', '#ffd34d');
+    this.finish();
   }
 
   /**
@@ -3003,12 +3032,16 @@ export class Game {
         const all = has(h, 'denture');
         if (all) this.pop(h, 'denture');
         if (n.k === 'ore') {
-          // a vein under the ore cave's dust has cracked open and pays more till the stones come; what a hero digs in the cave
-          // is its own, as is the risk, while the party's winnings in a fight are dealt out
+          // a vein under the ore cave's dust has cracked open and pays more till the stones come; the ore is dealt out as in a
+          // fight, and in the cave every hero keeps count of what it got there (the pool's alone: what its own discs dug)
           const k = all ? n.left : 1, crack = this.cracked(n), got = q * k * (crack ? FALL.crack : 1);
           n.left -= k;
-          if (this.cave()) { give(h, got, this.bank); (S.took ??= {})[h.i] = (S.took[h.i] ?? 0) + got; }
-          else deal(got, this.party, this.bank, h);
+          const dealt = deal(got, this.party, this.bank, h);
+          if (this.cave()) {
+            const took = (S.took ??= {});
+            if (this.bank.split) for (const [o, c] of dealt) took[o.i] = (took[o.i] ?? 0) + c;
+            else took[h.i] = (took[h.i] ?? 0) + got;
+          }
           this.mined += got;
           tallyOf(h).ore += got;
           this.float(n.x, n.y, crack ? M('+{0} руда из трещины', got) : M('+{0} руда', got), '#ffb070');
@@ -3760,6 +3793,7 @@ export class Game {
     S.turn++;
     S.discs = [];
     S.done = [];
+    S.vote = [];
     this.passing = -1;
     // the frost wears off after one enemy turn, a kiss after its turns, a cloud of gas thins out turn by turn, a firecracker
     // nobody came to fizzles out

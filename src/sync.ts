@@ -39,9 +39,10 @@ export interface Snapshot {
   dug?: Pit[];
   made?: Block[];
   smog?: boolean;
-  /** The ore cave's ceiling coming down, and the ore each hero dug there; older saves have none. */
+  /** The ore cave's ceiling coming down, the ore each hero got there and who wants out; older saves have none. */
   fall?: Fall | null;
   took?: Record<number, number>;
+  vote?: number[];
   discs: (Omit<Disc, 'hero'> & { hero: number })[];
   /** The cook's dishes on the floor; older saves have none. */
   food?: Food[];
@@ -85,6 +86,7 @@ export function snapshot(g: Game): Snapshot {
     smog: S.smog,
     fall: S.fall,
     took: S.took,
+    vote: S.vote,
     discs: S.discs.filter(d => !d.gone).map(d => ({ ...d, hero: d.hero.i })),
     food: S.food,
     bombs: S.bombs,
@@ -156,6 +158,7 @@ export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boo
   S.smog = s.smog;
   S.fall = s.fall;
   S.took = s.took;
+  S.vote = s.vote;
   if (s.ice) S.blocks.filter(b => b.ice).forEach((b, k) => { if (s.ice![k] !== undefined) b.hp = s.ice![k]; });
   S.discs = s.discs.map(d => ({ ...d, hero: g.heroOf(d.hero) }));
   S.food = (s.food ?? []).map(f => ({ ...f }));

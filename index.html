@@ -58,7 +58,7 @@
     <div class="ups hero-card" id="ups" hidden></div>
   </footer>
 
-  <button id="leaveBtn" class="leave-btn" type="button" hidden><i class="ico ico-ore" aria-hidden="true"></i><span>Уходим с рудой</span></button>
+  <button id="leaveBtn" class="leave-btn" type="button" hidden><i class="ico ico-ore" aria-hidden="true"></i><span id="leaveTxt">Уходим с рудой</span></button>
   <button id="turnBtn" class="turn-btn" type="button"><span class="tb-plate" aria-hidden="true"></span><i class="tap-area" aria-hidden="true"></i><b id="turnTxt"></b><small id="turnSub"></small><span class="tb-who" id="turnWho" aria-hidden="true"></span></button>
 
   <div class="camctl" id="camctl" role="group" aria-label="Камера">
@@ -371,7 +371,7 @@
             <li class="full-only"><i class="help-ico" data-art="ico_map" aria-hidden="true"></i><p data-t><b>Карта.</b> Три этажа, на каждом путь снизу вверх к боссу. Выбирай комнаты: бой, элита, рудная пещера, костёр, кузнец, событие.</p></li>
             <li><i class="help-ico" data-art="room_forge" aria-hidden="true"></i><p data-t><b>Кузнец.</b> Только здесь тратится <em class="k-ore">руда</em>. «Урон» +25%, «Скорость» +15%, «Отскок» +8% за уровень (<em class="k-ore">4, 6 и 7 руды</em>), второй диск за ход за <em class="k-ore">12</em>. Третий диск бывает только трофеем «Третья рука». Ещё кузнец дарит <em class="k-ore">0–3 руды</em>.</p></li>
             <li><i class="help-ico" data-art="room_camp" aria-hidden="true"></i><p data-t><b>Костёр.</b> Каждый герой делает одно: отдыхает (<em class="k-heal">+8 HP</em>), перевязывает товарища (<em class="k-heal">+8 HP</em>) или копает <em class="k-ore">0–3 руды</em>. Павший встаёт с половиной HP.</p></li>
-            <li><i class="help-ico" data-art="room_treasure" aria-hidden="true"></i><p data-t><b>Рудная пещера.</b> Врагов нет, но потолок рушится всё сильнее. Пыль на полу показывает, куда упадут камни после хода, а жила под пылью даёт вдвое больше руды. Со 2-го хода в его начале можно уйти с рудой. На 6-м ходу рушится весь потолок: −10 HP и половина добытой здесь руды.</p></li>
+            <li><i class="help-ico" data-art="room_treasure" aria-hidden="true"></i><p data-t><b>Рудная пещера.</b> Врагов нет, но потолок рушится всё сильнее. Пыль на полу показывает, куда упадут камни после хода, а жила под пылью даёт вдвое больше руды. Со 2-го хода в его начале можно уйти с рудой, но только всем вместе: в сети отряд уходит, когда это нажмут все. На 6-м ходу рушится весь потолок: −10 HP и половина добытой здесь руды.</p></li>
             <li><i class="help-ico" data-art="room_event" aria-hidden="true"></i><p data-t><b>События.</b> Сцена и выбор: <em class="k-heal">зелёное</em> хорошо, <em class="k-hurt">красное</em> плохо, у риска написан шанс. Бывает и <em class="k-hurt">проклятие</em> на следующий бой. В сети выбор общий: все жмут одно и то же.</p></li>
             <li class="full-only"><i class="help-ico" data-art="art_hand" aria-hidden="true"></i><p data-t><b>Трофеи.</b> После босса 1-го и 2-го этажа отряду выпадают три, и каждый герой берёт свой. Трофей работает до конца забега, его видно в карточке героя. Бывают и в событиях.</p></li>
         </ul>

@@ -948,8 +948,11 @@ export class Hud {
     // «готовы N из M» counts the players at the table: the ones who dropped out hold nobody up
     const here = g.alive().filter(o => g.here(o)).map(o => o.i), alive = here.length;
     // alone with a party the button speaks for every hero, so it stays when the picked one has fallen
-    // the ore cave: «Уходим с рудой» over the turn button at the start of a turn, for this player's heroes still digging
+    // the ore cave: «Уходим с рудой» over the turn button at the start of a turn, before this player's heroes have thrown
     $('leaveBtn').hidden = !this.leavers().length;
+    // online the party goes once every player has pressed it: how many want out already
+    const votes = (S.vote ?? []).length, voters = g.voters().length;
+    $('leaveTxt').textContent = votes ? t('Уходим с рудой: {0} из {1}', votes, voters) : t('Уходим с рудой');
     if (S.phase === 'over' || h.hp <= 0 && S.phase !== 'enemy' && S.phase !== 'resolve' && !this.team()) {
       b.hidden = true;
       this.act = 'none';
@@ -966,13 +969,11 @@ export class Hud {
       if (g.allDone()) { txt = 'Ждём…'; cls = 'wait'; act = 'cancel'; }
       else if (left > 0 && performance.now() < this.confirmUntil) { txt = 'Точно?'; sub = t('не брошено: {0}', left); cls = 'confirm'; act = 'end'; }
       else { txt = 'Конец хода'; cls = left > 0 ? 'idle' : 'lit'; act = 'end'; }
-    } else if (S.phase === 'throw' && h.out) {
-      // walked out of the ore cave: the hero waits at the way out for the ones still digging
-      txt = 'У выхода';
-      cls = 'wait';
     } else if (S.phase === 'throw') {
       const done = S.done.filter(i => here.includes(i)).length;
-      if (g.ended(h)) { txt = 'Ждём…'; sub = alive > 1 ? t('готовы {0} из {1}', done, alive) : ''; cls = 'wait'; act = 'cancel'; }
+      // wants out of the ore cave: waits for the others to want it too, and may take it back
+      if (S.vote?.includes(h.i)) { txt = 'Ждём…'; sub = t('уходят {0} из {1}', votes, voters); cls = 'wait'; act = 'cancel'; }
+      else if (g.ended(h)) { txt = 'Ждём…'; sub = alive > 1 ? t('готовы {0} из {1}', done, alive) : ''; cls = 'wait'; act = 'cancel'; }
       else if (h.hand > 0 && performance.now() < this.confirmUntil) { txt = 'Точно?'; sub = t('не брошено: {0}', h.hand); cls = 'confirm'; act = 'end'; }
       else { txt = 'Конец хода'; cls = h.hand > 0 ? 'idle' : 'lit'; act = g.canEndTurn(h) ? 'end' : 'none'; sub = alive > 1 && done ? t('готовы {0} из {1}', done, alive) : ''; }
     } else if (g.cave()) {
@@ -1005,7 +1006,9 @@ export class Hud {
   private leavers() {
     const g = this.g;
     if (!g.cave()) return [];
-    return (this.team() ? g.alive() : [g.hero]).filter(o => g.canControl(o) && g.mayLeave(o));
+    // the party walks out together: alone the one press takes everyone, so long as nobody has thrown yet this turn
+    if (!g.online) return g.inside().length && g.inside().every(o => g.mayLeave(o)) ? g.inside().slice(0, 1) : [];
+    return [g.hero].filter(o => g.canControl(o) && g.mayLeave(o));
   }
 
   /** One player plays the whole party (the campaign of two or three): the turn button speaks for every hero. */

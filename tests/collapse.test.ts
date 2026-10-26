@@ -88,37 +88,79 @@ describe('«Обвал» in the game', () => {
     expect(g.S.fall!.marks.length).toBeGreaterThan(0);
   });
 
-  it('lets a hero walk out at the start of a turn from the second on, and ends once nobody is inside', () => {
+  it('takes the whole party out at once from the second turn on, alone with a party, before any hero has thrown', () => {
     const { g, won } = enter([0, 1, 2]);
-    const [a, b, c] = g.party;
+    const [a, b] = g.party;
     expect(g.mayLeave(a)).toBe(false);
     sitOut(g);
-    expect(g.mayLeave(a)).toBe(true);
+    // a hero that has thrown this turn keeps the party in for it
+    b.hp = 99;
+    g.throwDisc(b, 10, 0);
     g.leave(a);
-    expect(a.out).toBe(true);
+    expect(g.party.some(h => h.out)).toBe(false);
+    expect(g.S.phase).toBe('throw');
+    endAll(g);
+    play(g, () => g.S.turn > 2 || g.S.phase === 'over');
+    expect(g.S.turn).toBe(3);
+    g.leave(a);
+    expect(g.party.every(h => h.out)).toBe(true);
+    expect(g.S.phase).toBe('over');
+    expect(won()).toBe(true);
+    expect(g.S.turn).toBe(3);
+    expect(g.caved).toBe(false);
+  });
+
+  it('online walks the party out once every player at the table wants out, and a wish lasts the turn', () => {
+    const { g, won } = enter([0, 1, 2], true);
+    const [a, b, c] = g.party;
+    for (const h of g.party) h.hp = h.max = 99;
+    sitOut(g);
+    // Петя wants out: his hero throws no more this turn, and he may take it back
+    g.leave(a);
+    expect(g.S.vote).toEqual([a.i]);
+    expect(a.out).toBe(false);
     expect(g.ended(a)).toBe(true);
     expect(g.canThrow(a)).toBe(false);
-    // the ones who walked out can't take it back, and the stones miss them
     g.cancelEndTurn(a);
-    expect(g.ended(a)).toBe(true);
-    const hp = a.hp;
-    sitOut(g);
-    expect(a.hp).toBe(hp);
-    expect(g.ended(a)).toBe(true);
-    // a hero that has thrown this turn stays for it
-    b.hp = c.hp = 99;
+    expect(g.S.vote).toEqual([]);
+    expect(g.ended(a)).toBe(false);
+    expect(a.hand).toBeGreaterThan(0);
+    g.leave(a);
+    // Оля digs on: the party stays, and Петя stands still as the stones come down
     g.throwDisc(b, 10, 0);
-    expect(g.mayLeave(b)).toBe(false);
     g.leave(c);
-    expect(c.out).toBe(true);
+    expect(g.S.vote).toEqual([a.i, c.i]);
+    expect(g.party.some(h => h.out)).toBe(false);
+    const hp = a.hp;
     endAll(g);
-    play(g, () => g.S.turn > 3 || g.S.phase === 'over');
-    expect(g.S.turn).toBe(4);
+    play(g, () => g.S.turn > 2 || g.S.phase === 'over');
+    expect(g.S.turn).toBe(3);
+    expect(a.hp).toBeLessThan(hp);
+    expect(g.S.vote).toEqual([]);
+    // the next turn they all want out: everyone goes at once, before the stones
+    g.leave(a);
     g.leave(b);
-    play(g, () => g.S.phase === 'over');
+    expect(g.S.phase).toBe('throw');
+    const hp3 = g.party.map(h => h.hp);
+    g.leave(c);
+    expect(g.party.every(h => h.out)).toBe(true);
+    expect(g.S.phase).toBe('over');
     expect(won()).toBe(true);
-    expect(g.S.turn).toBe(4);
+    expect(g.party.map(h => h.hp)).toEqual(hp3);
     expect(g.caved).toBe(false);
+  });
+
+  it('online doesn\'t wait for the players who dropped out', () => {
+    const { g } = enter([0, 1, 2], true);
+    const [a, b, c] = g.party;
+    for (const h of g.party) h.hp = h.max = 99;
+    sitOut(g);
+    g.setAway([c.i]);
+    g.leave(a);
+    expect(g.S.phase).toBe('throw');
+    g.leave(b);
+    expect(g.S.phase).toBe('over');
+    expect(c.out).toBe(true);
   });
 
   it('brings the whole ceiling down on whoever stays to the last turn: a blow and half their ore', () => {
@@ -136,7 +178,7 @@ describe('«Обвал» in the game', () => {
     expect(h.hp).toBeLessThanOrEqual(99 - FALL.endDmg - (FALL.end - 1) * FALL.stone);
   });
 
-  it('pays twice from a vein under the dust, the ore to the hero who dug it, and spills half of it when the stones bury the hero', () => {
+  it('pays twice from a vein under the dust, dealt out to the party online, and a hero the stones bury spills half its share', () => {
     const { g } = enter([0, 1], true);
     const [a, b] = g.party, p = g.spot(a)!;
     const v = g.S.nodes.filter(n => n.k === 'ore' && n.left > 0).sort((x, y) => Math.hypot(x.x - p.x, x.y - p.y) - Math.hypot(y.x - p.x, y.y - p.y))[0];
@@ -147,18 +189,22 @@ describe('«Обвал» in the game', () => {
     play(g, () => !g.moving());
     expect(g.mined % FALL.crack).toBe(0);
     expect(g.mined).toBeGreaterThan(0);
-    expect([a.ore, b.ore ?? 0]).toEqual([g.mined, 0]);
-    expect(g.S.took).toEqual({ [a.i]: g.mined });
-    // the stones bury the digger: half its ore stays in the cave
+    // dealt out as in a fight, the digger first: nobody more than one ore ahead
+    const ores = [a.ore ?? 0, b.ore ?? 0];
+    expect(ores[0] + ores[1]).toBe(g.mined);
+    expect(ores[0] - ores[1]).toBeGreaterThanOrEqual(0);
+    expect(ores[0] - ores[1]).toBeLessThanOrEqual(1);
+    expect(g.S.took).toEqual(ores[1] ? { [a.i]: ores[0], [b.i]: ores[1] } : { [a.i]: ores[0] });
+    // the stones bury the digger: half its share stays in the cave
     a.hp = 1;
     a.shield = 0;
-    const dug = g.mined;
+    const share = ores[0];
     endAll(g);
     play(g, () => g.S.turn > 1 || g.S.phase === 'over');
-    if (a.hp <= 0) expect(a.ore).toBe(dug - spill(dug));
+    if (a.hp <= 0) expect(a.ore).toBe(share - spill(share));
   });
 
-  it('carries the ceiling, the rubble, the ore dug and who walked out to every screen', () => {
+  it('carries the ceiling, the rubble, the ore got and who wants out to every screen', () => {
     const { g } = enter([0, 1], true);
     sitOut(g);
     g.leave(g.party[1]);
@@ -167,7 +213,8 @@ describe('«Обвал» in the game', () => {
     applySnapshot(c, JSON.parse(JSON.stringify(snapshot(g))));
     expect(c.S.fall).toEqual(g.S.fall);
     expect(c.S.took).toEqual(g.S.took);
-    expect(c.party.map(h => h.out)).toEqual([false, true]);
+    expect(c.S.vote).toEqual([g.party[1].i]);
+    expect(c.party.map(h => h.out)).toEqual([false, false]);
     expect(c.S.blocks.filter(b => b.rub)).toEqual(g.S.blocks.filter(b => b.rub));
   });
 });
