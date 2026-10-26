@@ -651,7 +651,7 @@ export const E_MAX = 0.99;
 
 /**
  * Disc upgrades, named for what they do. Damage and speed grow by a share of the hero's own value per level,
- * so "+25% урона" means the same for every hero; the bounce adds to the share of speed kept off walls.
+ * so "+25% урона" means the same for every hero; the bounce adds to the share of speed kept off walls (see `stepOf`).
  */
 export interface Upgrade {
   k: StatKey;
@@ -677,6 +677,16 @@ export const UPS: Upgrade[] = [
     fmt: (_, v) => pct(v), now: v => t('Сейчас после отскока у диска остаётся {0} скорости. ', pct(v)),
   },
 ];
+
+/**
+ * What a level of the stat adds for this hero. The bounce adds its `step`, but a disc that already keeps most of its speed
+ * gets the room left under E_MAX split into equal levels: every hero buys all of them and the last one lands on the limit
+ * (thread «Полная прокачка в кузнице»: Шулер's bounce stopped at 99% after two levels, Рикошет's after one).
+ */
+export const stepOf = (def: HeroDef, k: StatKey) => {
+  const step = UPS.find(u => u.k === k)!.step;
+  return k === 'e' ? Math.min(step, (E_MAX - def.e) / UP_COST.length) : step;
+};
 
 /** Damage of a full-strength throw that hits square on before the disc slows down (no precise-hit bonus). */
 export const fullHit = (m: number, pw: number) => Math.ceil((m * 270 * pw) / 120);

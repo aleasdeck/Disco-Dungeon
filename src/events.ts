@@ -5,7 +5,7 @@
 // down for it, the thimbles for the cup with the ball, the pawnshop for the trophy each hero hands over. The host (or a
 // lone player) settles every tap and shares the event with the map, so every screen shows the same.
 
-import { AB_COST, E_MAX, HAND_MAX, KINDS, UPS, UP_COST, type StatKey } from './data';
+import { AB_COST, E_MAX, HAND_MAX, KINDS, UPS, UP_COST, stepOf, type StatKey } from './data';
 import type { Bank, HeroState } from './game';
 import { artDef, artsLeft, drop, give, room, type ArtKey } from './artifacts';
 import { REST_ROW, nodeById, type MapNode, type Run } from './run';
@@ -563,7 +563,7 @@ export function sceneOf(ev: EventState): string {
 
 /** A disc stat the hero can still raise: levels left to buy, and a bounce not yet at the limit. */
 const canGrow = (h: HeroState, k: StatKey) =>
-  UP_COST[h.up[k]] !== undefined && (k !== 'e' || h.def.e + h.up.e * UPS.find(u => u.k === 'e')!.step < E_MAX);
+  UP_COST[h.up[k]] !== undefined && (k !== 'e' || h.def.e + h.up.e * stepOf(h.def, 'e') < E_MAX);
 
 /** Whether the party can take a choice now: it has the ore it costs. */
 export const canPick = (c: Choice, bank: Bank) => bank.ore >= (c.pay ?? 0);

@@ -1,7 +1,7 @@
 // Combat rules: turn flow, disc physics, damage, abilities.
 // Rendering and input live elsewhere; this module only changes state.
 
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CLEAN_ORE, CRIT, CRIT_COS, CUFF_TURNS, E_MAX, ELITE_UPS, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, KISS_TURNS, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, RAGE_FROM, RAGE_FROM_BOSS, RISE_HP, SHOVE_DMG, TILE, UPS, UP_COST, ZAP, ZAP_REACH, frostVuln, gasDmg, isRanged, mobSize, type HeroDef, type MobAct, type MobKind, type StatKey } from './data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CLEAN_ORE, CRIT, CRIT_COS, CUFF_TURNS, E_MAX, ELITE_UPS, FAN_ANGLE, FAN_M, FAN_R, FOOD_HEAL, FOOD_MAX, FOOD_PER_DISC, FROST_STEPS, GAS_MAX, GAS_R, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, KISS_TURNS, MOBS, MOB_E, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, RAGE_FROM, RAGE_FROM_BOSS, RISE_HP, SHOVE_DMG, TILE, UP_COST, ZAP, ZAP_REACH, frostVuln, gasDmg, isRanged, mobSize, stepOf, type HeroDef, type MobAct, type MobKind, type StatKey } from './data';
 import { KNOCK_T, type ChipKind, type Knock } from './fx';
 import { mulberry32 } from './rng';
 import { has, type ArtKey, type Kept } from './artifacts';
@@ -577,7 +577,7 @@ export class Game {
   /** The room is done: every enemy is down, or in the ore cave nothing is left to hit, veins and mushrooms alike. */
   cleared = () => (this.cave() ? !this.S.nodes.some(n => n.left > 0) : !this.liveMobs().length);
   stat = (h: HeroState, k: StatKey) => {
-    const step = UPS.find(u => u.k === k)!.step;
+    const step = stepOf(h.def, k);
     return k === 'e' ? Math.min(E_MAX, h.def.e + h.up.e * step) : h.def[k] * (1 + h.up[k] * step);
   };
   get hero() { return this.heroOf(this.act); }
