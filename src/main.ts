@@ -288,7 +288,8 @@ function startRun(picks?: number[], vol = 0) {
     ? { bg: photoBg, heroes: players.map(p => p.hero!), names: players.map(p => p.name), host: players.findIndex(p => p.id === 'host') }
     : { bg: campPhotoBg(), heroes: picks ?? [0, 1, 2] };
   game.party = newParty(picks, run.seed);
-  // every hero on the stand its player's wins with it have earned: online each player told the host theirs with the pick
+  // every hero on the stand its player put it on, of the ones their wins with it have earned: online each player told the
+  // host theirs with the pick
   for (const h of game.party) h.stand = mode === 'host' ? players.find(p => p.hero === h.i)?.stand : standFor(h.def.key);
   const mine = myHeroes();
   if (mine.length) beginRun(run, mine.map(h => h.def.key), mode === 'host');
@@ -336,9 +337,12 @@ function openHeroSelect() {
     renderHeroSelect({ size, party, shown, vol: knobVol(), onPick, onSize, onVol });
   };
   const onPick = (i: number) => {
+    // a hero of the party with another hero's card open: the tap opens its card, where its stand is picked, and the
+    // next tap takes it out
+    const read = party.includes(i) && shown !== i;
     shown = i;
     // a hero not opened yet is only read: its card says how it opens
-    if (locked(HEROES[i].key)) { draw(); return; }
+    if (read || locked(HEROES[i].key)) { draw(); return; }
     if (party.includes(i)) { if (size > 1) party = party.filter(o => o !== i); }
     else party = [...party, i].slice(-size);
     draw();
