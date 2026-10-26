@@ -423,17 +423,29 @@ i.ico { display: inline-block; font-style: normal; }
 .turn-btn.enemy { --p1: #e2525e; --p2: #b8323f; --p3: #6e1520; --tc: #fff; cursor: default; }
 .turn-btn:not(:disabled):active { transform: translateY(3px); }
 .turn-btn:disabled:not(.enemy):not(.wait) { cursor: default; }
-/* the ore cave's «Уходим с рудой» (src/collapse.ts): a gold slab over the turn button at the start of a turn */
+/* the ore cave's «Уходим с рудой» (src/collapse.ts): a slate piece of the corner right of the turn button, its top carrying
+   on the button's rising top (art/ui/draw_corner.py, the box and outline it prints) */
 .leave-btn {
-  position: fixed; z-index: 6; left: calc(var(--cx) + var(--pf-w) + var(--bgap) + 236 * var(--u)); bottom: calc(var(--cy) + 409 * var(--u) + 4px);
-  display: flex; align-items: center; gap: 6px; padding: 8px 16px 8px 12px; border: 0; cursor: pointer;
-  font: 700 15px/1 Oswald, sans-serif; text-transform: uppercase; letter-spacing: 0.03em; color: #2a1a0c;
-  background: linear-gradient(var(--gold-1), var(--gold-2) 60%, var(--gold-3)); clip-path: var(--cut-card);
+  position: fixed; z-index: 6; pointer-events: none;
+  left: calc(var(--cx) + var(--pf-w) + var(--bgap) + 512 * var(--u)); bottom: calc(var(--cy) + 263 * var(--u));
+  width: calc(215 * var(--u)); height: calc(175 * var(--u)); border: 0; background: none; cursor: pointer;
+  /* the words in the piece's wide upper part along its top, set to its straight right side: its left one slants in */
+  padding: 0 calc(26 * var(--u)) calc(40 * var(--u)) 0;
+  display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 3px;
+  filter: var(--outline) drop-shadow(0 5px 0 rgba(0, 0, 0, 0.55));
+  --plate: polygon(6.5% 23.4%, 93.5% 8%, 93.5% 92%, 67.9% 92%);
+  --tap: var(--plate);
 }
 .leave-btn[hidden] { display: none; }
-.leave-btn .ico { width: 20px; height: 20px; }
-.leave-btn:hover { filter: brightness(1.08); }
-.leave-btn:active { transform: translateY(2px); }
+.leave-btn > .tap-area { position: absolute; inset: 0; z-index: 2; pointer-events: auto; clip-path: var(--tap); }
+.lv-plate { position: absolute; inset: 0; clip-path: var(--plate); background: linear-gradient(#4a4f5e, #3e4250 55%, #2c2f3a); }
+.leave-btn b, .leave-btn small { position: relative; transform: rotate(-8deg); transform-origin: right center; text-align: right; text-transform: uppercase; color: #f2c94c; }
+.leave-btn b { max-width: calc(120 * var(--u)); font: 700 calc(26 * var(--u))/1.02 Oswald, sans-serif; letter-spacing: 0.02em; text-wrap: balance; }
+.leave-btn small { font: 600 max(8px, calc(16 * var(--u)))/1 Oswald, sans-serif; opacity: 0.85; }
+.leave-btn.long b { max-width: calc(132 * var(--u)); font-size: calc(21 * var(--u)); }
+.leave-btn small[hidden] { display: none; }
+.leave-btn:hover { filter: var(--outline) drop-shadow(0 5px 0 rgba(0, 0, 0, 0.55)) brightness(1.12); }
+.leave-btn:active { transform: translateY(3px); }
 /* the pulses above (--p09, --p14, --p16: 0 to 1 and back) are set by main.ts each time it draws the room, so they beat
    with it: an animation of their own would have the phone redraw the screen every frame while the room stands still */
 
@@ -1035,6 +1047,9 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 /* ---------- painted cardboard plates and icons (public/assets/ui): each takes over from the drawn one once its picture loads */
 /* the turn button (turn, drawn by art/ui/draw_corner.py): mustard board standing on the block, its top rising to the right,
    its bottom following the health's dip; the words tilted along its top */
+.art-leave .leave-btn { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)); }
+.art-leave .leave-btn:hover { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) brightness(1.12); }
+.art-leave .lv-plate { clip-path: none; background: var(--ui-leave) center / 100% 100% no-repeat; }
 .art-turn .turn-btn { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)); }
 .art-turn .tb-plate { clip-path: none; background: var(--ui-turn) center / 100% 100% no-repeat; transition: filter 0.2s; }
 .art-turn .tb-plate::before, .art-turn .tb-plate::after { display: none; }

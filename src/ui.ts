@@ -952,7 +952,13 @@ export class Hud {
     $('leaveBtn').hidden = !this.leavers().length;
     // online the party goes once every player has pressed it: how many want out already
     const votes = (S.vote ?? []).length, voters = g.voters().length;
-    $('leaveTxt').textContent = votes ? t('Уходим с рудой: {0} из {1}', votes, voters) : t('Уходим с рудой');
+    const leaveTxt = t('Уходим с рудой');
+    $('leaveTxt').textContent = leaveTxt;
+    // a longer line in another language takes smaller letters, so its longest word still fits the narrow piece
+    $('leaveBtn').classList.toggle('long', leaveTxt.length > 16 || Math.max(...leaveTxt.split(' ').map(w => w.length)) > 8);
+    $('leaveSub').textContent = votes ? t('{0} из {1}', votes, voters) : '';
+    $('leaveSub').hidden = !votes;
+    $('leaveBtn').title = votes ? t('уходят {0} из {1}', votes, voters) : '';
     if (S.phase === 'over' || h.hp <= 0 && S.phase !== 'enemy' && S.phase !== 'resolve' && !this.team()) {
       b.hidden = true;
       this.act = 'none';
