@@ -156,6 +156,17 @@
       <div class="re-ropes" id="reRopes"></div>
       <div class="panel re-panel">
         <div class="re-gains" id="reGains" hidden></div>
+        <div class="re-full demo-only" id="reFull">
+          <div class="re-full-faces" id="reFullFaces" aria-hidden="true"></div>
+          <div class="re-full-txt">
+            <b>В полной версии</b>
+            <p>Подземелье уходит глубже: новые этажи и боссы, герои, события и трофеи.</p>
+          </div>
+          <div class="re-full-btns">
+            <button class="btn" id="reFeedback" hidden>Рассказать, как тебе демо</button>
+            <button class="btn big" id="reWish" hidden>В список желаемого</button>
+          </div>
+        </div>
         <div class="re-tiles" id="reTiles"></div>
         <div class="re-foot">
           <div class="re-noms" id="reNoms"></div>
@@ -363,7 +374,7 @@
             <li><i class="help-ico help-face" data-face="necro" aria-hidden="true"></i><p data-t><b>Колдуны.</b> Призывают подмогу, лечат своих или поднимают павших. <em class="k-spk">Круг призыва</em> светится за ход до подмоги: бей колдуна первым. Других подкреплений нет, остальные враги в комнате с самого начала.</p></li>
             <li><i class="help-ico help-face" data-face="golem" aria-hidden="true"></i><p data-t><b>Бронированные.</b> Броня у самых крепких врагов и почти у всех боссов. Слабым диском её не пробить: бей сильнее, <em class="k-fire">огнём</em>, <em class="k-gas">газом</em> или <em class="k-ice">молнией</em>.</p></li>
             <li><i class="help-ico help-face" data-face="headsman" aria-hidden="true"></i><p data-t><b>Элита.</b> Победа: каждому герою <em class="k-btn">уровень прокачки даром</em>.</p></li>
-            <li class="demo-only"><i class="help-ico help-face" data-face="king" aria-hidden="true"></i><p data-t><b>Босс.</b> Ждёт на самом верху карты. Большой, с фазами и фокусами. Победишь его, и демо пройдено.</p></li>
+            <li class="demo-only"><i class="help-ico help-face" data-face="king" aria-hidden="true"></i><p data-t><b>Босс.</b> Один из трёх, кто именно, видно на самом верху карты. Большой, с фазами и фокусами. Победишь его, и демо пройдено.</p></li>
             <li class="full-only"><i class="help-ico help-face" data-face="king" aria-hidden="true"></i><p data-t><b>Боссы.</b> На этаже один из трёх, кто именно, видно на карте. Большие, с фазами и фокусами. Победа: всем <em class="k-heal">+половина HP</em>, павшие встают, а после 1-го и 2-го этажа каждый герой берёт <em class="k-btn">трофей</em>.</p></li>
         </ul>
         <ul class="help-list" data-tab="run" hidden>
@@ -373,6 +384,7 @@
             <li><i class="help-ico" data-art="room_camp" aria-hidden="true"></i><p data-t><b>Костёр.</b> Каждый герой делает одно: отдыхает (<em class="k-heal">+8 HP</em>), перевязывает товарища (<em class="k-heal">+8 HP</em>) или копает <em class="k-ore">0–3 руды</em>. Павший встаёт с половиной HP.</p></li>
             <li><i class="help-ico" data-art="room_treasure" aria-hidden="true"></i><p data-t><b>Рудная пещера.</b> Врагов нет, только жилы и грибы. Ходов 4 минус число героев, втроём один.</p></li>
             <li><i class="help-ico" data-art="room_event" aria-hidden="true"></i><p data-t><b>События.</b> Сцена и выбор: <em class="k-heal">зелёное</em> хорошо, <em class="k-hurt">красное</em> плохо, у риска написан шанс. Бывает и <em class="k-hurt">проклятие</em> на следующий бой. В сети выбор общий: все жмут одно и то же.</p></li>
+            <li class="demo-only"><i class="help-ico" data-art="art_cup" aria-hidden="true"></i><p data-t><b>Трофеи.</b> После первого события забега отряду выпадают три, и каждый герой берёт свой. Трофей работает до конца забега, его видно в карточке героя.</p></li>
             <li class="full-only"><i class="help-ico" data-art="art_hand" aria-hidden="true"></i><p data-t><b>Трофеи.</b> После босса 1-го и 2-го этажа отряду выпадают три, и каждый герой берёт свой. Трофей работает до конца забега, его видно в карточке героя. Бывают и в событиях.</p></li>
         </ul>
       </div>

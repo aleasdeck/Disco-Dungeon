@@ -10,7 +10,7 @@ import type { Player } from './net';
 import { uiArt } from './assets';
 import { BACKDROP_COUNT, drawPhoto, savePhoto, type PhotoSeat } from './photo';
 import { DEMO } from './demo';
-import { bestStand, demoLocked, kindAt, locked, opening, prevOf, standFor, STARS_TO_OPEN, starsOf, volTop, wearStand } from './progress';
+import { bestStand, demoLocked, demoOpened, kindAt, locked, opening, prevOf, standFor, STARS_TO_OPEN, starsOf, volTop, wearStand } from './progress';
 import { nextStand, standDef, STANDS, type StandMat } from './stands';
 import { renderKnob } from './volview';
 import { LANGS, isLang, lang, langTag, setLang, t } from './i18n';
@@ -121,10 +121,18 @@ export function starRow(n: number) {
   return `<span class="stars" role="img" aria-label="${t('{0} из {1} {1|звезды|звёзд|звёзд}', k, STARS_TO_OPEN)}">${'★'.repeat(k)}<i>${'★'.repeat(STARS_TO_OPEN - k)}</i></span>`;
 }
 
-/** How a hero not opened yet opens: the hero before it on its ladder gathers the stars, once that one is open itself. */
+/**
+ * How a hero not opened yet opens: the hero before it on its ladder gathers the stars, once that one is open itself. In the
+ * demo the first win opens the next hero up the ladder of the party's first hero, and only that one.
+ */
 export function howToOpen(key: string) {
-  if (DEMO) return t('Этот герой ждёт в полной версии игры.');
   const prev = prevOf(key);
+  if (DEMO) {
+    const got = demoOpened();
+    if (demoLocked(key) || !prev) return t('Этот герой ждёт в полной версии игры.');
+    return got ? t('В демо открывается только один герой, и это {0}. Этот ждёт в полной версии игры.', HEROES.find(h => h.key === got)!.name)
+      : t('Откроется, когда {0} победит босса. В отряде считается герой под номером 1. В демо открывается только один герой.', HEROES.find(h => h.key === prev)!.name);
+  }
   if (!prev) return '';
   // the one before is shut too: its name stays a secret
   if (locked(prev)) return t(KIND_FIRST[kindAt(key)]);
