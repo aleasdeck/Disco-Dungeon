@@ -2,7 +2,7 @@
 // the enemy queue with what each will do, map / journal / menu), my hero's corner (portrait with its statuses, a column of
 // discs, health with the shield on it, the sparks under it and the ability gem) and one big button for the turn.
 
-import { AB_COST, CRIT, E_MAX, ENEMY_BASE, FROST_STEPS, GAS_WEAK, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, frostVuln, fullHit, gasDmg, isRanged, type MobKind, type RoomType, type StatKey } from './data';
+import { AB_COST, CRIT, E_MAX, ENEMY_BASE, FROST_STEPS, GAS_WEAK, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, frostVuln, fullHit, gasDmg, isRanged, stepOf, type MobKind, type RoomType, type StatKey } from './data';
 import { envArt, eventArt, sprites, uiArt } from './assets';
 import { FOOD_TOSS, ZONE_COL, type Game, type HeroState } from './game';
 import type { Mob, RoomSpec } from './room';
@@ -193,7 +193,7 @@ function forgeRows(g: Game, h: HeroState, team: boolean) {
   return head
     + (g.whet ? '' : row('n', 'Диски за ход', 'Больше бросков за ход. Самое сильное улучшение', HAND_MAX - HAND_START, h.discs - HAND_START, String(g.handOf(h)), String(g.handOf(h) + 1), g.discCost(h)))
     + UPS.map(u => {
-      const lv = h.up[u.k], v = g.stat(h, u.k), next = u.k === 'e' ? Math.min(E_MAX, v + u.step) : v;
+      const lv = h.up[u.k], v = g.stat(h, u.k), next = u.k === 'e' ? Math.min(E_MAX, v + stepOf(h.def, 'e')) : v;
       return row(u.k, u.name, u.txt, UP_COST.length, lv, u.fmt(lv * u.step, v), u.fmt((lv + 1) * u.step, next), g.upCost(h, u.k), free);
     }).join('');
 }
