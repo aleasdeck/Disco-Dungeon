@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { Camera, FIT, KEEP, type Vec } from '../src/camera';
-import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, CUFF_TURNS, FOOD_HEAL, FOOD_PER_DISC, CLEAN_ORE, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, KISS_TURNS, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, KINDS, RAGE_FROM, RISE_HP, SHOVE_DMG, TILE, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize, toughOf } from '../src/data';
+import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, CUFF_TURNS, FOOD_HEAL, FOOD_PER_DISC, CLEAN_ORE, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, KISS_TURNS, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, KINDS, RAGE_FROM, RISE_HP, SHOVE_DMG, TILE, UPS, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize, toughOf } from '../src/data';
 import { ART, DOOR_MUL, DRAFT, FOOD_FLY, FOOD_TOSS, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
 import { ARENA_TRIES, BOSS_UP, COVER, COVER_TRIES, ICICLE_HP, ROOMY, SMALL_PIT, coverOf, BURROW_APART, BURROW_NEAR, CASTS, CAVE, MOB_CAP, arenaFit, bossOf, fireCells, lanesOf, mobPool, caveStock, PARTY_SCALE, RUNE_AREA, SPK_AREA, caveTurns, crystals, runes, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, dmgBonus, floorAt, generate, hazKey, inPit, isFloor, mobDmg, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob, type ResNode } from '../src/room';
@@ -1508,15 +1508,40 @@ describe('placement and discs', () => {
       expect(g.stat(h, 'm')).toBeCloseTo(h.def.m * 1.25);
       expect(g.stat(h, 'pw')).toBeCloseTo(h.def.pw * 1.15);
     }
-    // Ricochet's disc already keeps almost all its speed off a wall: one level reaches the limit, then nothing is for sale
+    // Ricochet's disc already keeps almost all its speed off a wall: the last level reaches the limit, then nothing is for sale
     const r = g.party[1];
     g.select(r.i);
-    g.upgrade('e');
-    expect(g.stat(r, 'e')).toBe(E_MAX);
+    for (let k = 0; k < UP_COST.length; k++) g.upgrade('e');
+    expect(g.stat(r, 'e')).toBeCloseTo(E_MAX);
     expect(g.upCost(r, 'e')).toBe(0);
     const ore = g.bank.ore;
     g.upgrade('e');
     expect(g.bank.ore).toBe(ore);
+  });
+
+  it('sells every hero all the bounce levels: a disc near the limit gets smaller steps that end on it', () => {
+    const step = UPS.find(u => u.k === 'e')!.step;
+    for (let i = 0; i < HEROES.length; i++) {
+      const g = new Game();
+      g.party = newParty([i]);
+      g.forge = 1;
+      g.bank.ore = 100;
+      const h = g.party[0], e0 = h.def.e, seen = [g.stat(h, 'e')];
+      for (let k = 0; k < UP_COST.length; k++) {
+        expect(g.upCost(h, 'e'), `${h.def.key} level ${k + 1}`).toBeGreaterThan(0);
+        g.upgrade('e', h);
+        seen.push(g.stat(h, 'e'));
+      }
+      expect(h.up.e).toBe(UP_COST.length);
+      expect(g.upCost(h, 'e')).toBe(0);
+      // equal steps, never past the limit; a hero with room for every full step keeps them, the rest end on the limit
+      const steps = seen.slice(1).map((v, k) => v - seen[k]);
+      for (const s of steps) expect(s).toBeCloseTo(steps[0]);
+      expect(steps[0]).toBeGreaterThan(0);
+      expect(seen[UP_COST.length]).toBeLessThanOrEqual(E_MAX);
+      if (e0 + step * UP_COST.length <= E_MAX) expect(steps[0]).toBeCloseTo(step);
+      else expect(seen[UP_COST.length]).toBeCloseTo(E_MAX);
+    }
   });
 
   it('carries every hero\'s sparks into the next room, and the altar fills them up', () => {
