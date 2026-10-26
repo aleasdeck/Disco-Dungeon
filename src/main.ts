@@ -624,12 +624,16 @@ function settleEvent(opt: number) {
   afterEvent();
 }
 
-/** The event has moved on: once it is over, a trophy is shared out before the map opens again, once the outcome is read. */
+/**
+ * The event has moved on: once it is over, a trophy is shared out before the map opens again, once the outcome is read. The
+ * demo's first event of the run gives one whatever came of it, so every demo run has a trophy to try.
+ */
 function afterEvent() {
   if (!ev) return;
   if (ev.done) {
-    const l = doneOf(ev)!.out.fx.some(f => f.k === 'art') ? newLoot(ev.seed * 7 + 3, run.floor, game.party) : null;
-    if (l && lootFor(l)) loot = { ...l, from: ev.key };
+    const gift = DEMO && run.seen?.length === 1;
+    const l = gift || doneOf(ev)!.out.fx.some(f => f.k === 'art') ? newLoot(ev.seed * 7 + 3, run.floor, game.party) : null;
+    if (l && lootFor(l)) loot = { ...l, from: ev.key, ...(gift ? { gift } : {}) };
     choosing = !loot;
     votes = {};
   }

@@ -5,7 +5,6 @@ import type { Bet, Floor } from './events';
 import { BIOMES, MOB_HP_MUL, MOBS, NODES, TILE, isRanged, mobSize, toughOf, type Biome, type MobKind, type NodeKind, type RoomType } from './data';
 import { VOL, VOL_BOSS_HP, loud } from './volume';
 import { makeRng, mulberry32 } from './rng';
-import { DEMO, DEMO_BOSS } from './demo';
 import { LAYERS } from './run';
 import { TRINKET_CHANCE, trinketsOf } from './trinkets';
 
@@ -623,8 +622,7 @@ export const castOf = (f: number) => CASTS[Math.min(f, CASTS.length - 1)];
  * map before it all meet the same one, and the next run may bring another.
  */
 export const bossOf = (spec: Pick<RoomSpec, 'seed' | 'floor' | 'boss'>) => {
-  // the demo has the king alone
-  const list = DEMO ? [DEMO_BOSS] : castOf(spec.floor).bosses;
+  const list = castOf(spec.floor).bosses;
   return spec.boss ?? list[makeRng(spec.seed * 13 + spec.floor * 7 + 991).int(0, list.length - 1)];
 };
 

@@ -79,6 +79,8 @@ export interface LootState {
   done?: Record<number, ArtKey>;
   /** The event whose outcome gave them (its key); none for a floor boss's hoard. */
   from?: string;
+  /** The demo's present for the run's first event, whatever came of it (src/demo.ts). */
+  gift?: boolean;
   /** The boss that fell (its own kind: king, ratswarm…): its hoard is the window's picture. A save from before names only the floor. */
   boss?: string;
   /** The heroes with all their sockets taken as the trophies were offered: one picked replaces one of their own (`drops`). */

@@ -7,15 +7,15 @@ import { eventArt, uiArt } from './assets';
 import { eventDef } from './events';
 import { artDef } from './artifacts';
 import { artIcon } from './icons';
-import { faceUrl, standIcon } from './ui';
+import { faceUrl, shadowUrl, standIcon } from './ui';
 import { standDef } from './stands';
 import { FLOORS, LAYERS } from './run';
 import { drawAfter, drawShot, drawStart, type Album } from './album';
 import { saveCanvas } from './photo';
 import type { Tally } from './game';
 import { escapeHtml, starRow } from './menu';
-import { DEMO } from './demo';
-import { nextOf, opening, starsOf, type Gains } from './progress';
+import { DEMO, FEEDBACK_URL, STORE_URL } from './demo';
+import { demoLocked, nextOf, opening, starsOf, type Gains } from './progress';
 import { VOL_RULES } from './volume';
 import { volToken } from './volview';
 import { langTag, t } from './i18n';
@@ -32,6 +32,12 @@ const WON: Record<string, string> = {
   forgelord: 'Владыка кузни остыл. Наковальню сдали в металлолом, диско продолжается.',
   discoball: 'Диско-шар разбит. Семь лет без удачи, зато какая была вечеринка.',
   dragon: 'Дымыч докурил своё. Яйца сдали в зоопарк, диско продолжается.',
+};
+/** A line under the demo's victory, by the boss beaten. */
+const DEMO_WON: Record<string, string> = {
+  king: 'Король остался без короны, казематы ваши. Дальше подземелье ждёт в полной версии.',
+  ratswarm: 'Свора разбежалась по щелям, казематы ваши. Дальше подземелье ждёт в полной версии.',
+  pahan: 'Пахан сдал общак, казематы ваши. Дальше подземелье ждёт в полной версии.',
 };
 /** A line under the defeat, by the floor it came on. */
 const LOST = [
@@ -140,7 +146,7 @@ export function showAlbum(a: Album, o: { gains?: Gains | null; button: string | 
   $('reTitle').textContent = t(a.win ? (solo ? (solo.fem ? 'Ты победила!' : 'Ты победил!') : 'Вы победили!')
     : solo ? (solo.fem ? 'Героиня пала' : 'Герой пал') : 'Отряд пал');
   $('reTitle').classList.toggle('lose', !a.win);
-  $('reGag').textContent = a.win ? t(DEMO ? 'Король остался без короны, казематы ваши. Дальше подземелье ждёт в полной версии.' : WON[lastBoss ?? ''] ?? 'Все три этажа позади. Диско продолжается.')
+  $('reGag').textContent = a.win ? t((DEMO ? DEMO_WON : WON)[lastBoss ?? ''] ?? (DEMO ? DEMO_WON.king : 'Все три этажа позади. Диско продолжается.'))
     : killer ? t('{0} {1?оставила|оставил} вас себе. Кости срастутся, приходите ещё.', killer.name, killer.fem) : t(LOST[a.floor] ?? LOST[0]);
   // the prints: ДО, the bosses beaten floor by floor, ПОСЛЕ
   prints = [
@@ -161,6 +167,7 @@ export function showAlbum(a: Album, o: { gains?: Gains | null; button: string | 
   if (bosses.length) tall.append(line(bosses, bosses.map(() => 30), bosses.map(() => 180), 12, 2));
   ropes.append(wide, tall);
   showGains(o.gains ?? null);
+  if (DEMO) showFull();
   // the run in numbers: the party's sums, the best blow and who dealt it
   const sumOf = (k: keyof Tally) => party.reduce((s, h) => s + h.t[k], 0);
   const best = (k: keyof Tally) => party.reduce((p, h) => (h.t[k] > p.t[k] ? h : p));
@@ -211,7 +218,7 @@ export function showAlbum(a: Album, o: { gains?: Gains | null; button: string | 
 function showGains(g: Gains | null) {
   const box = $('reGains'), got = g ? g.heroes.filter(k => g.got[k] > 0) : [];
   const stands = Object.entries(g?.stands ?? {});
-  box.hidden = !g || !(got.length || g.events.length || g.arts.length || g.vol || stands.length);
+  box.hidden = !g || !(got.length || g.opened.length || g.events.length || g.arts.length || g.vol || stands.length);
   if (!g || box.hidden) return;
   const at = (k: string) => HEROES.findIndex(h => h.key === k);
   const face = (i: number) => `<img alt="" src="${faceUrl({ i, def: HEROES[i] })}">`;
@@ -234,6 +241,19 @@ function showGains(g: Gains | null) {
       const def = HEROES[at(k)];
       return `<div class="re-gain re-new re-thing re-stand" style="--c:${def.col}"><img alt="" src="${standIcon(mat, def.col)}"><div><em>${t('Новая подставка')}</em><b>${t('{0}: {1}', def.name, standDef(mat).name)}</b></div></div>`;
     }).join('');
+}
+
+/**
+ * The demo's end of a run, won or lost: the full game's heroes as dark shapes and what else it holds, and the way to the
+ * game's Steam page and to the feedback form, once they are up.
+ */
+function showFull() {
+  $('reFullFaces').innerHTML = HEROES.map((def, i) => (demoLocked(def.key) ? `<img alt="" src="${shadowUrl({ i, def })}">` : '')).join('');
+  const wish = $('reWish'), say = $('reFeedback');
+  wish.hidden = !STORE_URL;
+  say.hidden = !FEEDBACK_URL;
+  wish.onclick = () => window.open(STORE_URL, '_blank', 'noopener');
+  say.onclick = () => window.open(FEEDBACK_URL, '_blank', 'noopener');
 }
 
 export function hideAlbum() {

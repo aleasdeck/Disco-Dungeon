@@ -146,7 +146,8 @@ function mobFile(k: MobKind): File {
 }
 
 function artFile(key: string): File {
-  const a = ARTIFACTS.find(x => x.key === key)!, shut = artLocked(key), feat = shut ? featOf(key) : null;
+  // the demo opens no trophy by a feat: the others wait for the full game
+  const a = ARTIFACTS.find(x => x.key === key)!, shut = artLocked(key), feat = shut && !DEMO ? featOf(key) : null;
   const start = START_ARTS.includes(a.key), ico = artIcon(a.key);
   return {
     key, open: !shut, name: t(a.name), face: ico, col: '#6b4a2c',
@@ -155,8 +156,9 @@ function artFile(key: string): File {
       title: t('Вещдок № {0}', no3(no)), note: shut ? t('Совершенно секретно') : t('Хранить вечно'),
       photo: photo({ img: ico, kind: 'thing', shut, col: '#9a7440', stamp: shut ? t('Засекречено') : t('Вещдок'), green: !shut, big: uiArt.get('art_' + a.key)?.src }),
       fields: field(t('Предмет'), `<b class="cs-name">${shut ? blackout(t(a.name)) : t(a.name)}</b>`) + field(t('Откуда'), `<span>${start ? t('Есть с самого начала') : t('Открыт подвигом')}</span>`),
-      flav: feat ? '' : field(t('Что делает'), `<p><b>${t(a.txt)}.</b></p>`),
-      body: !feat ? field(t('Приметы'), `<p class="cs-hand">${t(a.gag)}</p>`)
+      flav: shut ? '' : field(t('Что делает'), `<p><b>${t(a.txt)}.</b></p>`),
+      body: !shut ? field(t('Приметы'), `<p class="cs-hand">${t(a.gag)}</p>`)
+        : !feat ? field(t('Рассекретить'), `<p>${t('Этот трофей ждёт в полной версии игры.')}</p>`)
         : field(t('Рассекретить'), `<p><b>${t('Подвиг.')}</b> ${t(feat.how)}</p>`
           + (feat.need ? `<p class="cs-prog"><span class="cs-bar"><i style="width:${Math.round((100 * (feat.now ?? 0)) / feat.need)}%"></i></span>${t('{0} из {1}', feat.now ?? 0, feat.need)}</p>` : '')),
     }),
