@@ -207,8 +207,9 @@ export interface Mob {
   rise?: number;
   /** The rat swarm is down a burrow: the hole (by index in the room's list) where its eyes glow and it comes up next. */
   under?: number;
-  /** Пахан's «общак»: the ore its blows have taken from the party, paid back twice when it falls. */
+  /** Пахан's «общак»: the ore its blows have taken from the party, paid back twice when it falls; online who it came from (hero index → ore). */
   pot?: number;
+  potBy?: Record<number, number>;
   /** Times Пахан has treated this шестёрка («Подогрев»): its blow grows with each, up to a limit. */
   brew?: number;
   /** The fridge's door stands open till its next move, facing this way: a disc into it hits twice as hard, past the armour. */

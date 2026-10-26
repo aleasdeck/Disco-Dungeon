@@ -64,7 +64,9 @@ export interface MapVotes {
 export interface MapParty {
   heroes: HeroState[];
   me: HeroState | null;
+  /** This screen's ore: the party's alone; online (`own`) the player's own, and each teammate shows theirs by the face. */
   ore: number;
+  own?: boolean;
 }
 
 const el = <K extends keyof SVGElementTagNameMap>(parent: Element, tag: K, at: Record<string, string | number>) => {
@@ -197,7 +199,8 @@ export class MapView {
     box.innerHTML = party.heroes.map(h => {
       const hp = Math.max(0, h.hp), pct = (hp / h.max) * 100;
       return `<div class="mp-hero${h.hp <= 0 ? ' dead' : ''}${h === party.me ? ' me' : ''}" style="--c:${h.def.col}" title="${t('{0}: {1} из {2}', h.def.name, hp, h.max)}">`
-        + `<img src="${faceUrl(h)}" alt=""><span class="mp-hp"><i style="width:${pct}%"></i><u>${h.hp > 0 ? `${hp}/${h.max}` : t(h.def.fem ? 'пала' : 'пал')}</u></span></div>`;
-    }).join('') + `<div class="mp-ore" title="${t('Руда отряда')}">${ico('ore')}<b>${party.ore}</b></div>`;
+        + `<img src="${faceUrl(h)}" alt=""><span class="mp-hp"><i style="width:${pct}%"></i><u>${h.hp > 0 ? `${hp}/${h.max}` : t(h.def.fem ? 'пала' : 'пал')}</u></span>`
+        + (party.own && h !== party.me ? `<em class="mp-o" title="${t('{0} руды', h.ore ?? 0)}">${ico('ore')}${h.ore ?? 0}</em>` : '') + '</div>';
+    }).join('') + `<div class="mp-ore" title="${party.own ? t('Твоя руда') : t('Руда отряда')}">${ico('ore')}<b>${party.ore}</b></div>`;
   }
 }

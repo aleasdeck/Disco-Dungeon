@@ -16,6 +16,7 @@ import { hl } from './hl';
 import { DEMO } from './demo';
 import { OreCounters } from './orefx';
 import { M, t } from './i18n';
+import { oreOf, own } from './ore';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -173,13 +174,13 @@ const forgeTxt = (ore: number) => ore
 
 /**
  * The blacksmith's slab for each of a hero's upgrades: what it is, its level, where the stat goes with the next level,
- * and the price in the party's ore. A slab the ore does not cover, or a stat at its top, is shut.
+ * and the price in ore (the party's alone, the hero's own online). A slab the ore does not cover, or a stat at its top, is shut.
  */
 function forgeRows(g: Game, h: HeroState, team: boolean) {
   // a stat level an elite owes the hero costs nothing; in the sharpening window that is all there is
   const free = g.freeUp(h);
   const row = (k: string, name: string, txt: string, n: number, lv: number, now: string, next: string, cost: number, gratis = false) => {
-    const sold = !g.whet || gratis, short = !gratis && cost > g.bank.ore;
+    const sold = !g.whet || gratis, short = !gratis && cost > oreOf(h, g.bank);
     return `<button class="ev-opt fg-up" data-k="${k}" title="${t(txt)}"${cost && sold && !short ? '' : ' disabled'}>`
       + `<i data-art="${UP_ART[k]}" aria-hidden="true"></i><span class="fg-name"><b>${t(name)}</b>${pips(n, lv)}</span>`
       + `<span class="fg-fx">${cost ? `${now}<i>→</i>${next}` : t('{0}, больше некуда', now)}</span>`
@@ -190,12 +191,16 @@ function forgeRows(g: Game, h: HeroState, team: boolean) {
     ? `<div class="fg-team">${g.party.map(o => `<button class="fg-tab${o === h ? ' on' : ''}" data-hero="${o.i}" style="--c:${o.def.col}" aria-pressed="${o === h}">`
       + `<img src="${faceUrl(o)}" alt=""><b>${t(o.def.name)}</b>${g.freeUp(o) ? `<em>${t('даром')}</em>` : ''}</button>`).join('')}</div>`
     : `<div class="fg-me"><img src="${faceUrl(h)}" alt=""><b>${t(h.def.name)}</b><span>${h.hp > 0 ? `${h.hp}/${h.max} HP` : t('пал')}</span></div>`;
+  // online a player may hand ore of their own to a teammate, one at a tap: «Скинуться»
+  const mates = own(g.bank) && !g.whet && !team ? g.party.filter(o => o !== h) : [];
+  const chip = mates.length ? `<div class="fg-chip"><span>${t('Скинуться товарищу')}</span><span class="fg-mates">${mates.map(o => `<button class="fg-give" data-to="${o.i}" style="--c:${o.def.col}" title="${t(o.def.name)}"${(h.ore ?? 0) < 1 ? ' disabled' : ''}>`
+    + `<img src="${faceUrl(o)}" alt="${t(o.def.name)}"><b>+1</b>${icon('ore')}</button>`).join('')}</span></div>` : '';
   return head
     + (g.whet ? '' : row('n', 'Диски за ход', 'Больше бросков за ход. Самое сильное улучшение', HAND_MAX - HAND_START, h.discs - HAND_START, String(g.handOf(h)), String(g.handOf(h) + 1), g.discCost(h)))
     + UPS.map(u => {
       const lv = h.up[u.k], v = g.stat(h, u.k), next = u.k === 'e' ? Math.min(E_MAX, v + stepOf(h.def, 'e')) : v;
       return row(u.k, u.name, u.txt, UP_COST.length, lv, u.fmt(lv * u.step, v), u.fmt((lv + 1) * u.step, next), g.upCost(h, u.k), free);
-    }).join('');
+    }).join('') + chip;
 }
 
 /** The sharpening window's scene after an elite: the hero still owed a level picks it, then it is done. */
@@ -301,6 +306,8 @@ export class Hud {
     $('forgeMine').addEventListener('click', e => {
       const t = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-hero]');
       if (t) { this.forgeFor = Number(t.dataset.hero); this.forge(); return; }
+      const give = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-to]'), me = this.forgeHero();
+      if (give) { if (!give.disabled && me) g.chipIn(me, Number(give.dataset.to)); return; }
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-k]'), h = this.forgeHero();
       if (!b || b.disabled || !h) return;
       if (b.dataset.k === 'n') g.buyDisc(h);
@@ -397,7 +404,7 @@ export class Hud {
       b.id = 'ally' + h.i;
       b.style.setProperty('--c', h.def.col);
       b.setAttribute('aria-label', t(h.def.name));
-      b.innerHTML = `<canvas></canvas><b class="who"></b><span class="a-hp"><i></i><s></s><em></em></span><span class="tick">${icon('check')}</span><span class="off">${icon('plug')}</span>`;
+      b.innerHTML = `<canvas></canvas><b class="who"></b><span class="a-hp"><i></i><s></s><em></em></span><span class="tick">${icon('check')}</span><span class="off">${icon('plug')}</span><span class="a-ore" hidden></span>`;
       drawPortrait(b.querySelector('canvas')!, h);
       // a face opens its hero's card, with the trophies on it (Vladislav: the allies' trophies are seen there); only in a
       // fight a face of another hero this screen plays (the host's for players who left) picks it to throw with instead
@@ -498,7 +505,11 @@ export class Hud {
       // a tick: placed and ready (online placement), or done with the turn
       const done = !ev && (S.phase === 'place' ? g.online && S.ready.includes(o.i) : S.phase === 'throw' && g.ended(o));
       el.classList.toggle('done', done);
-      el.title = [who, `${t(o.def.name)}: ${Math.max(0, o.hp)}/${o.max}`, o.shield ? t('щит {0}', o.shield) : '',
+      // online each teammate's own ore by the face; this screen's own is on the ore chip
+      const ore = el.querySelector<HTMLElement>('.a-ore')!, mate = own(g.bank) && o !== this.me();
+      ore.hidden = !mate;
+      if (mate && ore.textContent !== String(o.ore ?? 0)) ore.textContent = String(o.ore ?? 0);
+      el.title = [who, `${t(o.def.name)}: ${Math.max(0, o.hp)}/${o.max}`, o.shield ? t('щит {0}', o.shield) : '', mate ? t('{0} руды', o.ore ?? 0) : '',
         o.hp <= 0 ? t('пал') : done ? (S.phase === 'place' ? t('готов') : t('закончил ход')) : ''].filter(Boolean).join(', ')
         + (away ? `. ${t('Нет связи: пока играет хозяин комнаты, ход его не ждёт')}` : '');
     }
@@ -1064,10 +1075,13 @@ export class Hud {
    * sticker when it was another hero.
    */
   private ore() {
-    const g = this.g, ore = g.bank.ore, at = this.atForge && !g.whet ? String(g.forge) : '', was = this.oreWas, visit = this.oreAt;
+    // online this screen's own hero's ore, alone the party's
+    const g = this.g, ore = oreOf(this.forgeHero(), g.bank), at = this.atForge && !g.whet ? String(g.forge) : '', was = this.oreWas, visit = this.oreAt;
     const seen = this.levels, sp = g.S.spec, room = `${sp.floor}:${sp.depth}:${sp.seed}`, behind = this.oreRoom;
     this.levels = new Map(g.party.map(h => [h.i, [h.discs, ...UPS.map(u => h.up[u.k])]]));
     this.oreRoom = room;
+    const tip = own(g.bank) ? t('Твоя руда') : t('Руда, общая на отряд');
+    for (const el of [$('hOre').parentElement!, $('forgeOre').parentElement!]) if (el.title !== tip) el.title = tip;
     if (ore === was && at === visit) return;
     this.oreWas = ore;
     this.oreAt = at;

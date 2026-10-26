@@ -11,6 +11,7 @@ import { BET_TURNS, FLOOR_FR, settleBet, type Bet, type Floor } from './events';
 import { CASTS, caveTurns, cellAt, cellCentre, clearLine, fireCells, generate, hazKey, ICICLE_HP, inPit, isFloor, mobDmg, muAt, newMob, partyScale, pitAt, standing, stops, volBlow, type Intent, type Layout, type Mob, type RoomSpec, type Zone } from './room';
 import { VOL, loud } from './volume';
 import { M } from './i18n';
+import { chipIn, deal, give, oreOf, own, spend, take } from './ore';
 import type { StandMat } from './stands';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
@@ -62,6 +63,9 @@ export interface HeroState {
   tally?: Tally;
   /** Stat levels an elite owes the hero: the next one costs no ore (the sharpening window right after it, or the next blacksmith's). */
   free?: number;
+  /** Online: the hero's own ore (src/ore.ts), and how much of what the party won together it has been dealt this run. */
+  ore?: number;
+  got?: number;
   /** The cop's «Наручники»: the enemies (by index) his discs have hit this turn, the first two; the second hit cuffs them. */
   cuffing?: number[];
   /** Online: the boss's trophies kept for the hero while its player was away at the share-out, to pick one from once back. */
@@ -252,6 +256,7 @@ export type Action =
   | { k: 'throw'; h: number; dx: number; dy: number }
   | { k: 'move'; h: number; pad: number }
   | { k: 'disc'; h: number }
+  | { k: 'chip'; h: number; to: number }
   | { k: 'up'; h: number; stat: StatKey }
   | { k: 'ability'; h: number }
   | { k: 'ready'; h: number }
@@ -375,7 +380,8 @@ export function pointAt(w: Pt[], d: number): Pt {
 }
 
 /**
- * Ore belongs to the whole party: any hero's hit fills the pool, any hero spends from it, and it lasts the whole run.
+ * Ore belongs to the whole party alone: any hero's hit fills the pool, any hero spends from it, and it lasts the whole run.
+ * Online (`split`) every hero keeps its own instead, and the party's winnings are dealt out to them alike (src/ore.ts).
  * Sparks are each hero's own to spend (`HeroState.sparks`), though a crystal fills everyone's, and last the whole run; the
  * altar's gift tops every hero up to `boon` of them at the next fight (usually none). An event may also leave the next fight a `shield`
  * for every hero, `rage`: that much harder blows from its enemies, or a curse that room's spec carries: `smoke` over the
@@ -383,16 +389,16 @@ export function pointAt(w: Pt[], d: number): Pt {
  * which waits for a fight (the ore cave has nobody to fight).
  */
 export interface Bank {
-  ore: number; boon?: number; shield?: number; rage?: number; smoke?: boolean; strobe?: boolean;
+  ore: number; split?: boolean; boon?: number; shield?: number; rage?: number; smoke?: boolean; strobe?: boolean;
   /** The next fight's floor, its bet and one disc a turn more in it: they go with the room's spec too. */
   ground?: Floor; bet?: Bet; extra?: number;
   /** The run's «Громкость» step (src/volume.ts), for the whole run: every room's spec carries it, the blacksmith and the camp read it. */
   vol?: number;
 }
 
-/** The party's pool for a new run at «Громкость» step `vol`. */
-export function newBank(vol = 0): Bank {
-  return { ore: 0, boon: 0, vol };
+/** The party's pool for a new run at «Громкость» step `vol`; online (`split`) every hero keeps its own ore instead. */
+export function newBank(vol = 0, split = false): Bank {
+  return { ore: 0, boon: 0, vol, ...(split ? { split } : {}) };
 }
 
 /** A fresh party for the run with seed `run`; `picks` lists which heroes (by index into HEROES) take part, the first three by default. */
@@ -859,10 +865,19 @@ export class Game {
 
   buyDisc(h = this.hero) {
     const c = this.discCost(h);
-    if (!this.forge || this.whet || !c || this.bank.ore < c) return;
+    if (!this.forge || this.whet || !c || oreOf(h, this.bank) < c) return;
     if (this.send) { this.send({ k: 'disc', h: h.i }); return; }
-    this.bank.ore -= c;
+    spend(h, c, this.bank);
     h.discs++;
+    this.onChange();
+  }
+
+  /** Online at the blacksmith's: the hero hands one ore of its own to the teammate `to` («Скинуться»). */
+  chipIn(h: HeroState, to: number) {
+    const o = this.party.find(p => p.i === to);
+    if (!this.forge || this.whet || !o || o === h || !own(this.bank) || (h.ore ?? 0) < 1) return;
+    if (this.send) { this.send({ k: 'chip', h: h.i, to }); return; }
+    chipIn(h, o, this.bank);
     this.onChange();
   }
 
@@ -880,10 +895,10 @@ export class Game {
 
   upgrade(k: StatKey, h = this.hero) {
     const c = this.upCost(h, k), free = this.freeUp(h);
-    if (!this.forge || !c || (!free && (this.whet || this.bank.ore < c))) return;
+    if (!this.forge || !c || (!free && (this.whet || oreOf(h, this.bank) < c))) return;
     if (this.send) { this.send({ k: 'up', h: h.i, stat: k }); return; }
     if (free) h.free!--;
-    else this.bank.ore -= c;
+    else spend(h, c, this.bank);
     h.up[k]++;
     this.onChange();
   }
@@ -1449,6 +1464,7 @@ export class Game {
     if (a.k === 'throw') this.throwDisc(h, a.dx, a.dy);
     else if (a.k === 'move') this.movePad(h, a.pad);
     else if (a.k === 'disc') this.buyDisc(h);
+    else if (a.k === 'chip') this.chipIn(h, a.to);
     else if (a.k === 'up') this.upgrade(a.stat, h);
     else if (a.k === 'ability') this.useAbility(h);
     else if (a.k === 'ready') this.startFight(h);
@@ -1972,10 +1988,12 @@ export class Game {
     if (m.hp > 0) this.phase(m);
     if (m.hp <= 0) {
       m.dead = 0.001; this.burst(m.x, m.y, '#ffd34d', 22); this.float(m.x, m.y - 6, m.k === 'egg' ? 'хрусь!' : 'повержен', '#ffd34d');
-      // Пахан's «общак» comes back to the party twice over
+      // Пахан's «общак» comes back to the party twice over: online to each hero as much as he took from it
       if (m.pot) {
         const ore = m.pot * 2;
-        this.bank.ore += ore; this.mined += ore; m.pot = 0;
+        if (own(this.bank) && m.potBy) for (const [i, n] of Object.entries(m.potBy)) { const o = this.party.find(p => p.i === Number(i)); if (o) give(o, n * 2, this.bank); }
+        else deal(ore, this.party, this.bank);
+        this.mined += ore; m.pot = 0; delete m.potBy;
         this.float(m.x, m.y + 8, M('общак +{0} руды', ore), '#ffb070');
         this.note(M('Общак {0} вернулся отряду: +{1} руды', MOBS[m.k].acc, ore));
       }
@@ -2004,7 +2022,7 @@ export class Game {
       if (p) this.float(p.x, p.y - 4, `+${hl} HP`, '#7be39a');
       this.pop(h, 'fangs');
     }
-    if (has(h, 'piggy')) { this.bank.ore++; this.mined++; tallyOf(h).ore++; this.float(m.x, m.y + 8, '+1 руда', '#ffb070'); this.pop(h, 'piggy'); }
+    if (has(h, 'piggy')) { give(h, 1, this.bank); this.mined++; tallyOf(h).ore++; this.float(m.x, m.y + 8, '+1 руда', '#ffb070'); this.pop(h, 'piggy'); }
   }
 
   /** A burning enemy falls: what is left of its fire leaps onto the nearest enemy still standing. */
@@ -2200,11 +2218,11 @@ export class Game {
     this.repick(dr);
   }
 
-  /** Пахан's blow has landed: it takes `pot` ore from the party into its «общак», as much as the party has. */
+  /** Пахан's blow has landed: it takes `pot` ore into its «общак», as much as there is: alone the party's, online the hero's own. */
   private steal(m: Mob, h: HeroState) {
-    const n = Math.min(MOBS[m.k].pot ?? 0, this.bank.ore), p = this.spot(h);
+    const n = take(h, MOBS[m.k].pot ?? 0, this.bank), p = this.spot(h);
     if (n <= 0) return;
-    this.bank.ore -= n;
+    if (own(this.bank)) (m.potBy ??= {})[h.i] = (m.potBy[h.i] ?? 0) + n;
     m.pot = (m.pot ?? 0) + n;
     if (p) this.float(p.x, p.y - 14, M('−{0} руды в общак', n), '#ffb070');
     this.note(M('{0} {2?забрала|забрал} {1} руды в общак', m.name, n, MOBS[m.k].fem));
@@ -2950,7 +2968,7 @@ export class Game {
         // and eats as many mushrooms as it takes to heal up (one at the least)
         const all = has(h, 'denture');
         if (all) this.pop(h, 'denture');
-        if (n.k === 'ore') { const k = all ? n.left : 1, got = q * k; n.left -= k; this.bank.ore += got; this.mined += got; tallyOf(h).ore += got; this.float(n.x, n.y, M('+{0} руда', got), '#ffb070'); }
+        if (n.k === 'ore') { const k = all ? n.left : 1, got = q * k; n.left -= k; deal(got, this.party, this.bank, h); this.mined += got; tallyOf(h).ore += got; this.float(n.x, n.y, M('+{0} руда', got), '#ffb070'); }
         // sparks go to every hero still standing, whoever threw the disc, each up to what one ability costs; the crystal
         // loses only what was taken, so sparks nobody had room for stay in it for later
         if (n.k === 'spk') {
@@ -3647,7 +3665,7 @@ export class Game {
     // a fight won without a scratch pays the party ore, as much for any party; the ore cave has nobody to scratch them
     if (win && S.spec.type !== 'treasure' && !S.hurt) {
       this.clean = CLEAN_ORE;
-      this.bank.ore += this.clean;
+      deal(this.clean, this.party, this.bank);
       this.float(S.Wx / 2, S.Wy / 2, M('БЕЗ ЦАРАПИНЫ +{0}', this.clean), '#ffd34d');
     }
     // the bookie's bet: a trophy on a fight without a scratch, a level on one won in three turns

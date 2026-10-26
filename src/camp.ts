@@ -4,6 +4,7 @@
 import type { Bank, HeroState } from './game';
 import { makeRng } from './rng';
 import { VOL, VOL_CAMP_HEAL, loud } from './volume';
+import { give } from './ore';
 
 /** Health a rest by the fire or a teammate's bandage gives back; a fallen hero gets up with half instead. */
 export const CAMP_HEAL = 8;
@@ -58,8 +59,9 @@ export function campDo(camp: CampState, h: HeroState, pick: CampPick, party: Her
   if (pick.k === 'rest') did = { k: 'rest', hp: heal(h, healOf(camp)) };
   else if (pick.k === 'mend') did = { k: 'mend', to: pick.to, hp: heal(party.find(o => o.i === pick.to)!, healOf(camp)) };
   else {
+    // the ore dug is the digger's own online: it gave up its rest for it
     did = { k: 'dig', ore: digOre(camp.seed, h.i) };
-    bank.ore += did.ore;
+    give(h, did.ore, bank);
   }
   return (camp.did[h.i] = did);
 }
