@@ -42,8 +42,6 @@ import { initTips } from './tip';
 // the page's own Russian text, found before the game writes anything into the page
 scanDom();
 initTips();
-// TEMP: the hint's look under review (thread «Красивые тултипы»): ?tip=a|b|c
-document.documentElement.classList.add('tip-' + (new URLSearchParams(location.search).get('tip') ?? 'a'));
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
