@@ -1900,7 +1900,7 @@ const gagTimer = setInterval(() => {
  */
 function go() {
   if (!loaded) return;
-  if (!isLang(settings.lang)) { $('boot').classList.add('pick'); return; }
+  if (!isLang(settings.lang)) { $('boot').classList.add('langs-only'); return; }
   langIn.then(start);
 }
 
