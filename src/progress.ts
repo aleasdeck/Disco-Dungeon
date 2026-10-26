@@ -8,7 +8,8 @@
 // start, each of the others opens by a feat of its own. Online the host's events and trophies come up, and every player
 // opens their own by what they did there.
 // «Громкость» (src/volume.ts): the first won run opens its first step, and a run won at the highest step opens the next.
-// «Подставки мастерства» (src/stands.ts): the runs won with a hero dress it in a new stand.
+// «Подставки мастерства» (src/stands.ts): the runs won with a hero dress it in a new stand; on the pick screens the player
+// may put it back on any stand it has earned before.
 // The demo has its own three heroes and events, all the trophies, no stars, no «Громкость» and no stands. `?progress=full`
 // in the address opens everything for a test without writing it down, and `?stand=wood` puts every hero on that stand.
 
@@ -112,6 +113,8 @@ interface Progress {
   arts: string[];
   /** The highest «Громкость» step opened, 0 before the first won run. */
   vol: number;
+  /** The heroes the player has put on a stand below the best one earned, picked on the pick screens. */
+  worn: Record<string, StandMat>;
   cur: Cur | null;
 }
 
@@ -127,9 +130,9 @@ function load(): Progress {
   try {
     const o = JSON.parse(localStorage.getItem(KEY) || 'null') as Progress | null;
     // a player who has won before there was any «Громкость» has its first step open
-    if (o && o.v === 1) return { v: 1, stars: o.stars ?? {}, open: o.open ?? [], events: o.events ?? [], due: o.due ?? [], arts: o.arts ?? [], vol: o.vol ?? (wonBefore() ? 1 : 0), cur: o.cur ?? null };
+    if (o && o.v === 1) return { v: 1, stars: o.stars ?? {}, open: o.open ?? [], events: o.events ?? [], due: o.due ?? [], arts: o.arts ?? [], vol: o.vol ?? (wonBefore() ? 1 : 0), worn: o.worn ?? {}, cur: o.cur ?? null };
   } catch { /* unreadable: start over below */ }
-  const p: Progress = { v: 1, stars: {}, open: [], events: [], due: [], arts: [], vol: wonBefore() ? 1 : 0, cur: null };
+  const p: Progress = { v: 1, stars: {}, open: [], events: [], due: [], arts: [], vol: wonBefore() ? 1 : 0, worn: {}, cur: null };
   for (const [k, h] of Object.entries(stats.heroes)) {
     if (!HEROES.some(d => d.key === k)) continue;
     if (h.runs > 0 && !START_HEROES.includes(k)) p.open.push(k);
@@ -248,12 +251,15 @@ export function creditRun(run: Run, keys: string[], o: Deeds) {
     progress.vol = c.vol = up;
     changed = true;
   }
-  // a won run may dress its heroes in a new stand: the statistics have counted the win by now
+  // a won run may dress its heroes in a new stand, and the hero goes on it whatever stand it was put on before: the
+  // statistics have counted the win by now
   if (o.won && !c.stood) {
     c.stood = true;
     for (const k of keys) {
       const w = stats.heroes[k]?.wins ?? 0;
-      if (standOf(w) !== standOf(w - 1)) (c.stands ??= {})[k] = standOf(w);
+      if (standOf(w) === standOf(w - 1)) continue;
+      (c.stands ??= {})[k] = standOf(w);
+      delete progress.worn[k];
     }
     changed = true;
   }
@@ -344,9 +350,28 @@ export const volTop = () => (DEMO ? 0 : ALL ? VOL_MAX : progress.vol);
 /** `?stand=wood` in the address: every hero on that stand, for a test. */
 const TEST_STAND = typeof location !== 'undefined' ? (new URLSearchParams(location.search).get('stand') as StandMat | null) : null;
 
-/** The stand this player's wins with the hero `key` have earned: plain in the demo, the mirror with `?progress=full`. */
-export function standFor(key: string): StandMat {
+/** The best stand this player's wins with the hero `key` have earned: plain in the demo, the mirror with `?progress=full`. */
+export function bestStand(key: string): StandMat {
   if (TEST_STAND && STAND_MATS.includes(TEST_STAND)) return TEST_STAND;
   if (DEMO) return 'plastic';
   return ALL ? 'mirror' : standOf(stats.heroes[key]?.wins ?? 0);
+}
+
+/** Stands picked in a test (`?progress=full`, `?stand=`): for this visit only, never written down. */
+const testWorn: Record<string, StandMat> = {};
+const wornNow = () => (ALL || TEST_STAND ? testWorn : progress.worn);
+
+/** The stand the hero `key` goes on: the one the player put it on, while earned, or the best one. */
+export function standFor(key: string): StandMat {
+  const best = bestStand(key), w = wornNow()[key];
+  return w && STAND_MATS.indexOf(w) <= STAND_MATS.indexOf(best) ? w : best;
+}
+
+/** Put the hero `key` on the stand `mat`, if earned; the best one again lets the next stand earned dress it at once. */
+export function wearStand(key: string, mat: StandMat) {
+  const best = bestStand(key), m = wornNow();
+  if (DEMO || !STAND_MATS.includes(mat) || STAND_MATS.indexOf(mat) > STAND_MATS.indexOf(best)) return;
+  if (mat === best) delete m[key];
+  else m[key] = mat;
+  if (m === progress.worn) save();
 }

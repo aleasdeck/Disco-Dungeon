@@ -66,7 +66,7 @@ export interface HeroState {
   cuffing?: number[];
   /** Online: the boss's trophies kept for the hero while its player was away at the share-out, to pick one from once back. */
   kept?: Kept | null;
-  /** What the hero's stand is made of, by its player's wins with it (src/stands.ts); plain painted plastic when not given. */
+  /** What the hero's stand is made of: its player's pick of the ones their wins with it have earned (src/stands.ts); plain painted plastic when not given. */
   stand?: StandMat;
 }
 

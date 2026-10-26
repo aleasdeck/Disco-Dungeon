@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newRun } from '../src/run';
-import { creditRun, runGains, standFor } from '../src/progress';
+import { bestStand, creditRun, runGains, standFor, wearStand } from '../src/progress';
 import { stats } from '../src/stats';
 import { STANDS, nextStand, standDef, standOf } from '../src/stands';
 import { Game, newParty } from '../src/game';
@@ -33,6 +33,31 @@ describe('«Подставки мастерства»', () => {
     creditRun(run, ['kid', 'bum'], { won: true });
     creditRun(run, ['kid', 'bum'], { won: true });
     expect(runGains(run)?.stands).toEqual({ kid: 'wood' });
+  });
+
+  it('lets the player put the hero back on any stand earned, until a win earns the next one', () => {
+    stats.heroes.cop = { runs: 9, wins: 5, time: 0, kills: 0 };
+    expect(standFor('cop')).toBe('wood');
+    wearStand('cop', 'card');
+    expect(standFor('cop')).toBe('card');
+    expect(bestStand('cop')).toBe('wood');
+    // a stand not earned yet can't be worn
+    wearStand('cop', 'gold');
+    expect(standFor('cop')).toBe('card');
+    // the win that earns bronze puts the hero on it
+    stats.heroes.cop.wins = 6;
+    creditRun(newRun(4242), ['cop'], { won: true });
+    expect(standFor('cop')).toBe('bronze');
+    wearStand('cop', 'plastic');
+    expect(standFor('cop')).toBe('plastic');
+    // a win that earns nothing new leaves it where the player put it
+    stats.heroes.cop.wins = 7;
+    creditRun(newRun(4243), ['cop'], { won: true });
+    expect(standFor('cop')).toBe('plastic');
+    // the best one again: the next stand earned dresses it at once
+    wearStand('cop', 'bronze');
+    stats.heroes.cop.wins = 10;
+    expect(standFor('cop')).toBe('gold');
   });
 
   it('travels with the hero to the players online', () => {

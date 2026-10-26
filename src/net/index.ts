@@ -14,7 +14,7 @@ import { hostRoom, joinRoom, RoomError, type Accept, type HostedRoom, type JoinR
  * `key` is the player's secret for rejoining after a drop; only the host keeps it. `ready`: the player pressed
  * «Готов» in the lobby (the host has no such flag: pressing «Начать» is its word).
  */
-/** `stand`: what the player's wins with the hero picked have made its stand of (src/stands.ts). */
+/** `stand`: the stand the player put the hero picked on, of the ones their wins with it have earned (src/stands.ts). */
 export interface Player { id: string; name: string; hero: number | null; key?: string; ready?: boolean; look?: number | null; stand?: StandMat }
 
 export type Msg =

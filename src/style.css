@@ -1669,9 +1669,17 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .pc-next { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0; font: 700 18px/1 var(--hand); color: var(--muted); }
 .pc-next .stars { font-size: 22px; }
 .pc-shut .pc-next { margin-top: 10px; color: #6a5640; }
-/* the hero's stand (src/stands.ts) and the wins to the next one */
-.pc-stand { display: flex; align-items: center; gap: 8px; margin: 0; font: 700 17px/1.05 var(--hand); color: var(--muted); }
+/* the hero's stand (src/stands.ts) and the wins to the next one; the six stands beside it, the earned ones to pick from */
+.pc-stand { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0; font: 700 17px/1.05 var(--hand); color: var(--muted); }
 .pc-stand img { width: 42px; height: 27px; flex: none; }
+.ps-mats { display: flex; flex: none; gap: 4px; }
+.ps-mat { display: grid; place-items: center; flex: none; width: 62px; height: 44px; padding: 0; border: 0; background: rgba(0, 0, 0, 0.28); }
+.ps-mat img { width: 56px; height: 36px; }
+button.ps-mat { cursor: pointer; }
+button.ps-mat:hover, button.ps-mat:focus-visible { background: rgba(243, 230, 200, 0.14); outline: 0; }
+.ps-mat.on { background: rgba(217, 178, 74, 0.3); box-shadow: inset 0 0 0 2px var(--gold-1); cursor: default; }
+.ps-mat.on:hover { background: rgba(217, 178, 74, 0.3); }
+.ps-mat.shut img { filter: grayscale(1) brightness(0.7); opacity: 0.35; }
 .pc-shut .stars i { color: #6a5640; opacity: 0.45; }
 .pick-q { position: absolute; inset: 0; display: grid; place-items: center; padding-top: 12%; font: 700 42cqw/1 Oswald, sans-serif; color: #f3e6c8; text-shadow: 0 2px 0 #1c120a, 0 0 8px rgba(0, 0, 0, 0.8); pointer-events: none; }
 .card.shut canvas { background-color: #6e5c49; }
@@ -1777,6 +1785,10 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
   .pc-stats { gap: 4px; }
   .pc-stats li { padding: 2px 7px 2px 3px; font-size: 13px; }
   .pc-stats img { width: 16px; height: 16px; }
+  .pc-stand { gap: 4px 10px; font-size: 15px; }
+  .ps-mats { gap: 3px; }
+  .ps-mat { width: 42px; height: 30px; }
+  .ps-mat img { width: 36px; height: 23px; }
   .pc-ab { padding: 10px 12px 11px; }
   .pc-gem { width: 30px; height: 30px; }
   .pc-abname b { font-size: calc(17px * var(--fit, 1)); }
@@ -1821,6 +1833,10 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
   .pick-card h3 em { font-size: 10px; }
   .pc-stats li { padding: 2px 7px 2px 3px; font-size: 11px; }
   .pc-stats img { width: 15px; height: 15px; }
+  .pc-stand { gap: 3px 10px; font-size: 15px; }
+  .ps-mats { gap: 3px; }
+  .ps-mat { width: 38px; height: 26px; }
+  .ps-mat img { width: 32px; height: 21px; }
   .pc-ab { padding: 7px 10px 8px; }
   .pc-gem { width: 26px; height: 26px; }
   .pc-abname b { font-size: calc(15px * var(--fit, 1)); }

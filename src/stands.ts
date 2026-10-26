@@ -1,7 +1,8 @@
 // «Подставки мастерства»: a hero's stand shows how many runs this player has won with it, from the painted plastic every
 // hero starts on up to a mirror-ball one. Nothing about the hero changes, only the look: the top of the stand turns to
 // the material with the hero's colour left as a ring round its edge (src/draw/figures.ts), and its front rim stays the
-// health bar. Online every player's own wins dress their own hero, and the others see it.
+// health bar. On the pick screens the player may put the hero back on any stand it has earned (the hero's card). Online
+// every player's own wins dress their own hero, and the others see it.
 
 /** What a stand can be made of. */
 export type StandMat = 'plastic' | 'card' | 'wood' | 'bronze' | 'gold' | 'mirror';
