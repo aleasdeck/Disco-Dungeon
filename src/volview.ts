@@ -45,11 +45,15 @@ export function renderKnob(el: HTMLElement, o: { vol: number; top: number; onVol
     const how = state === 'shut' ? `<small>${t('Откроется победой на громкости {0}', n - 1)}</small>` : '';
     return `<${tag} class="vk-row ${state}" data-n="${n}">${volToken(n, 'sm')}<span><b>${n}</b> ${words}${how}</span></${tag}>`;
   }).join('');
-  const more = vol > 1 ? `<small class="vk-more">${t('+ ещё {0} {0|правило|правила|правил}', vol - 1)}</small>` : '';
+  // a step's words; the words of every step lie unseen under the step's own, so the knob keeps the size of the longest and
+  // nothing beside or under it moves as it turns
+  const txt = (n: number, ghost = false) => `<span${ghost ? ' class="vk-ghost" aria-hidden="true"' : ''}><b>${t('Громкость {0}', n)}</b><small>${volLine(n)}</small>`
+    + (n > 1 ? `<small class="vk-more">${t('+ ещё {0} {0|правило|правила|правил}', n - 1)}</small>` : '') + '</span>';
+  const ghosts = Array.from({ length: VOL_MAX + 1 }, (_, n) => txt(n, true)).join('');
   el.innerHTML = (turn ? arrow(-1, t('Тише'), vol <= 0) : '')
     + `<button class="vk-face" aria-expanded="false" aria-label="${t('Громкость {0}: все правила', vol)}">${volToken(vol)}</button>`
     + (turn ? arrow(1, t('Громче'), vol >= o.top) : '')
-    + (o.mini ? '' : `<button class="vk-txt" aria-expanded="false"><b>${t('Громкость {0}', vol)}</b><small>${volLine(vol)}</small>${more}</button>`)
+    + (o.mini ? '' : `<button class="vk-txt" aria-expanded="false">${txt(vol)}${ghosts}</button>`)
     + `<div class="vk-list" hidden><p class="vk-head">${o.head ?? t(turn ? 'Каждая ступень добавляет своё правило к прошлым. Новая открывается победой на самой высокой.' : 'Громкость выбрал хозяин комнаты. Её правила складываются:')}</p>${rows}</div>`;
   const list = el.querySelector<HTMLElement>('.vk-list')!;
   el.querySelectorAll<HTMLButtonElement>('.vk-face, .vk-txt').forEach(b => b.addEventListener('click', () => {
