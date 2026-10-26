@@ -34,7 +34,7 @@ declare const __ASSETS__: Record<string, [rev: string, bytes: number]>;
 const ASSETS = __ASSETS__;
 
 /** Address of a file in public/assets: with its content hash, so the cache keeps it until the file changes. */
-function assetUrl(file: string) {
+export function assetUrl(file: string) {
   const rev = ASSETS[file]?.[0];
   return `${import.meta.env.BASE_URL}assets/${file}${rev ? '?v=' + rev : ''}`;
 }

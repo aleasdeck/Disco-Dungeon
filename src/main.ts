@@ -11,7 +11,7 @@ import { Hud, faceUrl, mobFace } from './ui';
 import { hl } from './hl';
 import { MapView, type MapParty, type MapVotes } from './mapview';
 import { SceneRenderer } from './draw/scene';
-import { loadAll } from './assets';
+import { assetUrl, loadAll } from './assets';
 import { BACKDROP_COUNT } from './photo';
 import { sound, type Track } from './sound';
 import { CAMPAIGN, clearCampaign, clearSeat, keepKey, keyFor, loadCampaign, loadHost, loadSeat, newKey, saveCampaign, saveHost, saveSeat, type Ending, type HostSave } from './resume';
@@ -1787,18 +1787,6 @@ function pulse(t: number) {
   }
 }
 
-/**
- * The disco ball over the main menu's name swings on its chain, 6° and back every 4 s, turned from here with the other
- * pulses at most 20 times a second (see style.css); with the motion turned off in the system it hangs still.
- */
-const logo = document.querySelector<HTMLElement>('.logo-art')!, LOGO_SWING = 6, LOGO_PERIOD = 4;
-let swungAt = -Infinity;
-function swing(t: number) {
-  if (stillMotion || $('menu').hidden || Math.abs(t - swungAt) < IDLE_GAP / 1000) return;
-  swungAt = t;
-  logo.style.transform = `rotate(${(LOGO_SWING * (0.5 - 0.5 * Math.cos((2 * Math.PI * t) / LOGO_PERIOD))).toFixed(2)}deg)`;
-}
-
 function applyQuality() {
   dprCap = settings.quality === 'low' ? 1 : 2;
 }
@@ -1834,7 +1822,6 @@ function frame(now: number) {
   keepSeat(now);
   keepRun(now);
   countStats(now, raw);
-  swing(T);
   const camKey = `${cam.panX},${cam.panY},${cam.zoom},${cam.rot}`;
   const changed = stale || camKey !== drawnCam || game.S !== drawnRoom || busy();
   const covered = document.querySelector('.overlay:not([hidden])') !== null;
@@ -1884,6 +1871,26 @@ let loaded = false;
 // the language: the one picked before, or for a new player the browser's until they pick one on the loading screen; its
 // table comes in beside the pictures
 let langIn = setLang(isLang(settings.lang) ? settings.lang : detectLang());
+
+/**
+ * The game's name on the loading screen and in the main menu is a picture (art/logo in the README): «Диско-подполье» in
+ * Russian, Disco Underground in every other language. Put in at once in the language being fetched, so a Russian player
+ * never sees the English one first, and again on each change of language.
+ */
+// i18n-skip: each name as its picture spells it, not a line to translate
+const LOGOS = { en: { w: 1080, h: 569, alt: 'Disco Underground' }, ru: { w: 1080, h: 492, alt: 'Диско-подполье' } };
+function showLogo(code: Lang) {
+  const k = code === 'ru' ? 'ru' : 'en', l = LOGOS[k], src = assetUrl(`ui/logo_${k}.webp`);
+  for (const img of document.querySelectorAll<HTMLImageElement>('img.logo-pic')) {
+    if (img.getAttribute('src') === src) continue;
+    img.width = l.w;
+    img.height = l.h;
+    img.alt = l.alt;
+    img.src = src;
+  }
+}
+showLogo(isLang(settings.lang) ? settings.lang : detectLang());
+onLang(() => showLogo(lang()));
 
 /** The languages on the loading screen, each by its own name, the one on (or just tapped) lit. */
 function bootLangs(on: Lang = lang()) {
