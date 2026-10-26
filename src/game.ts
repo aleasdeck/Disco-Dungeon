@@ -1673,7 +1673,9 @@ export class Game {
     c.owner = S.mobs.indexOf(u); c.born = 1; c.hold = dead.k; c.rise = COFFIN_TURNS;
     c.intent = this.rising(c);
     S.mobs.push(c);
+    // demo-cut: the undertaker is not in the demo
     this.float(u.x, u.y - 12, 'в гроб!', '#b7a07a');
+    // demo-cut
     this.note(M('{0} {2?уложила|уложил} {1:l} в гроб', u.name, d.acc, MOBS[u.k].fem));
   }
 
@@ -3461,7 +3463,7 @@ export class Game {
     if (m.mad !== undefined && (it.t === 'hit' || it.t === 'move')) { delete m.mad; m.speed = d.speed; }
     if (it.t === 'rise' && m.k === 'egg') {
       if (it.eta === 1) { this.hatch(m); this.sfx('ability'); }
-    } else if (it.t === 'rise') {
+    } else /* demo-cut: the coffins */ if (it.t === 'rise') {
       m.rise = (m.rise ?? COFFIN_TURNS) - 1;
       if (m.rise > 0) {
         this.float(m.x, m.y - 10, 'скрип…', '#b7a07a');

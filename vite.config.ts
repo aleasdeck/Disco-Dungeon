@@ -1,8 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
+import { demoBuild, demoContent, demoPublic } from './scripts/demo-build.mjs';
 
 /** Every file under `dir` but hidden ones (.gitkeep), as paths relative to it with forward slashes. */
 function filesIn(dir: string, sub = ''): string[] {
@@ -11,13 +12,15 @@ function filesIn(dir: string, sub = ''): string[] {
 }
 
 /** A file's content hash; the service worker checks what it downloads against the same hash. */
-const revOf = (path: string) => createHash('sha256').update(readFileSync(path)).digest('hex').slice(0, 10);
+const hashOf = (data: Buffer) => createHash('sha256').update(data).digest('hex').slice(0, 10);
+const revOf = (path: string) => hashOf(readFileSync(path));
 
 /**
- * Content hash and size of every file in public/assets: the game asks for each as `…?v=<hash>`, so a changed picture
- * gets a new address, and fills the loading bar by the sizes.
+ * Content hash and size of every file in public/assets (of the demo's build, the ones it carries): the game asks for each
+ * as `…?v=<hash>`, so a changed picture gets a new address, and fills the loading bar by the sizes.
  */
-function assetInfo(): Record<string, [string, number]> {
+function assetInfo(demo?: Map<string, Buffer>): Record<string, [string, number]> {
+  if (demo) return Object.fromEntries([...demo].filter(([f]) => f.startsWith('assets/')).map(([f, b]) => [f.slice(7), [hashOf(b), b.length]]));
   const dir = resolve('public/assets');
   return Object.fromEntries(filesIn(dir).map(f => [f, [revOf(join(dir, f)), statSync(join(dir, f)).size]]));
 }
@@ -33,6 +36,8 @@ function serviceWorker(assets: Record<string, [string, number]>): Plugin {
     apply: 'build',
     configResolved(c) { outDir = resolve(c.root, c.build.outDir); },
     closeBundle() {
+      // a build that failed wrote nothing
+      if (!existsSync(outDir)) return;
       const files = filesIn(outDir).filter(f => f !== 'sw.js').map(f => {
         const rev = revOf(join(outDir, f)), pub = f.startsWith('assets/') && assets[f.slice(7)]?.[0];
         if (pub && pub !== rev) throw new Error(`${f} differs from public/${f}`);
@@ -64,13 +69,16 @@ function version(): string {
   }
 }
 
-// Relative base so the build works at https://<user>.github.io/<repo>/ whatever the repo is called.
-export default defineConfig(({ command }) => {
-  const assets = command === 'build' ? assetInfo() : {};
+// Relative base so the build works at https://<user>.github.io/<repo>/ whatever the repo is called. `vite build --mode demo`
+// is the demo's own build for Steam, into dist-demo/: its files of public/ come from its plugin (scripts/demo-build.mjs).
+export default defineConfig(async ({ command, mode }) => {
+  const root = resolve('.'), demo = command === 'build' && mode === 'demo' ? await demoContent(root) : null;
+  const assets = command === 'build' ? assetInfo(demo ? demoPublic(root, demo) : undefined) : {};
   return {
     base: './',
-    build: { target: 'es2022' },
-    define: { __ASSETS__: JSON.stringify(assets), __VERSION__: JSON.stringify(version()) },
-    plugins: [serviceWorker(assets)],
+    build: { target: 'es2022', ...(demo ? { outDir: 'dist-demo' } : {}) },
+    ...(demo ? { publicDir: false as const } : {}),
+    define: { __ASSETS__: JSON.stringify(assets), __VERSION__: JSON.stringify(version()), __DEMO_BUILD__: JSON.stringify(!!demo) },
+    plugins: [...(demo ? [demoBuild(root, demo)] : []), serviceWorker(assets)],
   };
 });

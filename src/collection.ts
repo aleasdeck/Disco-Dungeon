@@ -266,7 +266,8 @@ export function renderCollection(which: ColTab = tab) {
     b.setAttribute('aria-pressed', String(b.dataset.tab === tab));
   });
   tabIcons();
-  groups = groupsOf(tab);
+  // a group with nothing in it (the demo's own build has no trophies for feats) has no folder tab
+  groups = groupsOf(tab).filter(g => g.files.length);
   const all = filesNow(), cur = all.find(f => f.key === picked[tab]) ?? all.find(f => f.open) ?? all[0];
   picked[tab] = cur.key;
   const gi = groups.findIndex(g => g.files.includes(cur)), g = groups[gi], n = g.files.length;
