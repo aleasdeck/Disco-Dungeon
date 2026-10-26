@@ -98,7 +98,10 @@ function playRect() {
   // the warm-up keeps a strip under the top bar clear for Бастион's lines
   const m = 10, top = (document.querySelector('header')?.getBoundingClientRect().bottom ?? 50) + m + (game.S.spec.tut ? WARM_GAP : 0);
   const fr = document.getElementById('frame')?.getBoundingClientRect();
-  const bottom = fr && fr.height && fr.width > view.w / 2 ? Math.max(0, view.h - fr.top) + m : m;
+  // the camera buttons over the frame (a row above it on an upright phone) are kept clear with it
+  const cc = document.getElementById('camctl')?.getBoundingClientRect();
+  const over = fr && fr.height && fr.width > view.w / 2 ? Math.min(fr.top, cc && cc.height ? cc.top : Infinity) : view.h;
+  const bottom = Math.max(0, view.h - over) + m;
   return { x: m, y: top, w: Math.max(120, view.w - 2 * m), h: Math.max(120, view.h - top - bottom) };
 }
 
@@ -162,6 +165,17 @@ function resize() {
 }
 
 const input = new Input(cv, cam, game, controls);
+
+// the camera buttons in the room's corner, the same steps as Q/E and +/− on a keyboard
+$('rotL').addEventListener('click', () => controls.rotateBy(-Math.PI / 4));
+$('rotR').addEventListener('click', () => controls.rotateBy(Math.PI / 4));
+$('zoomIn').addEventListener('click', () => controls.zoomBy(1.25));
+$('zoomOut').addEventListener('click', () => controls.zoomBy(0.8));
+/** The zoom buttons go dull at the end of their way: all the way out (the room just fits) or in. */
+function camButtons() {
+  $<HTMLButtonElement>('zoomOut').disabled = cam.zoom <= cam.minZoom * (1 + 1e-6);
+  $<HTMLButtonElement>('zoomIn').disabled = cam.zoom >= cam.maxZoom * (1 - 1e-6);
+}
 
 // ------------------------------------------------------------ run flow
 
@@ -1821,6 +1835,7 @@ function frame(now: number) {
   if (covered !== covering) { covering = covered; document.documentElement.classList.toggle('covered', covered); }
   const gap = covered ? (changed ? IDLE_GAP : Infinity) : changed ? BUSY_GAP : IDLE_GAP;
   if (cleared || now - drawnAt >= gap) {
+    if (camKey !== drawnCam) camButtons();
     scene.draw(ctx, cam, game, T, view, input.aim, input.carry);
     pulse(T);
     cleared = stale = false;
