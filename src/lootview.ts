@@ -12,6 +12,7 @@ import type { HeroState } from './game';
 import { artIcon } from './icons';
 import { faceUrl } from './ui';
 import { t } from './i18n';
+import { tipAttrs } from './tip';
 
 const $ = (id: string) => document.getElementById(id)!;
 
@@ -115,14 +116,14 @@ export class LootView {
   /** One of a full hero's own trophies, to throw away for the new one. */
   private dropOpt(k: string) {
     const a = artDef(k);
-    return `<button class="ev-opt loot-opt" data-drop="${k}" title="${t(a.gag)}"><i class="loot-ico" aria-hidden="true">${artIcon(k)}</i>`
+    return `<button class="ev-opt loot-opt" data-drop="${k}"${tipAttrs({ p: t(a.gag) })}><i class="loot-ico" aria-hidden="true">${artIcon(k)}</i>`
       + `<b>${t(a.name)}</b><span class="ev-fx"><em class="bad">${t('Выбросить: {0}', a.txt)}</em></span></button>`;
   }
 
   private option(k: string, i: number, votes?: LootVotes) {
     const a = artDef(k);
-    const who = (votes?.faces[i] ?? []).map(p => `<img src="${p.face}" alt="" title="${p.name}" style="--c:${p.col}"${p.me ? ' class="me"' : ''}>`).join('');
-    return `<button class="ev-opt loot-opt${votes?.mine === i ? ' mine' : ''}${who ? ' picked' : ''}" data-opt="${i}" title="${t(a.gag)}">`
+    const who = (votes?.faces[i] ?? []).map(p => `<img src="${p.face}" alt=""${tipAttrs({ h: p.name })} style="--c:${p.col}"${p.me ? ' class="me"' : ''}>`).join('');
+    return `<button class="ev-opt loot-opt${votes?.mine === i ? ' mine' : ''}${who ? ' picked' : ''}" data-opt="${i}"${tipAttrs({ p: t(a.gag) })}>`
       + `<i class="loot-ico" aria-hidden="true">${artIcon(k)}</i><b>${t(a.name)}</b><span class="ev-fx"><em class="good">${t(a.txt)}</em></span>`
       + (who ? `<span class="ev-who">${who}</span>` : '') + '</button>';
   }

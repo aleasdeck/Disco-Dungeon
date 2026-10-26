@@ -72,7 +72,7 @@ function scanTs(add, bad) {
 }
 
 const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
-const ATTRS = ['title', 'aria-label', 'placeholder', 'alt'];
+const ATTRS = ['title', 'aria-label', 'placeholder', 'alt', 'data-tip', 'data-tip-h', 'data-tip-f'];
 const unent = s => s.replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
 
 /** The Russian text of index.html, keyed the way src/i18n.ts scanDom keys it. */
