@@ -1,24 +1,17 @@
-// Main menu and its screens: collection, settings and the online lobby.
+// Main menu and its screens: the hero pick screens, statistics, settings and the online lobby (the collection is in src/collection.ts).
 
-import { BIOMES, HEROES, MOB_HP_MUL, KINDS, MOBS, fullHit, heroesByKind, kindOf, toughOf, type MobKind } from './data';
-import { drawPortrait, drawShadow, faceUrl, mobIcon, shadowUrl, standIcon } from './ui';
-import { ARTIFACTS } from './artifacts';
-import { artIcon } from './icons';
-import { BOSS_UP, CASTS } from './room';
+import { HEROES, KINDS, fullHit, heroesByKind, kindOf } from './data';
+import { drawPortrait, faceUrl, shadowUrl, standIcon } from './ui';
 import { saveSettings, settings } from './settings';
 import { favourite, stats } from './stats';
-import { TRINKETS, opened, type TrinketDef } from './trinkets';
-import { envArt, eventArt } from './assets';
 import { FLOORS, LAYERS } from './run';
 import { sound } from './sound';
 import type { Player } from './net';
 import { uiArt } from './assets';
 import { BACKDROP_COUNT, drawPhoto, savePhoto, type PhotoSeat } from './photo';
 import { DEMO } from './demo';
-import { artLocked, bestStand, demoLocked, eventLocked, featOf, kindAt, locked, meetOf, opening, prevOf, standFor, STARS_TO_OPEN, starsOf, volTop, wearStand } from './progress';
+import { bestStand, demoLocked, kindAt, locked, opening, prevOf, standFor, STARS_TO_OPEN, starsOf, volTop, wearStand } from './progress';
 import { nextStand, standDef, STANDS, type StandMat } from './stands';
-import { dossierOf, inDossier } from './dossier';
-import { EVENTS, eventDef } from './events';
 import { renderKnob } from './volview';
 import { LANGS, isLang, lang, langTag, setLang, t } from './i18n';
 
@@ -30,154 +23,6 @@ export type Screen = (typeof SCREENS)[number];
 /** Show one menu screen (or none). */
 export function show(screen: Screen | null) {
   for (const id of SCREENS) $(id).hidden = id !== screen;
-}
-
-const FLOOR_NAMES = BIOMES.map(b => b.name);
-
-// ------------------------------------------------------------ collection
-
-export function renderCollection(tab: 'heroes' | 'mobs' | 'arts' | 'events' | 'trinkets') {
-  document.querySelectorAll<HTMLButtonElement>('#collection .tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
-  const grid = $('colGrid');
-  grid.innerHTML = '';
-  if (tab === 'heroes') {
-    // the same order as the pick screens: the biggest discs first; in the demo its own heroes before the rest
-    heroesByKind().flat().sort((a, b) => +locked(HEROES[a].key) - +locked(HEROES[b].key)).forEach(i => {
-      const def = HEROES[i], card = document.createElement('article');
-      card.className = 'card';
-      const cv = document.createElement('canvas');
-      // a hero not opened yet (the demo's other heroes): a dark shape, its kind and how it opens
-      if (locked(def.key)) {
-        drawShadow(cv, { i, def });
-        card.classList.add('shut');
-        card.innerHTML = `<div></div><div><h3>???</h3><p>${DEMO ? '' : `${t(KINDS[kindAt(def.key)].one)}. `}${howToOpen(def.key)}</p>${shutStars(def.key)}</div>`;
-        card.firstElementChild!.replaceWith(cv);
-        grid.appendChild(card);
-        return;
-      }
-      drawPortrait(cv, { i, def });
-      // starting health, then the same words as the disc upgrades: damage of a full straight throw, speed next to Ash's, speed kept off a wall
-      const stats = `<dt>HP</dt><dd>${def.hp}</dd><dt>${t('Урон')}</dt><dd>${fullHit(def.m, def.pw)}</dd><dt>${t('Скорость')}</dt><dd>${Math.round(def.pw * 100)}%</dd><dt>${t('Отскок')}</dt><dd>${Math.round(def.e * 100)}%</dd>`;
-      card.innerHTML = `<div></div><div><h3 style="color:${def.col}">${t(def.name)}</h3><p>${t('{0}. Способность «{1}»: {2} {3}', kindOf(def), def.ab, def.abTxt, def.abMore)}</p>`
-        + `<dl>${stats}<dt>${t('Диск')}</dt><dd>${def.r * 2}</dd></dl></div>`;
-      card.firstElementChild!.replaceWith(cv);
-      grid.appendChild(card);
-    });
-  } else if (tab === 'trinkets') {
-    renderTrinkets(grid);
-  } else if (tab === 'arts') {
-    // the floor bosses' trophies: what each does, and its joke; one not opened yet tells the feat that opens it
-    for (const a of [...ARTIFACTS].sort((x, y) => +artLocked(x.key) - +artLocked(y.key))) {
-      const card = document.createElement('article'), feat = artLocked(a.key) && featOf(a.key);
-      card.className = 'card col-art' + (feat ? ' shut' : '');
-      card.innerHTML = `<span class="col-art-ico">${artIcon(a.key)}</span>`
-        + (feat ? `<div><h3>???</h3><p><b>${t('Подвиг.')}</b> ${t(feat.how)}</p>${feat.need ? `<p class="col-feat">${t('{0} из {1}', num(feat.now ?? 0), num(feat.need))}</p>` : ''}</div>`
-          : `<div><h3>${t(a.name)}</h3><p><b>${t(a.txt)}.</b> ${t(a.gag)}</p></div>`);
-      grid.appendChild(card);
-    }
-  } else if (tab === 'events') {
-    renderEvents(grid);
-  } else {
-    renderMobs(grid);
-  }
-}
-
-/**
- * The enemies' dossier: an enemy not met yet is a dark shape with its floor; one met has its picture, what it does, its
- * numbers and the two lines of its file, each open once it is beaten often enough (a boss: won over), the rest saying how far.
- * The undertaker's coffin is a thing, not an enemy of its own, and a boss's later phases are told on its own card.
- */
-function renderMobs(grid: HTMLElement) {
-  const kinds = (Object.keys(MOBS) as MobKind[]).filter(inDossier), files = kinds.map(dossierOf);
-  const head = document.createElement('p');
-  head.className = 'tr-head';
-  head.innerHTML = t('Встречено врагов: <b>{0}</b> из {1}. Строчек досье: <b>{2}</b> из {3}. Строчки открываются победами: над обычным врагом 10 и 50 раз, над боссом 1 и 5 раз.',
-    files.filter(f => f.met).length, kinds.length, files.reduce((n, f) => n + f.open, 0), kinds.length * 2);
-  grid.append(head);
-  kinds.forEach((k, at) => {
-    const d = MOBS[k], f = files[at], card = document.createElement('article');
-    const where = d.boss ? t('{0}, босс', FLOOR_NAMES[d.floor]) : CASTS.some(c => c.elite === k) ? t('{0}, элита', FLOOR_NAMES[d.floor]) : t(FLOOR_NAMES[d.floor]);
-    card.className = 'card' + (f.met ? '' : ' shut');
-    if (!f.met) {
-      card.innerHTML = `<img class="dark" src="${mobIcon(k)}" alt=""><div><h3>???</h3><p><b>${where}.</b> ${d.fem ? t('Ещё не встречалась.') : t('Ещё не встречался.')}</p></div>`;
-      grid.appendChild(card);
-      return;
-    }
-    // a boss as a party of three meets it, its extra health and blow (BOSS_UP) included
-    const up = BOSS_UP[k];
-    const lines = (f.lines ?? []).map((line, i) => (i < f.open ? `<li><q>${t(line)}</q></li>`
-      : `<li class="off">${d.boss ? (f.need[i] === 1 ? t('Откроется после первой победы') : t('Откроется после {0} {0|победы|побед|побед}: {1} из {0}', f.need[i], f.n))
-        : d.fem ? t('Откроется после {0} {0|победы|побед|побед} над ней: {1} из {0}', f.need[i], f.n) : t('Откроется после {0} {0|победы|побед|побед} над ним: {1} из {0}', f.need[i], f.n)}</li>`)).join('');
-    card.innerHTML = `<img src="${mobIcon(k)}" alt=""><div><h3>${t(d.name)}</h3><p><b>${where}.</b> ${t(d.txt)}</p>`
-      + `<dl><dt>HP</dt><dd>${Math.round(d.hp * MOB_HP_MUL * toughOf(k) * (up?.hp[2] ?? 1))}</dd><dt>${t('Удар')}</dt><dd>${Math.round((d.dmg + (up?.dmg[2] ?? 0)) * toughOf(k))}</dd>${d.armor ? `<dt>${t('Броня')}</dt><dd>${d.armor}</dd>` : ''}</dl>`
-      + (d.boss && f.n ? `<p class="dos-n">${d.fem ? t('Побеждена {0} {0|раз|раза|раз}', f.n) : t('Побеждён {0} {0|раз|раза|раз}', f.n)}</p>` : '')
-      + (lines ? `<ul class="dos-lines">${lines}</ul>` : '') + '</div>';
-    grid.appendChild(card);
-  });
-}
-
-/**
- * The events of the run map: the open ones with their picture and scene, the rest dark with the hint of who knows them. In
- * the demo its three and the rest waiting for the full game.
- */
-function renderEvents(grid: HTMLElement) {
-  const keys = EVENTS.map(e => e.key).sort((a, b) => +eventLocked(a) - +eventLocked(b));
-  const head = document.createElement('p');
-  head.className = 'tr-head';
-  head.innerHTML = t('Открыто событий: <b>{0}</b> из {1}. Новые открываются знакомствами: кто-нибудь в одном событии знает кого-нибудь из другого.', keys.filter(k => !eventLocked(k)).length, keys.length);
-  grid.append(head);
-  for (const k of keys) {
-    const e = eventDef(k), shut = eventLocked(k), m = meetOf(k), card = document.createElement('article'), pic = eventArt.get(k);
-    card.className = 'card col-ev' + (shut ? ' shut' : '');
-    // the one before it in its chain is shut too: whom it knows stays a secret
-    const how = DEMO ? t('Это событие ждёт в полной версии игры.') : !m ? '' : eventLocked(m.from) ? t('Сначала открой событие, которое к нему ведёт.') : t(m.how);
-    card.innerHTML = `<span class="col-ev-pic">${pic ? `<img src="${pic.src}" alt="">` : ''}</span>`
-      + (shut ? `<div><h3>???</h3><p>${how}</p></div>` : `<div><h3>${t(e.title)}</h3><p>${t(e.txt)}</p></div>`);
-    grid.appendChild(card);
-  }
-}
-
-/**
- * The trinkets found here and the heroes' lines about them: a line is open once its hero has picked the trinket up on this
- * device. A trinket nobody has picked up yet is a dark shape with only its floor told.
- */
-function renderTrinkets(grid: HTMLElement) {
-  // the demo: its floor's trinkets and its heroes' lines
-  const list = TRINKETS.filter(it => it.drawn && it.floor < FLOORS), order = heroesByKind().flat().filter(i => !locked(HEROES[i].key));
-  const all = list.length * order.length, open = list.reduce((n, it) => n + order.filter(i => opened(it.key, HEROES[i].key)).length, 0);
-  const head = document.createElement('p');
-  head.className = 'tr-head';
-  head.innerHTML = t('Открыто фраз: <b>{0}</b> из {1}. Прокати диск по безделушке в комнате, и герой скажет о ней своё. Каждый герой — свою фразу.', open, all);
-  grid.append(head);
-  const pic = (it: TrinketDef, found: boolean) => `<span class="tr-pic${found ? '' : ' dark'}">${envArt.get(it.art) ? `<img src="${envArt.get(it.art)!.src}" alt="">` : ''}</span>`;
-  const card = (it: TrinketDef) => {
-    const got = order.filter(i => opened(it.key, HEROES[i].key)), found = got.length > 0, el = document.createElement('article');
-    el.className = 'card tr-card';
-    const lines = order.map(i => {
-      const def = HEROES[i], on = opened(it.key, def.key);
-      return `<li class="${on ? 'on' : 'off'}" style="--c:${def.col}"><img src="${faceUrl({ i, def })}" alt="${t(def.name)}">`
-        + (on ? `<b>${t(def.name)}</b><q>${t(it.lines[def.key])}</q>` : `<span>???</span>`) + '</li>';
-    }).join('');
-    el.innerHTML = pic(it, found) + `<div><h3>${found ? t(it.name) : '???'} <small>${t('{0} из {1}', got.length, order.length)}</small></h3>`
-      + `<p><b>${t(FLOOR_NAMES[it.floor])}.</b> ${found ? t(it.txt) : t('Ещё не попадалась.')}</p></div>${found ? `<ul class="tr-lines">${lines}</ul>` : ''}`;
-    return el;
-  };
-  // tiles: the picture, the name and how many lines are open; one tapped opens its card under them, the first found to begin with
-  const box = document.createElement('div');
-  box.className = 'tr-open';
-  const tiles = document.createElement('div');
-  tiles.className = 'tr-tiles';
-  const pickT = (it: TrinketDef) => { box.replaceChildren(card(it)); tiles.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.k === it.key)); };
-  for (const it of list) {
-    const n = order.filter(i => opened(it.key, HEROES[i].key)).length, b = document.createElement('button');
-    b.className = 'tr-tile';
-    b.dataset.k = it.key;
-    b.innerHTML = pic(it, n > 0) + `<b>${n ? t(it.name) : '???'}</b><small>${t('{0} из {1}', n, order.length)}</small>`;
-    b.addEventListener('click', () => pickT(it));
-    tiles.append(b);
-  }
-  grid.append(tiles, box);
-  pickT(list.find(it => order.some(i => opened(it.key, HEROES[i].key))) ?? list[0]);
 }
 
 // ------------------------------------------------------------ statistics
@@ -266,7 +111,7 @@ const icon = (key: string) => uiArt.get(key)?.src ?? '';
 
 /** What a shut hero's card says of the hero before it on its kind's ladder, and how far its stars go, by the kind's place in KINDS. */
 const KIND_FIRST = ['Сначала открой толстяка перед ним.', 'Сначала открой чувака перед ним.', 'Сначала открой дрища перед ним.'];
-const KIND_NEXT = ['до нового толстяка', 'до нового чувака', 'до нового дрища'];
+export const KIND_NEXT = ['до нового толстяка', 'до нового чувака', 'до нового дрища'];
 const STARS_WHY = 'Босс этажа даёт каждому герою отряда звёзды по номеру этажа: 1, 2 и 3.';
 
 /** Stars toward the next hero as a row of STARS_TO_OPEN: the ones got in gold, the rest hollow. */
@@ -276,7 +121,7 @@ export function starRow(n: number) {
 }
 
 /** How a hero not opened yet opens: the hero before it on its ladder gathers the stars, once that one is open itself. */
-function howToOpen(key: string) {
+export function howToOpen(key: string) {
   if (DEMO) return t('Этот герой ждёт в полной версии игры.');
   const prev = prevOf(key);
   if (!prev) return '';
@@ -286,7 +131,7 @@ function howToOpen(key: string) {
 }
 
 /** The stars the hero before a shut one has gathered toward it, when that one is open. */
-function shutStars(key: string) {
+export function shutStars(key: string) {
   const prev = prevOf(key);
   if (DEMO || !prev || locked(prev)) return '';
   const n = starsOf(prev);
@@ -300,14 +145,19 @@ function shutStars(key: string) {
 function standLine(key: string, col: string, theirs?: StandMat) {
   if (DEMO) return '';
   if (theirs) return `<p class="pc-stand"><img src="${standIcon(theirs, col)}" alt=""><span>${t('Подставка: {0}', standDef(theirs).name)}</span></p>`;
-  const best = bestStand(key), mat = standFor(key), next = nextStand(best), left = next ? next.wins - (stats.heroes[key]?.wins ?? 0) : 0;
-  const tail = !next ? t('выше некуда') : left > 0 ? t('до {0} {1} {1|победа|победы|побед}', next.gen, left) : '';
+  const best = bestStand(key), { mat, txt } = standText(key);
   const top = STANDS.indexOf(standDef(best));
   const mats = STANDS.map((s, k) => k <= top
     ? `<button type="button" class="ps-mat${s.mat === mat ? ' on' : ''}" data-mat="${s.mat}" aria-pressed="${s.mat === mat}" title="${t(s.name)}"><img src="${standIcon(s.mat, col)}" alt="${t(s.name)}"></button>`
     : `<span class="ps-mat shut" title="${t('{0:u}: за {1} {1|победу|победы|побед}', s.name, s.wins)}"><img src="${standIcon(s.mat, col)}" alt=""></span>`).join('');
-  return `<div class="pc-stand"><div class="ps-mats" role="group" aria-label="${t('Выбор подставки')}">${mats}</div>`
-    + `<span>${tail ? t('Подставка: {0}, {1}', standDef(mat).name, tail) : t('Подставка: {0}', standDef(mat).name)}</span></div>`;
+  return `<div class="pc-stand"><div class="ps-mats" role="group" aria-label="${t('Выбор подставки')}">${mats}</div><span>${txt}</span></div>`;
+}
+
+/** The stand the hero `key` goes on, and the line about it: what it is made of and how many more wins make the next one. */
+export function standText(key: string) {
+  const best = bestStand(key), mat = standFor(key), next = nextStand(best), left = next ? next.wins - (stats.heroes[key]?.wins ?? 0) : 0;
+  const tail = !next ? t('выше некуда') : left > 0 ? t('до {0} {1} {1|победа|победы|побед}', next.gen, left) : '';
+  return { mat, txt: tail ? t('Подставка: {0}, {1}', standDef(mat).name, tail) : t('Подставка: {0}', standDef(mat).name) };
 }
 
 /** Mice can point at a hero to read it without taking it; fingers take it with a tap. */

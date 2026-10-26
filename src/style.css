@@ -738,63 +738,250 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .players .rdy.on::before { content: '✓ '; }
 .lobby-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; color: #b2a38c; }
 
-/* ---------- collection */
-.collection-panel { width: min(980px, 100%); }
+/* ---------- collection: a case folder per tab (src/collection.ts), the whole of it on one screen */
 .tab.on { background: linear-gradient(#b8892f, #8a5f1c); }
-.col-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 14px; }
-.card { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 10px; align-items: start; background: rgba(0, 0, 0, 0.22); border: 1.5px solid var(--ink); border-radius: 12px; padding: 10px; }
-.card canvas, .card img { width: 72px; height: 72px; border-radius: 10px; border: 1.5px solid var(--ink); background: #1d1611; }
-.card h3 { margin: 0 0 4px; font: 600 18px Oswald, sans-serif; }
-.card p { margin: 0 0 6px; font-size: 13px; color: #d6cfbd; }
-.card dl { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; margin: 0; font-size: 12px; color: #b2a38c; }
-.card dd { margin: 0; color: #f0e5d0; }
-.col-art-ico { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 10px; border: 1.5px solid var(--ink); background: #1d1611; }
-.col-art-ico > .ico, .col-art-ico > .art { width: 56px; height: 56px; border: 0; background: none; border-radius: 0; }
-/* the trinkets: what is open of the heroes' lines about each */
-.tr-head { grid-column: 1 / -1; margin: 0; color: #d6cfbd; font-size: 14px; }
-.tr-head b { color: var(--gold); font: 600 16px Oswald, sans-serif; }
-.col-grid:has(.tr-card) { grid-template-columns: 1fr; }
-/* the events: a picture of the scene; the trophies and events not opened yet, dark, with the feat or the hint and how far it got */
-.col-ev-pic { width: 72px; height: 72px; overflow: hidden; clip-path: var(--cut-tile); background: #2a2019; }
-.card .col-ev-pic img { width: 100%; height: 100%; border: 0; border-radius: 0; clip-path: none; object-fit: cover; }
-.card.shut .col-art-ico > * { filter: brightness(0) opacity(0.55); }
-.card.shut .col-ev-pic img { filter: blur(5px) brightness(0.4) saturate(0.4); scale: 1.15; }
-.card.shut h3 { color: var(--muted); }
-.col-feat { margin-top: 4px; font-weight: 700; color: var(--gold); }
-/* the enemies' dossier (src/dossier.ts): a shape until met, then its two lines, the shut ones saying how far */
-.card img.dark { filter: brightness(0) opacity(0.55); }
-.dos-n { font-weight: 700; color: var(--gold) !important; }
-.dos-lines { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.dos-lines li { font-size: 13px; color: #f0e5d0; padding-left: 10px; border-left: 2px solid var(--gold); }
-.dos-lines q { quotes: none; font-style: italic; }
-.dos-lines li.off { color: var(--muted); border-left-color: rgba(255, 255, 255, 0.15); font-size: 12px; }
-.tr-card { grid-template-columns: 84px minmax(0, 1fr); }
-.tr-card h3 small { margin-left: 6px; font: 500 14px Oswald, sans-serif; color: var(--muted); }
-.tr-pic { display: grid; place-items: center; width: 84px; height: 84px; background: #2a2019; clip-path: var(--cut-tile); }
-.card .tr-pic img, .tr-pic img { width: 64px; height: 64px; object-fit: contain; border: 0; background: none; clip-path: none; }
-.tr-pic.dark img { filter: brightness(0) opacity(0.55); }
-.tr-lines { grid-column: 1 / -1; list-style: none; margin: 2px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 4px 14px; }
-.tr-lines li { display: grid; grid-template-columns: 30px minmax(0, 1fr); column-gap: 8px; align-items: center; min-height: 32px; font-size: 13px; }
-.card .tr-lines li img { grid-row: span 2; width: 30px; height: 30px; border: 0; background: var(--c); clip-path: var(--cut-face, none); }
-.tr-lines li b { font: 600 13px Oswald, sans-serif; color: var(--c); line-height: 1.1; }
-.tr-lines li q { font: 700 17px/1.1 Hand, cursive; color: #f0e5d0; quotes: '«' '»'; }
-.tr-lines li.off img { filter: grayscale(1) brightness(0.5); }
-.tr-lines li.off span { grid-row: span 2; color: #6f6150; font: 600 14px Oswald, sans-serif; letter-spacing: 2px; }
-.tr-tiles { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
-.tr-tile { display: grid; justify-items: center; gap: 2px; padding: 8px 4px; background: #3b2d22 var(--grain) 0 0 / 160px; background-blend-mode: overlay; border: 0; clip-path: var(--cut-card); color: inherit; cursor: pointer; }
-.tr-tile.on { box-shadow: inset 0 0 0 3px var(--gold-1); background-color: #4a3826; }
-.tr-tile .tr-pic { width: 72px; height: 72px; }
-.tr-tile .tr-pic img { width: 56px; height: 56px; }
-.tr-tile b { font: 600 14px Oswald, sans-serif; text-align: center; }
-.tr-tile small { color: var(--muted); font-size: 12px; }
-.tr-open { grid-column: 1 / -1; }
-/* on a phone the tiles are one strip swiped sideways, so the opened card stays right under the finger */
-@media (max-width: 600px) {
-  .tr-tiles { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 96px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; padding-bottom: 4px; }
-  .tr-tile { scroll-snap-align: start; }
-  .tr-tile .tr-pic { width: 64px; height: 64px; }
-  .tr-tile .tr-pic img { width: 50px; height: 50px; }
-  .tr-tile b { font-size: 13px; }
+.collection-panel { position: relative; width: min(1240px, 100%); height: min(calc(100dvh - 32px), 860px); display: flex; flex-direction: column; gap: 12px; }
+.art-panel .panel.collection-panel { padding: 26px 32px 24px; }
+.collection-panel .panel-head { flex: none; flex-wrap: nowrap; justify-content: flex-start; gap: 16px; }
+.col-tabs { display: flex; gap: 6px; margin-left: auto; }
+.col-ico { display: none; }
+.cs-folder { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+/* the groups on the folder's own tabs, the one open joined to the folder */
+.cs-gtabs { flex: none; display: flex; gap: 4px; padding-left: 14px; }
+.cs-gt {
+  margin-bottom: -1px; padding: 5px 14px 8px; border: 0; cursor: pointer; white-space: nowrap;
+  font: 600 14px Oswald, sans-serif; color: #3a2716; background: #b0844a var(--grain) 0 0 / 200px; background-blend-mode: soft-light;
+  clip-path: polygon(8% 0, 92% 0, 100% 100%, 0 100%);
+}
+.cs-gt b { font-weight: 500; color: #6b4a2c; margin-left: 4px; }
+.cs-gt.on { background-color: #c69c5e; color: #1a1210; }
+.cs-desk {
+  flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: clamp(220px, 30%, 380px) minmax(0, 1fr); gap: 20px; padding: 16px 18px 18px;
+  background: #c69c5e var(--grain) 0 0 / 200px; background-blend-mode: soft-light; clip-path: polygon(0 0.6%, 100% 0, 100% 100%, 0.4% 99.4%);
+}
+/* the list: two columns of the group's files, a face and a name each, ‹ › at its foot */
+.cs-list { min-height: 0; display: flex; flex-direction: column; gap: 8px; container-type: inline-size; }
+.cs-list h3 {
+  flex: none; margin: 0; padding-bottom: 3px; border-bottom: 2px solid rgba(58, 39, 22, 0.35); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font: 700 15px Oswald, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: #3a2716;
+}
+.cs-items { flex: 0 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(var(--rows), minmax(0, 58px)); gap: 6px; }
+.cs-it {
+  position: relative; min-width: 0; min-height: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; padding: 4px 8px 4px 4px;
+  border: 0; cursor: pointer; text-align: left; color: #2a1a0d; background: #efe3c8; clip-path: polygon(0 0, 100% 3%, 99% 100%, 1% 96%);
+}
+.cs-it:hover { background: #f8eed6; }
+.cs-it.on { background: #ffe9a8; box-shadow: inset 0 0 0 2px #c9962f; }
+.cs-it .cs-face { height: 100%; max-height: 50px; }
+.cs-face { position: relative; display: block; aspect-ratio: 1; background: var(--c, #6b4a2c); clip-path: var(--cut-face); overflow: hidden; }
+.cs-face img, .cs-face svg { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.cs-desk[data-tab='arts'] .cs-face, .cs-desk[data-tab='trinkets'] .cs-face { background: #6b4a2c; }
+.cs-desk[data-tab='arts'] .cs-face > *, .cs-desk[data-tab='trinkets'] .cs-face img { padding: 4px; object-fit: contain; object-position: center; }
+/* a file not open: a dark shape (a hero's is drawn dark already), an event's scene blurred */
+.cs-it.shut .cs-face > * { filter: brightness(0) opacity(0.55); }
+.cs-desk[data-tab='heroes'] .cs-it.shut .cs-face > * { filter: none; }
+.cs-desk[data-tab='events'] .cs-it.shut .cs-face > * { filter: blur(3px) brightness(0.4) saturate(0.4); }
+.cs-in { min-width: 0; }
+.cs-in b, .cs-in small { display: block; overflow: hidden; }
+.cs-in b { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font: 600 15px/1.1 Oswald, sans-serif; overflow-wrap: break-word; }
+.cs-in small { white-space: nowrap; text-overflow: ellipsis; font: 500 11.5px/1.3 Rubik, sans-serif; color: #8b6d4c; }
+.cs-it.shut b { color: #8b6d4c; }
+/* a narrow list (a small laptop): one column, so the names keep their words whole */
+@container (max-width: 300px) {
+  .cs-items { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(var(--n), minmax(0, 52px)); }
+}
+.cs-nav { flex: none; display: flex; gap: 8px; margin-top: auto; }
+.cs-nav button { flex: 1; height: 40px; border: 0; cursor: pointer; font: 700 26px/1 Oswald, sans-serif; color: #2a1a0d; background: #efe3c8; clip-path: polygon(2% 0, 100% 4%, 98% 100%, 0 94%); }
+.cs-nav button:hover { background: #f8eed6; }
+/* the sheet: the title line, the photo on its clip with the stamp, the fields beside it and the rest of the file below */
+.cs-sheet {
+  --pw: clamp(150px, min(31dvh, 22vw), 270px);
+  position: relative; min-width: 0; min-height: 0; display: grid; grid-template-columns: var(--pw) minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr); grid-template-areas: 'top top' 'photo fields' 'photo flav' 'txt txt'; gap: 10px 24px; padding: 14px 20px 14px; color: #2a1a0d;
+  background: #f1e6cc var(--grain) 0 0 / 260px; background-blend-mode: soft-light; clip-path: polygon(0 0.5%, 100% 0, 99.6% 100%, 0.3% 99.5%);
+  touch-action: pan-y; user-select: none; -webkit-user-select: none;
+}
+.cs-top {
+  grid-area: top; display: flex; justify-content: space-between; gap: 12px; padding-bottom: 4px; border-bottom: 1.5px solid rgba(60, 35, 15, 0.3); white-space: nowrap; overflow: hidden;
+  font: 600 12px Oswald, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: #6b4a2c;
+}
+.cs-photo { grid-area: photo; position: relative; width: var(--pw); aspect-ratio: 4 / 5; margin: 8px 0 2px 4px; padding: 7px 7px 20px; background: #fbf6ea; rotate: -2deg; box-shadow: 0 3px 6px rgba(40, 20, 5, 0.35); }
+.cs-photo.cs-scene { aspect-ratio: 10 / 11; }
+.cs-photo.zoom { cursor: zoom-in; }
+.cs-pin {
+  display: flex; align-items: flex-end; justify-content: center; width: 100%; height: 100%; overflow: hidden;
+  background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--c) 30%, #fff3d6), color-mix(in srgb, var(--c) 65%, #2a1a0d));
+}
+/* a figure cut out as a sticker: a white edge round its outline */
+.cs-fig .cs-pin img { max-width: 94%; max-height: 96%; object-fit: contain; filter: drop-shadow(3px 0 0 #fcf8ee) drop-shadow(-3px 0 0 #fcf8ee) drop-shadow(0 3px 0 #fcf8ee) drop-shadow(0 -3px 0 #fcf8ee) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.3)); }
+.cs-thing .cs-pin { align-items: center; }
+.cs-thing .cs-pin > * { width: 74%; height: 74%; object-fit: contain; filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.35)); }
+.cs-scene .cs-pin img { width: 100%; height: 100%; object-fit: cover; }
+.cs-photo.shut .cs-pin > * { filter: brightness(0) opacity(0.55); }
+.cs-scene.shut .cs-pin img { filter: blur(5px) brightness(0.4) saturate(0.4); scale: 1.15; }
+.cs-clip { position: absolute; z-index: 2; top: -12px; left: 22px; width: 16px; height: 46px; border: 3px solid #8d96a0; border-radius: 9px; }
+.cs-clip::after { content: ''; position: absolute; left: 2px; right: 2px; top: 6px; bottom: 10px; border: 2px solid #8d96a0; border-radius: 6px; }
+.cs-stamp {
+  position: absolute; z-index: 3; right: 3%; bottom: 3%; rotate: -11deg; max-width: 86%; padding: 0.05em 0.45em; border: 3px solid rgba(163, 38, 26, 0.72); background: rgba(246, 236, 214, 0.72); text-align: center; pointer-events: none;
+  font: 700 clamp(12px, calc(var(--pw) * 0.075), 20px)/1.15 Oswald, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(163, 38, 26, 0.8);
+}
+.cs-stamp.g { border-color: rgba(44, 106, 28, 0.7); color: rgba(44, 106, 28, 0.8); }
+/* a long word on the stamp (other languages): smaller and tighter, so it stays inside the photo */
+.cs-stamp.long { font-size: clamp(10px, calc(var(--pw) * 0.058), 16px); letter-spacing: 0.04em; }
+.cs-fields { grid-area: fields; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+.cs-flav { grid-area: flav; align-self: start; min-width: 0; }
+.cs-flav-in { display: none; }
+.cs-fd { min-width: 0; }
+.cs-fd > i { display: block; font: 600 calc(11px * var(--f, 1)) Oswald, sans-serif; font-style: normal; letter-spacing: 0.14em; text-transform: uppercase; color: #8b6d4c; }
+.cs-fd > span { font: 600 17px/1.2 Oswald, sans-serif; }
+.cs-name { display: block; font: 700 clamp(22px, calc(var(--pw) * 0.12), 32px)/1.05 Oswald, sans-serif; overflow-wrap: anywhere; }
+.cs-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 5px; margin: 3px 0 0; padding: 0; }
+.cs-chips li { display: flex; align-items: center; gap: 4px; padding: 3px 9px 3px 5px; background: #e2cfa8; clip-path: var(--cut-bar); font: 700 16px/1 Oswald, sans-serif; }
+.cs-chips img { width: 20px; height: 20px; object-fit: contain; }
+.cs-chips small { font: 500 11px Rubik, sans-serif; opacity: 0.7; }
+/* the rest of the file: its words shrink with --f until they fit (fit() in src/collection.ts) */
+.cs-txt { grid-area: txt; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: calc(9px * var(--f, 1)); }
+.cs-scroll .cs-txt { overflow-y: auto; overscroll-behavior: contain; }
+:is(.cs-txt, .cs-flav) p { margin: 0; font: 500 calc(15px * var(--f, 1))/1.32 Rubik, sans-serif; }
+:is(.cs-txt, .cs-flav) .cs-hand { font: 700 calc(22px * var(--f, 1))/1.08 var(--hand); color: #3a2716; }
+:is(.cs-txt, .cs-flav) .cs-long { font-size: calc(19px * var(--f, 1)); }
+.cs-txt .cs-foot { padding-top: 5px; border-top: 1px dashed rgba(60, 35, 15, 0.3); font-size: calc(12.5px * var(--f, 1)); color: #6b5440; }
+.cs-foot::before { content: '* '; }
+.cs-more { display: none; padding: 0; border: 0; background: none; cursor: pointer; font: 600 0.9em Oswald, sans-serif; color: #8a5a00; text-decoration: underline; text-underline-offset: 2px; }
+.cs-short .cs-foot { display: none; }
+.cs-short .cs-more { display: inline; }
+.cs-txt .cs-stand { display: flex; align-items: center; gap: 8px; font: 700 calc(17px * var(--f, 1))/1.05 var(--hand); color: #6b4a2c; }
+.cs-stand img { width: calc(40px * var(--f, 1)); height: auto; flex: none; }
+.cs-txt .cs-next, .cs-txt .pc-next { margin: 0; font-size: calc(17px * var(--f, 1)); color: #6b4a2c; }
+.cs-txt .stars { font-size: calc(20px * var(--f, 1)); text-shadow: 0 1px 0 rgba(60, 35, 15, 0.6); }
+.cs-txt .stars i { color: #6a5640; opacity: 0.45; }
+.cs-lines { list-style: none; display: grid; gap: calc(6px * var(--f, 1)); margin: 3px 0 0; padding: 0; }
+.cs-lines li { padding-left: 9px; border-left: 2px solid #d9b24a; font: 700 calc(19px * var(--f, 1))/1.1 var(--hand); color: #3a2716; }
+.cs-lines q { quotes: none; }
+.cs-lines li.off { border-left-color: rgba(60, 35, 15, 0.2); }
+.cs-lines li.off small { display: block; margin-top: 3px; font: 500 calc(12px * var(--f, 1))/1.3 Rubik, sans-serif; color: #8a5a00; }
+.cs-red { padding: 0 2px; background: linear-gradient(transparent 10%, #1a1210 10% 90%, transparent 90%); color: transparent; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.cs-txt .cs-count, .cs-txt .cs-prog { font: 600 calc(14px * var(--f, 1)) Oswald, sans-serif; color: #8a5a00; }
+.cs-prog { display: flex; align-items: center; gap: 8px; margin-top: 4px !important; }
+.cs-bar { flex: 1; max-width: 180px; height: 8px; background: rgba(60, 35, 15, 0.25); clip-path: var(--cut-bar); }
+.cs-bar i { display: block; height: 100%; background: #c9962f; }
+.cs-choices { list-style: none; display: flex; flex-wrap: wrap; gap: 5px; margin: 3px 0 0; padding: 0; }
+.cs-choices li { display: flex; align-items: center; gap: 6px; padding: 3px 8px; background: #e2cfa8; clip-path: polygon(2% 0, 100% 4%, 98% 100%, 0 94%); font: 500 calc(13.5px * var(--f, 1))/1.25 Rubik, sans-serif; }
+.cs-choices b { display: inline-flex; align-items: center; gap: 2px; font: 600 calc(13px * var(--f, 1)) Oswald, sans-serif; color: #8a5a00; }
+.cs-choices .ico { width: 1.15em; height: 1.15em; }
+.cs-faces { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.cs-faces .cs-face { width: calc(36px * var(--f, 1)); padding: 0; border: 0; cursor: pointer; }
+.cs-faces .cs-face.off img { filter: grayscale(1) brightness(0.45); }
+.cs-face.on::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 0 3px #e3a42e; }
+.cs-txt .cs-bub { margin-top: 6px; padding: 6px 10px 7px; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); clip-path: polygon(0 0, 100% 3%, 98% 100%, 2% 96%); font: 700 calc(20px * var(--f, 1))/1.08 var(--hand); }
+.cs-bub b { display: block; margin-bottom: 1px; font: 600 calc(12px * var(--f, 1)) Oswald, sans-serif; color: color-mix(in srgb, var(--c) 70%, #000); }
+.cs-bub q { quotes: '«' '»'; }
+.cs-txt .cs-bub.off { font: 500 calc(13px * var(--f, 1))/1.3 Rubik, sans-serif; color: #8a7a62; }
+/* the next sheet slides in once from the side it comes from */
+@keyframes cs-in-pop { from { transform: scale(0.95); opacity: 0.4; } }
+@keyframes cs-in-next { from { transform: translateX(36px); opacity: 0.3; } }
+@keyframes cs-in-prev { from { transform: translateX(-36px); opacity: 0.3; } }
+.cs-sheet.cs-in-pop { animation: cs-in-pop 0.2s ease-out; }
+.cs-sheet.cs-in-next { animation: cs-in-next 0.22s ease-out; }
+.cs-sheet.cs-in-prev { animation: cs-in-prev 0.22s ease-out; }
+/* a photo looked at whole */
+.cs-look { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 24px; background: rgba(10, 6, 4, 0.92); cursor: zoom-out; }
+.cs-look img { max-width: min(92vw, 900px); max-height: 88dvh; object-fit: contain; animation: cs-in-pop 0.22s ease-out; }
+.cs-look.cs-fig img { filter: drop-shadow(5px 0 0 #fcf8ee) drop-shadow(-5px 0 0 #fcf8ee) drop-shadow(0 5px 0 #fcf8ee) drop-shadow(0 -5px 0 #fcf8ee); }
+.cs-look.cs-scene img { padding: 12px; background: #f3ead8; rotate: -1deg; }
+.cs-note { max-width: min(560px, 100%); margin: 0; padding: 16px 18px; background: #f1e6cc; color: #2a1a0d; clip-path: polygon(0 1%, 100% 0, 99% 100%, 1% 98%); font: 500 16px/1.4 Rubik, sans-serif; animation: cs-in-pop 0.2s ease-out; }
+.cs-note::before { content: '* '; }
+@media (prefers-reduced-motion: reduce) { .cs-sheet, .cs-look img, .cs-note { animation: none !important; } }
+
+/* an upright screen: the group's faces in a row over the sheet */
+@media (orientation: portrait) and (max-width: 1100px) {
+  .cs-desk { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 10px; }
+  .cs-list { flex-direction: row; align-items: center; gap: 4px; }
+  .cs-list h3 { display: none; }
+  .cs-items { flex: 1 1 auto; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+  .cs-it { flex: 0 0 calc((100% - (var(--per) - 1) * 4px) / var(--per)); max-width: 60px; display: block; padding: 0; background: none; clip-path: none; }
+  .cs-it.on, .cs-it:hover { background: none; box-shadow: none; }
+  .cs-it .cs-face { width: 100%; height: auto; max-height: none; }
+  .cs-it.on .cs-face::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 0 3px #e3a42e; }
+  .cs-in { display: none; }
+  .cs-nav { display: contents; }
+  .cs-nav button { flex: none; width: 32px; height: 46px; }
+  .cs-nav [data-go='-1'] { order: -1; }
+  .cs-sheet { --pw: clamp(150px, 30vw, 270px); }
+}
+
+/* an upright phone: besides, the tabs as a bar of pictures at the foot, and the character under the photo */
+@media (orientation: portrait) and (max-width: 700px) {
+  #collection { padding: 8px; place-items: stretch; }
+  .collection-panel { height: calc(100dvh - 16px); gap: 8px; padding-bottom: 86px; }
+  .art-panel .panel.collection-panel { border-image-width: 34px 24px; padding: 18px 14px 88px; }
+  .collection-panel .panel-head h2 { font-size: 22px; }
+  #colBack { margin-left: auto; padding: 6px 12px; font-size: 14px; }
+  .col-tabs { position: absolute; left: 14px; right: 14px; bottom: 16px; height: 64px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; margin: 0; }
+  #collection .col-tabs .tab { display: grid; grid-template-rows: minmax(0, 1fr) auto; justify-items: center; align-items: center; padding: 4px 2px 5px; font-size: 10.5px; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .col-ico { display: block; }
+  .col-ico img { display: block; width: 34px; height: 30px; object-fit: contain; }
+  .cs-gtabs { padding-left: 8px; }
+  .cs-gt { flex: 1 1 auto; padding: 4px 8px 7px; font-size: 13px; }
+  .cs-desk { gap: 8px; padding: 10px 8px 8px; }
+  .cs-it { max-width: 44px; }
+  .cs-nav button { width: 24px; height: 40px; font-size: 22px; }
+  .cs-sheet { --pw: clamp(104px, 32vw, 140px); grid-template-rows: auto auto minmax(0, 1fr); grid-template-areas: 'top top' 'photo fields' 'txt txt'; gap: 8px 14px; padding: 10px 12px 10px; }
+  .cs-flav { display: none; }
+  .cs-flav-in { display: block; }
+  .cs-top { font-size: 10.5px; letter-spacing: 0.08em; }
+  .cs-photo { margin-top: 6px; padding: 5px 5px 14px; }
+  .cs-clip { left: 14px; width: 13px; height: 38px; }
+  .cs-fields { gap: 5px; }
+  .cs-fd > span { font-size: 15px; }
+  .cs-chips { gap: 3px; }
+  .cs-chips li { padding: 2px 6px 2px 3px; font-size: 14px; }
+  .cs-chips img { width: 16px; height: 16px; }
+  .cs-chips small { display: none; }
+}
+
+/* a short upright phone: the faces on one row, a smaller photo and tab bar, so the file keeps its height */
+@media (orientation: portrait) and (max-width: 700px) and (max-height: 720px) {
+  .collection-panel { padding-bottom: 72px; }
+  .art-panel .panel.collection-panel { padding-bottom: 72px; }
+  .col-tabs { height: 52px; bottom: 14px; }
+  .col-ico img { width: 28px; height: 24px; }
+  .cs-it { flex-basis: calc((100% - (var(--n) - 1) * 4px) / var(--n)); }
+  .cs-items { flex-wrap: nowrap; }
+  .cs-sheet { --pw: clamp(92px, 27vw, 120px); }
+}
+
+/* a phone on its side: the group's faces in a small grid on the left, the photo down the sheet's left side */
+@media (max-height: 520px) and (orientation: landscape) {
+  #collection { padding: 6px 10px; }
+  .collection-panel { height: calc(100dvh - 12px); gap: 6px; }
+  .art-panel .panel.collection-panel { border-image-width: 30px 22px; padding: 12px 18px 12px; }
+  .collection-panel .panel-head { gap: 10px; }
+  .collection-panel .panel-head h2 { font-size: 20px; }
+  .collection-panel .panel-head .btn { padding: 4px 10px; font-size: 13px; }
+  .col-tabs { gap: 4px; }
+  .cs-gt { padding: 3px 10px 6px; font-size: 12px; }
+  .cs-desk { grid-template-columns: 122px minmax(0, 1fr); gap: 12px; padding: 8px 10px; }
+  .cs-list { gap: 6px; }
+  .cs-list h3 { display: none; }
+  .cs-items { flex: 0 1 auto; grid-template-columns: repeat(3, 38px); grid-template-rows: none; grid-auto-rows: 38px; gap: 4px; }
+  .cs-it { display: block; padding: 0; background: none; clip-path: none; }
+  .cs-it.on, .cs-it:hover { background: none; box-shadow: none; }
+  .cs-it .cs-face { width: 100%; height: 100%; max-height: none; }
+  .cs-it.on .cs-face::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 0 3px #e3a42e; }
+  .cs-in { display: none; }
+  .cs-nav button { height: 32px; font-size: 22px; }
+  .cs-sheet { --pw: min(23vw, calc((100dvh - 168px) * 0.8)); grid-template-rows: auto auto minmax(0, 1fr); grid-template-areas: 'top top' 'photo fields' 'photo txt'; gap: 6px 18px; padding: 8px 14px 8px; }
+  .cs-flav { display: none; }
+  .cs-flav-in { display: block; }
+  .cs-top { font-size: 10.5px; }
+  .cs-photo { align-self: start; margin-top: 6px; padding: 5px 5px 14px; }
+  .cs-fields { flex-direction: row; flex-wrap: wrap; align-items: flex-end; gap: 4px 18px; padding: 0; }
+  .cs-name { font-size: 22px; }
+  .cs-fd > span { font-size: 15px; }
+  .cs-chips li { padding: 2px 6px 2px 3px; font-size: 14px; }
+  .cs-chips img { width: 16px; height: 16px; }
+  .cs-chips small { display: none; }
 }
 
 /* ---------- statistics: three big numbers, the favourite hero, every hero's runs, the totals and the records */
@@ -1453,8 +1640,8 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
   --cut-card: polygon(0 1.5%, 98.5% 0, 100% 97%, 1.5% 100%);
 }
 .art-board { --grain: var(--ui-board); }
-.head::before, .portrait::before, .qb img, .ib, .statuses .st, .boss-bar, .mp-ore, .ev-out, .way, .card, .pick-role,
-.col-art-ico, .fl-dots i, .players .rdy, .st-tile, .st-fav {
+.head::before, .portrait::before, .qb img, .ib, .statuses .st, .boss-bar, .mp-ore, .ev-out, .way, .pick-role,
+.fl-dots i, .players .rdy, .st-tile, .st-fav {
   background-image: var(--grain); background-size: 160px; background-blend-mode: overlay;
 }
 /* the top strip is no band any more (Vladislav's pick): the room shows up to the top edge, and each thing on it stands
@@ -1466,10 +1653,9 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .ib { border: 0; }
 .ib.go { background-image: none; }
 /* the boxes inside windows: a darker print on the board, cut a little unevenly, no ink line or rounded corner */
-.way, .card, .pick-role, .st-tile, .st-fav { border: 0; border-radius: 0; clip-path: var(--cut-card); background-color: #3b2d22; }
+.way, .pick-role, .st-tile, .st-fav { border: 0; border-radius: 0; clip-path: var(--cut-card); background-color: #3b2d22; }
 .st-fav canvas, .st-heroes img { border: 0; border-radius: 0; clip-path: var(--cut-face); }
 .st-bar { border: 0; border-radius: 0; clip-path: var(--cut-bar); }
-.card canvas, .card img, .col-art-ico { border: 0; border-radius: 0; clip-path: var(--cut-tile); background-color: #2a2019; }
 .pick { border: 0; border-radius: 0; background-image: var(--grain); background-size: 160px; background-blend-mode: overlay; }
 .pick.mine { outline: 0; box-shadow: 0 0 0 3px var(--gold-1); }
 .players i { border: 0; }
@@ -1698,8 +1884,6 @@ button.ps-mat:hover, button.ps-mat:focus-visible { background: rgba(243, 230, 20
 .ps-mat.shut img { filter: grayscale(1) brightness(0.7); opacity: 0.35; }
 .pc-shut .stars i { color: #6a5640; opacity: 0.45; }
 .pick-q { position: absolute; inset: 0; display: grid; place-items: center; padding-top: 12%; font: 700 42cqw/1 Oswald, sans-serif; color: #f3e6c8; text-shadow: 0 2px 0 #1c120a, 0 0 8px rgba(0, 0, 0, 0.8); pointer-events: none; }
-.card.shut canvas { background-color: #6e5c49; }
-.card.shut h3 { color: var(--muted); }
 /* «Как играть» says what the demo has, and the full game what it has */
 body:not(.demo) .demo-only, body.demo .full-only { display: none !important; }
 /* the card of the hero being read: the name and the numbers on one line, the ability whole on a note, never a scrollbar */
@@ -1980,8 +2164,8 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
 .overlay.run-end.win { overflow: auto; }
 
 /* the quotes each language writes round a name it quotes (the button names in the hero's lines, the trinkets' lines) */
-:lang(en) :is(.coach-paper, .tr-lines li) q, :lang(pt) :is(.coach-paper, .tr-lines li) q, :lang(ko) :is(.coach-paper, .tr-lines li) q, :lang(zh) :is(.coach-paper, .tr-lines li) q { quotes: '“' '”'; }
-:lang(de) :is(.coach-paper, .tr-lines li) q { quotes: '„' '“'; }
-:lang(pl) :is(.coach-paper, .tr-lines li) q { quotes: '„' '”'; }
-:lang(fr) :is(.coach-paper, .tr-lines li) q { quotes: '« ' ' »'; }
-:lang(ja) :is(.coach-paper, .tr-lines li) q { quotes: '「' '」'; }
+:lang(en) :is(.coach-paper, .cs-bub) q, :lang(pt) :is(.coach-paper, .cs-bub) q, :lang(ko) :is(.coach-paper, .cs-bub) q, :lang(zh) :is(.coach-paper, .cs-bub) q { quotes: '“' '”'; }
+:lang(de) :is(.coach-paper, .cs-bub) q { quotes: '„' '“'; }
+:lang(pl) :is(.coach-paper, .cs-bub) q { quotes: '„' '”'; }
+:lang(fr) :is(.coach-paper, .cs-bub) q { quotes: '« ' ' »'; }
+:lang(ja) :is(.coach-paper, .cs-bub) q { quotes: '「' '」'; }
