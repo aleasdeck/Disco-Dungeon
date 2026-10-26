@@ -9,6 +9,7 @@ import { FLOORS, reachable, roomSeed, type Run } from './run';
 import { faceUrl, mobFace } from './ui';
 import { renderKnob } from './volview';
 import { t } from './i18n';
+import { setTip, tipAttrs } from './tip';
 
 const NS = 'http://www.w3.org/2000/svg';
 const $ = (id: string) => document.getElementById(id)!;
@@ -85,7 +86,7 @@ export class MapView {
     const f = run.floor, layers = run.floors[f];
     // the floor, and the whole run as three gems: done, here, ahead (the demo's one floor has none)
     const dots = Array.from({ length: FLOORS }, (_, k) => `<i class="${k < f ? 'done' : k === f ? 'cur' : ''}"></i>`).join('');
-    $('mapFloor').innerHTML = `${t('Этаж {0}', f + 1)}${FLOORS > 1 ? `<em class="fl-dots" title="${t('Этаж {0} из {1}', f + 1, FLOORS)}">${dots}</em>` : ''}<span>${t(BIOMES[f].name)}</span>`;
+    $('mapFloor').innerHTML = `${t('Этаж {0}', f + 1)}${FLOORS > 1 ? `<em class="fl-dots"${tipAttrs({ h: t('Этаж {0} из {1}', f + 1, FLOORS) })}>${dots}</em>` : ''}<span>${t(BIOMES[f].name)}</span>`;
     renderKnob($('mapVol'), { vol: this.vol, top: this.vol, mini: true, head: t('Забег на громкости {0}. Её правила складываются:', this.vol) });
     this.partyRow(party);
     const svg = $('map');
@@ -130,7 +131,7 @@ export class MapView {
       g.dataset.id = n.id;
       const boss = n.type === 'boss' ? bossOf({ seed: roomSeed(run, f, n), floor: f }) : null, r = rad[n.id], pic = boss ? undefined : uiArt.get('room_' + n.type);
       // what is in the room, for a mouse resting on it
-      el(g, 'title', {}).textContent = boss ? t('{0}: {1}.', name, MOBS[boss].name) : `${name}. ${t(rt.txt)}`;
+      setTip(g, { h: name, p: boss ? t(MOBS[boss].name) : t(rt.txt) });
       if (pic) {
         // a painted room is its own token: no disc under it, and it glows instead of a ring when it can be picked
         g.classList.add('art');
@@ -163,7 +164,7 @@ export class MapView {
       ps.forEach((p, k) => {
         const px = x + (k - (ps.length - 1) / 2) * 24, py = y - r + 4, id = `pip${n.id}-${k}`;
         const pg = el(g, 'g', { class: 'pip' });
-        el(pg, 'title', {}).textContent = p.name;
+        setTip(pg, { h: p.name });
         el(el(el(pg, 'defs', {}), 'clipPath', { id }), 'circle', { cx: px, cy: py, r: 11 });
         el(pg, 'circle', { cx: px, cy: py, r: 13, fill: p.col });
         el(pg, 'image', { href: p.face, x: px - 11, y: py - 11, width: 22, height: 22, 'clip-path': `url(#${id})` });
@@ -196,8 +197,8 @@ export class MapView {
     const box = $('mapParty');
     box.innerHTML = party.heroes.map(h => {
       const hp = Math.max(0, h.hp), pct = (hp / h.max) * 100;
-      return `<div class="mp-hero${h.hp <= 0 ? ' dead' : ''}${h === party.me ? ' me' : ''}" style="--c:${h.def.col}" title="${t('{0}: {1} из {2}', h.def.name, hp, h.max)}">`
+      return `<div class="mp-hero${h.hp <= 0 ? ' dead' : ''}${h === party.me ? ' me' : ''}" style="--c:${h.def.col}"${tipAttrs({ p: t('{0}: {1} из {2}', h.def.name, hp, h.max) })}>`
         + `<img src="${faceUrl(h)}" alt=""><span class="mp-hp"><i style="width:${pct}%"></i><u>${h.hp > 0 ? `${hp}/${h.max}` : t(h.def.fem ? 'пала' : 'пал')}</u></span></div>`;
-    }).join('') + `<div class="mp-ore" title="${t('Руда отряда')}">${ico('ore')}<b>${party.ore}</b></div>`;
+    }).join('') + `<div class="mp-ore"${tipAttrs({ h: t('Руда отряда') })}>${ico('ore')}<b>${party.ore}</b></div>`;
   }
 }

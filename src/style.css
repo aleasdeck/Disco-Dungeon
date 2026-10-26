@@ -1748,23 +1748,6 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 /* the hero's card from the portrait opens over the portrait and the discs, whichever stands taller */
 .corner .hero-card { bottom: calc(max(var(--pf-h), 327 * var(--u)) + 8px); }
 
-.art-tip { width: 270px; }
-.art-tip .mc-head .tok { position: relative; flex: none; width: 44px; height: 44px; }
-.art-tip .mc-head b { color: var(--gold); }
-.art-tip p { margin: 6px 0 0; font-size: 18px; line-height: 1.1; color: var(--text); }
-.art-tip small { display: block; margin-top: 5px; font-size: 15px; line-height: 1.1; color: var(--muted); }
-.art-tip .at-state { display: inline-block; margin-top: 7px; padding: 2px 8px; font: 600 11px/1.4 Oswald, sans-serif; color: #2a1a0d; background: #c9a877; }
-/* a little tail to the left, at the token it speaks of */
-.art-tip::after { content: ''; position: absolute; left: -9px; top: var(--ay, 30px); width: 10px; height: 16px; background: #2a201a; clip-path: polygon(100% 0, 100% 100%, 0 50%); }
-/* on a phone it takes the width beside the column (6 + 94 + 6 px of portrait, the column, 12 px to the tail, 8 after) */
-@media (orientation: portrait) and (max-width: 700px) { .art-tip { width: calc(100vw - 126px - 78 * var(--u)); } }
-@media (max-height: 520px) and (orientation: landscape) {
-  .art-tip { width: 250px; padding-top: 8px; padding-bottom: 8px; }
-  .art-tip .mc-head .tok { width: 32px; height: 32px; }
-  .art-tip p { margin-top: 4px; font-size: 15px; }
-  .art-tip small { margin-top: 3px; font-size: 13px; }
-}
-
 /* ---------- the hero's lines (coach.ts): light paper under the top strip, the speaker's face on its corner, chalk on the room */
 #coach { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
 .coach-dim { position: absolute; inset: 0; pointer-events: auto; }
@@ -2166,3 +2149,45 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
 :lang(pl) :is(.coach-paper, .cs-bub) q { quotes: '„' '”'; }
 :lang(fr) :is(.coach-paper, .cs-bub) q { quotes: '« ' ' »'; }
 :lang(ja) :is(.coach-paper, .cs-bub) q { quotes: '「' '」'; }
+
+/* ---------- the hints (tip.ts): a torn slip of white paper over the thing a mouse rests on, like the hero's lines
+   (Vladislav's pick «Записка», 2026-10-26): ink on it, the thing's name on a red sticker over its top edge, its tail at
+   the thing. The trophy's hint over the sockets is the same slip, and a tap pins it there on a phone. */
+.tip {
+  --tip-bg: #f3e7cc; --tip-red: #9e1f12;
+  position: fixed; z-index: 60; left: 0; top: 0; width: max-content; max-width: min(290px, calc(100vw - 16px));
+  pointer-events: none; color: #24170b;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.42)) drop-shadow(0 8px 14px rgba(0, 0, 0, 0.45));
+}
+/* the paper is drawn under the words, so the sticker can stand over its torn edge */
+.tip-paper { position: relative; margin-top: 12px; padding: 16px 14px 10px; rotate: -1deg; isolation: isolate; }
+.tip-paper::before {
+  content: ''; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 45%, rgba(110, 72, 32, 0.12)), repeating-linear-gradient(90deg, rgba(120, 84, 44, 0.07) 0 4px, rgba(255, 255, 255, 0.06) 4px 11px), var(--tip-bg);
+  clip-path: polygon(0 4px, 5% 0, 62% 3px, 97% 0, 100% 7px, 99% calc(100% - 5px), 96% 100%, 40% calc(100% - 3px), 3% 100%, 0 calc(100% - 6px));
+}
+.tip-paper:not(:has(.tip-h)) { margin-top: 0; padding-top: 10px; }
+/* the sticker takes its room on the paper, so a long name widens the slip instead of running off it */
+.tip-h {
+  display: flex; align-items: center; gap: 8px; width: fit-content; margin: -28px 0 8px -6px; padding: 3px 10px 2px; rotate: -3deg;
+  font: 600 13px/1.15 Oswald, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; color: #fff8e8;
+  background: var(--tip-red) var(--grain) 0 0 / 160px; background-blend-mode: overlay; clip-path: polygon(0 8%, 100% 0, 96% 100%, 3% 92%);
+}
+.tip-h .tok { position: relative; flex: none; width: 24px; height: 24px; margin: -1px 0 -1px -4px; }
+.tip p { margin: 3px 0 0; font: 700 18px/1.05 var(--hand); }
+.tip-h + p, .tip p:first-child { margin-top: 0; }
+.tip-f { display: block; margin-top: 6px; font: 500 12px/1.25 Oswald, sans-serif; letter-spacing: 0.02em; color: #8a5a2a; }
+/* a hint that is only a name is the sticker alone */
+.tip.only-h .tip-paper { margin: 0; padding: 0; rotate: none; }
+.tip.only-h .tip-paper::before { display: none; }
+.tip.only-h .tip-h { margin: 0; rotate: -2deg; }
+.tip-tail { position: absolute; width: 18px; height: 10px; background: var(--tip-bg); }
+.tip.only-h .tip-tail { background: var(--tip-red); }
+.tip[data-dir=down] .tip-tail { left: calc(var(--ax) - 9px); top: calc(100% - 1px); clip-path: polygon(0 0, 100% 0, 40% 100%); }
+.tip[data-dir=up] .tip-tail { left: calc(var(--ax) - 9px); bottom: calc(100% - 1px); clip-path: polygon(60% 0, 100% 100%, 0 100%); }
+.tip[data-dir=left] .tip-tail { top: calc(var(--ay) - 9px); right: calc(100% - 1px); width: 10px; height: 18px; clip-path: polygon(0 40%, 100% 0, 100% 100%); }
+@media (max-height: 520px) and (orientation: landscape) {
+  .tip { max-width: min(250px, calc(100vw - 16px)); }
+  .tip p { font-size: 15px; }
+  .tip-h { font-size: 12px; }
+}

@@ -19,6 +19,7 @@ import { dossierOf, inDossier } from './dossier';
 import { EVENTS, eventDef } from './events';
 import { KIND_NEXT, howToOpen, shutStars, standText, starRow } from './menu';
 import { t } from './i18n';
+import { tipAttrs } from './tip';
 
 export type ColTab = 'heroes' | 'mobs' | 'arts' | 'events' | 'trinkets';
 
@@ -66,7 +67,7 @@ const no3 = (n: number) => String(n).padStart(3, '0');
 /** A name still secret: blacked out, as long as the name is. */
 const blackout = (s: string) => `<span class="cs-red">${s.replace(/\S/g, 'x')}</span>`;
 const field = (label: string, body: string, cls = '') => `<div class="cs-fd${cls ? ' ' + cls : ''}"><i>${label}</i>${body}</div>`;
-const chip = (img: string, val: string | number, label: string) => `<li title="${label}"><img src="${img}" alt="">${val}<small>${label}</small></li>`;
+const chip = (img: string, val: string | number, label: string) => `<li${tipAttrs({ h: label })}><img src="${img}" alt="">${val}<small>${label}</small></li>`;
 
 /** The photo on the sheet: a figure cut out as a sticker on a coloured backdrop, a thing on kraft, an event's scene whole. */
 function photo(o: { img: string; kind: 'fig' | 'thing' | 'scene'; shut: boolean; col: string; stamp: string; green: boolean; big?: string }) {
@@ -192,7 +193,7 @@ function trinketFile(key: string, heroes: number[]): File {
       const who = heroes.find(i => HEROES[i].key === says[key]) ?? got[0] ?? heroes[0], def = HEROES[who];
       const faces = heroes.map(i => {
         const d = HEROES[i], on = opened(key, d.key);
-        return `<button type="button" class="cs-face${on ? '' : ' off'}${i === who ? ' on' : ''}" style="--c:${d.col}" data-say="${d.key}" aria-pressed="${i === who}" title="${t(d.name)}"><img src="${faceUrl({ i, def: d })}" alt="${t(d.name)}"></button>`;
+        return `<button type="button" class="cs-face${on ? '' : ' off'}${i === who ? ' on' : ''}" style="--c:${d.col}" data-say="${d.key}" aria-pressed="${i === who}"${tipAttrs({ h: t(d.name) })}><img src="${faceUrl({ i, def: d })}" alt="${t(d.name)}"></button>`;
       }).join('');
       const line = opened(key, def.key) ? `<p class="cs-bub" style="--c:${def.col}"><b>${t(def.name)}</b><q>${t(it.lines[def.key])}</q></p>`
         : `<p class="cs-bub off">${t('{0} ещё не {1?подбирала|подбирал} эту безделушку.', def.name, !!def.fem)}</p>`;
@@ -270,7 +271,7 @@ export function renderCollection(which: ColTab = tab) {
   const box = $('colGrid');
   box.innerHTML = `<div class="cs-gtabs">${groups.map((x, i) => `<button type="button" class="cs-gt${i === gi ? ' on' : ''}" data-g="${i}" aria-pressed="${i === gi}">${x.tab}<b>${x.files.filter(f => f.open).length}/${x.files.length}</b></button>`).join('')}</div>`
     + `<div class="cs-desk" data-tab="${tab}"><nav class="cs-list" style="--rows:${Math.ceil(n / 2)};--per:${n > 8 ? Math.ceil(n / 2) : n};--n:${n}" aria-label="${t('Опись · {0}', g.title)}"><h3>${t('Опись · {0}', g.title)}</h3><div class="cs-items">`
-    + g.files.map(f => `<button type="button" class="cs-it${f === cur ? ' on' : ''}${f.open ? '' : ' shut'}" data-k="${f.key}" aria-pressed="${f === cur}" title="${f.open ? f.name : '???'}">`
+    + g.files.map(f => `<button type="button" class="cs-it${f === cur ? ' on' : ''}${f.open ? '' : ' shut'}" data-k="${f.key}" aria-pressed="${f === cur}"${tipAttrs({ h: f.open ? f.name : '???' })}>`
       + `<span class="cs-face" style="--c:${f.col}">${f.face}</span><span class="cs-in"><b>${f.open ? f.name : '???'}</b><small>${f.small}</small></span></button>`).join('')
     + `</div><div class="cs-nav"><button type="button" data-go="-1" aria-label="${t('Предыдущий')}">‹</button><button type="button" data-go="1" aria-label="${t('Следующий')}">›</button></div></nav>`
     + `<article class="cs-sheet ${enter}">${cur.sheet(all.indexOf(cur) + 1)}</article></div>`;

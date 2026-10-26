@@ -17,22 +17,22 @@
 
   <header class="hud-top" id="hudTop">
     <div class="party" id="allies" aria-label="Отряд"></div>
-    <div class="ore-chip" title="Руда, общая на отряд"><i class="ico ico-ore" aria-hidden="true"></i><b id="hOre">0</b></div>
+    <div class="ore-chip" data-tip-h="Руда отряда"><i class="ico ico-ore" aria-hidden="true"></i><b id="hOre">0</b></div>
     <div class="where">
       <b id="locName">Disco Underground</b>
       <span class="where-sub"><span id="hTurn"></span><span id="hSide" class="side"></span><span id="hRage" class="rage" hidden></span><span id="hCurse" class="curse" hidden></span></span>
     </div>
     <ol class="queue" id="queue" aria-label="Очередь врагов: кто левее, тот ходит раньше"></ol>
     <div class="top-btns">
-      <button class="ibtn" id="btnMap" aria-label="Карта" title="Карта"><i class="ico ico-map" aria-hidden="true"></i></button>
-      <button class="ibtn" id="btnLog" aria-label="Журнал хода врагов" title="Журнал хода врагов" aria-expanded="false"><i class="ico ico-log" aria-hidden="true"></i></button>
-      <button class="ibtn" id="btnMenu" aria-label="Меню" title="Меню"><i class="ico ico-menu" aria-hidden="true"></i></button>
+      <button class="ibtn" id="btnMap" aria-label="Карта" data-tip-h="Карта"><i class="ico ico-map" aria-hidden="true"></i></button>
+      <button class="ibtn" id="btnLog" aria-label="Журнал хода врагов" data-tip-h="Журнал хода врагов" aria-expanded="false"><i class="ico ico-log" aria-hidden="true"></i></button>
+      <button class="ibtn" id="btnMenu" aria-label="Меню" data-tip-h="Меню"><i class="ico ico-menu" aria-hidden="true"></i></button>
     </div>
   </header>
 
   <div id="bossBar" class="boss-bar" hidden><canvas width="64" height="64"></canvas><div><b></b><span class="bb-hp"><i></i><em></em><u></u></span></div></div>
   <div id="mobCard" class="mob-card" role="tooltip" hidden></div>
-  <div id="artTip" class="mob-card art-tip" role="tooltip" hidden></div>
+  <div id="artTip" class="tip art-tip" role="tooltip" hidden></div>
   <div id="heroPeek" class="hero-card hero-peek" hidden></div>
   <div id="logPanel" class="log-panel" hidden><h3>Ход врагов</h3><ol id="logList"></ol></div>
 
@@ -61,10 +61,10 @@
   <button id="turnBtn" class="turn-btn" type="button"><span class="tb-plate" aria-hidden="true"></span><i class="tap-area" aria-hidden="true"></i><b id="turnTxt"></b><small id="turnSub"></small><span class="tb-who" id="turnWho" aria-hidden="true"></span></button>
 
   <div class="camctl" id="camctl" role="group" aria-label="Камера">
-    <button class="ibtn" id="rotL" aria-label="Повернуть комнату влево" title="Повернуть комнату влево"><i class="ico ico-rotl" aria-hidden="true"></i></button>
-    <button class="ibtn" id="rotR" aria-label="Повернуть комнату вправо" title="Повернуть комнату вправо"><i class="ico ico-rotr" aria-hidden="true"></i></button>
-    <button class="ibtn" id="zoomIn" aria-label="Приблизить" title="Приблизить"><i class="ico ico-zin" aria-hidden="true"></i></button>
-    <button class="ibtn" id="zoomOut" aria-label="Отдалить" title="Отдалить"><i class="ico ico-zout" aria-hidden="true"></i></button>
+    <button class="ibtn" id="rotL" aria-label="Повернуть комнату влево" data-tip-h="Повернуть комнату влево"><i class="ico ico-rotl" aria-hidden="true"></i></button>
+    <button class="ibtn" id="rotR" aria-label="Повернуть комнату вправо" data-tip-h="Повернуть комнату вправо"><i class="ico ico-rotr" aria-hidden="true"></i></button>
+    <button class="ibtn" id="zoomIn" aria-label="Приблизить" data-tip-h="Приблизить"><i class="ico ico-zin" aria-hidden="true"></i></button>
+    <button class="ibtn" id="zoomOut" aria-label="Отдалить" data-tip-h="Отдалить"><i class="ico ico-zout" aria-hidden="true"></i></button>
   </div>
 
   <section id="mapScreen" class="overlay" hidden>
@@ -127,7 +127,7 @@
       <div class="ev-body">
         <div class="fg-head">
           <h2 id="forgeTitle">Кузнец</h2>
-          <span class="forge-ore" title="Руда, общая на отряд"><i class="ico ico-ore" aria-hidden="true"></i><b id="forgeOre">0</b></span>
+          <span class="forge-ore" data-tip-h="Руда отряда"><i class="ico ico-ore" aria-hidden="true"></i><b id="forgeOre">0</b></span>
         </div>
         <p id="forgeText" class="ev-text"></p>
         <div id="forgeMine" class="fg-mine"></div>
@@ -191,7 +191,7 @@
       <div class="pick-body">
         <div class="pick-pic">
           <div class="pick-print"><canvas id="heroPhoto" width="1024" height="1024" role="img" aria-label="Фото отряда"></canvas></div>
-          <div class="pick-tools"><button class="btn" id="heroBg" title="Другой фон"><i data-art="m_bg" aria-hidden="true"></i>Фон</button><button class="btn" id="heroSave" title="Сохранить фото"><i data-art="m_photo" aria-hidden="true"></i>Фото</button></div>
+          <div class="pick-tools"><button class="btn" id="heroBg" data-tip-h="Другой фон"><i data-art="m_bg" aria-hidden="true"></i>Фон</button><button class="btn" id="heroSave" data-tip-h="Сохранить фото"><i data-art="m_photo" aria-hidden="true"></i>Фото</button></div>
         </div>
         <div class="pick-side">
           <div id="heroPicks" class="pick-row" role="group" aria-label="Герои"></div>
@@ -225,7 +225,7 @@
         <div class="pick-body">
           <div class="pick-pic">
             <div class="pick-print"><canvas id="lobbyPhoto" width="1024" height="1024" role="img" aria-label="Фото отряда"></canvas></div>
-            <div class="pick-tools"><button class="btn" id="lobbyBg" title="Другой фон"><i data-art="m_bg" aria-hidden="true"></i>Фон</button><button class="btn" id="lobbySave" title="Сохранить фото"><i data-art="m_photo" aria-hidden="true"></i>Фото</button></div>
+            <div class="pick-tools"><button class="btn" id="lobbyBg" data-tip-h="Другой фон"><i data-art="m_bg" aria-hidden="true"></i>Фон</button><button class="btn" id="lobbySave" data-tip-h="Сохранить фото"><i data-art="m_photo" aria-hidden="true"></i>Фото</button></div>
           </div>
           <div class="pick-side">
             <div class="room-code">Код комнаты <b id="lobbyRoomCode"></b> <button class="btn sm" id="lobbyCopy"><i data-art="m_link" aria-hidden="true"></i>Скопировать ссылку</button></div>

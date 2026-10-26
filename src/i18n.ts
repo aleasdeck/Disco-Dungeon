@@ -171,7 +171,7 @@ export function Mjoin(...parts: string[]): string {
 /** A piece of index.html in Russian: a text, an attribute, or a paragraph with its markup (`data-t`). */
 interface Spot { el: Element | Text; attr?: string; html?: boolean; src: string; lead: string; trail: string; shown: string }
 const spots: Spot[] = [];
-const ATTRS = ['title', 'aria-label', 'placeholder', 'alt'];
+const ATTRS = ['title', 'aria-label', 'placeholder', 'alt', 'data-tip', 'data-tip-h', 'data-tip-f'];
 const CYR = /[А-Яа-яЁё]/;
 
 /** How a Russian piece of the page is keyed: its text with the spaces between words made single. */

@@ -37,9 +37,11 @@ import { noteRoom } from './dossier';
 import { setOut } from './volume';
 import { bindCollection, renderCollection, type ColTab } from './collection';
 import { LANGS, M, Mjoin, detectLang, isLang, lang, onLang, scanDom, setLang, t, type Lang } from './i18n';
+import { initTips } from './tip';
 
 // the page's own Russian text, found before the game writes anything into the page
 scanDom();
+initTips();
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 

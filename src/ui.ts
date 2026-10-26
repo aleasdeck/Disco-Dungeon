@@ -16,6 +16,7 @@ import { hl } from './hl';
 import { DEMO } from './demo';
 import { OreCounters } from './orefx';
 import { M, t } from './i18n';
+import { fillTip, placeTip, setTip, tipAttrs, type Tip } from './tip';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -149,20 +150,20 @@ const UP_ART: Record<string, string> = { n: 'up_discs', m: 'up_dmg', pw: 'up_spe
 const pips = (n: number, lv: number) => `<span class="lvl">${Array.from({ length: n }, (_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('')}</span>`;
 
 /**
- * A hero's disc upgrades on the hero card, one row each: level pips and where the stat stands. Each says what it does
- * in a line under the name (the phone pop-up) or a tooltip (the desktop).
+ * A hero's disc upgrades on the hero card, one row each: level pips, where the stat stands and what it does in a line
+ * under the name; the blacksmith's price for the next level is in the row's hint.
  */
 function upRows(g: Game, h: HeroState) {
-  const row = (k: string, name: string, txt: string, n: number, lv: number, val: string, tip: string[]) =>
-    `<div class="up" title="${tip.filter(Boolean).join(' ')}">${art(UP_ART[k], 'up-ico')}<span class="up-name">${t(name)}</span>`
+  const row = (k: string, name: string, txt: string, n: number, lv: number, val: string, price: string) =>
+    `<div class="up"${tipAttrs({ p: price })}>${art(UP_ART[k], 'up-ico')}<span class="up-name">${t(name)}</span>`
     + `${pips(n, lv)}<b>${val}</b><small class="up-txt">${t(txt)}</small></div>`;
-  const dc = g.discCost(h), discTxt = 'Больше бросков за ход. Самое сильное улучшение';
-  return row('n', 'Диски за ход', discTxt, HAND_MAX - HAND_START, h.discs - HAND_START, String(g.handOf(h)),
-    [`${t(discTxt)}.`, dc ? t('Следующий диск у кузнеца за {0} руды.', dc) : t('Больше двух кузнец не продаёт, третий диск даёт только трофей «Третья рука».')])
+  const dc = g.discCost(h);
+  return row('n', 'Диски за ход', 'Больше бросков за ход. Самое сильное улучшение', HAND_MAX - HAND_START, h.discs - HAND_START, String(g.handOf(h)),
+    dc ? t('Следующий диск у кузнеца за {0} руды.', dc) : t('Третий диск даёт только трофей «Третья рука».'))
     + UPS.map(u => {
       const lv = h.up[u.k], cost = g.upCost(h, u.k), v = g.stat(h, u.k);
       return row(u.k, u.name, u.txt, UP_COST.length, lv, u.fmt(lv * u.step, v),
-        [`${t(u.txt)}.`, u.now?.(v) ?? '', cost ? t('Следующий уровень у кузнеца за {0} руды.', cost) : t('Больше не прокачать.')]);
+        cost ? t('Следующий уровень у кузнеца за {0} руды.', cost) : t('Больше не прокачать.'));
     }).join('');
 }
 
@@ -180,7 +181,7 @@ function forgeRows(g: Game, h: HeroState, team: boolean) {
   const free = g.freeUp(h);
   const row = (k: string, name: string, txt: string, n: number, lv: number, now: string, next: string, cost: number, gratis = false) => {
     const sold = !g.whet || gratis, short = !gratis && cost > g.bank.ore;
-    return `<button class="ev-opt fg-up" data-k="${k}" title="${t(txt)}"${cost && sold && !short ? '' : ' disabled'}>`
+    return `<button class="ev-opt fg-up" data-k="${k}"${tipAttrs({ p: t(txt) })}${cost && sold && !short ? '' : ' disabled'}>`
       + `<i data-art="${UP_ART[k]}" aria-hidden="true"></i><span class="fg-name"><b>${t(name)}</b>${pips(n, lv)}</span>`
       + `<span class="fg-fx">${cost ? `${now}<i>→</i>${next}` : t('{0}, больше некуда', now)}</span>`
       + (!cost || !sold ? '' : gratis ? `<span class="fg-cost free">${t('даром')}</span>` : `<span class="fg-cost${short ? ' short' : ''}">${cost}${icon('ore')}</span>`) + '</button>';
@@ -208,20 +209,20 @@ export type Side = 'place' | 'heroes' | 'enemies' | 'over';
 
 /** One status as a little icon with a number: on the portrait for heroes, on the card for enemies. */
 interface Status { k: string; n?: number; t: string }
-const statusHtml = (list: Status[]) => list.map(s => `<i class="st st-${s.k}" title="${t(s.t)}">${icon(s.k)}${s.n ? `<b>${s.n}</b>` : ''}</i>`).join('');
+const statusHtml = (list: Status[]) => list.map(s => `<i class="st st-${s.k}"${tipAttrs({ p: t(s.t) })}>${icon(s.k)}${s.n ? `<b>${s.n}</b>` : ''}</i>`).join('');
 
 /** The turn button's job right now. */
 type TurnAct = 'fight' | 'end' | 'cancel' | 'none';
 
-/** What an event left the fight, a word each in the top bar and a line in its tooltip. */
+/** What an event left the fight, a word each in the top bar and a line in its hint. */
 const CHIPS: { on: (s: RoomSpec) => boolean; name: string; txt: string; ico?: string }[] = [
   { on: s => !!s.smoke, name: 'дым-машина', txt: 'Дым-машина: видно только вокруг героев.' },
   { on: s => !!s.strobe, name: 'стробоскоп', txt: 'Стробоскоп: нет линии прицела.' },
   { on: s => s.ground === 'slick', name: 'пена на дисках', ico: 'ico_slick', txt: 'Пена на дисках: они не теряют скорость о стены.' },
   { on: s => s.ground === 'soap', name: 'мыльный пол', ico: 'ico_soap', txt: 'Мыльный пол: диски катятся вдвое дальше.' },
   { on: s => s.ground === 'sticky', name: 'липкий пол', ico: 'ico_sticky', txt: 'Липкий пол: диски тормозят быстрее.' },
-  { on: s => s.bet === 'art', name: 'пари: без царапины', ico: 'ico_bet', txt: 'Пари с букмекером: победа без царапины даст каждому трофей, иначе каждый потеряет свой.' },
-  { on: s => s.bet === 'up', name: M('пари: за {0} {0|ход|хода|ходов}', BET_TURNS), ico: 'ico_bet', txt: M('Пари с букмекером: победа за {0} {0|ход|хода|ходов} даст каждому уровень, иначе каждый потеряет уровень.', BET_TURNS) },
+  { on: s => s.bet === 'art', name: 'пари: без царапины', ico: 'ico_bet', txt: 'Пари: без царапины каждому трофей, иначе каждый теряет свой.' },
+  { on: s => s.bet === 'up', name: M('пари: за {0} {0|ход|хода|ходов}', BET_TURNS), ico: 'ico_bet', txt: M('Пари: победа за {0} {0|ход|хода|ходов} даст каждому уровень, иначе минус уровень.', BET_TURNS) },
   { on: s => !!s.extra, name: '+1 диск', txt: 'Краденые шайбы: в этом бою каждый бросает на диск больше.' },
 ];
 
@@ -427,14 +428,14 @@ export class Hud {
     rage.hidden = !fighting || (g.rage() === 0 && soon > 1);
     rage.classList.toggle('soon', g.rage() === 0);
     rage.textContent = g.rage() ? t('ярость +{0}', g.rage()) : t('ярость со след. хода');
-    rage.title = t('С {0}-го хода каждый враг с каждым ходом бьёт на 1 сильнее.', g.rageFrom());
+    setTip(rage, { h: t('Ярость'), p: t('С {0}-го хода враги каждый ход бьют на 1 сильнее.', g.rageFrom()) });
     // an event's curse on this fight
     // and what else an event left this fight: the foam party's floor, the bookie's bet, a disc more
     const curse = $('hCurse'), on = CHIPS.filter(c => c.on(S.spec));
     curse.hidden = !on.length || S.phase === 'over';
     const chips = on.map(c => (c.ico ? art(c.ico, 'chip') : '') + t(c.name)).join(' · ');
     if (curse.dataset.k !== chips) { curse.dataset.k = chips; curse.innerHTML = chips; }
-    curse.title = on.map(c => t(c.txt)).join(' ');
+    setTip(curse, { p: on.map(c => t(c.txt)).join('\n') });
 
     // in the ore cave nobody moves against the party: the heroes hop to their discs and throw again
     const side: Side = S.phase === 'place' || S.phase === 'over' ? S.phase : S.phase === 'enemy' || (S.phase === 'resolve' && !g.cave()) ? 'enemies' : 'heroes';
@@ -498,9 +499,11 @@ export class Hud {
       // a tick: placed and ready (online placement), or done with the turn
       const done = !ev && (S.phase === 'place' ? g.online && S.ready.includes(o.i) : S.phase === 'throw' && g.ended(o));
       el.classList.toggle('done', done);
-      el.title = [who, `${t(o.def.name)}: ${Math.max(0, o.hp)}/${o.max}`, o.shield ? t('щит {0}', o.shield) : '',
-        o.hp <= 0 ? t('пал') : done ? (S.phase === 'place' ? t('готов') : t('закончил ход')) : ''].filter(Boolean).join(', ')
-        + (away ? `. ${t('Нет связи: пока играет хозяин комнаты, ход его не ждёт')}` : '');
+      setTip(el, {
+        h: who ? `${t(o.def.name)} · ${who}` : t(o.def.name),
+        p: [o.hp > 0 ? `${o.hp}/${o.max} HP` : t('пал'), o.shield ? t('щит {0}', o.shield) : ''].filter(Boolean).join(', '),
+        f: away ? t('Нет связи: ход его не ждёт') : done ? (S.phase === 'place' ? t('готов') : t('закончил ход')) : '',
+      });
     }
   }
 
@@ -738,7 +741,7 @@ export class Hud {
     discs.innerHTML = Array.from({ length: per }, (_, k) => `<i class="${k < per - out ? 'on' : ''}"></i>`).join('');
     if (discPic) discs.style.setProperty('--disc', `url("${discPic.src}")`);
     else discs.style.removeProperty('--disc');
-    discs.title = t('Диски: {0} из {1} за ход', h.hand, per);
+    setTip(discs, { p: t('Диски: {0} из {1} за ход', h.hand, per) });
 
     // health and the shield on top of it: the bar holds both, squeezing when they add up to more than the most health
     const inc = g.incoming(h), dead = h.hp > 0 && inc >= h.hp, tot = Math.max(h.max, h.hp + h.shield);
@@ -758,7 +761,7 @@ export class Hud {
     wrap.classList.toggle('shielded', h.shield > 0);
     wrap.classList.toggle('lethal', dead);
     // the shield has no badge of its own: the blue chunk shows it, the number is in the hint
-    wrap.title = [h.shield > 0 ? t('Щит {0}: снимается первым.', h.shield) : '', inc ? t('Враги в этот ход снимут {0} HP, если их не остановить.', inc) : ''].filter(Boolean).join(' ');
+    setTip(wrap, { p: [h.shield > 0 ? t('Щит {0}: снимается первым.', h.shield) : '', inc ? t('Враги в этот ход снимут {0} HP.', inc) : ''].filter(Boolean).join('\n') });
 
     // the sparks under the health: two pieces, the gem itself being the third; full, they light up and the gem pulses
     // «Энергетик» makes the ability cheaper: the button lights up as soon as there are enough
@@ -774,7 +777,8 @@ export class Hud {
     ab.classList.toggle('full', full);
     ab.classList.toggle('on', h.boost);
     ab.style.setProperty('--ab', h.def.abCol);
-    ab.title = [`${t(h.def.ab)}: ${t(h.def.abTxt)}`, t(h.def.abMore), t('Стоит {0} {0|искру|искры|искр}, включается до броска.', cost), h.boost ? t('Включено до конца хода.') : ''].filter(Boolean).join(' ');
+    // the hint is the short of it: the card from the portrait and the collection tell the ability in full
+    setTip(ab, { h: t(h.def.ab), p: t(h.def.abTip), f: h.boost ? t('Включено до конца хода.') : t('Стоит {0} {0|искру|искры|искр}, действует весь ход.', cost) });
   }
 
   /** My hero's card from the portrait: how hard the disc hits, its upgrades and the ability in full. */
@@ -792,12 +796,12 @@ export class Hud {
   /** A hero's card under the name: how hard the disc hits, its upgrades, the ability in full and the bosses' trophies. */
   private cardBody(h: HeroState) {
     const g = this.g, hit = Math.round(fullHit(g.stat(h, 'm'), g.stat(h, 'pw')) * (h.chill > 0 ? 0.7 : 1));
-    return `<p class="hc-hit" title="${t('Сильнее всего диск бьёт на полной натяжке; прямо в лоб урон в {0} раза больше', CRIT)}">${t('удар до {0}, в лоб ×{1}', hit, CRIT)}</p>`
+    return `<p class="hc-hit"${tipAttrs({ p: t('Столько диск бьёт на полной натяжке.') })}>${t('удар до {0}, в лоб ×{1}', hit, CRIT)}</p>`
       + upRows(g, h) + `<small class="ups-note">${t('Прокачка у кузнеца на карте')}</small>`
       + `<p class="hc-ab"><b>${t(h.def.ab)}.</b> ${t(h.def.abTxt)} ${t(h.def.abMore)}</p>`
       + (h.arts?.length ? `<div class="hc-arts"><small class="ups-note">${t('Трофеи боссов')}</small>${h.arts.map(k => {
         const a = artDef(k);
-        return `<div class="hc-art" title="${t(a.gag)}">${artIcon(k, 'hc-art-ico')}<b>${t(a.name)}</b><small>${t(a.txt)}</small></div>`;
+        return `<div class="hc-art"${tipAttrs({ p: t(a.gag) })}>${artIcon(k, 'hc-art-ico')}<b>${t(a.name)}</b><small>${t(a.txt)}</small></div>`;
       }).join('')}</div>` : '');
   }
 
@@ -882,26 +886,25 @@ export class Hud {
       ], { duration: 900, easing: 'ease-out' });
   }
 
-  /** The hint over the sockets: the trophy's name, what it does, its joke and whether it has had its go; or what fills an empty one. */
+  /**
+   * The hint over the sockets, the same slip as every hint (tip.ts): the trophy's name, what it does and whether it has
+   * had its go; or what fills an empty one. Its joke is on the hero's card and in the collection.
+   */
   private openTip(k: number) {
-    const h = this.g.hero, key = h.arts?.[k], tip = $('artTip'), box = $('fArts'), b = box.querySelectorAll<HTMLElement>('.sock')[k];
+    const h = this.g.hero, key = h.arts?.[k], tip = $('artTip'), b = $('fArts').querySelectorAll<HTMLElement>('.sock')[k];
     if (!b) { this.closeTip(); return; }
-    let html: string;
+    let o: Tip;
     if (key) {
       const a = artDef(key), st = this.spent(h, key);
-      html = `<div class="mc-head"><i class="tok">${artIcon(key)}</i><b>${t(a.name)}</b></div><p>${t(a.txt)}</p><small>${t(a.gag)}</small>`
-        + (st ? `<span class="at-state">${t(st)}</span>` : '');
-    } else html = `<div class="mc-head"><b>${t('Пустое место')}</b></div><p>${DEMO ? t('Трофеи появятся в полной версии игры.') : t('Трофеи дают боссы первого и второго этажа, а иногда «Влюблённый сундук».')}</p>`;
-    if (tip.dataset.html !== html) { tip.innerHTML = html; tip.dataset.html = html; }
+      o = { h: t(a.name), ico: `<i class="tok">${artIcon(key)}</i>`, p: t(a.txt), f: st ? t(st) : '' };
+    } else o = { h: t('Пустое место'), p: DEMO ? t('Трофеи появятся в полной версии игры.') : t('Трофеи дают боссы первого и второго этажа, а иногда «Влюблённый сундук».') };
+    const html = JSON.stringify(o);
+    if (tip.dataset.html !== html) { fillTip(tip, o); tip.dataset.html = html; }
     tip.hidden = false;
     // beside the column of sockets, over the health, kept on the screen, its tail at the token
-    const r = box.getBoundingClientRect(), br = b.getBoundingClientRect(), hgt = tip.offsetHeight;
-    const top = Math.max(8, Math.min(window.innerHeight - hgt - 8, br.top + br.height / 2 - hgt / 2));
-    tip.style.left = r.right + 12 + 'px';
-    tip.style.top = top + 'px';
-    tip.style.setProperty('--ay', br.top + br.height / 2 - top - 8 + 'px');
+    placeTip(tip, b, true);
     if (this.tip !== k) {
-      box.querySelectorAll('.sock').forEach((o, j) => o.classList.toggle('sel', j === k));
+      $('fArts').querySelectorAll('.sock').forEach((o, j) => o.classList.toggle('sel', j === k));
       this.tip = k;
     }
   }
@@ -969,7 +972,7 @@ export class Hud {
     $('turnTxt').textContent = txt;
     $('turnSub').textContent = sub;
     $('turnSub').hidden = !sub;
-    b.title = act === 'cancel' ? t('Нажми ещё раз, чтобы отменить') : '';
+    setTip(b, { p: act === 'cancel' ? t('Нажми ещё раз, чтобы отменить') : '' });
     this.act = act;
   }
 

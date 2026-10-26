@@ -14,6 +14,7 @@ import { bestStand, demoLocked, kindAt, locked, opening, prevOf, standFor, STARS
 import { nextStand, standDef, STANDS, type StandMat } from './stands';
 import { renderKnob } from './volview';
 import { LANGS, isLang, lang, langTag, setLang, t } from './i18n';
+import { tipAttrs } from './tip';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -148,8 +149,8 @@ function standLine(key: string, col: string, theirs?: StandMat) {
   const best = bestStand(key), { mat, txt } = standText(key);
   const top = STANDS.indexOf(standDef(best));
   const mats = STANDS.map((s, k) => k <= top
-    ? `<button type="button" class="ps-mat${s.mat === mat ? ' on' : ''}" data-mat="${s.mat}" aria-pressed="${s.mat === mat}" title="${t(s.name)}"><img src="${standIcon(s.mat, col)}" alt="${t(s.name)}"></button>`
-    : `<span class="ps-mat shut" title="${t('{0:u}: за {1} {1|победу|победы|побед}', s.name, s.wins)}"><img src="${standIcon(s.mat, col)}" alt=""></span>`).join('');
+    ? `<button type="button" class="ps-mat${s.mat === mat ? ' on' : ''}" data-mat="${s.mat}" aria-pressed="${s.mat === mat}"${tipAttrs({ h: t(s.name) })}><img src="${standIcon(s.mat, col)}" alt="${t(s.name)}"></button>`
+    : `<span class="ps-mat shut"${tipAttrs({ p: t('{0:u}: за {1} {1|победу|победы|побед}', s.name, s.wins) })}><img src="${standIcon(s.mat, col)}" alt=""></span>`).join('');
   return `<div class="pc-stand"><div class="ps-mats" role="group" aria-label="${t('Выбор подставки')}">${mats}</div><span>${txt}</span></div>`;
 }
 
@@ -181,11 +182,11 @@ function heroCard(box: HTMLElement, i: number, shut = locked(HEROES[i].key), o: 
   // the name and the numbers on one line, so the ability fits whole without scrolling
   const hp = t('Здоровье'), dmg = t('Урон'), speed = t('Скорость'), bounce = t('Отскок');
   box.innerHTML = `<div class="pc-top"><h3>${t(d.name)}<em>${t(kindOf(d))}</em></h3>`
-    + `<ul class="pc-stats"><li title="${hp}"><img src="${icon('ico_hp')}" alt="${hp}">${d.hp}</li>`
-    + `<li title="${dmg}"><img src="${icon('up_dmg')}" alt="${dmg}">${fullHit(d.m, d.pw)}</li>`
-    + `<li title="${speed}"><img src="${icon('up_speed')}" alt="${speed}">${Math.round(d.pw * 100)}%</li>`
-    + `<li title="${bounce}"><img src="${icon('up_bounce')}" alt="${bounce}">${Math.round(d.e * 100)}%</li></ul></div>`
-    + (opening(d.key) ? `<p class="pc-next" title="${t(STARS_WHY)}">${starRow(starsOf(d.key))}<span>${t(KIND_NEXT[kindAt(d.key)])}</span></p>` : '')
+    + `<ul class="pc-stats"><li${tipAttrs({ h: hp })}><img src="${icon('ico_hp')}" alt="${hp}">${d.hp}</li>`
+    + `<li${tipAttrs({ h: dmg })}><img src="${icon('up_dmg')}" alt="${dmg}">${fullHit(d.m, d.pw)}</li>`
+    + `<li${tipAttrs({ h: speed })}><img src="${icon('up_speed')}" alt="${speed}">${Math.round(d.pw * 100)}%</li>`
+    + `<li${tipAttrs({ h: bounce })}><img src="${icon('up_bounce')}" alt="${bounce}">${Math.round(d.e * 100)}%</li></ul></div>`
+    + (opening(d.key) ? `<p class="pc-next"${tipAttrs({ p: t(STARS_WHY) })}>${starRow(starsOf(d.key))}<span>${t(KIND_NEXT[kindAt(d.key)])}</span></p>` : '')
     + standLine(d.key, d.col, o.theirs)
     + `<div class="pc-ab"><div class="pc-abname"><span class="pc-gem" style="--ab:${d.abCol}"><img src="${icon('ab_' + d.key)}" alt=""></span><b>${t('«{0}»', d.ab)}</b></div>`
     + `<p>${t(d.abTxt)}</p><p class="pc-more">${t(d.abMore)}</p></div>`;
