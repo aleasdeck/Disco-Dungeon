@@ -5,7 +5,7 @@ import { Game, newBank, newParty, newTally, type HeroState } from './game';
 import { Net, type Player } from './net';
 import { applySnapshot, snapshot, type MapState } from './sync';
 import { saveSettings, settings } from './settings';
-import { bindSettings, campPhotoBg, lobbyStatus, renderCollection, renderHeroSelect, renderLobby, renderStats, resetLobby, show, startable } from './menu';
+import { bindSettings, campPhotoBg, lobbyStatus, renderHeroSelect, renderLobby, renderStats, resetLobby, show, startable } from './menu';
 import { Input } from './input';
 import { Hud, faceUrl, mobFace } from './ui';
 import { hl } from './hl';
@@ -35,6 +35,7 @@ import { creditRun, demoLocked, dueEvents, locked, openEvents, openedBy, runGain
 import { STAND_MATS, type StandMat } from './stands';
 import { noteRoom } from './dossier';
 import { setOut } from './volume';
+import { bindCollection, renderCollection, type ColTab } from './collection';
 import { LANGS, M, Mjoin, detectLang, isLang, lang, onLang, scanDom, setLang, t, type Lang } from './i18n';
 
 // the page's own Russian text, found before the game writes anything into the page
@@ -1096,7 +1097,7 @@ $('heroGo').addEventListener('click', () => {
   else startCampaign(settings.party);
 });
 $('mOnline').addEventListener('click', () => { shelveCampaign(); $<HTMLInputElement>('lobbyName').value = settings.name; resetLobby(); show('lobby'); });
-$('mCollection').addEventListener('click', () => { renderCollection('heroes'); show('collection'); });
+$('mCollection').addEventListener('click', () => { renderCollection(); show('collection'); });
 $('mStats').addEventListener('click', () => { flushStats(); renderStats(); show('statsScreen'); });
 $('statsBack').addEventListener('click', openMenu);
 /** The settings open from the main menu or from the pause menu in a game, and «Назад» goes back where they came from. */
@@ -1130,7 +1131,8 @@ tutor.where = () => {
 };
 tutor.me = meHero;
 $('mSettings').addEventListener('click', () => openSettings('menu'));
-document.querySelectorAll<HTMLButtonElement>('#collection .tab').forEach(b => b.addEventListener('click', () => renderCollection(b.dataset.tab as 'heroes' | 'mobs' | 'arts' | 'events' | 'trinkets')));
+document.querySelectorAll<HTMLButtonElement>('#collection .tab').forEach(b => b.addEventListener('click', () => renderCollection(b.dataset.tab as ColTab)));
+bindCollection();
 $('colBack').addEventListener('click', openMenu);
 $('setBack').addEventListener('click', () => (settingsFrom === 'pause' ? show('pause') : openMenu()));
 const syncSettings = bindSettings(() => { applyQuality(); sizeCanvas(); });
