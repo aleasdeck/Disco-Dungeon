@@ -15,8 +15,8 @@ import type { Player } from './net';
 import { uiArt } from './assets';
 import { BACKDROP_COUNT, drawPhoto, savePhoto, type PhotoSeat } from './photo';
 import { DEMO } from './demo';
-import { artLocked, demoLocked, eventLocked, featOf, kindAt, locked, meetOf, opening, prevOf, standFor, STARS_TO_OPEN, starsOf, volTop } from './progress';
-import { nextStand, standDef } from './stands';
+import { artLocked, bestStand, demoLocked, eventLocked, featOf, kindAt, locked, meetOf, opening, prevOf, standFor, STARS_TO_OPEN, starsOf, volTop, wearStand } from './progress';
+import { nextStand, standDef, STANDS, type StandMat } from './stands';
 import { dossierOf, inDossier } from './dossier';
 import { EVENTS, eventDef } from './events';
 import { renderKnob } from './volview';
@@ -292,22 +292,33 @@ function shutStars(key: string) {
   const n = starsOf(prev);
   return `<p class="pc-next">${starRow(n)}<span>${t('{0} из {1}', Math.min(n, STARS_TO_OPEN), STARS_TO_OPEN)}</span></p>`;
 }
-/** What the hero's stand is made of and how many more wins with it make the next one; nothing in the demo. */
-function standLine(key: string, col: string) {
+/**
+ * The hero's stand: what it is made of and how many more wins with the hero make the next one, and the six stands in a row,
+ * the ones earned to put the hero on with a tap, the rest dim. Nothing in the demo. `theirs`: another player's hero online,
+ * on the stand that player put it on, only shown.
+ */
+function standLine(key: string, col: string, theirs?: StandMat) {
   if (DEMO) return '';
-  const mat = standFor(key), next = nextStand(mat), left = next ? next.wins - (stats.heroes[key]?.wins ?? 0) : 0;
+  if (theirs) return `<p class="pc-stand"><img src="${standIcon(theirs, col)}" alt=""><span>${t('Подставка: {0}', standDef(theirs).name)}</span></p>`;
+  const best = bestStand(key), mat = standFor(key), next = nextStand(best), left = next ? next.wins - (stats.heroes[key]?.wins ?? 0) : 0;
   const tail = !next ? t('выше некуда') : left > 0 ? t('до {0} {1} {1|победа|победы|побед}', next.gen, left) : '';
-  return `<p class="pc-stand"><img src="${standIcon(mat, col)}" alt=""><span>${tail ? t('Подставка: {0}, {1}', standDef(mat).name, tail) : t('Подставка: {0}', standDef(mat).name)}</span></p>`;
+  const top = STANDS.indexOf(standDef(best));
+  const mats = STANDS.map((s, k) => k <= top
+    ? `<button type="button" class="ps-mat${s.mat === mat ? ' on' : ''}" data-mat="${s.mat}" aria-pressed="${s.mat === mat}" title="${t(s.name)}"><img src="${standIcon(s.mat, col)}" alt="${t(s.name)}"></button>`
+    : `<span class="ps-mat shut" title="${t('{0:u}: за {1} {1|победу|победы|побед}', s.name, s.wins)}"><img src="${standIcon(s.mat, col)}" alt=""></span>`).join('');
+  return `<div class="pc-stand"><div class="ps-mats" role="group" aria-label="${t('Выбор подставки')}">${mats}</div>`
+    + `<span>${tail ? t('Подставка: {0}, {1}', standDef(mat).name, tail) : t('Подставка: {0}', standDef(mat).name)}</span></div>`;
 }
 
 /** Mice can point at a hero to read it without taking it; fingers take it with a tap. */
 const canPoint = () => matchMedia('(hover: hover)').matches;
 
 /**
- * The card beside the photo: whose the hero is, its name and kind, its numbers, its ability whole, and its stars while it
- * still has a hero to open. A hero this player hasn't opened (`shut`) shows only its kind and how it opens.
+ * The card beside the photo: whose the hero is, its name and kind, its numbers, its stand, its ability whole, and its stars
+ * while it still has a hero to open. A hero this player hasn't opened (`shut`) shows only its kind and how it opens.
+ * `theirs`: the stand of another player who took the hero online. `onStand`: the player has put the hero on another stand.
  */
-function heroCard(box: HTMLElement, i: number, shut = locked(HEROES[i].key)) {
+function heroCard(box: HTMLElement, i: number, shut = locked(HEROES[i].key), o: { theirs?: StandMat; onStand?: () => void } = {}) {
   const d = HEROES[i];
   if (shut) {
     box.style.setProperty('--c', '#a8916f');
@@ -325,9 +336,15 @@ function heroCard(box: HTMLElement, i: number, shut = locked(HEROES[i].key)) {
     + `<li title="${speed}"><img src="${icon('up_speed')}" alt="${speed}">${Math.round(d.pw * 100)}%</li>`
     + `<li title="${bounce}"><img src="${icon('up_bounce')}" alt="${bounce}">${Math.round(d.e * 100)}%</li></ul></div>`
     + (opening(d.key) ? `<p class="pc-next" title="${t(STARS_WHY)}">${starRow(starsOf(d.key))}<span>${t(KIND_NEXT[kindAt(d.key)])}</span></p>` : '')
-    + standLine(d.key, d.col)
+    + standLine(d.key, d.col, o.theirs)
     + `<div class="pc-ab"><div class="pc-abname"><span class="pc-gem" style="--ab:${d.abCol}"><img src="${icon('ab_' + d.key)}" alt=""></span><b>${t('«{0}»', d.ab)}</b></div>`
     + `<p>${t(d.abTxt)}</p><p class="pc-more">${t(d.abMore)}</p></div>`;
+  box.querySelectorAll<HTMLButtonElement>('.ps-mat[data-mat]').forEach(b => b.addEventListener('click', () => {
+    if (b.classList.contains('on')) return;
+    wearStand(d.key, b.dataset.mat as StandMat);
+    heroCard(box, i, shut, o);
+    o.onStand?.();
+  }));
   fitCard(box);
 }
 
@@ -538,8 +555,9 @@ export function renderLobby(o: {
   const photo = $<HTMLCanvasElement>('lobbyPhoto');
   zoomable(photo.parentElement!);
   const paint = () => {
-    const i = lobbyPeek >= 0 ? lobbyPeek : lobbyShown;
-    heroCard($('lobbyInfo'), i, locked(HEROES[i].key) && !ownerOf(i));
+    const i = lobbyPeek >= 0 ? lobbyPeek : lobbyShown, by = ownerOf(i);
+    // another player's hero stands on their stand; a new stand for my own hero goes to the host with it
+    heroCard($('lobbyInfo'), i, locked(HEROES[i].key) && !by, by && by.id !== o.me ? { theirs: by.stand ?? 'plastic' } : { onStand: () => { if (mine === i) o.onPick(i); } });
     const seats: PhotoSeat[] = o.players.map(p => ({
       hero: p.hero,
       look: p.hero !== null ? null : p.id === o.me && lobbyPeek >= 0 && !ownerOf(lobbyPeek) && !locked(HEROES[lobbyPeek].key) ? lobbyPeek : p.look ?? null,
@@ -557,9 +575,11 @@ export function renderLobby(o: {
       return eye ? { cls: 'eyed', badge: escapeHtml(eye.name.slice(0, 1).toUpperCase()) + '?', label: t('смотрит {0}', eye.name) } : {};
     },
     onTap: i => {
+      // my own hero with another hero's card open: the tap opens its card, where its stand is picked, and the next tap lets it go
+      const read = mine === i && lobbyShown !== i;
       lobbyShown = i;
       const by = ownerOf(i);
-      if ((by && by.id !== o.me) || (!by && locked(HEROES[i].key))) { paint(); return; }
+      if (read || (by && by.id !== o.me) || (!by && locked(HEROES[i].key))) { paint(); return; }
       o.onPick(mine === i ? null : i);
     },
     onPeek: i => {
