@@ -183,6 +183,22 @@ i.ico { display: inline-block; font-style: normal; }
 .queue li.now .qb { transform: scale(1.12); }
 .queue li.now .qb::after { content: ''; position: absolute; inset: -5px; border: 3px solid var(--gold-1); clip-path: var(--cut-tile); }
 .queue li.done { opacity: 0.4; }
+/* held flat, the queue stands off the buttons by about twice the room between two enemies, so the last one's badge
+   doesn't brush the map; a crowd (summons too) the strip has no room for takes smaller faces rather than run under the
+   room's name or push the buttons off the screen, and only then does the room's name give way. The upright phone gives
+   the queue a row of its own (below) */
+@media not all and (orientation: portrait) and (max-width: 700px) {
+  .queue { --q: 48px; --qboss: 56px; flex-shrink: 100; margin-right: 28px; }
+  .queue li { flex: 0 1 var(--q); min-width: calc(var(--q) * 0.66); }
+  .queue li.boss { flex-basis: var(--qboss); min-width: calc(var(--qboss) * 0.66); margin-top: -4px; }
+  .queue .qb, .queue li.boss .qb { width: 100%; height: auto; aspect-ratio: 1; margin-top: 0; }
+  /* the chevron points at the middle of the face after it, however small the faces got */
+  .queue li + li::before { top: calc(50% - 7px); }
+  /* the name giving way drops the floor first, as on the upright phone, then trails off; the turn below keeps its start */
+  .where b { flex-wrap: wrap; height: 1.1em; max-width: 100%; overflow: hidden; }
+  .where b > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .where-sub { max-width: 100%; overflow: hidden; justify-content: safe center; }
+}
 .qi { position: absolute; right: -9px; bottom: -7px; }
 /* a badge in the colour of the hero it is after: a number for a blow, a hollow ring for walking up, every colour for a blow on all */
 .ib {
@@ -436,10 +452,10 @@ html.intro .camctl { animation: bi-hide 0.3s both; pointer-events: none !importa
   .ore-chip .ico { width: 20px; height: 20px; }
   .where b { font-size: 14px; }
   .where-sub { font-size: 11px; }
-  .qb { width: 34px; height: 34px; }
-  .queue li.boss .qb { width: 40px; height: 40px; margin-top: -3px; }
+  .queue { --q: 34px; --qboss: 40px; margin-right: 16px; }
+  .queue li.boss { margin-top: -3px; }
   .queue li + li { margin-left: 13px; }
-  .queue li + li::before { left: -12px; top: 11px; width: 8px; height: 11px; }
+  .queue li + li::before { left: -12px; top: calc(50% - 5.5px); width: 8px; height: 11px; }
   .ib { min-width: 18px; height: 18px; font-size: 11px; padding: 0 3px; }
   .ib.sp .ico, .ib.go .ico { width: 12px; height: 12px; }
   .qi { right: -7px; bottom: -6px; }
