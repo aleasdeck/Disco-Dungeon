@@ -19,6 +19,7 @@ export const BASTION_I = HEROES.indexOf(BASTION);
 /** The warm-up's lines, in the order they come. */
 export const WARM_LINES = {
   offer: 'Опа, новенький! Пошли сперва на манекенах разомнёмся, покажу, что тут к чему. Быстро, без соплей: пузо уже разогрето.',
+  look: 'Ты пока осмотрись здесь, а я пузо разомну. Вот этими кнопками комнату крутят и приближают, если чего не разглядел. Крути смело, манекенов не укачает.',
   rune: 'Видишь светящийся кружок на полу? Ткни в него, я туда встану. Оттуда и будем лупить.',
   go: 'Стою. Красивый. Жми «В бой!», манекены сами себя не отлупят.',
   pull: 'Хватай меня за пузо и тяни назад, как рогатку. Отпустишь, и полетит диск. Чем сильнее тянешь, тем больнее прилетит.',
@@ -186,6 +187,8 @@ export class Tutor {
       point: () => { const l = lady(); return l ? this.worldBox(l, 0, 26, MOB_TOP[l.k]) : null; },
     };
     this.beats = [
+      // a look round the room first, at the camera buttons; it goes once read, or once the hero is put down anyway
+      { text: () => WARM_LINES.look, kind: 'tap', ready: () => S().phase === 'place', gone: () => h().pad !== null || S().phase !== 'place', point: () => this.domBox('camctl') },
       { text: () => WARM_LINES.rune, kind: 'do', ready: () => S().phase === 'place', gone: () => h().pad !== null || S().phase !== 'place', point: () => this.floorBox(S().pads[0], 18) },
       { text: () => WARM_LINES.go, kind: 'do', ready: () => S().phase === 'place' && h().pad !== null, gone: () => S().phase !== 'place', point: () => this.domBox('turnBtn') },
       {

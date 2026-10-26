@@ -10,6 +10,11 @@ const SHAPES: Record<string, [string, string][]> = {
   map: [['M3 5l6-2 6 2 6-2v16l-6 2-6-2-6 2z', '#e6cf9c'], ['M9 3v16M15 5v16', 'none'], ['M16 9l3 3M19 9l-3 3', 'none']],
   log: [['M6 3h11a3 3 0 0 1 0 6h-1v10a3 3 0 0 1-3 3H5a3 3 0 0 1 0-6h1z', '#e6cf9c'], ['M9 8h5M9 11h5M9 14h4', 'none']],
   menu: [['M4 5h16v3H4zM3 11h17v3H3zM5 17h15v3H5z', '#d9c6a0']],
+  /** The camera buttons: an arrow bent round a floor tile, turning the room left or right; a magnifying glass with a plus or a minus. */
+  rotl: [['M12 9.5l4 2.5-4 2.5-4-2.5z', '#a4926f'], ['M18 6A8.5 8.5 0 1 0 19 18.5l2 1.5-.5-6-5.5 2 1.8 1.2A6 6 0 1 1 16.3 7.8z', '#dbcca8']],
+  rotr: [['M12 9.5l4 2.5-4 2.5-4-2.5z', '#a4926f'], ['M6 6A8.5 8.5 0 1 1 5 18.5l-2 1.5.5-6 5.5 2-1.8 1.2A6 6 0 1 0 7.7 7.8z', '#dbcca8']],
+  zin: [['M14.5 14.5l6 6', 'none'], ['M10 2.5a7.5 7.5 0 1 1 0 15 7.5 7.5 0 0 1 0-15z', '#c4d6d2'], ['M6.5 10h7M10 6.5v7', 'none']],
+  zout: [['M14.5 14.5l6 6', 'none'], ['M10 2.5a7.5 7.5 0 1 1 0 15 7.5 7.5 0 0 1 0-15z', '#c4d6d2'], ['M6.5 10h7', 'none']],
   chill: [['M12 2v20M3.5 7l17 10M3.5 17l17-10', 'none'], ['M12 2l-2 2M12 2l2 2M12 22l-2-2M12 22l2-2', 'none']],
   /** A banshee's scream: an eye struck out, no aiming line this turn. */
   daze: [['M2 12c3-5 6.5-7 10-7s7 2 10 7c-3 5-6.5 7-10 7s-7-2-10-7z', '#e8e0cc'], ['M12 8.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7z', '#7a4fb0'], ['M4 21L20 3', 'none']],
