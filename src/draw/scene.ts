@@ -1029,7 +1029,7 @@ export class SceneRenderer {
 
   /**
    * A hole in the floor, any shape of cells: the far walls of the shaft, in the room's own masonry, sink into the dark in
-   * flat bands, and the opening is inked like the edge of the room. A bigger hole shows more of the black below.
+   * flat bands, and the opening is inked thin, like a block. A bigger hole shows more of the black below.
    */
   private drawPit(p: Pit) {
     const { c, P, cam } = this;
@@ -1073,10 +1073,12 @@ export class SceneRenderer {
     c.lineWidth = DL;
     c.stroke();
     c.restore();
+    // the opening's ink is as thin as a block's: the dark of the shaft already makes the edge, and the room's thick silhouette
+    // ink along it on top of that read as a heavy black frame
     c.beginPath();
     for (const f of rim) { c.moveTo(...P(...f.a)); c.lineTo(...P(...f.b)); }
     c.strokeStyle = INK;
-    c.lineWidth = OL;
+    c.lineWidth = BL;
     c.lineCap = 'round';
     c.stroke();
   }
