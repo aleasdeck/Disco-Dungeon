@@ -14,7 +14,7 @@ import { drawAfter, drawShot, drawStart, type Album } from './album';
 import { saveCanvas } from './photo';
 import type { Tally } from './game';
 import { escapeHtml, starRow } from './menu';
-import { DEMO, FEEDBACK_URL, STORE_URL } from './demo';
+import { DEMO, DEMO_BUILD, FEEDBACK_URL, STORE_URL } from './demo';
 import { demoLocked, nextOf, opening, starsOf, type Gains } from './progress';
 import { VOL_RULES } from './volume';
 import { volToken } from './volview';
@@ -42,8 +42,10 @@ const DEMO_WON: Record<string, string> = {
 /** A line under the defeat, by the floor it came on. */
 const LOST = [
   'Казематы оставили вас себе. Кости срастутся, приходите ещё.',
-  'Склеп сохранит вас свежими. Кости срастутся, приходите ещё.',
-  'Кузня переплавит вас на диски. Кости срастутся, приходите ещё.',
+  ...(DEMO_BUILD ? [] : [
+    'Склеп сохранит вас свежими. Кости срастутся, приходите ещё.',
+    'Кузня переплавит вас на диски. Кости срастутся, приходите ещё.',
+  ]),
 ];
 
 const clock = (s: number) => {

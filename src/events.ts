@@ -747,6 +747,7 @@ export function loseArts(party: HeroState[], seed: number) {
  */
 export function settleBet(b: Bet, ok: boolean, party: HeroState[], seed: number) {
   const R = makeRng(seed * 29 + 1);
+  // demo-cut: the bookie is not in the demo
   if (b === 'art') {
     const notes = ok ? giftArts(party, seed) : loseArts(party, seed);
     if (ok) return notes.length ? M('Пари выиграно, букмекер отдал трофеи: {0}.', notes) : 'Пари выиграно, букмекер отдал трофеи: свободных гнёзд не было.';

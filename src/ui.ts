@@ -159,7 +159,7 @@ function upRows(g: Game, h: HeroState) {
     + `${pips(n, lv)}<b>${val}</b><small class="up-txt">${t(txt)}</small></div>`;
   const dc = g.discCost(h);
   return row('n', 'Диски за ход', 'Больше бросков за ход. Самое сильное улучшение', HAND_MAX - HAND_START, h.discs - HAND_START, String(g.handOf(h)),
-    dc ? t('Следующий диск у кузнеца за {0} руды.', dc) : t('Третий диск даёт только трофей «Третья рука».'))
+    dc ? t('Следующий диск у кузнеца за {0} руды.', dc) : DEMO ? t('Третий диск ждёт в полной версии игры.') : t('Третий диск даёт только трофей «Третья рука».'))
     + UPS.map(u => {
       const lv = h.up[u.k], cost = g.upCost(h, u.k), v = g.stat(h, u.k);
       return row(u.k, u.name, u.txt, UP_COST.length, lv, u.fmt(lv * u.step, v),
@@ -526,7 +526,7 @@ export class Hud {
     };
     // kissed by the model: it goes for another enemy, or sighs with nobody left to go for
     if (it.sigh) return { badge: `<span class="ib sp">${icon('kiss')}</span>`, txt: t('Поцелован: вздыхает и никого не ударит') };
-    // going for an enemy the model has kissed, as it would for a hero
+    // going for an enemy the model has kissed, as it would for a hero (demo-cut: she is not in the demo)
     if (it.foe !== undefined && m.kiss === undefined && it.t !== 'charge') {
       const o = MOBS[g.S.mobs[it.foe].k];
       if (it.t === 'hit') return { badge: `${bow}<span class="ib hit" style="--c:#ff5a8a">${it.dmg}</span>`, txt: cap(t('{0}: {1?та поцелована|тот поцелован} Вешалкой, броня считается', atMob(o.acc), o.fem)) };
@@ -548,9 +548,11 @@ export class Hud {
       const line = cap(out ? t('выйдет на линию огня и {0}', how) : how);
       return { badge: `${bow}<span class="ib hit" style="--c:${tgt!.def.col}">${it.dmg}</span>`, txt: g.executes(m) ? t('Казнь: {0}', line) : line };
     }
+    // demo-cut: the dragon's eggs are not in the demo
     if (it.t === 'rise' && m.k === 'egg') {
       return { badge: `<span class="ib go">${it.eta}</span>`, txt: (it.eta ?? 1) > 1 ? t('Через {0} {0|ход|хода|ходов} вылупится бес-кочегар, если не разбить яйцо', it.eta!) : t('В этот ход вылупится бес-кочегар, если не разбить яйцо') };
     }
+    // demo-cut: the undertaker's coffins are not in the demo
     if (it.t === 'rise') {
       const who = MOBS[m.hold ?? 'skel'].name;
       return { badge: `<span class="ib go">${it.eta}</span>`, txt: (it.eta ?? 1) > 1 ? t('Через {0} {0|ход|хода|ходов} встанет {1:l}, если не разбить гроб', it.eta!, who) : t('В этот ход встанет {0:l}, если не разбить гроб', who) };
@@ -626,6 +628,7 @@ export class Hud {
     const brittle = Math.round(frostVuln(m.frost) * 100);
     if (g.frozen(m)) out.push({ k: 'chill', t: t('Заморожен: пропустит ход; урон от дисков и умений героев +{0}%', brittle) });
     else if (m.frost) out.push({ k: 'slow', t: t('Замедлен: в свой ход пройдёт не больше {0} {0|клетки|клеток|клеток}; урон от дисков и умений героев +{1}%', FROST_STEPS, brittle) });
+    // demo-cut: the model's kiss
     if (m.kiss !== undefined) out.push({ k: 'kiss', n: m.kissLeft, t: t('Поцелуй Вешалки: бьёт ближайшего другого врага, а не героев, и другие враги могут пойти на него; ещё {0} {0|ход|хода|ходов}', m.kissLeft ?? 1) });
     const mate = g.cuffedTo(m);
     if (mate && mate.hp > 0) out.push({ k: 'cuffs', n: g.S.cuffs!.left, t: t('В наручниках, в паре: {0}. Урон по одному достаётся и другому, ещё {1} {1|ход|хода|ходов}', MOBS[mate.k].name, g.S.cuffs!.left) });
@@ -633,6 +636,7 @@ export class Hud {
     if (m.armor) out.push({ k: 'armor', n: m.armor, t: t('Броня {0}', m.armor) });
     if (MOBS[m.k].shield) out.push({ k: 'shield', t: 'Дверь вместо щита: диск спереди ранит вполовину, бей сбоку или рикошетом' });
     const honed = g.honed(m);
+    // demo-cut: the grinder is not in the demo
     if (honed) out.push({ k: 'hit', n: honed, t: t('Наточен: точильщик рядом, бьёт на {0} сильнее', honed) });
     if (m.under !== undefined) out.push({ k: 'ghost', t: 'В норе: диски не достают. Попади диском в яму с глазами, удар вдвое' });
     else if (!g.solid(m) && !MOBS[m.k].fixed) out.push({ k: 'ghost', t: 'Бесплотен в этот ход: диски пролетают насквозь' });

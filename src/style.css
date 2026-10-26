@@ -2088,6 +2088,7 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
 /* the demo's end of a run, won or lost: the full game's heroes as dark shapes, what else it holds, the way to its Steam page */
 .re-full { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; padding: 8px 12px; background: rgba(18, 12, 9, 0.45); box-shadow: inset 0 0 0 2px var(--gold-1); }
 .re-full-faces { display: flex; flex: none; gap: 6px; }
+.re-full-faces:empty { display: none; }
 .re-full-faces img { width: 44px; height: 44px; clip-path: var(--cut-face); background: #6e5c49; }
 .re-full-txt { flex: 1 1 260px; min-width: 0; }
 .re-full-txt b { display: block; font: 600 13px/1.1 Oswald, sans-serif; color: var(--gold-1); text-transform: uppercase; letter-spacing: 0.08em; }
