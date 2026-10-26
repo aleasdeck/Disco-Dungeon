@@ -664,9 +664,9 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 }
 .boot-langs button[aria-checked='true'] { color: #2a1c10; background: var(--gold); border-color: var(--gold); }
 /* the first start, everything in: the languages alone wait for the pick */
-.boot.pick :is(.boot-bar, .boot-note) { display: none; }
-.boot.pick .boot-langs { gap: 8px; max-width: 420px; margin-top: 22px; }
-.boot.pick .boot-langs button { font-size: 16px; padding: 8px 14px; }
+.boot.langs-only :is(.boot-bar, .boot-note) { display: none; }
+.boot.langs-only .boot-langs { gap: 8px; max-width: 420px; margin-top: 22px; }
+.boot.langs-only .boot-langs button { font-size: 16px; padding: 8px 14px; }
 .field select { font: 500 16px Rubik, sans-serif; color: #2a1c10; border: 0; border-radius: 0; clip-path: var(--cut-bar); padding: 9px 12px; background: #c9a877 var(--grain) 0 0 / 160px; background-blend-mode: overlay; }
 .menu-btns .btn.big { font-size: 20px; padding: 13px 22px; }
 .end-panel .menu-btns { margin-top: 14px; }
