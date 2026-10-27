@@ -1087,6 +1087,8 @@ showVer();
 onLang(showVer);
 document.body.classList.toggle('demo', DEMO);
 document.body.classList.toggle('desktop', !!desktop);
+// the desktop app lets sound play from the start (electron/main.cjs): the menu's music doesn't wait for a first click
+if (desktop) sound.unlock();
 
 /** A campaign to go on with: the one on screen, or after the game was closed (or played online) the one this browser kept. */
 const unfinished = () => (mode === 'solo' ? !runOver : !!loadCampaign());

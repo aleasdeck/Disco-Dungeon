@@ -32,7 +32,7 @@ function launchLobby(argv) {
  * Starts Steam for `appId`; `fake` is the port of the pretend Steam (fake-steam.cjs) to take instead. `page(channel,
  * ...args)` tells the page what came. Gives the calls the page may make, or `{ error }` when Steam can't be had.
  */
-function startSteam({ appId, fake, page }) {
+function startSteam({ appId, fake, page, overlay = true }) {
   let sw, client;
   try {
     sw = fake ? require('./fake-steam.cjs')(fake) : require('@pipelab/steamworks.js');
@@ -40,8 +40,13 @@ function startSteam({ appId, fake, page }) {
   } catch (e) {
     return { error: String(e?.message ?? e) };
   }
-  // the overlay (Shift+Tab, the invite window) draws into the window only with the GPU in the main process
-  if (!fake) sw.electronEnableSteamOverlay();
+  // The overlay (Shift+Tab, the invite window) draws into the window only with the GPU in the main process. On Windows
+  // that also takes Chromium's DirectComposition off, as ceifa's steamworks.js did and the fork no longer does: with it
+  // on, the window showed a dark blur over a game that ran and took clicks, unseen.
+  if (!fake && overlay) {
+    sw.electronEnableSteamOverlay();
+    require('electron').app.commandLine.appendSwitch('disable-direct-composition');
+  }
   const me = String(client.localplayer.getSteamId().steamId64);
   /** The lobbies this side is in, by id. */
   const lobbies = new Map();
