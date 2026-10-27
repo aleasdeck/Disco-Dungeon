@@ -1,7 +1,8 @@
 // Online co-op. One browser hosts and runs the game; the others send their actions and draw the host's
 // snapshots. Each player has its own link to the host, made the way Dark Realm makes them (src/net/link.ts):
 // straight over WebRTC through the PeerJS broker, or through public MQTT brokers when WebRTC can't get
-// through, moving over to a direct link once the relay has helped set one up.
+// through, moving over to a direct link once the relay has helped set one up. The desktop build for Steam makes them
+// over Steam's P2P instead (src/net/steam.ts).
 
 import type { CampPick } from '../camp';
 import type { Action } from '../game';
@@ -104,11 +105,12 @@ export class Net {
       const code = again ?? newCode();
       Object.assign(this, { isHost: true, code, id: 'host' });
       try {
-        const room = await this.open(code, accept => this.accept(gen, accept));
+        const room = await this.open(code, accept => this.accept(gen, accept), !!again);
         if (gen !== this.gen) { room.close(); throw new Error(''); }
         this.room = room;
+        if (room.code) this.code = room.code;
         this.flush = setInterval(() => this.release(), FLUSH_MS);
-        return code;
+        return this.code;
       } catch (e) {
         if (gen !== this.gen) throw e;
         this.reset();

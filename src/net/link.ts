@@ -89,8 +89,8 @@ export interface LinkHandlers {
 /** Opens a link over an incoming connection. */
 export type Accept = (h: LinkHandlers) => Link;
 
-/** A connection under a link: a PeerJS DataConnection or a relay channel. */
-interface Pipe {
+/** A connection under a link: a PeerJS DataConnection, a relay channel or a Steam connection (src/net/steam.ts). */
+export interface Pipe {
   readonly open: boolean;
   send(msg: unknown): void;
   close(): void;
@@ -103,7 +103,7 @@ interface Pipe {
  * link that went silent, with how long it had been open. A link over the relay tries to go
  * direct: the player's end (`upgrade: 'offer'`) starts it, the host's end answers.
  */
-function wrap(
+export function wrap(
   conn: Pipe,
   h: LinkHandlers,
   label: string,
@@ -233,11 +233,14 @@ function roomError(err: unknown): RoomError {
 }
 
 export interface HostedRoom {
+  /** The room's code, when the way through gives it rather than takes the one asked for (a Steam lobby's). */
+  code?: string;
   /** Takes the room down: the code is free again and every connection closes. */
   close(): void;
 }
 
-export type OpenRoom = (code: string, onConnection: (accept: Accept) => void) => Promise<HostedRoom>;
+/** Opens room `code`; `again` after a crash, when players may still be waiting for that very room to come back. */
+export type OpenRoom = (code: string, onConnection: (accept: Accept) => void, again: boolean) => Promise<HostedRoom>;
 
 /** Calls `fn` whenever the page comes back to the front, until the returned function is called. */
 function onFront(fn: () => void): () => void {

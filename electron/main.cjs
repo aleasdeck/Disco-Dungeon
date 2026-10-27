@@ -1,0 +1,139 @@
+// Disco Underground as a desktop app for Steam. Electron shows the game's own build (for now the demo's, from npm run
+// build:demo) off the disk at app://game/, so it plays with no network and keeps its saves in one place, and gives the
+// page Steam through preload.cjs: the player, lobbies, invites and P2P packets (steam.cjs).
+//
+//   npm run desktop                          the demo in a window (it builds dist-demo first)
+//   DD_FAKE_STEAM=27999 npm run desktop      a pretend Steam on that local port instead (fake-steam.cjs), and with
+//   DD_PROFILE=b                             a second window with saves of its own: two players on one computer
+//   npm run pack:demo                        the Windows build for Steam, into release/
+//
+// Steam's AppID is in config.json: 480 (Valve's Spacewar, open to everyone) until the demo has its own. A game Steam
+// starts gets its AppID from Steam itself.
+
+'use strict';
+const { app, BrowserWindow, Menu, ipcMain, net, protocol, session, shell } = require('electron');
+const fs = require('node:fs');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
+const config = require('./config.json');
+const { startSteam } = require('./steam.cjs');
+
+const ROOT = path.resolve(__dirname, '..', config.content);
+const ORIGIN = 'app://game';
+/** Only while trying things out: a pretend Steam, and a second player's own saves. */
+const fake = !app.isPackaged && process.env.DD_FAKE_STEAM;
+if (!app.isPackaged && process.env.DD_PROFILE) app.setPath('userData', `${app.getPath('userData')}-${process.env.DD_PROFILE}`);
+
+// The game's files as https would serve them: the page's storage, fetch() and modules work as on the web.
+protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
+
+if (!app.requestSingleInstanceLock()) app.exit(0);
+
+const appId = Number(process.env.SteamAppId) || config.appId;
+// Started outside Steam: Steam starts it again its own way. Not for 480, which Steam would start as Spacewar.
+if (app.isPackaged && config.appId !== 480 && require('@pipelab/steamworks.js').restartAppIfNecessary(config.appId)) app.exit(0);
+
+let win = null;
+const toPage = (channel, ...args) => { if (win && !win.isDestroyed()) win.webContents.send(channel, ...args); };
+const steam = startSteam({ appId, fake, page: toPage });
+if (steam.error) console.warn(`Steam: ${steam.error}`);
+
+/** The window's own settings, kept between runs: fullscreen or not. */
+const PREFS = path.join(app.getPath('userData'), 'window.json');
+function prefs() {
+  try {
+    return { fullscreen: app.isPackaged, ...JSON.parse(fs.readFileSync(PREFS, 'utf8')) };
+  } catch {
+    return { fullscreen: app.isPackaged };
+  }
+}
+
+/** A file of the game for an address of app://game/, or null for anything outside its folder. */
+function fileOf(url) {
+  const { host, pathname } = new URL(url);
+  if (host !== 'game') return null;
+  const file = path.join(ROOT, decodeURIComponent(pathname));
+  if (file !== ROOT && !file.startsWith(ROOT + path.sep)) return null;
+  return pathname.endsWith('/') ? path.join(file, 'index.html') : file;
+}
+
+/**
+ * Everything the page loads is its own, from the disk; the inline styles are the ones the game writes into its HTML. Steam
+ * goes through preload.cjs, so the page needs no network at all.
+ */
+const CSP = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'";
+
+/** Only the game's page talks to Steam and the app. */
+const fromGame = e => e.senderFrame?.url.startsWith(`${ORIGIN}/`);
+const ID = /^\d{1,20}$/;
+
+ipcMain.on('steam:hello', e => { e.returnValue = fromGame(e) && !steam.error ? steam.hello() : null; });
+ipcMain.handle('steam:host', (e, max, data) => {
+  if (!fromGame(e) || steam.error) throw new Error('no Steam');
+  return steam.host(Math.min(Math.max(Number(max) || 1, 1), 8), Object.fromEntries(Object.entries(data ?? {}).map(([k, v]) => [String(k), String(v)])));
+});
+ipcMain.handle('steam:enter', (e, id) => {
+  if (!fromGame(e) || steam.error || !ID.test(id)) throw new Error('no such lobby');
+  return steam.enter(id);
+});
+ipcMain.on('steam:leave', (e, id) => { if (fromGame(e) && !steam.error && ID.test(id)) steam.leave(id); });
+ipcMain.on('steam:invite', (e, id) => { if (fromGame(e) && !steam.error && ID.test(id)) steam.invite(id); });
+ipcMain.on('steam:send', (e, to, data) => { if (fromGame(e) && !steam.error && ID.test(to) && typeof data === 'string') steam.send(to, data); });
+ipcMain.on('app:quit', e => { if (fromGame(e)) app.quit(); });
+
+function open() {
+  const p = prefs();
+  win = new BrowserWindow({
+    width: 1600, height: 900, minWidth: 960, minHeight: 540, show: false, fullscreen: p.fullscreen,
+    backgroundColor: '#16110d', title: 'Disco Underground', icon: path.join(__dirname, 'icon.png'), autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false,
+      // the host's game runs on while its window is behind another, as the players' games wait on it
+      backgroundThrottling: false,
+    },
+  });
+  win.once('ready-to-show', () => win.show());
+  // F11 or Alt+Enter: fullscreen and back, remembered; F12 the developer tools, only while trying things out
+  win.webContents.on('before-input-event', (e, input) => {
+    if (input.type !== 'keyDown') return;
+    if (input.key === 'F11' || (input.key === 'Enter' && input.alt)) {
+      e.preventDefault();
+      win.setFullScreen(!win.isFullScreen());
+      fs.writeFileSync(PREFS, JSON.stringify({ ...prefs(), fullscreen: win.isFullScreen() }));
+    } else if (input.key === 'F12' && !app.isPackaged) win.webContents.toggleDevTools();
+  });
+  // the page never goes anywhere but the game; links out (the Steam page, the feedback form) open in the browser
+  win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith(`${ORIGIN}/`)) e.preventDefault(); });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https:\/\//.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  // a page that crashed comes back: the game takes its room or campaign up again as after a reload
+  win.webContents.on('render-process-gone', (_e, d) => { if (d.reason !== 'clean-exit') win.loadURL(`${ORIGIN}/index.html`); });
+  win.on('closed', () => { win = null; });
+  win.loadURL(`${ORIGIN}/index.html`);
+}
+
+app.on('second-instance', () => {
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.focus();
+});
+
+app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
+  protocol.handle('app', async req => {
+    const file = fileOf(req.url);
+    if (!file) return new Response('', { status: 404 });
+    const res = await net.fetch(pathToFileURL(file).toString());
+    if (!file.endsWith('.html')) return res;
+    const headers = new Headers(res.headers);
+    headers.set('Content-Security-Policy', CSP);
+    return new Response(res.body, { status: res.status, headers });
+  });
+  // copying the room's code is all the page asks for
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, done) => done(permission === 'clipboard-sanitized-write'));
+  open();
+});
+
+app.on('window-all-closed', () => app.quit());
