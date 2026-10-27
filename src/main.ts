@@ -3,6 +3,7 @@ import { AB_COST, BOOT_GAGS, COMBAT_ROOMS, HEROES, MAX_PLAYERS, MOBS, RISE_HP, W
 import { Camera } from './camera';
 import { Game, newBank, newParty, newTally, type HeroState } from './game';
 import { Net, type Player } from './net';
+import { codeOf, desktop, steamNet } from './net/steam';
 import { applySnapshot, snapshot, type MapState } from './sync';
 import { saveSettings, settings } from './settings';
 import { bindSettings, campPhotoBg, lobbyStatus, renderHeroSelect, renderLobby, renderStats, resetLobby, show, startable } from './menu';
@@ -201,7 +202,9 @@ function showMap(open: boolean) {
 type Mode = 'menu' | 'solo' | 'host' | 'client';
 /** 'menu' until a game starts; online the host runs the game and clients mirror it. */
 let mode: Mode = 'menu';
-const net = new Net();
+/** The desktop build plays online through Steam (src/net/steam.ts), the browser through PeerJS and MQTT brokers. */
+const steamWay = desktop ? steamNet(desktop.steam) : null;
+const net = steamWay ? new Net(steamWay.open, steamWay.join) : new Net();
 /** Online: the lobby, and once the game starts, who plays which hero. */
 let players: Player[] = [];
 let started = false;
@@ -218,7 +221,7 @@ let ending: HostSave['ending'] = null;
 /** Client: bumped to cancel a reconnect in progress. */
 let reconnecting = 0;
 
-const playerName = () => settings.name || t('Игрок');
+const playerName = () => settings.name || desktop?.steam?.name || t('Игрок');
 const ownerOf = (i: number) => players.find(p => p.hero === i)?.id ?? 'host';
 
 /** A player who drops out mid-game is waited for this long before the others go on without them: a reload is back sooner. */
@@ -1083,6 +1086,7 @@ const showVer = () => { $('menuVer').textContent = DEMO ? t('{0} · демо', _
 showVer();
 onLang(showVer);
 document.body.classList.toggle('demo', DEMO);
+document.body.classList.toggle('desktop', !!desktop);
 
 /** A campaign to go on with: the one on screen, or after the game was closed (or played online) the one this browser kept. */
 const unfinished = () => (mode === 'solo' ? !runOver : !!loadCampaign());
@@ -1172,6 +1176,7 @@ function leaveOnline() {
   if (game.forge) { game.forge = 0; game.whet = false; hud.refresh(); }
   if (mode === 'host') net.broadcast({ t: 'bye' });
   if (net.active) net.close();
+  steamWay?.leave();
   clearSeat();
   players = [];
   leftAt.clear();
@@ -1292,6 +1297,14 @@ $('lobbyCopy').addEventListener('click', () => {
   const url = `${location.origin}${location.pathname}${location.search}#${net.code}`;
   navigator.clipboard?.writeText(url).then(() => lobbyStatus('Ссылка скопирована.'), () => lobbyStatus(url));
 });
+// the desktop build: friends come by Steam's invite, anyone else by the code
+$('lobbyInvite').hidden = !desktop?.steam;
+$('lobbyInvite').addEventListener('click', () => steamWay?.invite());
+$('lobbyCopyCode').addEventListener('click', () => {
+  const code = net.code;
+  navigator.clipboard?.writeText(code).then(() => lobbyStatus('Код скопирован.'), () => lobbyStatus(code));
+});
+if (desktop) $<HTMLInputElement>('lobbyCode').maxLength = 13;
 $('lobbyStartBtn').addEventListener('click', () => {
   if (!startable(players)) return;
   started = true;
@@ -1860,8 +1873,9 @@ resize();
 game.loadRoom({ seed: Math.floor(Math.random() * 1e6), depth: 1, floor: 0, type: 'fight' });
 controls.fit();
 window.addEventListener('resize', resize);
-// closing the tab tells the others right away instead of after the heartbeat timeout
-window.addEventListener('pagehide', () => { keepRun(performance.now(), true); flushStats(); if (net.active) net.close(); });
+/** The page is going: what is under way is kept, and the others hear right away instead of after the heartbeat timeout. */
+const goodbye = () => { keepRun(performance.now(), true); flushStats(); if (net.active) net.close(); };
+window.addEventListener('pagehide', goodbye);
 // a phone may kill a page in the background without a pagehide
 document.addEventListener('visibilitychange', () => { if (document.hidden) { keepRun(performance.now(), true); flushStats(); } });
 
@@ -1930,11 +1944,11 @@ const gagTimer = setInterval(() => {
 
 /**
  * Once everything is in, the game goes on in the language picked. On the first start it waits for the pick: the bar and the
- * gags make way for the languages alone.
+ * gags make way for the languages alone. Steam's language for the game counts as picked (in Steam's properties of it).
  */
 function go() {
   if (!loaded) return;
-  if (!isLang(settings.lang)) { $('boot').classList.add('langs-only'); return; }
+  if (!isLang(settings.lang) && !isLang(desktop?.lang)) { $('boot').classList.add('langs-only'); return; }
   langIn.then(start);
 }
 
@@ -1952,14 +1966,43 @@ onLang(() => {
   dirty = true;
 });
 
+/** The room of a friend's Steam invite taken before the menu came up: Steam started the game for it, or it came while loading. */
+let invited = desktop?.steam?.launch ? codeOf(desktop.steam.launch) : '';
+
+/**
+ * A friend's Steam invite taken, or «Join game» on a friend, while the game is running: their room is joined from wherever
+ * the player is. A campaign waits behind as from the menu's «Сетевая игра»; another room is left once the player says so.
+ */
+function takeInvite(code: string) {
+  if (!booted) { invited = code; return; }
+  if (net.active && net.code === code) return;
+  if (mode === 'solo') shelveCampaign();
+  else if (net.active) {
+    if (!confirm(t('Выйти из сетевой игры?'))) return;
+    leaveOnline();
+    showMap(false);
+    hideEnd();
+  }
+  $<HTMLInputElement>('lobbyName').value = settings.name;
+  $<HTMLInputElement>('lobbyCode').value = code;
+  resetLobby();
+  show('lobby');
+  join(code);
+}
+desktop?.steam?.onInvite(lobby => takeInvite(codeOf(lobby)));
+
+// the desktop build's way out: what is under way is kept first, as when a tab is closed
+$('mQuit').addEventListener('click', () => { goodbye(); desktop?.quit(); });
+
 /** Leaves the loading screen for the menu, or for the lobby of a shared link or a room this browser dropped out of. */
 function start() {
   if (booted) return;
   booted = true;
   $('boot').hidden = true;
   clearInterval(gagTimer);
-  // a shared link (…#CODE) opens straight into that room's lobby; a room this browser dropped out of is rejoined
-  const linkCode = location.hash.slice(1).toUpperCase(), seat = loadSeat();
+  // a shared link (…#CODE) or a friend's Steam invite opens straight into that room's lobby; a room this browser dropped
+  // out of is rejoined
+  const linkCode = (invited || location.hash.slice(1)).toUpperCase(), seat = loadSeat();
   if (linkCode) history.replaceState(null, '', location.pathname + location.search);
   if (seat && (!linkCode || linkCode === seat.code)) {
     myKey = seat.key;
@@ -1970,7 +2013,7 @@ function start() {
       show('lobby');
       join(seat.code, seat.key);
     }
-  } else if (/^[A-Z0-9]{4,6}$/.test(linkCode)) {
+  } else if (/^[A-Z0-9]{4,13}$/.test(linkCode)) {
     $<HTMLInputElement>('lobbyCode').value = linkCode;
     resetLobby();
     show('lobby');
@@ -1990,7 +2033,8 @@ loadAll(part => {
   loaded = true;
   go();
   // the offline cache, filled once the game has what it needs, so the two don't share the first download
-  if (import.meta.env.PROD && 'serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+  // (the desktop build has every file on the disk already)
+  if (import.meta.env.PROD && 'serviceWorker' in navigator && !desktop) navigator.serviceWorker.register('./sw.js').catch(() => {});
 });
 $('waitLeave').addEventListener('click', () => { leaveOnline(); hideEnd(); showMap(false); openMenu(); });
 requestAnimationFrame(frame);

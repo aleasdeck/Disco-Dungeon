@@ -1,6 +1,7 @@
 node_modules/
 dist/
 dist-demo/
+release/
 *.log
 .DS_Store
 art/sound/out/

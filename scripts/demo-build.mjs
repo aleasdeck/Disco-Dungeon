@@ -12,7 +12,7 @@
 // with «demo-cut» (an `if` leaves its `else`). A line the demo never shows (`DEMO ? … : …`) goes with the minifier.
 
 import ts from 'typescript';
-import { createServer } from 'vite';
+import { createServer, normalizePath } from 'vite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { catalog, hashOf, LANGS, loadTable } from './i18n.mjs';
@@ -193,7 +193,8 @@ export const demoHtml = html => html.replace(/<li class="full-only">[\s\S]*?<\/l
  * the demo's files of public/ and fails on any name of what is cut left in the build.
  */
 export function demoBuild(root, c) {
-  const src = join(root, 'src'), cuts = new Map();
+  // Vite's module ids have forward slashes on Windows too
+  const src = `${normalizePath(join(root, 'src'))}/`, cuts = new Map();
   let lines = new Set();
   return {
     name: 'dd-demo-build',
@@ -208,7 +209,7 @@ export function demoBuild(root, c) {
       for (const [f, buf] of demoPublic(root, c)) this.emitFile({ type: 'asset', fileName: f, source: buf });
     },
     transform(code, id) {
-      const file = id.split('?')[0];
+      const file = normalizePath(id.split('?')[0]);
       if (!file.startsWith(src)) return null;
       if (/\/i18n\/[a-z]+\.json$/.test(file)) {
         const table = JSON.parse(code);
@@ -229,7 +230,7 @@ export function demoBuild(root, c) {
       for (const [name, o] of Object.entries(bundle)) {
         const text = o.type === 'chunk' ? o.code : /\.(html|json|js|css|txt)$/.test(name) ? Buffer.from(o.source).toString('utf8') : null;
         if (text === null) continue;
-        const lang = o.type === 'chunk' && o.moduleIds.map(m => /\/i18n\/([a-z]+)\.json$/.exec(m)?.[1]).find(Boolean);
+        const lang = o.type === 'chunk' && o.moduleIds.map(m => /[\\/]i18n[\\/]([a-z]+)\.json$/.exec(m)?.[1]).find(Boolean);
         for (const s of lang ? tr[lang] : ru) if (lang ? says(lang, text, s) : text.includes(s)) left.push(`${name}: «${s}»`);
       }
       this.info(`the demo cut ${cuts.size} entries: ${[...new Set(cuts.values())].sort().join(' ')}`);

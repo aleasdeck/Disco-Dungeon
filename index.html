@@ -6,9 +6,6 @@
   <meta name="theme-color" content="#16110d" />
   <title>Disco Underground</title>
   <link rel="icon" href="./favicon.png" type="image/png" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Rubik:wght@400;500;700&family=Amatic+SC:wght@700&family=Caveat:wght@700&family=Neucha&display=swap" rel="stylesheet" />
 </head>
 <body>
   <canvas id="stage" aria-label="Игровое поле"></canvas>
@@ -191,6 +188,7 @@
         <button class="btn big" id="mCollection"><i data-art="m_collection" aria-hidden="true"></i>Коллекция</button>
         <button class="btn big" id="mStats"><i data-art="m_stats" aria-hidden="true"></i>Статистика</button>
         <button class="btn big" id="mSettings"><i data-art="m_settings" aria-hidden="true"></i>Настройки</button>
+        <button class="btn big desktop-only" id="mQuit"><i data-art="m_close" aria-hidden="true"></i>Выход</button>
       </nav>
     </div>
     <small class="menu-ver" id="menuVer"></small>
@@ -222,7 +220,8 @@
         <div class="lobby-ways">
           <div class="way">
             <h3>Собрать отряд</h3>
-            <p>Создай комнату и отправь друзьям код или ссылку.</p>
+            <p class="web-only">Создай комнату и отправь друзьям код или ссылку.</p>
+            <p class="desktop-only">Создай комнату и позови друзей через Steam или отправь им код.</p>
             <button class="btn big" id="lobbyHost"><i data-art="m_host" aria-hidden="true"></i>Создать комнату</button>
           </div>
           <div class="way">
@@ -239,7 +238,7 @@
             <div class="pick-tools"><button class="btn" id="lobbyBg" data-tip-h="Другой фон"><i data-art="m_bg" aria-hidden="true"></i>Фон</button><button class="btn" id="lobbySave" data-tip-h="Сохранить фото"><i data-art="m_photo" aria-hidden="true"></i>Фото</button></div>
           </div>
           <div class="pick-side">
-            <div class="room-code">Код комнаты <b id="lobbyRoomCode"></b> <button class="btn sm" id="lobbyCopy"><i data-art="m_link" aria-hidden="true"></i>Скопировать ссылку</button></div>
+            <div class="room-code">Код комнаты <b id="lobbyRoomCode"></b> <button class="btn sm web-only" id="lobbyCopy"><i data-art="m_link" aria-hidden="true"></i>Скопировать ссылку</button><button class="btn sm desktop-only" id="lobbyInvite"><i data-art="m_online" aria-hidden="true"></i>Пригласить друзей</button><button class="btn sm desktop-only" id="lobbyCopyCode"><i data-art="m_link" aria-hidden="true"></i>Скопировать код</button></div>
             <div id="lobbyHeroes" class="pick-row" role="group" aria-label="Герои"></div>
             <article id="lobbyInfo" class="pick-card"></article>
             <ul id="lobbyPlayers" class="players sr-only"></ul>

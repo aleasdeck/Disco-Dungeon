@@ -1,0 +1,37 @@
+name: Desktop build
+
+# The demo for Steam as a Windows app (electron/, npm run pack:demo): the folder to try out or to upload to Steam is this
+# run's artifact «disco-underground-demo-windows».
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths: ['electron/**', 'src/net/**', 'package.json', 'package-lock.json', '.github/workflows/desktop.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the version's build number counts commits (vite.config.ts)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run pack:demo
+      - uses: actions/upload-artifact@v4
+        with:
+          name: disco-underground-demo-windows
+          path: release/win-unpacked
+          retention-days: 14
