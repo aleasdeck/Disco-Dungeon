@@ -24,10 +24,27 @@ const ORIGIN = 'app://game';
 const fake = !app.isPackaged && process.env.DD_FAKE_STEAM;
 if (!app.isPackaged && process.env.DD_PROFILE) app.setPath('userData', `${app.getPath('userData')}-${process.env.DD_PROFILE}`);
 
+/**
+ * What this run went through, in log.txt beside the saves (%APPDATA%\disco-dungeon on Windows), written anew each start:
+ * the file to ask for when the game misbehaves on someone's computer.
+ */
+const LOG = path.join(app.getPath('userData'), 'log.txt');
+const log = (...args) => {
+  try {
+    fs.mkdirSync(path.dirname(LOG), { recursive: true });
+    fs.appendFileSync(LOG, `${new Date().toISOString()} ${args.join(' ')}\n`);
+  } catch {
+    // no log is no reason to stop
+  }
+};
+
 // The game's files as https would serve them: the page's storage, fetch() and modules work as on the web.
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
 
 if (!app.requestSingleInstanceLock()) app.exit(0);
+
+try { fs.rmSync(LOG, { force: true }); } catch { /* as above */ }
+log(`Disco Underground ${app.getVersion()}, Electron ${process.versions.electron}, ${process.platform} ${process.getSystemVersion()}`);
 
 const appId = Number(process.env.SteamAppId) || config.appId;
 // Started outside Steam: Steam starts it again its own way. Not for 480, which Steam would start as Spacewar.
@@ -35,8 +52,12 @@ if (app.isPackaged && config.appId !== 480 && require('@pipelab/steamworks.js').
 
 let win = null;
 const toPage = (channel, ...args) => { if (win && !win.isDestroyed()) win.webContents.send(channel, ...args); };
-const steam = startSteam({ appId, fake, page: toPage });
+// `--no-overlay` in the game's launch options (Steam: the game's Properties) starts it without the Steam overlay, should
+// the overlay's way of drawing not get on with someone's graphics card
+const overlay = !process.argv.includes('--no-overlay');
+const steam = startSteam({ appId, fake, page: toPage, overlay });
 if (steam.error) console.warn(`Steam: ${steam.error}`);
+log(steam.error ? `Steam: none (${steam.error})` : `Steam: AppID ${appId}, overlay ${overlay && !fake ? 'on' : 'off'}`);
 
 /** The window's own settings, kept between runs: fullscreen or not. */
 const PREFS = path.join(app.getPath('userData'), 'window.json');
@@ -90,9 +111,13 @@ function open() {
       preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false,
       // the host's game runs on while its window is behind another, as the players' games wait on it
       backgroundThrottling: false,
+      // a game plays its music from the start, without waiting for a first click as a web page must
+      autoplayPolicy: 'no-user-gesture-required',
     },
   });
   win.once('ready-to-show', () => win.show());
+  win.webContents.on('did-finish-load', () => log('page loaded'));
+  win.webContents.on('console-message', e => { if (e.level === 'warning' || e.level === 'error') log(`page ${e.level}: ${e.message} (${e.sourceId}:${e.lineNumber})`); });
   // F11 or Alt+Enter: fullscreen and back, remembered; F12 the developer tools, only while trying things out
   win.webContents.on('before-input-event', (e, input) => {
     if (input.type !== 'keyDown') return;
@@ -109,7 +134,10 @@ function open() {
     return { action: 'deny' };
   });
   // a page that crashed comes back: the game takes its room or campaign up again as after a reload
-  win.webContents.on('render-process-gone', (_e, d) => { if (d.reason !== 'clean-exit') win.loadURL(`${ORIGIN}/index.html`); });
+  win.webContents.on('render-process-gone', (_e, d) => {
+    log(`page gone: ${d.reason} (${d.exitCode})`);
+    if (d.reason !== 'clean-exit') win.loadURL(`${ORIGIN}/index.html`);
+  });
   win.on('closed', () => { win = null; });
   win.loadURL(`${ORIGIN}/index.html`);
 }
@@ -120,7 +148,12 @@ app.on('second-instance', () => {
   win.focus();
 });
 
+app.on('child-process-gone', (_e, d) => log(`${d.type} process gone: ${d.reason} (${d.exitCode})`));
+
 app.whenReady().then(() => {
+  log(`switches: ${['in-process-gpu', 'disable-direct-composition', 'disable-gpu'].filter(s => app.commandLine.hasSwitch(s)).join(' ') || 'none'}`);
+  log(`GPU: ${JSON.stringify(app.getGPUFeatureStatus())}`);
+  app.getGPUInfo('basic').then(i => log(`GPU devices: ${JSON.stringify(i.gpuDevice)}`)).catch(() => {});
   Menu.setApplicationMenu(null);
   protocol.handle('app', async req => {
     const file = fileOf(req.url);
