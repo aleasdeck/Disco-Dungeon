@@ -1,72 +1,112 @@
-// The hall behind the main menu (menu_bg / menu_bg_tall) a little alive: light on a canvas laid over the picture, drawn
-// at most 20 times a second and only while the menu is up, so the phone has no more to do than in a room standing still.
-// Nothing moves when the system asks for less motion or the graphics are set low. Everything is placed in the picture's
-// own pixels (parts2/comp/hall3_*.json of the menu background) and follows it as the stylesheet covers the screen with it.
-//
-// Variants to pick from (?menufx=a|b|c|d), thread «Оживить фон главного меню»:
-//   a: the mirror ball turns: spots of light sweep over the walls and the floor, sparks flash on the ball
-//   b: the torches flicker and dust floats in the three beams
-//   c: the three beams breathe in turn and a white spotlight sweeps the dance floor
-//   d: a little of everything: fewer and dimmer spots, sparks on the ball, torches, dust
+// The hall behind the main menu a little alive (thread «Оживить фон главного меню», Vladislav picked «всё понемногу» of
+// four, 2026-10-28): the mirror ball turns and its spots drift over the walls and the floor, a spark flashes on it on
+// every beat, the torches breathe, dust floats where the three beams catch it, and the dancers move to the music, each
+// one whole, as a cut-out figure moves: a dip on the beat, a sway, the rat a hop.
+// The dancers are pictures of their own (menu_dancer_*) in front of the hall without them (menu_hall / menu_hall_tall);
+// the light is a canvas over both. All of it is redrawn at most 20 times a second and only while the main menu is up, so
+// the phone does less than in a room standing still; with less motion asked of the system or the graphics set to save,
+// the menu keeps the still hall with its dancers in it (menu_bg). Everything is placed in the hall picture's own pixels
+// (art: /mnt/project-files/discodungeon/menu-fx/tools/split.py) and follows it as the stylesheet covers the screen with it.
+// The light comes round again every 40 beats exactly, and the dancers every 4, so a recording of 40 beats loops clean.
 
+import { uiArt } from './assets';
 import { settings } from './settings';
+import { sound } from './sound';
 
 type XY = [number, number];
 type RGB = [number, number, number];
 
 interface Beam {
   from: XY;
+  /** The two corners where it meets the floor. */
   to: [XY, XY];
-  rgb: RGB;
-  /** The light's pool on the floor: centre and half sizes. */
-  pool: [number, number, number, number];
+}
+
+/** How a dancer moves, all of it at once: sway in degrees, the rest in parts of its height. */
+interface Move {
+  sway: number;
+  /** Sways over 4 beats instead of 2. */
+  slow?: boolean;
+  /** Its sway starts this many beats on, so no two lean the same way at once. */
+  turn: number;
+  /** A step aside and back with the sway. */
+  side: number;
+  /** A hop between beats. */
+  hop: number;
+  /** Squashed down onto its feet on the beat. */
+  dip: number;
+}
+
+interface Dancer {
+  /** Its picture, ui/<key>.webp. */
+  key: string;
+  /** Its box in the hall picture: left, top, right, bottom. */
+  box: [number, number, number, number];
+  feet: XY;
+  move: Move;
 }
 
 interface Hall {
   w: number;
   h: number;
+  /** The still hall with the dancers in it, and the one without them. */
+  still: string;
+  bare: string;
   /** The mirror ball: centre and radius. */
   ball: [number, number, number];
   /** The flames. */
   torches: XY[];
   /** Where the floor starts, going down: spots below it lie flat. */
   floorY: number;
-  /** The dance floor's middle and how far a spotlight sweeps either way. */
-  stage: [number, number, number];
+  /** The purple, the yellow and the teal beam. */
   beams: Beam[];
+  /** Back to front. */
+  dancers: Dancer[];
 }
+
+const GOBLIN: Move = { sway: 2.5, turn: 0, side: 0.025, hop: 0, dip: 0.03 };
+const RAT: Move = { sway: 3, turn: 1, side: 0, hop: 0.045, dip: 0.05 };
+const POINTER: Move = { sway: 2, turn: 1, side: 0, hop: 0, dip: 0.022 };
+const ARMS_UP: Move = { sway: 3, slow: true, turn: 0.5, side: 0.01, hop: 0, dip: 0.028 };
 
 const HALLS: Record<'pc' | 'tall', Hall> = {
   pc: {
-    w: 1536, h: 1024, ball: [1086, 305, 104], torches: [[180, 305], [335, 335], [1205, 340], [1375, 305]], floorY: 712, stage: [768, 860, 330],
-    beams: [
-      { from: [1080, 250], to: [[430, 930], [640, 960]], rgb: [150, 90, 230], pool: [535, 945, 150, 36] },
-      { from: [200, 0], to: [[760, 850], [930, 860]], rgb: [240, 180, 50], pool: [845, 855, 120, 28] },
-      { from: [1400, 0], to: [[1000, 960], [1180, 955]], rgb: [50, 200, 180], pool: [1090, 958, 130, 32] },
+    w: 1536, h: 1024, still: 'menu_bg', bare: 'menu_hall', ball: [1086, 305, 104], torches: [[180, 305], [335, 335], [1205, 340], [1375, 305]], floorY: 712,
+    beams: [{ from: [1080, 250], to: [[430, 930], [640, 960]] }, { from: [200, 0], to: [[760, 850], [930, 860]] }, { from: [1400, 0], to: [[1000, 960], [1180, 955]] }],
+    dancers: [
+      { key: 'menu_dancer_pc0', box: [968, 520, 1173, 870], feet: [1070, 870], move: GOBLIN },
+      { key: 'menu_dancer_pc1', box: [373, 590, 567, 880], feet: [470, 880], move: RAT },
+      { key: 'menu_dancer_pc2', box: [84, 412, 357, 972], feet: [220, 972], move: POINTER },
+      { key: 'menu_dancer_pc3', box: [1146, 405, 1494, 975], feet: [1320, 975], move: ARMS_UP },
     ],
   },
   tall: {
-    w: 1024, h: 1536, ball: [723, 230, 85], torches: [[140, 580], [884, 575]], floorY: 1075, stage: [512, 1330, 260],
-    beams: [
-      { from: [720, 180], to: [[300, 1450], [470, 1480]], rgb: [150, 90, 230], pool: [385, 1465, 130, 32] },
-      { from: [160, 0], to: [[560, 1460], [700, 1480]], rgb: [240, 180, 50], pool: [630, 1470, 100, 26] },
-      { from: [900, 0], to: [[600, 1480], [780, 1490]], rgb: [50, 200, 180], pool: [690, 1485, 120, 28] },
+    w: 1024, h: 1536, still: 'menu_bg_tall', bare: 'menu_hall_tall', ball: [723, 230, 85], torches: [[140, 580], [884, 575]], floorY: 1075,
+    beams: [{ from: [720, 180], to: [[300, 1450], [470, 1480]] }, { from: [160, 0], to: [[560, 1460], [700, 1480]] }, { from: [900, 0], to: [[600, 1480], [780, 1490]] }],
+    dancers: [
+      { key: 'menu_dancer_tall0', box: [443, 1290, 587, 1505], feet: [515, 1505], move: RAT },
+      { key: 'menu_dancer_tall1', box: [215, 1178, 385, 1528], feet: [300, 1528], move: POINTER },
+      { key: 'menu_dancer_tall2', box: [617, 1175, 834, 1530], feet: [725, 1530], move: ARMS_UP },
     ],
   },
 };
 
-type Variant = 'a' | 'b' | 'c' | 'd' | 'off';
-const VARIANT: Variant = (() => {
-  const v = new URLSearchParams(location.search).get('menufx');
-  return v === 'a' || v === 'b' || v === 'c' || v === 'off' ? v : 'd';
-})();
-
-/** At most this many drawings a second. */
-const FPS = Number(new URLSearchParams(location.search).get('menufps')) || 20;
+/** The main menu's tune (music/funk.mp3) is 118 beats a minute, its first beat where its loop starts. */
+const BEAT = 60 / 118;
+/** The light comes round again after this many seconds. */
+const LOOP = 40 * BEAT;
+/** Once round, in radians a second: a motion at k times this comes back with the loop. */
+const W = (Math.PI * 2) / LOOP;
+/** At most this many drawings a second, as a room standing still. */
+const FPS = 20;
 /** The canvas holds at most about this many pixels, so a big screen costs no more than a laptop. */
 const MAX_PIXELS = 2.6e6;
+/** How many spots the ball throws round the room (half of them on its other side), and how much dust floats in the beams. */
+const SPOTS = 40, MOTES = 60;
 
+/** The spots' colours, white the most; the dust in each beam takes that beam's colour (purple, yellow, teal). */
 const SPOT_RGB: RGB[] = [[245, 238, 255], [245, 238, 255], [200, 160, 255], [130, 235, 225], [255, 225, 140], [255, 160, 215]];
+const BEAM_DOT = [2, 4, 3];
 
 /** A number from 0 to 1 that is always the same for the same i. */
 const hash = (i: number) => {
@@ -99,10 +139,11 @@ function sparkSprite(size = 96) {
   c.width = c.height = size;
   const g = c.getContext('2d')!, r = size / 2;
   g.translate(r, r);
-  for (const [w, len, a] of [[0.07, 1, 1], [0.035, 0.62, 0.7]] as const) {
-    for (let k = 0; k < (len === 1 ? 2 : 4); k++) {
+  // two long rays across, then four short ones between them
+  for (const [w, len, a, n] of [[0.07, 1, 1, 2], [0.035, 0.62, 0.7, 4]] as const) {
+    for (let k = 0; k < n; k++) {
       g.save();
-      g.rotate((k * Math.PI) / (len === 1 ? 2 : 4) + (len === 1 ? 0 : Math.PI / 4));
+      g.rotate((k * Math.PI) / n + (n === 2 ? 0 : Math.PI / 4));
       const grad = g.createLinearGradient(0, -r * len, 0, r * len);
       grad.addColorStop(0, 'rgba(255,255,255,0)');
       grad.addColorStop(0.5, `rgba(255,255,255,${a})`);
@@ -126,41 +167,7 @@ function sparkSprite(size = 96) {
   return c;
 }
 
-interface Cone { c: HTMLCanvasElement; x: number; y: number; w: number; h: number }
-
-/** A light cone from a point down to a span, soft at its sides and fading as it goes; drawn once at a quarter size and
- * only as big as the cone, so stamping it fills no more of the screen than the light takes. */
-function coneSprite(from: XY, to: [XY, XY], rgb: RGB, alpha: number): Cone {
-  const k = 0.25, c = document.createElement('canvas'), SPREAD = 6, STEP = 0.09;
-  const mid: XY = [(to[0][0] + to[1][0]) / 2, (to[0][1] + to[1][1]) / 2], half = (to[1][0] - to[0][0]) / 2;
-  const wide = half * (1 + (SPREAD - 1) * STEP);
-  const x = Math.floor(Math.min(from[0], mid[0] - wide)), y = Math.floor(Math.min(from[1], to[0][1], to[1][1]));
-  const w = Math.ceil(Math.max(from[0], mid[0] + wide)) - x, h = Math.ceil(Math.max(from[1], to[0][1], to[1][1])) - y;
-  c.width = Math.max(1, Math.ceil(w * k));
-  c.height = Math.max(1, Math.ceil(h * k));
-  const g = c.getContext('2d')!;
-  g.scale(k, k);
-  g.translate(-x, -y);
-  const [R, G, B] = rgb;
-  const grad = g.createLinearGradient(from[0], from[1], mid[0], mid[1]);
-  grad.addColorStop(0, `rgba(${R},${G},${B},${alpha})`);
-  grad.addColorStop(1, `rgba(${R},${G},${B},${alpha * 0.45})`);
-  g.fillStyle = grad;
-  // a few cones each a little wider and fainter make soft sides without a blur filter
-  for (let i = 0; i < SPREAD; i++) {
-    const spread = 1 + i * STEP;
-    g.globalAlpha = i === 0 ? 0.55 : 0.12;
-    g.beginPath();
-    g.moveTo(from[0], from[1]);
-    g.lineTo(mid[0] - half * spread, to[0][1]);
-    g.lineTo(mid[0] + half * spread, to[1][1]);
-    g.closePath();
-    g.fill();
-  }
-  return { c, x, y, w, h };
-}
-
-/** Is the point inside the beam's cone? 0 outside, rising to 1 a little inside its edge. */
+/** Is the point inside the beam? 0 outside, rising to 1 a little inside its edge. */
 function inBeam(b: Beam, x: number, y: number) {
   const [fx, fy] = b.from, [[ax, ay], [bx, by]] = b.to;
   const u = (y - fy) / ((ay + by) / 2 - fy);
@@ -171,6 +178,15 @@ function inBeam(b: Beam, x: number, y: number) {
   return Math.min(smooth(0, 0.25, v), smooth(1, 0.75, v));
 }
 
+/** A dancer's pose `b` beats into the tune, as a CSS transform about its feet; `h` is its height on screen. */
+function pose(m: Move, b: number, h: number) {
+  const sw = Math.sin((Math.PI * (b + m.turn)) / (m.slow ? 2 : 1));
+  // down on the beat, up between beats
+  const land = Math.max(0, Math.cos(Math.PI * 2 * b)) ** 3, air = Math.abs(Math.sin(Math.PI * b));
+  const sq = m.dip * land;
+  return `translate(${(m.side * h * sw).toFixed(1)}px,${(-m.hop * h * air).toFixed(1)}px) rotate(${(m.sway * sw).toFixed(2)}deg) scale(${(1 + sq * 0.6).toFixed(3)},${(1 - sq).toFixed(3)})`;
+}
+
 interface Spot { lon: number; y: number; r: number; c: number; tw: number }
 interface Mote { x: number; y: number; r: number; p: number[]; beam: number }
 
@@ -178,64 +194,87 @@ class MenuFx {
   private ctx: CanvasRenderingContext2D;
   private sized = false;
   private drawnAt = -Infinity;
-  private blank = true;
+  private on = false;
   private hall = HALLS.pc;
   private key: 'pc' | 'tall' = 'pc';
-  /** Picture to screen: scale and offset (canvas pixels). */
+  /** Picture to canvas: scale and offset. */
   private s = 1;
   private ox = 0;
   private oy = 0;
+  /** The dancers on screen and their height there. */
+  private figs: { img: HTMLImageElement; move: Move; h: number }[] = [];
   private dots = SPOT_RGB.map(c => softDot(c));
   private crisp = SPOT_RGB.map(c => softDot(c, 64, true));
   private warm = softDot([255, 150, 60], 128);
   private spark = sparkSprite();
-  private beamSprites: Record<string, Cone[]> = {};
-  private sweep: Record<string, Cone> = {};
   private spots: Spot[] = [];
-  private motes: Record<string, Mote[]> = {};
+  private motes: Partial<Record<'pc' | 'tall', Mote[]>> = {};
   private still = matchMedia('(prefers-reduced-motion: reduce)');
 
-  constructor(private canvas: HTMLCanvasElement, private menu: HTMLElement) {
+  constructor(private menu: HTMLElement, private canvas: HTMLCanvasElement, private floor: HTMLElement) {
     this.ctx = canvas.getContext('2d')!;
     window.addEventListener('resize', () => (this.sized = false));
-    const n = VARIANT === 'a' ? 80 : 40;
-    for (let i = 0; i < n; i++) {
-      this.spots.push({ lon: hash(i + 1) * Math.PI * 2, y: hash(i + 101), r: 0.7 + hash(i + 201) * 0.6, c: Math.floor(hash(i + 301) * SPOT_RGB.length), tw: hash(i + 401) * 6.28 });
+    // each spot has a twin on the ball's far side: half a turn later the room shows the same spots, so the light loops
+    // after half a turn without the room ever showing a spot and its twin at once
+    for (let i = 0; i < SPOTS / 2; i++) {
+      const s = { lon: hash(i + 1) * Math.PI, y: hash(i + 101), r: 0.7 + hash(i + 201) * 0.6, c: Math.floor(hash(i + 301) * SPOT_RGB.length), tw: hash(i + 401) * 6.28 };
+      this.spots.push(s, { ...s, lon: s.lon + Math.PI });
     }
+  }
+
+  /** Every picture it needs is in. */
+  private ready(hall: Hall) {
+    return uiArt.has(hall.still) && uiArt.has(hall.bare) && hall.dancers.every(d => uiArt.has(d.key));
   }
 
   private size() {
     this.sized = true;
-    const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
+    // the menu's own box, which its picture covers (the canvas may be hidden yet)
+    const w = this.menu.clientWidth, h = this.menu.clientHeight;
     // one canvas pixel to a screen point is plenty for soft light, and each pixel more is work 20 times a second
-    const q = Number(new URLSearchParams(location.search).get('menuq')) || Math.min(1, Math.sqrt(MAX_PIXELS / Math.max(1, w * h)));
+    const q = Math.min(1, Math.sqrt(MAX_PIXELS / Math.max(1, w * h)));
     this.canvas.width = Math.round(w * q);
     this.canvas.height = Math.round(h * q);
     // the same picture as the stylesheet's: the tall one on an upright screen
     this.key = matchMedia('(orientation: portrait)').matches ? 'tall' : 'pc';
     this.hall = HALLS[this.key];
-    const s = Math.max(w / this.hall.w, h / this.hall.h);
+    const s = Math.max(w / this.hall.w, h / this.hall.h), ox = (w - this.hall.w * s) / 2, oy = (h - this.hall.h * s) / 2;
     this.s = s * q;
-    this.ox = ((w - this.hall.w * s) / 2) * q;
-    this.oy = ((h - this.hall.h * s) / 2) * q;
-    this.blank = true;
+    this.ox = ox * q;
+    this.oy = oy * q;
+    // the dancers stand where they stood in the still hall, each turning about its feet
+    this.floor.replaceChildren();
+    this.figs = this.hall.dancers.map(d => {
+      const img = new Image(), [x0, y0, x1, y1] = d.box;
+      img.src = uiArt.get(d.key)!.src;
+      img.alt = '';
+      Object.assign(img.style, {
+        left: `${ox + x0 * s}px`, top: `${oy + y0 * s}px`, width: `${(x1 - x0) * s}px`, height: `${(y1 - y0) * s}px`,
+        transformOrigin: `${(d.feet[0] - x0) * s}px ${(d.feet[1] - y0) * s}px`,
+      });
+      this.floor.append(img);
+      return { img, move: d.move, h: (y1 - y0) * s };
+    });
   }
 
-  private beamsOf() {
-    const k = this.key, H = this.hall;
-    this.beamSprites[k] ??= H.beams.map(b => coneSprite(b.from, b.to, b.rgb, 0.5));
-    // the spotlight is drawn hanging straight down from the top middle and turned about that point as it sweeps
-    const [, cy, reach] = H.stage, top: XY = [H.w / 2, -40], half = reach * 0.36;
-    this.sweep[k] ??= coneSprite(top, [[top[0] - half, cy], [top[0] + half, cy + 4]], [255, 244, 225], 0.42);
-    return this.beamSprites[k];
+  /** Light and dancers on (the hall without its dancers behind them) or off (the still hall with them). */
+  private set(on: boolean) {
+    if (on === this.on) return;
+    this.on = on;
+    this.menu.classList.toggle('alive', on);
+    if (!on) {
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
   }
 
+  /** Each beam's dust: somewhere in it or a little past its edges, so a mote drifts in and out of the light. */
   private motesOf() {
-    if (this.motes[this.key]) return this.motes[this.key];
-    const out: Mote[] = [], beams = this.hall.beams, n = VARIANT === 'b' ? 90 : 60;
-    for (let i = 0; i < n; i++) {
+    const had = this.motes[this.key];
+    if (had) return had;
+    const out: Mote[] = [], beams = this.hall.beams;
+    for (let i = 0; i < MOTES; i++) {
       const bi = i % beams.length, b = beams[bi];
-      // somewhere in the beam's cone, a little past its edges
       const u = 0.12 + hash(i + 501) * 0.85, v = -0.15 + hash(i + 601) * 1.3;
       const l = b.from[0] + (b.to[0][0] - b.from[0]) * u, r = b.from[0] + (b.to[1][0] - b.from[0]) * u;
       const y = b.from[1] + ((b.to[0][1] + b.to[1][1]) / 2 - b.from[1]) * u;
@@ -244,43 +283,43 @@ class MenuFx {
     return (this.motes[this.key] = out);
   }
 
-  /** Called from the game's loop each frame; draws only when it is time and the menu is on screen. */
+  /** Called from the game's loop each frame; draws only when it is time and the main menu is on screen. */
   tick(now: number) {
     if (this.menu.hidden) return;
-    const off = VARIANT === 'off' || this.still.matches || settings.quality === 'low' || !document.documentElement.classList.contains('art-menu_bg');
-    if (off) {
-      if (!this.blank) { this.ctx.setTransform(1, 0, 0, 1, 0, 0); this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height); this.blank = true; }
-      return;
+    if (this.still.matches || settings.quality === 'low') return this.set(false);
+    if (!this.sized) {
+      const key = matchMedia('(orientation: portrait)').matches ? 'tall' : 'pc';
+      if (!this.ready(HALLS[key])) return this.set(false);
+      this.size();
     }
-    if (!this.sized) this.size();
     if (now - this.drawnAt < 1000 / FPS - 4) return;
     this.drawnAt = now;
-    this.draw(now / 1000);
-    this.blank = false;
-  }
-
-  private draw(t: number) {
+    const t = now / 1000;
+    // the dancers keep to the tune when it plays, else to a clock at its pace
+    const beats = (sound.heard('menu') ?? t) / BEAT;
+    for (const f of this.figs) f.img.style.transform = pose(f.move, beats, f.h);
     const g = this.ctx;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.globalAlpha = 1;
     g.globalCompositeOperation = 'source-over';
     g.clearRect(0, 0, this.canvas.width, this.canvas.height);
     g.setTransform(this.s, 0, 0, this.s, this.ox, this.oy);
+    // light adds up where it overlaps
     g.globalCompositeOperation = 'lighter';
-    const v = VARIANT;
-    if (v === 'c') this.beams(t);
-    if (v === 'b' || v === 'd') this.torches(t, v === 'b' ? 1 : 0.75);
-    if (v === 'b' || v === 'd') this.dust(t, v === 'b' ? 1 : 0.8);
-    if (v === 'a' || v === 'd') this.mirror(t, v === 'a' ? 1 : 0.7);
+    this.torches(t);
+    this.dust(t);
+    this.mirror(t);
     g.globalAlpha = 1;
     g.globalCompositeOperation = 'source-over';
+    this.set(true);
   }
 
-  /** The ball turns: its spots sweep round the room, and sparks flash on it now and then. */
-  private mirror(t: number, k: number) {
+  /** The ball turns: its spots go round the room, and a spark flashes on it every beat. */
+  private mirror(t: number) {
     const g = this.ctx, H = this.hall, [bx, by, br] = H.ball;
-    // the spots go round the room as on a drum about the room's middle: across the back wall, thinning out at the sides
-    const turn = (t * Math.PI * 2) / 40, reach = H.w * 0.6, mx = H.w / 2;
+    // the spots go round as on a drum about the room's middle: across the back wall, thinning out at the sides; the ball
+    // turns once in two loops, and its twin spots make half a turn look the same
+    const turn = (W / 2) * t, reach = H.w * 0.6, mx = H.w / 2;
     const top = H.h * 0.03, bottom = H.h * 0.98;
     for (const s of this.spots) {
       const th = s.lon + turn, c = Math.cos(th);
@@ -290,84 +329,60 @@ class MenuFx {
       const y = top + (bottom - top) * s.y;
       const flat = y > H.floorY ? 0.45 : 1;
       const r = H.w * 0.011 * s.r * (0.7 + 0.3 * c);
-      g.globalAlpha = k * 0.85 * smooth(0.02, 0.35, c) * (0.7 + 0.3 * Math.sin(t * 2.3 + s.tw));
+      g.globalAlpha = 0.6 * smooth(0.02, 0.35, c) * (0.7 + 0.3 * Math.sin(7 * W * t + s.tw));
       g.drawImage(this.crisp[s.c], x - r, y - r * flat, r * 2, r * 2 * flat);
     }
-    // a spark every so often somewhere on the ball's face, each one lit for under a second
-    const every = 0.5, life = 0.9;
-    for (let n = Math.floor((t - life) / every) + 1; n * every <= t; n++) {
-      const age = (t - n * every) / life;
+    // the spark of each beat, somewhere on the ball's face, lit for under a second; the 40 beats of a loop have 40 places
+    const life = 0.9;
+    for (let n = Math.floor((t - life) / BEAT) + 1; n * BEAT <= t; n++) {
+      const age = (t - n * BEAT) / life;
       if (age < 0 || age > 1) continue;
-      const a = hash(n * 3 + 1) * 6.28, d = Math.sqrt(hash(n * 3 + 2)) * br * 0.82;
-      const x = bx + Math.cos(a) * d, y = by + Math.sin(a) * d, size = br * (0.32 + hash(n * 3 + 3) * 0.3) * Math.sin(age * Math.PI);
-      g.globalAlpha = k * 0.9 * Math.sin(age * Math.PI);
+      const k = ((n % 40) + 40) % 40, glow = Math.sin(age * Math.PI);
+      const a = hash(k * 3 + 1) * 6.28, d = Math.sqrt(hash(k * 3 + 2)) * br * 0.82;
+      const x = bx + Math.cos(a) * d, y = by + Math.sin(a) * d, size = br * (0.32 + hash(k * 3 + 3) * 0.3) * glow;
+      g.globalAlpha = 0.63 * glow;
       g.drawImage(this.spark, x - size, y - size, size * 2, size * 2);
     }
   }
 
   /** The flames breathe: the warm light round each one comes and goes, never two alike. */
-  private torches(t: number, k: number) {
-    const g = this.ctx, R = this.hall.w * 0.11;
+  private torches(t: number) {
+    const g = this.ctx, R = this.hall.w * 0.11, r = R * 0.28;
     this.hall.torches.forEach(([x, y], i) => {
-      const f = 0.5 + 0.22 * Math.sin(t * 7.3 + i * 1.7) + 0.16 * Math.sin(t * 12.9 + i * 4.1) + 0.12 * Math.sin(t * 21.7 + i * 2.3);
-      g.globalAlpha = k * (0.06 + 0.16 * f);
+      const f = 0.5 + 0.22 * Math.sin(23 * W * t + i * 1.7) + 0.16 * Math.sin(41 * W * t + i * 4.1) + 0.12 * Math.sin(69 * W * t + i * 2.3);
+      g.globalAlpha = 0.75 * (0.06 + 0.16 * f);
       g.drawImage(this.warm, x - R, y - R, R * 2, R * 2);
-      const r = R * 0.28;
-      g.globalAlpha = k * (0.1 + 0.3 * f);
+      g.globalAlpha = 0.75 * (0.1 + 0.3 * f);
       g.drawImage(this.warm, x - r, y - r * 1.2, r * 2, r * 2.4);
     });
   }
 
-  /** Dust floats in the air: seen only where a beam catches it, in the beam's colour. */
-  private dust(t: number, k: number) {
-    const g = this.ctx, beams = this.hall.beams;
+  /** Dust floats in the air, seen only where a beam catches it, in the beam's colour. */
+  private dust(t: number) {
+    const g = this.ctx, beams = this.hall.beams, wt = W * t;
     for (const m of this.motesOf()) {
-      const x = m.x + 16 * Math.sin(t * 0.21 + m.p[0]) + 9 * Math.sin(t * 0.47 + m.p[1]);
-      const y = m.y + 12 * Math.sin(t * 0.17 + m.p[2]) + 7 * Math.sin(t * 0.39 + m.p[3]);
+      const x = m.x + 16 * Math.sin(wt + m.p[0]) + 9 * Math.sin(2 * wt + m.p[1]);
+      const y = m.y + 12 * Math.sin(wt + m.p[2]) + 7 * Math.sin(3 * wt + m.p[3]);
       const lit = inBeam(beams[m.beam], x, y);
       if (lit <= 0.01) continue;
-      const r = m.r * 2.4;
-      g.globalAlpha = k * lit * (0.55 + 0.35 * Math.sin(t * 1.3 + m.p[0] * 3));
-      g.drawImage(this.dots[[2, 4, 3][m.beam] ?? 0], x - r, y - r, r * 2, r * 2);
-      g.globalAlpha *= 0.8;
+      const r = m.r * 2.4, a = 0.8 * lit * (0.55 + 0.35 * Math.sin(4 * wt + m.p[0] * 3));
+      g.globalAlpha = a;
+      g.drawImage(this.dots[BEAM_DOT[m.beam]], x - r, y - r, r * 2, r * 2);
+      // and a white grain in its middle
+      g.globalAlpha = a * 0.8;
       g.drawImage(this.dots[0], x - r * 0.4, y - r * 0.4, r * 0.8, r * 0.8);
     }
-  }
-
-  /** The three beams brighten one after another, and a white spotlight sweeps the dance floor. */
-  private beams(t: number) {
-    const g = this.ctx, H = this.hall, sprites = this.beamsOf();
-    sprites.forEach((c, i) => {
-      g.globalAlpha = 0.4 * (0.5 - 0.5 * Math.cos((t * Math.PI * 2) / 6 + (i * Math.PI * 2) / 3)) ** 1.5;
-      g.drawImage(c.c, c.x, c.y, c.w, c.h);
-      const [px, py, rx, ry] = H.beams[i].pool;
-      g.globalAlpha *= 0.9;
-      g.drawImage(this.dots[[2, 4, 3][i]], px - rx * 1.2, py - ry * 1.2, rx * 2.4, ry * 2.4);
-    });
-    const [cx, cy, reach] = H.stage, top: XY = [H.w / 2, -40];
-    const x = cx + Math.sin((t * Math.PI * 2) / 11) * reach;
-    const ang = -Math.atan2(x - top[0], cy - top[1]);
-    g.save();
-    g.translate(top[0], top[1]);
-    g.rotate(ang);
-    g.translate(-top[0], -top[1]);
-    g.globalAlpha = 0.8;
-    const sw = this.sweep[this.key];
-    g.drawImage(sw.c, sw.x, sw.y, sw.w, sw.h);
-    g.restore();
-    g.globalAlpha = 0.55;
-    const rx = reach * 0.42, ry = rx * 0.24;
-    g.drawImage(this.dots[0], x - rx, cy - ry, rx * 2, ry * 2);
   }
 }
 
 let fx: MenuFx | null = null;
-/** The menu's light, once the page is up; call menuFx(now) from the loop. */
+/** The menu's life: call from the game's loop every frame. */
 export function menuFx(now: number) {
   if (!fx) {
-    const canvas = document.getElementById('menuFx') as HTMLCanvasElement | null, menu = document.getElementById('menu');
-    if (!canvas || !menu) return;
-    fx = new MenuFx(canvas, menu);
+    const $ = (id: string) => document.getElementById(id);
+    const menu = $('menu'), canvas = $('menuFx') as HTMLCanvasElement | null, floor = $('menuDancers');
+    if (!menu || !canvas || !floor) return;
+    fx = new MenuFx(menu, canvas, floor);
   }
   fx.tick(now);
 }
