@@ -16,7 +16,7 @@ function steamWorld() {
     const me = { packet: [] as ((from: string, data: string) => void)[], invite: [] as ((lobby: string) => void)[] };
     players.set(id, me);
     return {
-      id, name, launch: null, invites: true,
+      id, name, launch: null,
       host: async (_max, data) => {
         const lobby = String((0x01840000n << 32n) | BigInt(next++));
         lobbies.set(lobby, { data: { ...data }, members: new Set([id]) });
@@ -33,7 +33,10 @@ function steamWorld() {
         l?.members.delete(id);
         if (l && !l.members.size) lobbies.delete(lobby);
       },
-      invite: lobby => { for (const [other, p] of players) if (other !== id) later(() => p.invite.forEach(f => f(lobby))); },
+      invite: async lobby => {
+        for (const [other, p] of players) if (other !== id) later(() => p.invite.forEach(f => f(lobby)));
+        return 'overlay';
+      },
       send: (to, data) => later(() => players.get(to)?.packet.forEach(f => f(id, data))),
       onPacket: cb => { me.packet.push(cb); },
       onFail: () => {},
@@ -200,6 +203,17 @@ describe('online play over Steam', () => {
     await host.net.hostRoom();
     const second = await host.net.hostRoom();
     expect(a.lobbies()).toEqual([lobbyOf(second)]);
+  });
+
+  it('invites friends into the room\'s lobby, and a friend who takes it gets the room\'s code', async () => {
+    vi.useFakeTimers();
+    const w = steamWorld(), a = w.player('100'), b = w.player('200'), host = netOf(a), taken: string[] = [];
+    b.onInvite(lobby => taken.push(codeOf(lobby)));
+    expect(await host.way.invite()).toBeNull();
+    const code = await host.net.hostRoom();
+    expect(await host.way.invite()).toBe('overlay');
+    await wait(50);
+    expect(taken).toEqual([code]);
   });
 
   it('fails plainly without Steam', async () => {

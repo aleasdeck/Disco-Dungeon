@@ -1301,8 +1301,10 @@ $('lobbyCopy').addEventListener('click', () => {
   navigator.clipboard?.writeText(url).then(() => lobbyStatus('Ссылка скопирована.'), () => lobbyStatus(url));
 });
 // the desktop build: friends come by Steam's invite, anyone else by the code
-$('lobbyInvite').hidden = !desktop?.steam?.invites;
-$('lobbyInvite').addEventListener('click', () => steamWay?.invite());
+$('lobbyInvite').hidden = !desktop?.steam;
+$('lobbyInvite').addEventListener('click', async () => {
+  if ((await steamWay?.invite()) === 'friends') lobbyStatus('Открыл список друзей Steam: нажми на друга правой кнопкой и пригласи в игру.');
+});
 $('lobbyCopyCode').addEventListener('click', () => {
   const code = net.code;
   navigator.clipboard?.writeText(code).then(() => lobbyStatus('Код скопирован.'), () => lobbyStatus(code));

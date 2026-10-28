@@ -5,7 +5,8 @@
 //   DD_FAKE_STEAM=27999 DD_PROFILE=b npm run desktop     a second window, with saves of its own
 //
 // Lobbies, their data and members, P2P packets and session requests behave as Steam's do. Steam's invite window has no
-// pretend: opening it hands the invite to every other window at once, as if a friend there took it.
+// pretend: opening it shows and hides the overlay as Steam's would, and hands the invite to every other window at once,
+// as if a friend there took it.
 
 'use strict';
 const net = require('node:net');
@@ -13,7 +14,7 @@ const net = require('node:net');
 /** A lobby's Steam id: the upper half every lobby has, then a number of the hub's. */
 const LOBBY = 0x01840000n << 32n;
 /** The callbacks steam.cjs registers, numbered as steamworks.js numbers them. */
-const SteamCallback = { LobbyDataUpdate: 4, LobbyChatUpdate: 5, P2PSessionRequest: 6, P2PSessionConnectFail: 7, GameLobbyJoinRequested: 8 };
+const SteamCallback = { LobbyDataUpdate: 4, LobbyChatUpdate: 5, P2PSessionRequest: 6, P2PSessionConnectFail: 7, GameLobbyJoinRequested: 8, GameOverlayActivated: 10 };
 
 /** Lines of JSON over a socket. */
 function lines(sock, onMsg) {
@@ -143,7 +144,11 @@ function client(port) {
     getMembers: () => (states.get(lid)?.members ?? []).map(m => ({ steamId64: BigInt(m) })),
     getOwner: () => ({ steamId64: BigInt(states.get(lid)?.owner ?? 0) }),
     leave: () => { send({ t: 'leave', lobby: lid }); states.delete(lid); },
-    openInviteDialog: () => send({ t: 'invite', lobby: lid }),
+    openInviteDialog: () => {
+      fire(SteamCallback.GameOverlayActivated, { active: true });
+      setTimeout(() => fire(SteamCallback.GameOverlayActivated, { active: false }), 300);
+      send({ t: 'invite', lobby: lid });
+    },
   });
 
   return {

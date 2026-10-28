@@ -56,7 +56,7 @@ const toPage = (channel, ...args) => { if (win && !win.isDestroyed()) win.webCon
 // the overlay's way of drawing not get on with someone's graphics card. Not on a Mac at all: the switches it needs are
 // untried there, and a game nobody sees (as on Windows before) is worse than one without the overlay.
 const overlay = !process.argv.includes('--no-overlay') && process.platform !== 'darwin';
-const steam = startSteam({ appId, fake, page: toPage, overlay });
+const steam = startSteam({ appId, fake, page: toPage, overlay, log });
 if (steam.error) console.warn(`Steam: ${steam.error}`);
 log(steam.error ? `Steam: none (${steam.error})` : `Steam: AppID ${appId}, overlay ${overlay && !fake ? 'on' : 'off'}`);
 
@@ -99,7 +99,7 @@ ipcMain.handle('steam:enter', (e, id) => {
   return steam.enter(id);
 });
 ipcMain.on('steam:leave', (e, id) => { if (fromGame(e) && !steam.error && ID.test(id)) steam.leave(id); });
-ipcMain.on('steam:invite', (e, id) => { if (fromGame(e) && !steam.error && ID.test(id)) steam.invite(id); });
+ipcMain.handle('steam:invite', (e, id) => (fromGame(e) && !steam.error && ID.test(id) ? steam.invite(id) : null));
 ipcMain.on('steam:send', (e, to, data) => { if (fromGame(e) && !steam.error && ID.test(to) && typeof data === 'string') steam.send(to, data); });
 ipcMain.on('app:quit', e => { if (fromGame(e)) app.quit(); });
 
@@ -147,7 +147,9 @@ function open() {
   win.loadURL(`${ORIGIN}/index.html`);
 }
 
-app.on('second-instance', () => {
+// started again while it runs: by Steam with a friend's lobby to join, or by hand
+app.on('second-instance', (_e, argv) => {
+  if (!steam.error) steam.again(argv);
   if (!win) return;
   if (win.isMinimized()) win.restore();
   win.focus();
