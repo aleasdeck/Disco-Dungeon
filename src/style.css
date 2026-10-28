@@ -1912,7 +1912,8 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .pick-panel .panel-head > .btn:last-child { margin-left: auto; }
 .pick-panel .hero-size { margin: 0; flex-wrap: nowrap; }
 .pick-panel .lobby-room { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
-.pick-panel .lobby-status { margin: 0; min-height: 0; }
+/* under the right column: the photo's print hangs a little past the board's foot and would cover a line on the left */
+.pick-panel .lobby-status { margin: 0; min-height: 0; text-align: right; }
 .pick-panel .lobby-status:empty { display: none; }
 /* the row across the whole panel, the photo under it on the left, the room code, the card and the button beside the photo */
 .pick-body {

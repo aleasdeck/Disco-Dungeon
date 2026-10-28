@@ -26,10 +26,11 @@ export interface SteamBridge {
   /** Goes into a lobby, unless already in it, and gives its data. */
   enter(lobby: string): Promise<Record<string, string>>;
   leave(lobby: string): void;
-  /** Steam's window for inviting friends into the lobby; it opens only over the Steam overlay, so only when `invites`. */
-  invite(lobby: string): void;
-  /** The overlay is on (not on a Mac, nor with `--no-overlay`): the game can open Steam's window of invites. */
-  invites: boolean;
+  /**
+   * Steam's window for inviting friends into the lobby, over the game; without the overlay (a Mac, `--no-overlay`, or it
+   * didn't show) Steam's own friends list opens instead. Gives which, or null for a lobby this side isn't in.
+   */
+  invite(lobby: string): Promise<Invite>;
   send(to: string, data: string): void;
   onPacket(cb: (from: string, data: string) => void): void;
   /** Steam gave up reaching that player. */
@@ -37,6 +38,9 @@ export interface SteamBridge {
   /** The player took a friend's invite, or «Join game» on a friend, while playing. */
   onInvite(cb: (lobby: string) => void): void;
 }
+
+/** Where friends got invited from: the overlay's invite window, or Steam's own friends list. */
+export type Invite = 'overlay' | 'friends' | null;
 
 export const desktop: Desktop | null = (globalThis as { desktop?: Desktop }).desktop ?? null;
 
@@ -135,7 +139,7 @@ class SteamPipe implements Pipe {
  * Rooms and links over Steam. `leave` lets go of the lobby for good (the player left the room): a player whose link
  * dropped stays in it meanwhile, so a host back from a crash finds its lobby still there and its players in it.
  */
-export function steamNet(steam: SteamBridge | null): { open: OpenRoom; join: JoinRoom; leave(): void; invite(): void } {
+export function steamNet(steam: SteamBridge | null): { open: OpenRoom; join: JoinRoom; leave(): void; invite(): Promise<Invite> } {
   /** Live links by `<Steam id>/<link>`, and the player's knocks still waiting for an answer. */
   const pipes = new Map<string, SteamPipe>();
   const knocks = new Map<string, { peer: string; ok(): void; no(e: RoomError): void }>();
@@ -265,6 +269,6 @@ export function steamNet(steam: SteamBridge | null): { open: OpenRoom; join: Joi
       hosting = null;
       keepOnly(null);
     },
-    invite: () => { if (using) steam?.invite(using); },
+    invite: async () => (using && steam ? steam.invite(using) : null),
   };
 }
