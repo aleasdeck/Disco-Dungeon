@@ -1900,7 +1900,7 @@ let langIn = setLang(isLang(settings.lang) ? settings.lang : detectLang());
  * never sees the English one first, and again on each change of language.
  */
 // i18n-skip: each name as its picture spells it, not a line to translate
-const LOGOS = { en: { w: 1080, h: 531, alt: 'Disco Underground' }, ru: { w: 1080, h: 458, alt: 'Диско-подполье' } };
+const LOGOS = { en: { w: 1080, h: 807, alt: 'Disco Underground' }, ru: { w: 1080, h: 692, alt: 'Диско-подполье' } };
 function showLogo(code: Lang) {
   const k = code === 'ru' ? 'ru' : 'en', l = LOGOS[k], src = assetUrl(`ui/logo_${k}.webp`);
   for (const img of document.querySelectorAll<HTMLImageElement>('img.logo-pic')) {
