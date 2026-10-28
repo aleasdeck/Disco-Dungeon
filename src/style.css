@@ -1298,6 +1298,7 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
   transform: rotate(-2deg);
 }
 .overlay.win .end-panel p:not(.muted) { color: var(--text); }
+.confetti-box { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .confetti {
   position: absolute; top: -16px; width: 8px; height: 14px; border-radius: 2px; pointer-events: none;
   animation: win-fall linear infinite;
@@ -1666,8 +1667,15 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .loot-whose { display: flex; align-items: center; gap: 6px; font: 600 15px Oswald, sans-serif; color: var(--c); }
 .loot-whose img { width: 26px; height: 26px; clip-path: var(--cut-face); background: var(--c); }
 #lootLeave { justify-self: end; align-self: flex-end; margin-top: 4px; }
-@media (max-height: 520px) and (orientation: landscape) {
+/* a low window on its side (the PC's smallest, 960×540, or a phone): the window closes up to the screen's edges, so the
+   boss's line and all three trophies fit without a scrollbar */
+@media (max-height: 620px) and (orientation: landscape) {
+  #lootScreen { padding-top: 6px; padding-bottom: 6px; }
   .art-panel #lootScreen .ev-panel { padding: 20px 24px; }
+  #lootScreen .ev-body { gap: 8px; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  .art-panel #lootScreen .ev-panel { padding: 14px 22px; }
   .loot-opt { padding-left: 58px; min-height: 0; }
   .loot-ico { left: 8px; width: 40px; height: 40px; }
 }
@@ -2140,8 +2148,10 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
 
 /* ---------- the end of the run (src/albumview.ts): the album's prints pegged on a line to dry, ДО, the bosses beaten and
    ПОСЛЕ, under the congratulation, with the run in numbers on a board below (Vladislav's pick of three layouts, 2026-10-22) */
-.overlay.run-end { background: rgba(10, 7, 5, 0.8); place-items: start center; padding: 14px 16px calc(16px + var(--safe-b)); }
-.re-wrap { width: min(1280px, 100%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.overlay.run-end { --pt: 14px; --pb: 16px; background: rgba(10, 7, 5, 0.8); place-items: start center; padding: var(--pt) 16px calc(var(--pb) + var(--safe-b)); }
+/* the album keeps to the screen's height, so a PC has no scrollbar over it (Vladislav, 2026-10-28): the rest keeps its
+   size and the line of prints gives way; under it room for the board rising 24px into place */
+.re-wrap { width: min(1280px, 100%); max-height: calc(100dvh - var(--pt) - max(var(--pb), 25px) - var(--safe-b)); display: flex; flex-direction: column; align-items: center; gap: 6px; container-type: inline-size; }
 .re-head { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding-top: 6px; }
 .re-ribbon {
   font: 600 14px Oswald, sans-serif; letter-spacing: 0.16em; text-transform: uppercase; color: #1c120a;
@@ -2154,7 +2164,12 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
 }
 .re-head h2.lose { color: #eadfc8; }
 .re-gag { margin: 0; max-width: 760px; font: 700 clamp(19px, 2.2vw, 26px)/1.1 var(--hand); color: var(--text); text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8); }
-.re-ropes { width: 100%; }
+/* the line stands as tall as its biggest print at full size (--nat, albumview.ts) with the peg's room, the caption and
+   the room under it; squeezed lower, the biggest print is cut to the width that still fits (--fit) */
+.re-ropes {
+  --cap-h: calc(clamp(14px, 1.45vw, 21px) + 14px); --fit: calc((100cqh - 28px - var(--cap-h)) / 0.96);
+  width: 100%; flex: 0 1 calc(var(--nat, 300px) * 0.96 + 28px + var(--cap-h)); min-height: 150px; container-type: size;
+}
 .re-tall { display: none; }
 .re-line { position: relative; width: 100%; padding-top: 14px; }
 /* the string from edge to edge of the screen, sagging in the middle */
@@ -2237,7 +2252,10 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
 .re-lb figcaption { font: 700 30px/1 var(--hand); color: #2a1a0d; text-align: center; padding: 10px 0 14px; }
 /* an upright phone: ДО and ПОСЛЕ on one line, the bosses on a second, the numbers three to a row */
 @media (orientation: portrait) and (max-width: 700px) {
-  .overlay.run-end { padding: 10px 8px calc(12px + var(--safe-b)); }
+  .overlay.run-end { --pt: 10px; --pb: 12px; padding-left: 8px; padding-right: 8px; }
+  /* here the album runs on down the screen, its prints at full size */
+  .re-wrap { max-height: none; }
+  .re-ropes { flex: none; min-height: 0; container-type: normal; --fit: initial; }
   .re-wide { display: none; }
   .re-tall { display: block; }
   .re-line { padding-top: 12px; }
@@ -2267,10 +2285,27 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
   .re-nom span { font-size: 15px; }
   .re-btns { margin: 0; justify-content: space-between; }
 }
+/* a low screen on its side (a 720 px laptop, the Deck, a phone): the heading and the board close up, so the prints keep
+   more of the height; what the run opened and the full game's word share a row */
+@media (orientation: landscape) and (max-height: 820px) {
+  .overlay.run-end { --pt: 8px; --pb: 10px; }
+  .re-head { gap: 4px; padding-top: 0; }
+  .re-ribbon { font-size: 12px; padding: 3px 12px; }
+  .re-head h2 { font-size: clamp(30px, 7.5dvh, 66px); }
+  .re-gag { max-width: 1000px; font-size: clamp(16px, 3dvh, 24px); }
+  .art-panel .re-panel { padding: 16px 26px; border-image-width: 40px 28px; }
+  .re-panel { flex-flow: row wrap; gap: 10px 16px; }
+  .re-panel > * { flex: 1 1 100%; }
+  .re-panel > .re-gains { flex: 0 1 auto; }
+  .re-panel > .re-full { flex: 1 1 360px; }
+  .re-tile { min-height: 50px; }
+}
 @media (prefers-reduced-motion: reduce) {
   .pol, .re-panel { animation: none; }
 }
-.overlay.run-end.win { overflow: auto; }
+/* it scrolls only down, and only where it is taller than the screen: the string to the screen's edges and the prints
+   swinging in never push it sideways */
+.overlay.run-end, .overlay.run-end.win { overflow: hidden auto; }
 
 /* the quotes each language writes round a name it quotes (the button names in the hero's lines, the trinkets' lines) */
 :lang(en) :is(.coach-paper, .cs-bub) q, :lang(pt) :is(.coach-paper, .cs-bub) q, :lang(ko) :is(.coach-paper, .cs-bub) q, :lang(zh) :is(.coach-paper, .cs-bub) q { quotes: '“' '”'; }

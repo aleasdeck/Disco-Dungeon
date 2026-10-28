@@ -1024,15 +1024,19 @@ function showEnd(e: Ending) {
 /** Dress a result screen up as the victory banner: a spinning disco ball and confetti falling over it. */
 function victory(el: HTMLElement, on: boolean) {
   el.classList.toggle('win', on);
-  el.querySelectorAll('.confetti').forEach(c => c.remove());
+  el.querySelectorAll('.confetti-box').forEach(c => c.remove());
   if (!on) return;
+  // the confetti fall in a box the size of the screen, so what falls past its bottom gives the screen no scrollbar
+  const box = document.createElement('div');
+  box.className = 'confetti-box';
   const cols = ['#d9b24a', '#d9733a', '#3fc4b6', '#b8323f', '#9a7bd9', '#f0e5d0'];
   for (let k = 0; k < 40; k++) {
     const c = document.createElement('i');
     c.className = 'confetti';
     c.style.cssText = `left:${Math.random() * 100}%;background:${cols[k % cols.length]};animation-delay:${-Math.random() * 4}s;animation-duration:${3 + Math.random() * 3}s;--dx:${Math.random() * 80 - 40}px`;
-    el.prepend(c);
+    box.append(c);
   }
+  el.prepend(box);
 }
 
 function hideEnd() {

@@ -66,9 +66,12 @@ function paint(draw: (cv: HTMLCanvasElement) => void, cap: string, big: boolean)
 
 /**
  * A line with prints pegged on it, sagging in the middle: each print hangs from its peg a little lower towards the
- * middle and turned a little, and comes in after the one before it. `widths` are the prints' widths in % of the line.
+ * middle and turned a little, and comes in after the one before it. `widths` are the prints' widths in % of the line,
+ * `caps` in px; where the screen is too low for them, the biggest print is cut to the width `--fit` gives (style.css,
+ * .re-ropes) and the others in step with it.
  */
 function line(ps: Print[], widths: number[], caps: number[], sag: number, from: number) {
+  const top = Math.max(...caps);
   const el = document.createElement('div');
   el.className = 're-line';
   el.innerHTML = `<svg class="re-rope" viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true"><path d="M0 1 Q50 ${1 + sag / 4} 100 1"/></svg>`;
@@ -77,7 +80,7 @@ function line(ps: Print[], widths: number[], caps: number[], sag: number, from: 
   ps.forEach((p, k) => {
     const t = (k + 0.5) / ps.length, f = document.createElement('figure');
     f.className = 'pol';
-    f.style.cssText = `--i:${from + k};--r:${((k * 7 + from * 3) % 5) - 2}deg;--dy:${(sag * 4 * t * (1 - t)).toFixed(1)}px;width:min(${widths[k]}%, ${caps[k]}px)`;
+    f.style.cssText = `--i:${from + k};--r:${((k * 7 + from * 3) % 5) - 2}deg;--dy:${(sag * 4 * t * (1 - t)).toFixed(1)}px;width:min(${widths[k]}%, ${caps[k]}px, calc(var(--fit, 9999px) * ${(caps[k] / top).toFixed(3)}))`;
     f.innerHTML = `<span class="peg" aria-hidden="true"></span><img alt="" src="${p.url}"><figcaption>${p.cap}</figcaption>`;
     f.addEventListener('click', () => zoom(p));
     row.append(f);
@@ -162,7 +165,10 @@ export function showAlbum(a: Album, o: { gains?: Gains | null; button: string | 
   const wide = document.createElement('div');
   wide.className = 're-wide';
   const weight = prints.map(p => (p.big ? 1.3 : 1)), sum = weight.reduce((s, v) => s + v, 0), room = 96 - 2 * (prints.length - 1);
-  wide.append(line(prints, weight.map(v => (v / sum) * room), prints.map(p => (p.big ? 300 : 230)), 26, 0));
+  const widths = weight.map(v => (v / sum) * room), caps = prints.map(p => (p.big ? 300 : 230));
+  wide.append(line(prints, widths, caps, 26, 0));
+  // the biggest print's width at full size, which the line's height at full size follows (style.css, .re-ropes)
+  ropes.style.setProperty('--nat', `min(${Math.max(...widths).toFixed(2)}cqw, ${Math.max(...caps)}px)`);
   const tall = document.createElement('div');
   tall.className = 're-tall';
   tall.append(line(ends, [46, 46], [260, 260], 14, 0));
