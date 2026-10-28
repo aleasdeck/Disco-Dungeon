@@ -407,6 +407,7 @@ export function renderLobby(o: {
   $('lobbyStart').hidden = true;
   $('lobbyRoom').hidden = false;
   $('lobbyRoom').closest('.panel')!.classList.add('pick-panel');
+  $('lobbyCodeBox').hidden = false;
   $('lobbyRoomCode').textContent = o.code;
   const me = o.players.find(p => p.id === o.me), mine = me?.hero ?? null;
   const ownerOf = (i: number) => o.players.find(p => p.hero === i);
@@ -486,6 +487,7 @@ export function resetLobby() {
   $('lobbyStart').hidden = false;
   $('lobbyRoom').hidden = true;
   $('lobbyRoom').closest('.panel')!.classList.remove('pick-panel');
+  $('lobbyCodeBox').hidden = true;
   lobbyPeek = -1;
   lobbyShown = -1;
   $('lobbyPhoto').parentElement!.classList.remove('zoomed');
