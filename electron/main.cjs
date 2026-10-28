@@ -53,8 +53,9 @@ if (app.isPackaged && config.appId !== 480 && require('@pipelab/steamworks.js').
 let win = null;
 const toPage = (channel, ...args) => { if (win && !win.isDestroyed()) win.webContents.send(channel, ...args); };
 // `--no-overlay` in the game's launch options (Steam: the game's Properties) starts it without the Steam overlay, should
-// the overlay's way of drawing not get on with someone's graphics card
-const overlay = !process.argv.includes('--no-overlay');
+// the overlay's way of drawing not get on with someone's graphics card. Not on a Mac at all: the switches it needs are
+// untried there, and a game nobody sees (as on Windows before) is worse than one without the overlay.
+const overlay = !process.argv.includes('--no-overlay') && process.platform !== 'darwin';
 const steam = startSteam({ appId, fake, page: toPage, overlay });
 if (steam.error) console.warn(`Steam: ${steam.error}`);
 log(steam.error ? `Steam: none (${steam.error})` : `Steam: AppID ${appId}, overlay ${overlay && !fake ? 'on' : 'off'}`);
@@ -116,15 +117,19 @@ function open() {
     },
   });
   win.once('ready-to-show', () => win.show());
+  // fullscreen or not, however it was switched (the keys below, or a Mac's green button and menu), stays so next time
+  const keep = () => fs.writeFileSync(PREFS, JSON.stringify({ ...prefs(), fullscreen: win.isFullScreen() }));
+  win.on('enter-full-screen', keep);
+  win.on('leave-full-screen', keep);
   win.webContents.on('did-finish-load', () => log('page loaded'));
   win.webContents.on('console-message', e => { if (e.level === 'warning' || e.level === 'error') log(`page ${e.level}: ${e.message} (${e.sourceId}:${e.lineNumber})`); });
-  // F11 or Alt+Enter: fullscreen and back, remembered; F12 the developer tools, only while trying things out
+  // F11 or Alt+Enter: fullscreen and back (a Mac's own Ctrl+Cmd+F is in its menu); F12 the developer tools, only while
+  // trying things out
   win.webContents.on('before-input-event', (e, input) => {
     if (input.type !== 'keyDown') return;
     if (input.key === 'F11' || (input.key === 'Enter' && input.alt)) {
       e.preventDefault();
       win.setFullScreen(!win.isFullScreen());
-      fs.writeFileSync(PREFS, JSON.stringify({ ...prefs(), fullscreen: win.isFullScreen() }));
     } else if (input.key === 'F12' && !app.isPackaged) win.webContents.toggleDevTools();
   });
   // the page never goes anywhere but the game; links out (the Steam page, the feedback form) open in the browser
@@ -154,7 +159,10 @@ app.whenReady().then(() => {
   log(`switches: ${['in-process-gpu', 'disable-direct-composition', 'disable-gpu'].filter(s => app.commandLine.hasSwitch(s)).join(' ') || 'none'}`);
   log(`GPU: ${JSON.stringify(app.getGPUFeatureStatus())}`);
   app.getGPUInfo('basic').then(i => log(`GPU devices: ${JSON.stringify(i.gpuDevice)}`)).catch(() => {});
-  Menu.setApplicationMenu(null);
+  // No menu, but a Mac's: without it there Cmd+Q doesn't quit and Cmd+V doesn't paste a room's code
+  Menu.setApplicationMenu(process.platform === 'darwin'
+    ? Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { label: 'View', submenu: [{ role: 'togglefullscreen' }] }, { role: 'windowMenu' }])
+    : null);
   protocol.handle('app', async req => {
     const file = fileOf(req.url);
     if (!file) return new Response('', { status: 404 });
