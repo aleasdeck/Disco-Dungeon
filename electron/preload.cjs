@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('desktop', {
     id: steam.id,
     name: steam.name,
     launch: steam.launch,
+    invites: steam.invites,
     host: (max, data) => ipcRenderer.invoke('steam:host', max, data),
     enter: lobby => ipcRenderer.invoke('steam:enter', lobby),
     leave: lobby => ipcRenderer.send('steam:leave', lobby),

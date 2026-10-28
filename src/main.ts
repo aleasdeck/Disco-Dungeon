@@ -1300,7 +1300,7 @@ $('lobbyCopy').addEventListener('click', () => {
   navigator.clipboard?.writeText(url).then(() => lobbyStatus('Ссылка скопирована.'), () => lobbyStatus(url));
 });
 // the desktop build: friends come by Steam's invite, anyone else by the code
-$('lobbyInvite').hidden = !desktop?.steam;
+$('lobbyInvite').hidden = !desktop?.steam?.invites;
 $('lobbyInvite').addEventListener('click', () => steamWay?.invite());
 $('lobbyCopyCode').addEventListener('click', () => {
   const code = net.code;

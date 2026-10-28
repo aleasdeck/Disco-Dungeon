@@ -81,7 +81,7 @@ function startSteam({ appId, fake, page, overlay = true }) {
       for (const l of lobbies.values()) l.leave();
       lobbies.clear();
       const lang = client.apps.currentGameLanguage();
-      const info = { id: me, name: client.localplayer.getName(), lang: LANGS[lang] ?? null, launch };
+      const info = { id: me, name: client.localplayer.getName(), lang: LANGS[lang] ?? null, launch, invites: !!fake || overlay };
       launch = null;
       return info;
     },

@@ -1,5 +1,7 @@
-// How electron-builder packs the desktop build for Steam (npm run pack:demo): the demo's files (dist-demo), the app's own
-// (electron/) and steamworks.js, into release/<platform>-unpacked/. That folder is what goes up to Steam (SteamPipe).
+// How electron-builder packs the desktop build for Steam (npm run pack:demo, on each system for its own): the demo's files
+// (dist-demo), the app's own (electron/) and steamworks.js, into release/win-unpacked/, release/linux-unpacked/ (Linux and
+// the Steam Deck) or release/mac-universal/ (a Mac with either chip). That folder is what goes up to Steam (SteamPipe),
+// each system's into a depot of its own.
 
 'use strict';
 const fs = require('node:fs');
@@ -32,5 +34,16 @@ module.exports = {
     // Steam's library beside the game too, as Valve's documentation puts it (asarUnpack keeps one by the .node file)
     extraFiles: [{ from: `${STEAMWORKS}/dist/win64/steam_api64.dll`, to: 'steam_api64.dll' }],
   },
-  linux: { target: 'dir', executableName: 'disco-underground-demo' },
+  linux: { target: 'dir', executableName: 'disco-underground-demo', category: 'Game' },
+  mac: {
+    target: [{ target: 'dir', arch: ['universal'] }],
+    category: 'public.app-category.games',
+    // No Apple Developer account: signed ad hoc, as a Mac with Apple's chip wants of any program. A game installed by Steam
+    // runs so; Gatekeeper stops only what a browser downloaded (the CI's zip: right click → Open). Hardened runtime would
+    // refuse Electron's own frameworks signed by another team.
+    identity: '-',
+    hardenedRuntime: false,
+    // steamworks.js brings the modules for both chips, the same files in both halves of the universal build
+    x64ArchFiles: `**/${STEAMWORKS}/dist/osx/*.node`,
+  },
 };

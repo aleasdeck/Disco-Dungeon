@@ -16,7 +16,7 @@ function steamWorld() {
     const me = { packet: [] as ((from: string, data: string) => void)[], invite: [] as ((lobby: string) => void)[] };
     players.set(id, me);
     return {
-      id, name, launch: null,
+      id, name, launch: null, invites: true,
       host: async (_max, data) => {
         const lobby = String((0x01840000n << 32n) | BigInt(next++));
         lobbies.set(lobby, { data: { ...data }, members: new Set([id]) });

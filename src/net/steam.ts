@@ -26,8 +26,10 @@ export interface SteamBridge {
   /** Goes into a lobby, unless already in it, and gives its data. */
   enter(lobby: string): Promise<Record<string, string>>;
   leave(lobby: string): void;
-  /** Steam's window for inviting friends into the lobby. */
+  /** Steam's window for inviting friends into the lobby; it opens only over the Steam overlay, so only when `invites`. */
   invite(lobby: string): void;
+  /** The overlay is on (not on a Mac, nor with `--no-overlay`): the game can open Steam's window of invites. */
+  invites: boolean;
   send(to: string, data: string): void;
   onPacket(cb: (from: string, data: string) => void): void;
   /** Steam gave up reaching that player. */

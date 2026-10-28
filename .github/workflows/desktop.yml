@@ -1,7 +1,9 @@
 name: Desktop build
 
-# The demo for Steam as a Windows app (electron/, npm run pack:demo): the folder to try out or to upload to Steam is this
-# run's artifact «disco-underground-demo-windows».
+# The demo for Steam as a desktop app (electron/, npm run pack:demo), on each system for its own: what to try out or to
+# upload to Steam is this run's artifacts «disco-underground-demo-windows» (the folder), «-linux» (a .tar.gz, for Linux
+# and the Steam Deck) and «-mac» (a .zip of the app, for a Mac with either chip). Linux's and the Mac's are packed once
+# more because an artifact's own zip loses which files may run and the Mac app's links.
 
 on:
   push:
@@ -18,8 +20,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  windows:
-    runs-on: windows-latest
+  pack:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: windows, os: windows-latest, out: release/win-unpacked }
+          - { name: linux, os: ubuntu-latest, out: release/disco-underground-demo-linux.tar.gz }
+          - { name: mac, os: macos-latest, out: release/disco-underground-demo-mac.zip }
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,8 +40,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run pack:demo
+      - if: matrix.name == 'linux'
+        run: tar -czf ${{ matrix.out }} -C release linux-unpacked
+      - if: matrix.name == 'mac'
+        run: ditto -c -k --keepParent "release/mac-universal/Disco Underground Demo.app" ${{ matrix.out }}
       - uses: actions/upload-artifact@v4
         with:
-          name: disco-underground-demo-windows
-          path: release/win-unpacked
+          name: disco-underground-demo-${{ matrix.name }}
+          path: ${{ matrix.out }}
           retention-days: 14
