@@ -775,7 +775,9 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .muted { color: var(--muted, #b2a38c); font-size: 13px; }
 
 /* ---------- main menu */
-.menu-panel { text-align: center; width: min(420px, 100%); justify-self: center; }
+.menu-panel { position: relative; text-align: center; width: min(420px, 100%); justify-self: center; }
+/* the hall's light over its picture (src/menufx.ts), held to the screen like the picture while the menu scrolls */
+.menu-fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 /* the game's name as its picture (logo_en / logo_ru), wider than the buttons under it, less wide on a low screen: the
    picture is about three quarters as tall as wide, so the buttons under it still fit on a 720 px laptop and a small phone */
 .logo { margin: 0 0 0 50%; width: clamp(240px, min(92vw, 50vh), 540px); line-height: 0; transform: translateX(-50%) rotate(-2deg); }
