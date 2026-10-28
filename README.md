@@ -36,9 +36,9 @@ CI (`.github/workflows/desktop.yml`) при каждом пуше в `main` со
 
 - `disco-underground-demo-windows`: папка с `DiscoUndergroundDemo.exe`;
 - `disco-underground-demo-linux`: `.tar.gz` с папкой для Linux и Steam Deck, запускается `disco-underground-demo`;
-- `disco-underground-demo-mac`: `.zip` с `Disco Underground Demo.app` для Мака на любом процессоре (universal).
+- `disco-underground-demo-mac`: `.zip` с `DiscoUndergroundDemo.app` для Мака на любом процессоре (universal).
 
-В Steamworks под каждую систему заводится свой депо, и у каждой своя команда запуска: `DiscoUndergroundDemo.exe`, `disco-underground-demo` и `Disco Underground Demo.app`.
+В Steamworks под каждую систему заводится свой депо, и у каждой своя команда запуска: `DiscoUndergroundDemo.exe`, `disco-underground-demo` и `DiscoUndergroundDemo.app`.
 
 Мак-версия подписана без аккаунта Apple Developer (ad hoc, `identity: '-'`): так её запускает Мак с процессором Apple, и игру, поставленную через Steam, macOS пускает. Скачанный из браузера zip Gatekeeper останавливает, тогда открывают через правый клик → «Открыть». Нотаризации нет. Оверлей Steam на Маке выключен: нужные ему ключи там никто не проверял, а невидимая игра, как было на Windows, хуже игры без оверлея. Поэтому «Пригласить друзей» там не показывается, и друзей зовут кодом или из списка друзей Steam. Полный экран на Маке включается сочетанием Ctrl+Cmd+F или зелёной кнопкой, Cmd+Q и Cmd+V работают через меню приложения. Мак-сборку пока никто не проверял.
 
