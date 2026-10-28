@@ -2728,8 +2728,11 @@ export class Game {
    */
   private zoneAct(m: Mob, it: Intent) {
     const S = this.S, d = MOBS[m.k], z = it.z ?? 'cold', spots = it.spots ?? [], col = ZONE_COL[z];
-    const rolled = z === 'roll' ? this.swept(m.walk ?? [], mobSize(m.k)) : spots;
-    const hit = this.alive().filter(h => this.underHammer(h, spots) && this.underHammer(h, rolled));
+    const rolled = z === 'roll' ? this.swept(m.walk ?? [], mobSize(m.k)) : spots, crushed = m.crushed ?? [];
+    // the ball has already hurt those it ran over, the moment it reached them (crushOn)
+    const hit = this.alive().filter(h => this.underHammer(h, spots) && this.underHammer(h, rolled) && !crushed.includes(h.i));
+    // and whoever it hits now it doesn't hurt again as it settles
+    if (z === 'roll') m.crushed = [...crushed, ...hit.map(h => h.i)];
     if (z === 'cold' && spots.length) {
       // the freezer is behind the door: it stays open till the fridge's next move
       const c = spots.reduce((o, p) => ({ x: o.x + p.x / spots.length, y: o.y + p.y / spots.length }), { x: 0, y: 0 }), L = Math.hypot(c.x - m.x, c.y - m.y) || 1;
@@ -2750,7 +2753,7 @@ export class Game {
       this.float(m.x, m.y - 24, 'ДЫМ!', '#c9c2d8');
       this.note(M('{0}: комнату затянуло дымом', m.name));
     }
-    if (!hit.length) this.note(M('{0}: {1} мимо', m.name, ZONE_NAME[z]));
+    if (!hit.length && !crushed.length) this.note(M('{0}: {1} мимо', m.name, ZONE_NAME[z]));
     for (const h of hit) {
       // the freezer and the belch hit as well (thread «Сложность боссов»), then freeze or set on fire whoever is still up
       if (z === 'cold') {
@@ -3263,6 +3266,7 @@ export class Game {
     m.fx = m.tx = m.x;
     m.fy = m.ty = m.y;
     m.walk = undefined;
+    m.crushed = undefined;
     if (m.hp <= 0 || !it || this.frozen(m)) return;
     // the fallen disco ball rolls down its lane as far as it gets now; one running from the heroes runs from where they stand now
     if (it.t === 'zone' && it.z === 'roll') { this.setWalk(m, this.rollWay(m, it.way ?? [])); return; }
@@ -3720,13 +3724,31 @@ export class Game {
       m.hop = m.hp > 0 && u < 1 ? Math.sin(Math.PI * u) * 4 : 0;
       return;
     }
-    const n = w.length - 1;
-    this.putDown(m, S.clock >= T ? n : Math.floor((S.clock / T) * n));
+    const n = w.length - 1, on = S.clock >= T ? n : Math.floor((S.clock / T) * n);
+    this.putDown(m, on);
+    if (m.intent?.t === 'zone' && m.intent.z === 'roll') this.crushOn(m, m.intent, w.slice(0, on + 1));
     if (S.clock >= T) { m.x = m.tx; m.y = m.ty; m.hop = 0; return; }
     const at = Math.min(n - 1e-6, (S.clock / T) * n), k = Math.floor(at), f = at - k, e = f * f * (3 - 2 * f);
     m.x = w[k].x + (w[k + 1].x - w[k].x) * e;
     m.y = w[k].y + (w[k + 1].y - w[k].y) * e;
     m.hop = Math.sin(Math.PI * f) * 6;
+  }
+
+  /**
+   * The rolling ball hurts a hero in its lit lane the moment it rolls onto them, not at the end of the roll; each one once.
+   * The host's (or the lone player's) game does it, a client gets the blow with the next snapshot.
+   */
+  private crushOn(m: Mob, it: Intent, way: Pt[]) {
+    if (this.send || way.length < 2) return;
+    const rolled = this.swept(way, mobSize(m.k)), done = (m.crushed ??= []);
+    for (const h of this.alive()) {
+      if (done.includes(h.i) || !this.underHammer(h, it.spots ?? []) || !this.underHammer(h, rolled)) continue;
+      done.push(h.i);
+      this.S.shake = Math.max(this.S.shake, 0.35);
+      this.sfx('slam');
+      const blk = this.hurtHero(h, it.dmg, '', m);
+      this.noteBlow(M('{0}: {1} по {2} на {3}', m.name, ZONE_NAME.roll, h.def.dat, it.dmg), h, blk);
+    }
   }
 
   /** The walker has put down on its `n`th cell: a knock on the board for each, once, however the snapshots set the clock back. */

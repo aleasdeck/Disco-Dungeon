@@ -184,6 +184,8 @@ export interface Mob {
   hop: number;
   /** The stretch of route walked this enemy turn, from (fx, fy) to (tx, ty). */
   walk?: { x: number; y: number }[];
+  /** The heroes (by hero index) the rolling ball has run over so far this roll: each hurt as the ball reached them, once. */
+  crushed?: number[];
   /** Index in the room's mob list of the mob that summoned this one, or -1. */
   owner: number;
   /** Counts down from 1 while a summoned mob rises out of its circle. */
