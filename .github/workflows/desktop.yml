@@ -40,10 +40,18 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run pack:demo
+        env:
+          # the Mac app is signed ad hoc, with no certificate or secret at all, so a pull request's build may be signed too
+          CSC_FOR_PULL_REQUEST: ${{ matrix.name == 'mac' }}
       - if: matrix.name == 'linux'
         run: tar -czf ${{ matrix.out }} -C release linux-unpacked
       - if: matrix.name == 'mac'
-        run: ditto -c -k --keepParent "release/mac-universal/Disco Underground Demo.app" ${{ matrix.out }}
+        run: |
+          ls release/mac-universal
+          app=$(ls -d release/mac-universal/*.app)
+          codesign --verify --deep --strict --verbose=2 "$app"
+          lipo -archs "$app/Contents/MacOS/"*
+          ditto -c -k --keepParent "$app" ${{ matrix.out }}
       - uses: actions/upload-artifact@v4
         with:
           name: disco-underground-demo-${{ matrix.name }}
