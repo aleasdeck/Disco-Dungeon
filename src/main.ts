@@ -39,6 +39,7 @@ import { setOut } from './volume';
 import { bindCollection, renderCollection, type ColTab } from './collection';
 import { LANGS, M, Mjoin, detectLang, isLang, lang, onLang, scanDom, setLang, t, type Lang } from './i18n';
 import { initTips } from './tip';
+import { menuFx } from './menufx';
 
 // the page's own Russian text, found before the game writes anything into the page
 scanDom();
@@ -1843,6 +1844,7 @@ function frame(now: number) {
   keepSeat(now);
   keepRun(now);
   countStats(now, raw);
+  menuFx(now);
   const camKey = `${cam.panX},${cam.panY},${cam.zoom},${cam.rot}`;
   const changed = stale || camKey !== drawnCam || game.S !== drawnRoom || busy();
   const covered = document.querySelector('.overlay:not([hidden])') !== null;
