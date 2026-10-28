@@ -832,8 +832,13 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .join-row { display: flex; gap: 8px; }
 .join-row input { width: 7.5em; text-transform: uppercase; letter-spacing: 0.15em; font-family: Oswald, sans-serif; }
 .lobby-status { min-height: 1.4em; margin: 10px 0 0; color: #ff8a7a; }
-.room-code { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 16px; }
-.room-code b { font: 700 28px Oswald, sans-serif; letter-spacing: 0.18em; color: var(--gold); }
+/* the room's code beside the lobby's title, gold as the title: a click copies it; then the button inviting friends */
+.room-code { display: flex; align-items: center; gap: 12px; }
+.room-code-btn { padding: 0 2px; border: 0; background: none; font: 700 26px/1 Oswald, sans-serif; letter-spacing: 0.16em; color: var(--gold); cursor: pointer; transition: color 0.25s; }
+.room-code-btn:hover { color: var(--gold-1); }
+.room-code-btn.copied { color: #fff; transition: none; }
+.room-code .btn.sm.icon { display: grid; place-items: center; padding: 2px 12px; }
+.room-code .btn.icon > i[data-art] { width: 32px; height: 32px; margin: 0; }
 .pick { position: relative; padding: 0; border: 2px solid var(--ink); border-radius: 12px; background: var(--c); overflow: hidden; cursor: pointer; color: #fff; font: 600 15px Oswald, sans-serif; }
 .pick.mine { outline: 3px solid var(--gold); outline-offset: 2px; }
 .pick.taken { filter: grayscale(0.7) brightness(0.6); cursor: default; }
@@ -1931,7 +1936,6 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
   gap: 14px 34px; align-items: start;
 }
 .pick-side { display: contents; }
-.pick-side .room-code { grid-column: 2; grid-row: 2; margin: 0; }
 /* the photo: a square print in a white edge, taped to the board like the events' pictures; its two buttons sit left of the
    start button under the card, so the photo gets all the height */
 .pick-pic { display: contents; }
@@ -2061,8 +2065,13 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
   .pick-panel .hero-size .btn { padding: 6px 12px; font-size: 14px; }
   .pick-panel .lobby-foot .btn.big { padding: 10px 26px; font-size: 18px; }
   .pick-body { grid-template-rows: auto auto minmax(0, 1fr) auto auto; gap: 8px 10px; }
-  .pick-side .room-code { grid-column: 1 / -1; grid-row: 1; gap: 6px; font-size: 14px; }
-  .pick-side .room-code b { font-size: 20px; }
+  .room-code { gap: 8px; }
+  .room-code-btn { font-size: 20px; letter-spacing: 0.1em; }
+  /* the title, the code and the invite on one line with «Назад», which keeps only its arrow */
+  #lobby .pick-panel .panel-head { flex-wrap: nowrap; gap: 10px; }
+  #lobby .pick-panel .panel-head h2 { font-size: 20px; white-space: nowrap; }
+  #lobby .pick-panel #lobbyBack { padding-inline: 10px; font-size: 0; }
+  #lobby .pick-panel #lobbyBack > i[data-art] { margin: 0; }
   /* the photo's own place keeps its size while the photo is lifted out */
   .pick-pic { --ph: 128px; grid-column: 1; grid-row: 2; display: grid; grid-template-rows: calc(var(--ph) + 8px) auto; justify-items: center; gap: 8px; }
   .pick-print { grid-column: 1; grid-row: 1; margin-top: 8px; padding: 5px; cursor: zoom-in; }
@@ -2113,12 +2122,10 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
   .pick-print { --ph: min(calc(100dvh - 104px), 32vw); margin-top: 6px; padding: 7px; cursor: zoom-in; }
   .pick-print::before, .pick-print::after { width: 60px; height: 20px; top: -8px; }
   .pick-tools .btn { padding: 4px 10px 5px; font-size: 12px; }
-  /* the room's code in the middle of the title line, its link button only an icon: the card gets the height */
-  #lobby .pick-panel .panel-head h2 { display: none; }
-  .pick-side .room-code { grid-column: 2 / -1; grid-row: 1; justify-self: start; align-self: center; padding-left: 26px; gap: 6px; font-size: 0; }
-  .pick-side .room-code b { font-size: 20px; }
-  .pick-side .room-code .btn { padding: 4px 7px; font-size: 0; }
-  .pick-side .room-code .btn > i[data-art] { margin: 0; }
+  .room-code { gap: 8px; }
+  .room-code-btn { font-size: 20px; }
+  .pick-panel .room-code .btn.sm.icon { padding: 2px 9px; }
+  .room-code .btn.icon > i[data-art] { width: 26px; height: 26px; }
   .pick-row { grid-column: 2 / -1; grid-row: 2; }
   .pick-card { grid-column: 2 / -1; grid-row: 3; }
   .pick-go { grid-column: 3; grid-row: 4; }

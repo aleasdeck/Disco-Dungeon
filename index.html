@@ -216,7 +216,7 @@
 
   <section id="lobby" class="overlay solid" hidden>
     <div class="panel lobby-panel">
-      <div class="panel-head"><h2>Сетевая игра</h2><button class="btn" id="lobbyBack"><i data-art="m_back" aria-hidden="true"></i>Назад</button></div>
+      <div class="panel-head"><h2>Сетевая игра</h2><div id="lobbyCodeBox" class="room-code" hidden><button class="room-code-btn" id="lobbyRoomCode" data-tip-h="Скопировать код"></button><button class="btn sm icon" id="lobbyInvite" aria-label="Пригласить друзей" data-tip-h="Пригласить друзей"><i data-art="m_invite" aria-hidden="true"></i></button></div><button class="btn" id="lobbyBack"><i data-art="m_back" aria-hidden="true"></i>Назад</button></div>
       <div id="lobbyStart" class="lobby-start">
         <label class="field">Твоё имя <input id="lobbyName" maxlength="16" autocomplete="nickname" placeholder="Игрок" /></label>
         <div class="lobby-ways">
@@ -240,7 +240,6 @@
             <div class="pick-tools"><button class="btn" id="lobbyBg" data-tip-h="Другой фон"><i data-art="m_bg" aria-hidden="true"></i>Фон</button><button class="btn" id="lobbySave" data-tip-h="Сохранить фото"><i data-art="m_photo" aria-hidden="true"></i>Фото</button></div>
           </div>
           <div class="pick-side">
-            <div class="room-code">Код комнаты <b id="lobbyRoomCode"></b> <button class="btn sm web-only" id="lobbyCopy"><i data-art="m_link" aria-hidden="true"></i>Скопировать ссылку</button><button class="btn sm desktop-only" id="lobbyInvite"><i data-art="m_online" aria-hidden="true"></i>Пригласить друзей</button><button class="btn sm desktop-only" id="lobbyCopyCode"><i data-art="m_link" aria-hidden="true"></i>Скопировать код</button></div>
             <div id="lobbyHeroes" class="pick-row" role="group" aria-label="Герои"></div>
             <article id="lobbyInfo" class="pick-card"></article>
             <ul id="lobbyPlayers" class="players sr-only"></ul>

@@ -1300,18 +1300,24 @@ $('lobbyHost').addEventListener('click', async () => {
 });
 $('lobbyJoin').addEventListener('click', () => join($<HTMLInputElement>('lobbyCode').value.trim()));
 $('lobbyCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('lobbyJoin').click(); });
-$('lobbyCopy').addEventListener('click', () => {
-  const url = `${location.origin}${location.pathname}${location.search}#${net.code}`;
-  navigator.clipboard?.writeText(url).then(() => lobbyStatus('Ссылка скопирована.'), () => lobbyStatus(url));
+// the room's code in the title: a click copies it, and it lights up for a moment
+$('lobbyRoomCode').addEventListener('click', () => {
+  const code = net.code, el = $('lobbyRoomCode');
+  navigator.clipboard?.writeText(code).then(() => {
+    lobbyStatus('Код скопирован.');
+    el.classList.add('copied');
+    setTimeout(() => el.classList.remove('copied'), 700);
+  }, () => lobbyStatus(code));
 });
-// the desktop build: friends come by Steam's invite, anyone else by the code
-$('lobbyInvite').hidden = !desktop?.steam;
+// friends come by Steam's invite in the desktop build and by the room's link in the browser; anyone else by the code
+$('lobbyInvite').hidden = !!desktop && !desktop.steam;
 $('lobbyInvite').addEventListener('click', async () => {
-  if ((await steamWay?.invite()) === 'friends') lobbyStatus('Открыл список друзей Steam: нажми на друга правой кнопкой и пригласи в игру.');
-});
-$('lobbyCopyCode').addEventListener('click', () => {
-  const code = net.code;
-  navigator.clipboard?.writeText(code).then(() => lobbyStatus('Код скопирован.'), () => lobbyStatus(code));
+  if (steamWay) {
+    if ((await steamWay.invite()) === 'friends') lobbyStatus('Открыл список друзей Steam: нажми на друга правой кнопкой и пригласи в игру.');
+    return;
+  }
+  const url = `${location.origin}${location.pathname}${location.search}#${net.code}`;
+  navigator.clipboard?.writeText(url).then(() => lobbyStatus('Ссылка на комнату скопирована: отправь её друзьям.'), () => lobbyStatus(url));
 });
 if (desktop) $<HTMLInputElement>('lobbyCode').maxLength = 13;
 $('lobbyStartBtn').addEventListener('click', () => {
