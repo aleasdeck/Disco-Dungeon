@@ -1,6 +1,6 @@
 // The demo (…?demo=true in the address): three heroes, one floor with its three bosses (one of them at the top of the map,
-// the same as in the full game) and seven of the events. The run's first event is always the chest with the trophies, and
-// the first boss beaten opens one more hero: the next up the ladder of the party's first hero, and never another (src/progress.ts).
+// the same as in the full game) and seven of the events. The chest with the trophies turns up far more often than the rest,
+// and the first boss beaten opens one more hero: the next up the ladder of the party's first hero, and never another (src/progress.ts).
 // The other heroes stand on the pick screens as dark shapes with a «?», and the end of a run shows them as the full game's.
 // The demo keeps its own saves and statistics, so a demo run never turns up in the full game and the other way round; an
 // online room lets in only players of the same version. The demo's own build for Steam (npm run build:demo) is the demo
@@ -18,8 +18,10 @@ export const DEMO_FLOORS = 1;
 export const DEMO_HEROES = ['bastion', 'ricochet', 'ash'];
 /** The demo's events: the chest in love, the bar, the disco god's altar, the plague doctor, the black market, the snoring ogre and the DJ. */
 export const DEMO_EVENTS = ['mimic', 'bar', 'altar', 'doctor', 'goblin', 'ogre', 'dj'];
-/** The run's first event in the demo: «Влюблённый сундук», whose hand comes out with a trophy every time (src/events.ts). */
+/** The demo's one way to a trophy: «Влюблённый сундук», whose hand comes out with one half the time, as in the full game. */
 export const DEMO_CHEST = 'mimic';
+/** The chance that an event room of a demo run is the chest, until the run has met it (the other six share the rest). */
+export const DEMO_CHEST_ODDS = 0.7;
 
 /** The game's Steam page and the demo's feedback form, once they are up: the end of a demo run points at them. */
 export const STORE_URL = '';
