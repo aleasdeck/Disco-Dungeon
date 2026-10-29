@@ -3,7 +3,6 @@
 import { BIOMES, MOBS, ROOM_TYPES, type RoomType } from './data';
 import type { HeroState } from './game';
 import { uiArt } from './assets';
-import { icon as ico } from './icons';
 import { bossOf } from './room';
 import { FLOORS, reachable, roomSeed, type Run } from './run';
 import { faceUrl, mobFace } from './ui';
@@ -61,13 +60,6 @@ export interface MapVotes {
   note: string;
 }
 
-/** Who walks the map: the heroes (this screen's own first) and the party's ore. */
-export interface MapParty {
-  heroes: HeroState[];
-  me: HeroState | null;
-  ore: number;
-}
-
 const el = <K extends keyof SVGElementTagNameMap>(parent: Element, tag: K, at: Record<string, string | number>) => {
   const e = document.createElementNS(NS, tag);
   for (const k in at) e.setAttribute(k, String(at[k]));
@@ -82,13 +74,13 @@ export class MapView {
   /** The run's «Громкость» step: its token stands by the floor's name, a tap lists its rules. */
   vol = 0;
 
-  render(run: Run, canChoose: boolean, party: MapParty, votes?: MapVotes) {
+  /** `heroes`: who walks the map, this screen's own first; their health and the ore are on the top strip over it (ui.ts). */
+  render(run: Run, canChoose: boolean, heroes: HeroState[], votes?: MapVotes) {
     const f = run.floor, layers = run.floors[f];
     // the floor, and the whole run as three gems: done, here, ahead (the demo's one floor has none)
     const dots = Array.from({ length: FLOORS }, (_, k) => `<i class="${k < f ? 'done' : k === f ? 'cur' : ''}"></i>`).join('');
     $('mapFloor').innerHTML = `${t('Этаж {0}', f + 1)}${FLOORS > 1 ? `<em class="fl-dots"${tipAttrs({ h: t('Этаж {0} из {1}', f + 1, FLOORS) })}>${dots}</em>` : ''}<span>${t(BIOMES[f].name)}</span>`;
     renderKnob($('mapVol'), { vol: this.vol, top: this.vol, mini: true, head: t('Забег на громкости {0}. Её правила складываются:', this.vol) });
-    this.partyRow(party);
     const svg = $('map');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.innerHTML = '';
@@ -179,7 +171,7 @@ export class MapView {
     // the party's token: the heroes' faces on the room they are in, or at the stairs before the first room;
     // a hero whose player has picked a room already stands on that room instead
     const voted = new Set(Object.values(votes?.pips ?? {}).flat().map(p => p.hero));
-    const at = path.length ? pos[path[path.length - 1]] : gate, hs = party.heroes.filter(h => !voted.has(h.i));
+    const at = path.length ? pos[path[path.length - 1]] : gate, hs = heroes.filter(h => !voted.has(h.i));
     const tok = el(svg, 'g', { class: 'token' });
     hs.forEach((h, k) => {
       const tx = at[0] + (k - (hs.length - 1) / 2) * 15, ty = at[1] - (path.length ? 2 : 8), id = 'tokFace' + k;
@@ -190,15 +182,5 @@ export class MapView {
     });
     $('mapVotes').textContent = votes?.note ?? '';
     $('mapVotes').hidden = !votes;
-  }
-
-  /** The heroes' health and the party's ore over the map: enough to choose between a camp and a fight. */
-  private partyRow(party: MapParty) {
-    const box = $('mapParty');
-    box.innerHTML = party.heroes.map(h => {
-      const hp = Math.max(0, h.hp), pct = (hp / h.max) * 100;
-      return `<div class="mp-hero${h.hp <= 0 ? ' dead' : ''}${h === party.me ? ' me' : ''}" style="--c:${h.def.col}"${tipAttrs({ p: t('{0}: {1} из {2}', h.def.name, hp, h.max) })}>`
-        + `<img src="${faceUrl(h)}" alt=""><span class="mp-hp"><i style="width:${pct}%"></i><u>${h.hp > 0 ? `${hp}/${h.max}` : t(h.def.fem ? 'пала' : 'пал')}</u></span></div>`;
-    }).join('') + `<div class="mp-ore"${tipAttrs({ h: t('Руда отряда') })}>${ico('ore')}<b>${party.ore}</b></div>`;
   }
 }
