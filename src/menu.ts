@@ -8,7 +8,7 @@ import { FLOORS, LAYERS } from './run';
 import { sound } from './sound';
 import type { Player } from './net';
 import { uiArt } from './assets';
-import { BACKDROP_COUNT, drawPhoto, savePhoto, type PhotoSeat } from './photo';
+import { BACKDROP_COUNT, drawPhoto, savePhoto, stillPhoto, type PhotoSeat } from './photo';
 import { DEMO } from './demo';
 import { bestStand, demoLocked, demoOpened, kindAt, locked, opening, prevOf, standFor, STARS_TO_OPEN, starsOf, volTop, wearStand } from './progress';
 import { nextStand, standDef, STANDS, type StandMat } from './stands';
@@ -329,6 +329,7 @@ export function renderHeroSelect(o: { size: number; party: number[]; shown: numb
     const seats: PhotoSeat[] = Array.from({ length: o.size }, (_, k) => ({ hero: o.party[k] ?? null, look: k === o.party.length ? tryOn : null }));
     drawPhoto(photo, seats, { bg: campBg, names: false });
     photo.setAttribute('aria-label', t('Фото отряда: {0}', o.party.map(h => t(HEROES[h].name)).join(', ') || t('пока никого')));
+    stillPhoto(photo);
   };
   heroRow($('heroPicks'), {
     mark: i => {
@@ -425,6 +426,7 @@ export function renderLobby(o: {
     }));
     drawPhoto(photo, seats, { bg: o.bg, names: true });
     photo.setAttribute('aria-label', t('Фото отряда: {0}', o.players.map(p => `${p.name}: ${p.hero !== null ? t(HEROES[p.hero].name) : t('выбирает')}`).join(', ')));
+    stillPhoto(photo);
   };
   let sent: number | null = null, timer = 0;
   heroRow($('lobbyHeroes'), {
