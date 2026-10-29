@@ -901,7 +901,7 @@ export class Hud {
     if (key) {
       const a = artDef(key), st = this.spent(h, key);
       o = { h: t(a.name), ico: `<i class="tok">${artIcon(key)}</i>`, p: t(a.txt), f: st ? t(st) : '' };
-    } else o = { h: t('Пустое место'), p: DEMO ? t('В демо трофей дарит первое событие забега. Остальные гнёзда пригодятся в полной версии.') : t('Трофеи дают боссы первого и второго этажа, а иногда «Влюблённый сундук».') };
+    } else o = { h: t('Пустое место'), p: DEMO ? t('В демо трофей прячется во «Влюблённом сундуке», первом событии забега. Остальные гнёзда пригодятся в полной версии.') : t('Трофеи дают боссы первого и второго этажа, а иногда «Влюблённый сундук».') };
     const html = JSON.stringify(o);
     if (tip.dataset.html !== html) { fillTip(tip, o); tip.dataset.html = html; }
     tip.hidden = false;
