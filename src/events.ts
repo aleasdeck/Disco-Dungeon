@@ -10,7 +10,7 @@ import type { Bank, HeroState } from './game';
 import { artDef, artsLeft, drop, give, room, type ArtKey } from './artifacts';
 import { REST_ROW, nodeById, type MapNode, type Run } from './run';
 import { makeRng } from './rng';
-import { DEMO, DEMO_EVENTS } from './demo';
+import { DEMO, DEMO_CHEST, DEMO_EVENTS } from './demo';
 import { M, t, type Arg } from './i18n';
 
 /** The floor of the next fight, from the foam party: discs keep their speed off the walls, or roll twice as far, or stick. */
@@ -288,7 +288,8 @@ export const EVENTS: EventDef[] = [
     txt: 'Сундук хлопает крышкой и строит глазки. Крышка вся в следах помады, изнутри что-то блестит и капают слюни. Похоже, он ждёт, что его приласкают.',
     choices: [
       {
-        label: 'Сунуть руку', odds: 0.5,
+        // the demo's chest is its one way to a trophy, so there the hand always finds one
+        label: 'Сунуть руку', odds: DEMO ? undefined : 0.5,
         win: { fx: [{ k: 'art' }], txt: 'Сундук томно вздохнул и раскрыл душу: внутри подарки от прошлых ухажёров. Руку потом отмывали долго.' },
         lose: { fx: [{ k: 'hp', n: -6 }], txt: 'Сундук решил, что это предложение руки и сердца, и начал с руки.' },
       },
@@ -534,9 +535,9 @@ export const eventDef = (key: string) => EVENTS.find(e => e.key === key) ?? EVEN
  * The host (or a lone player) picks it and shares it.
  */
 export function eventOf(seed: number, seen: readonly string[] = [], open?: readonly string[], due: readonly string[] = []): string {
-  // the demo draws from its few
+  // the demo draws from its few, and its run meets the chest first
   const pool = DEMO ? EVENTS.filter(e => DEMO_EVENTS.includes(e.key)) : open ? EVENTS.filter(e => open.includes(e.key)) : EVENTS;
-  const first = due.find(k => !seen.includes(k) && pool.some(e => e.key === k));
+  const first = (DEMO ? [DEMO_CHEST, ...due] : due).find(k => !seen.includes(k) && pool.some(e => e.key === k));
   if (first) return first;
   const fresh = pool.filter(e => !seen.includes(e.key));
   return makeRng(seed).pick(fresh.length ? fresh : pool).key;

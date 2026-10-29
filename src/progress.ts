@@ -328,7 +328,7 @@ export function openedBy(ev: EventState, run: Run): { events: string[]; arts: Ar
   };
 }
 
-/** Whether this player hasn't opened the event `key`: in the demo, any but its three. */
+/** Whether this player hasn't opened the event `key`: in the demo, any but its own. */
 export function eventLocked(key: string) {
   if (DEMO) return !DEMO_EVENTS.includes(key);
   return !ALL && !START_EVENTS.includes(key) && !progress.events.includes(key);

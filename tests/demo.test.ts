@@ -27,16 +27,31 @@ describe('the demo', () => {
     expect([...met].sort()).toEqual([...CASTS[0].bosses].sort());
   });
 
-  it('draws from its six events and hands out the starting trophies only', async () => {
+  it('draws from its seven events and hands out the starting trophies only', async () => {
     const { DEMO_EVENTS } = await import('../src/demo');
     const { eventOf } = await import('../src/events');
     const { artLocked, openEvents, START_ARTS } = await import('../src/progress');
     const { ARTIFACTS } = await import('../src/artifacts');
-    expect(DEMO_EVENTS).toHaveLength(6);
+    expect(DEMO_EVENTS).toHaveLength(7);
     expect(openEvents().sort()).toEqual([...DEMO_EVENTS].sort());
-    const seen = new Set(Array.from({ length: 300 }, (_, s) => eventOf(s)));
-    expect([...seen].sort()).toEqual([...DEMO_EVENTS].sort());
+    const seen = new Set(Array.from({ length: 300 }, (_, s) => eventOf(s, ['mimic'])));
+    expect([...seen].sort()).toEqual(DEMO_EVENTS.filter(k => k !== 'mimic').sort());
     expect(ARTIFACTS.map(a => a.key).filter(k => !artLocked(k)).sort()).toEqual([...START_ARTS].sort());
+  });
+
+  it("meets the chest first, and the chest's hand always finds a trophy, and only the chest gives one", async () => {
+    const { EVENTS, choicesOf, doneOf, eventOf, take } = await import('../src/events');
+    const { newBank, newParty } = await import('../src/game');
+    for (let s = 0; s < 50; s++) {
+      expect(eventOf(s)).toBe('mimic');
+      const ev = { key: eventOf(s), seed: s, votes: {} }, party = newParty([0]);
+      expect(take(ev, choicesOf(ev).findIndex(c => c.label === 'Сунуть руку'), { party, bank: newBank() })).toBe(true);
+      expect(doneOf(ev)!.out.fx).toEqual([{ k: 'art' }]);
+    }
+    // the other demo events give no trophy: the chest is the demo's one way to them
+    const { DEMO_EVENTS } = await import('../src/demo');
+    const arts = (o?: { fx: { k: string }[] }) => !!o?.fx.some(f => f.k === 'art' || f.k === 'gift');
+    for (const e of EVENTS.filter(e => DEMO_EVENTS.includes(e.key) && e.key !== 'mimic')) expect(e.choices.some(c => arts(c.win) || arts(c.lose))).toBe(false);
   });
 
   it("opens one hero with its first win, the next up the first hero's ladder, and none after it", async () => {

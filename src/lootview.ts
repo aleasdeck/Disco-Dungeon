@@ -36,11 +36,6 @@ const FOUND: Record<string, string> = {
   slot: 'Из лотка Люськи вывалился джекпот: три вещицы в ленточках, тёплые и немного липкие. Бери, пока она не передумала.',
 };
 
-
-
-/** The demo's present after the run's first event (src/demo.ts). */
-const GIFT = 'На выходе вас догоняет швейцар клуба с коробкой: первым гостям подарок от заведения. Внутри три вещицы с бантиками.';
-
 /** Online: the faces of the players on the trophies they point at, and a line on how the share-out stands. */
 export interface LootVotes {
   faces: Record<number, { col: string; name: string; face: string; me: boolean }[]>;
@@ -94,7 +89,7 @@ export class LootView {
         + order.filter(h => loot.picks[h.i] === PASS).map(h => `<p class="camp-ask">${h === me && !team ? t('Ты оставляешь свои три трофея.') : t('{0} оставляет свои три трофея.', nm(h))}</p>`).join('');
     } else {
       $('lootText').textContent = kept ? t('Пока тебя не было, остальные разобрали свои трофеи. Твой отложили до твоего возвращения.')
-        : loot.gift ? t(GIFT) : loot.from ? t(FOUND[loot.from] ?? 'Здесь нашлись трофеи.') : `${t(SCENES[boss] ?? SCENES.king)} ${healed}`;
+        : loot.from ? t(FOUND[loot.from] ?? 'Здесь нашлись трофеи.') : `${t(SCENES[boss] ?? SCENES.king)} ${healed}`;
       // a hero with all sockets taken takes a new one for one of its own, or keeps its own
       const full = !kept && !!me && !!loot.full?.includes(me.i), p = me ? loot.picks[me.i] : undefined, out = me ? loot.drops?.[me.i] : undefined;
       const face = team && me ? `<img src="${faceUrl(me)}" alt="">` : '', whose = team && me ? me.def.dat : '';
