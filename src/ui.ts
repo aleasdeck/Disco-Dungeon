@@ -240,8 +240,8 @@ export class Hud {
   /** The enemy whose card is open, and whether a tap pinned it (a hover card goes when the pointer leaves). */
   private card = -1;
   private pinned = false;
-  /** The map room whose window main.ts put up (an event, the camp). */
-  private win: { floor: number; type: RoomType } | null = null;
+  /** The map room whose window main.ts put up (an event, the camp), or the map itself. */
+  private win: { floor: number; type: RoomType | 'map' } | null = null;
   /** The hero (by index) whose card a tap on its face on the strip opened. */
   private peek = -1;
   /** The trophy socket whose hint is up, by its place, and whether a tap pinned it (a hover hint goes with the pointer). */
@@ -350,9 +350,10 @@ export class Hud {
   /**
    * A map room's window opens (an event, the camp) or closes, with null: over it the strip keeps the party's faces with
    * their health and the ore, names that room instead of the room behind, and a tap on a face opens that hero's card.
-   * The blacksmith's window does the same by itself (refresh).
+   * The blacksmith's window does the same by itself (refresh). Over the map the strip names nothing (the map's title says
+   * the floor) and keeps the journal and the menu.
    */
-  setWindow(at: { floor: number; type: RoomType } | null) {
+  setWindow(at: { floor: number; type: RoomType | 'map' } | null) {
     if (at?.floor === this.win?.floor && at?.type === this.win?.type) return;
     this.win = at;
     if (this.g.S) this.refresh();
@@ -362,6 +363,7 @@ export class Hud {
   /** The strip takes on or leaves the window's dress as a window opens or closes. */
   private liftStrip() {
     const up = !!(this.g.S && this.at), root = document.documentElement;
+    root.classList.toggle('at-map', up && this.at?.type === 'map');
     if (root.classList.contains('at-window') === up) return;
     root.classList.toggle('at-window', up);
     if (!up) this.closeHero();
@@ -418,8 +420,11 @@ export class Hud {
     fillIcons();
     this.liftStrip();
     // the floor is laid out after the room's name (style.css): where the strip is narrow the floor gives way, never the room
-    $('locName').innerHTML = S.spec.tut && !this.at ? `<span>${t('Разминка')}</span>`
-      : `<span class="fl">${t('Этаж {0}', (this.at?.floor ?? S.spec.floor) + 1)} · </span><span>${t(ROOM_TYPES[this.at?.type ?? S.spec.type].name)}</span>`;
+    const at = this.at;
+    if (at?.type !== 'map') {
+      $('locName').innerHTML = S.spec.tut && !at ? `<span>${t('Разминка')}</span>`
+        : `<span class="fl">${t('Этаж {0}', (at?.floor ?? S.spec.floor) + 1)} · </span><span>${t(ROOM_TYPES[at?.type ?? S.spec.type].name)}</span>`;
+    }
     // the ore cave counts its turns down: «Ход 2 из 3»
     const max = g.turnsMax(), last = max > 0 && S.turn >= max;
     $('hTurn').textContent = S.phase === 'place' ? t('Расстановка') : max ? t('Ход {0} из {1}', S.turn, max) : t('Ход {0}', S.turn);

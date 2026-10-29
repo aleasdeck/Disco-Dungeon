@@ -10,7 +10,7 @@ import { bindSettings, campPhotoBg, lobbyStatus, renderHeroSelect, renderLobby, 
 import { Input } from './input';
 import { Hud, faceUrl, mobFace } from './ui';
 import { hl } from './hl';
-import { MapView, type MapParty, type MapVotes } from './mapview';
+import { MapView, type MapVotes } from './mapview';
 import { SceneRenderer } from './draw/scene';
 import { assetUrl, loadAll } from './assets';
 import { BACKDROP_COUNT } from './photo';
@@ -191,11 +191,12 @@ function showMap(open: boolean) {
   const was = !$('mapScreen').hidden;
   $('mapScreen').hidden = !open;
   $('mapClose').hidden = choosing;
+  liftStrip();
   if (open) {
     // the host's or a lone player's own new event comes in the next event room; a client's map can't tell
     mapView.fresh = mode !== 'client' && dueEvents().some(k => !(run.seen ?? []).includes(k));
     mapView.vol = game.bank.vol ?? 0;
-    mapView.render(run, choosing, mapParty(), mapVotes());
+    mapView.render(run, choosing, mapHeroes(), mapVotes());
     // on a short screen the map scrolls; bring the rooms to choose from into view
     if (!was) document.querySelector('#map .mnode.reach, #map .mnode.cur')?.scrollIntoView({ block: 'center' });
   }
@@ -474,9 +475,12 @@ function choose(id: string) {
   shareMap();
 }
 
-/** The top strip stays in sight over the event's and the camp's windows: the heroes' health and the ore while deciding. */
+/**
+ * The top strip stays in sight over the event's and the camp's windows and over the map (Vladislav asked): the heroes'
+ * health and the ore while deciding, its buttons working.
+ */
 function liftStrip() {
-  const at = !$('eventScreen').hidden ? 'event' : !$('campScreen').hidden ? 'camp' : null;
+  const at = !$('eventScreen').hidden ? 'event' : !$('campScreen').hidden ? 'camp' : !$('mapScreen').hidden ? 'map' : null;
   hud.setWindow(at && { floor: run.floor, type: at });
 }
 
@@ -891,10 +895,10 @@ function shareMap() {
   if (!$('mapScreen').hidden) showMap(true);
 }
 
-/** Who walks the map, this screen's own hero first, and the party's ore. */
-function mapParty(): MapParty {
-  const mine = game.online ? myHero() : game.party[0]?.i ?? null, me = game.party.find(h => h.i === mine) ?? null;
-  return { heroes: me ? [me, ...game.party.filter(h => h !== me)] : game.party, me, ore: game.bank.ore };
+/** Who walks the map, this screen's own hero first. */
+function mapHeroes() {
+  const mine = game.online ? myHero() : game.party[0]?.i ?? null, me = game.party.find(h => h.i === mine);
+  return me ? [me, ...game.party.filter(h => h !== me)] : game.party;
 }
 
 /** Online: whose token stands on which room, and whom the party still waits for. Alone there is nothing to show. */
