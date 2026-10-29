@@ -39,17 +39,25 @@ describe('the demo', () => {
     expect(ARTIFACTS.map(a => a.key).filter(k => !artLocked(k)).sort()).toEqual([...START_ARTS].sort());
   });
 
-  it("meets the chest first, and the chest's hand always finds a trophy, and only the chest gives one", async () => {
+  it("meets the chest far more often than the other events, and the chest's hand finds a trophy half the time, as in the full game", async () => {
+    const { DEMO_CHEST_ODDS, DEMO_EVENTS } = await import('../src/demo');
     const { EVENTS, choicesOf, doneOf, eventOf, take } = await import('../src/events');
     const { newBank, newParty } = await import('../src/game');
-    for (let s = 0; s < 50; s++) {
-      expect(eventOf(s)).toBe('mimic');
-      const ev = { key: eventOf(s), seed: s, votes: {} }, party = newParty([0]);
-      expect(take(ev, choicesOf(ev).findIndex(c => c.label === 'Сунуть руку'), { party, bank: newBank() })).toBe(true);
-      expect(doneOf(ev)!.out.fx).toEqual([{ k: 'art' }]);
+    const N = 4000, keys = Array.from({ length: N }, (_, s) => eventOf(s * 7919 + 1));
+    const share = (k: string) => keys.filter(x => x === k).length / N;
+    expect(Math.abs(share('mimic') - DEMO_CHEST_ODDS)).toBeLessThan(0.03);
+    for (const k of DEMO_EVENTS.filter(k => k !== 'mimic')) expect(share(k)).toBeGreaterThan(0.02);
+    // a run that met it meets the others
+    expect(Array.from({ length: 200 }, (_, s) => eventOf(s, ['bar', 'mimic']))).not.toContain('mimic');
+    const got = new Set<string>();
+    for (let s = 0; s < 60; s++) {
+      const ev = { key: 'mimic', seed: s, votes: {} }, party = newParty([0]), opt = choicesOf(ev).findIndex(c => c.label === 'Сунуть руку');
+      expect(choicesOf(ev)[opt].odds).toBe(0.5);
+      expect(take(ev, opt, { party, bank: newBank() })).toBe(true);
+      got.add(doneOf(ev)!.out.fx[0].k);
     }
+    expect([...got].sort()).toEqual(['art', 'hp']);
     // the other demo events give no trophy: the chest is the demo's one way to them
-    const { DEMO_EVENTS } = await import('../src/demo');
     const arts = (o?: { fx: { k: string }[] }) => !!o?.fx.some(f => f.k === 'art' || f.k === 'gift');
     for (const e of EVENTS.filter(e => DEMO_EVENTS.includes(e.key) && e.key !== 'mimic')) expect(e.choices.some(c => arts(c.win) || arts(c.lose))).toBe(false);
   });
