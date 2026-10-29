@@ -39,6 +39,7 @@ import { setOut } from './volume';
 import { bindCollection, renderCollection, type ColTab } from './collection';
 import { LANGS, M, Mjoin, detectLang, isLang, lang, onLang, scanDom, setLang, t, type Lang } from './i18n';
 import { initTips } from './tip';
+import { initCursor } from './cursor';
 import { menuFx } from './menufx';
 
 // the page's own Russian text, found before the game writes anything into the page
@@ -2043,6 +2044,7 @@ loadAll(part => {
   hud.refresh();
   stale = true;
   loaded = true;
+  initCursor();
   go();
   // the offline cache, filled once the game has what it needs, so the two don't share the first download
   // (the desktop build has every file on the disk already)

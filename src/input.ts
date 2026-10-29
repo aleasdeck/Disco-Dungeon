@@ -110,8 +110,8 @@ export class Input {
       if (h) {
         if (g.canControl(h)) {
           g.select(h.i);
-          if (g.canThrow(h)) { this.mode = 'aim'; this.aim = { hero: h, dx: 0, dy: 0 }; return; }
-          if (S.phase === 'place') { this.mode = 'carry'; this.carry = { hero: h, x, y, pad: h.pad, moved: false }; return; }
+          if (g.canThrow(h)) { this.mode = 'aim'; this.aim = { hero: h, dx: 0, dy: 0 }; this.cv.dataset.cur = 'aim'; return; }
+          if (S.phase === 'place') { this.mode = 'carry'; this.carry = { hero: h, x, y, pad: h.pad, moved: false }; this.cv.dataset.cur = 'grabbing'; return; }
           this.mode = 'none';
           return;
         }
@@ -125,7 +125,7 @@ export class Input {
   private move(e: PointerEvent) {
     const [x, y] = this.pos(e);
     if (!this.pts.has(e.pointerId)) {
-      if (e.pointerType === 'mouse') this.cv.style.cursor = this.heroAt(x, y) || this.padAt(x, y) >= 0 ? 'pointer' : 'grab';
+      if (e.pointerType === 'mouse') this.cv.dataset.cur = this.heroAt(x, y) || this.padAt(x, y) >= 0 ? 'hand' : '';
       return;
     }
     this.pts.set(e.pointerId, [x, y]);
@@ -149,7 +149,7 @@ export class Input {
       cam.panBy(x - this.start.x, y - this.start.y);
       this.start.x = x;
       this.start.y = y;
-      this.cv.style.cursor = 'grabbing';
+      this.cv.dataset.cur = 'grabbing';
       this.view.changed();
     } else if (this.mode === 'rotate') {
       const [cx, cy] = this.view.center();
@@ -186,7 +186,7 @@ export class Input {
     }
     if (this.pts.size === 0) {
       this.mode = 'none';
-      this.cv.style.cursor = '';
+      this.cv.dataset.cur = '';
     }
   }
 
