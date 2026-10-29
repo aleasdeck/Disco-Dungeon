@@ -3,7 +3,7 @@ import { AB_COST, BOOT_GAGS, COMBAT_ROOMS, HEROES, MAX_PLAYERS, MOBS, RISE_HP, W
 import { Camera } from './camera';
 import { Game, newBank, newParty, newTally, type HeroState } from './game';
 import { Net, type Player } from './net';
-import { codeOf, desktop, steamNet } from './net/steam';
+import { desktop, steamNet } from './net/steam';
 import { applySnapshot, snapshot, type MapState } from './sync';
 import { saveSettings, settings } from './settings';
 import { bindSettings, campPhotoBg, lobbyStatus, renderHeroSelect, renderLobby, renderStats, resetLobby, show, startable } from './menu';
@@ -1315,7 +1315,6 @@ $('lobbyInvite').addEventListener('click', async () => {
   const url = `${location.origin}${location.pathname}${location.search}#${net.code}`;
   navigator.clipboard?.writeText(url).then(() => lobbyStatus('Ссылка на комнату скопирована: отправь её друзьям.'), () => lobbyStatus(url));
 });
-if (desktop) $<HTMLInputElement>('lobbyCode').maxLength = 13;
 $('lobbyStartBtn').addEventListener('click', () => {
   if (!startable(players)) return;
   started = true;
@@ -1979,7 +1978,7 @@ onLang(() => {
 });
 
 /** The room of a friend's Steam invite taken before the menu came up: Steam started the game for it, or it came while loading. */
-let invited = desktop?.steam?.launch ? codeOf(desktop.steam.launch) : '';
+let invited = steamWay && desktop?.steam?.launch ? steamWay.code(desktop.steam.launch) : '';
 
 /**
  * A friend's Steam invite taken, or «Join game» on a friend, while the game is running: their room is joined from wherever
@@ -2001,7 +2000,7 @@ function takeInvite(code: string) {
   show('lobby');
   join(code);
 }
-desktop?.steam?.onInvite(lobby => takeInvite(codeOf(lobby)));
+desktop?.steam?.onInvite(lobby => steamWay && takeInvite(steamWay.code(lobby)));
 
 // the desktop build's way out: what is under way is kept first, as when a tab is closed
 $('mQuit').addEventListener('click', () => { goodbye(); desktop?.quit(); });

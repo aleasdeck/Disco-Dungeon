@@ -100,6 +100,7 @@ ipcMain.handle('steam:enter', (e, id) => {
 });
 ipcMain.on('steam:leave', (e, id) => { if (fromGame(e) && !steam.error && ID.test(id)) steam.leave(id); });
 ipcMain.handle('steam:invite', (e, id) => (fromGame(e) && !steam.error && ID.test(id) ? steam.invite(id) : null));
+ipcMain.handle('steam:friendLobbies', e => (fromGame(e) && !steam.error ? steam.friendLobbies() : []));
 ipcMain.on('steam:send', (e, to, data) => { if (fromGame(e) && !steam.error && ID.test(to) && typeof data === 'string') steam.send(to, data); });
 ipcMain.on('app:quit', e => { if (fromGame(e)) app.quit(); });
 

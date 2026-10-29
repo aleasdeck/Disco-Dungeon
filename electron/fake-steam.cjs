@@ -4,7 +4,8 @@
 //
 //   DD_FAKE_STEAM=27999 DD_PROFILE=b npm run desktop     a second window, with saves of its own
 //
-// Lobbies, their data and members, P2P packets and session requests behave as Steam's do. Steam's invite window has no
+// Lobbies, their data and members, P2P packets and session requests behave as Steam's do, and every player is a friend
+// of every other, the friends list showing the lobby each is in. Steam's invite window has no
 // pretend: opening it shows and hides the overlay as Steam's would, and hands the invite to every other window at once,
 // as if a friend there took it.
 
@@ -38,27 +39,37 @@ function hub(port, ready) {
   let next = 1000 + Math.floor(Math.random() * 1e6);
   const state = l => ({ owner: l.owner, members: [...l.members], data: l.data });
   const tell = (id, l) => { for (const m of l.members) players.get(m)?.({ t: 'state', lobby: id, state: state(l) }); };
+  /** Everyone hears who is on and the lobby each is in, as friends see it in their list. */
+  const roster = () => {
+    const list = [...players.keys()].map(p => [p, [...lobbies].find(([, l]) => l.members.has(p))?.[0] ?? null]);
+    for (const send of players.values()) send({ t: 'friends', list });
+  };
   const out = (who, id) => {
     const l = lobbies.get(id);
     if (!l || !l.members.delete(who)) return;
-    if (!l.members.size) return lobbies.delete(id);
-    if (l.owner === who) l.owner = [...l.members][0];
-    tell(id, l);
+    if (!l.members.size) lobbies.delete(id);
+    else {
+      if (l.owner === who) l.owner = [...l.members][0];
+      tell(id, l);
+    }
+    roster();
   };
   const server = net.createServer(sock => {
     let me = '';
     const send = lines(sock, m => {
-      if (m.t === 'hi') { me = m.id; players.set(me, send); }
+      if (m.t === 'hi') { me = m.id; players.set(me, send); roster(); }
       else if (m.t === 'create') {
         const id = String(LOBBY | BigInt(next++)), l = { owner: me, members: new Set([me]), data: {}, max: m.max };
         lobbies.set(id, l);
         send({ t: 're', q: m.q, lobby: id, state: state(l) });
+        roster();
       } else if (m.t === 'join') {
         const l = lobbies.get(m.lobby);
         if (!l || (l.members.size >= l.max && !l.members.has(me))) return send({ t: 're', q: m.q, error: 'Failed to join lobby' });
         l.members.add(me);
         send({ t: 're', q: m.q, lobby: m.lobby, state: state(l) });
         tell(m.lobby, l);
+        roster();
       } else if (m.t === 'leave') out(me, m.lobby);
       else if (m.t === 'set') {
         const l = lobbies.get(m.lobby);
@@ -76,6 +87,7 @@ function hub(port, ready) {
     sock.on('close', () => {
       if (players.get(me) === send) players.delete(me);
       for (const id of [...lobbies.keys()]) out(me, id);
+      roster();
     });
     sock.on('error', () => {});
   });
@@ -99,6 +111,8 @@ function client(port) {
   const packets = [];
   const open = new Set();
   const held = new Map();
+  /** The other players and the lobby each is in, as the hub last told. */
+  let friends = [];
 
   const take = m => {
     if (m.t === 're') {
@@ -119,6 +133,7 @@ function client(port) {
       }
       held.get(m.from).push(p);
     } else if (m.t === 'fail') fire(SteamCallback.P2PSessionConnectFail, { remote: BigInt(m.remote), error: 1 });
+    else if (m.t === 'friends') friends = m.list.filter(([p]) => p !== id);
     else if (m.t === 'invited') fire(SteamCallback.GameLobbyJoinRequested, { lobby_steam_id: BigInt(m.lobby), friend_steam_id: BigInt(m.from) });
   };
   const connect = (tries = 0) => {
@@ -157,6 +172,9 @@ function client(port) {
       return {
         localplayer: { getSteamId: () => ({ steamId64: BigInt(id) }), getName: () => name },
         apps: { currentGameLanguage: () => process.env.DD_FAKE_STEAM_LANG || 'russian' },
+        friends: {
+          getFriends: () => friends.map(([p, l]) => ({ steamId: BigInt(p), name: `Тестер ${p.slice(-3)}`, state: 1, gamePlayed: { gameId: 480n, lobbyId: l ? BigInt(l) : 0n } })),
+        },
         matchmaking: {
           createLobby: (_type, max) => ask({ t: 'create', max }),
           joinLobby: lid => ask({ t: 'join', lobby: String(lid) }),

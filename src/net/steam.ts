@@ -1,7 +1,8 @@
 // Online play in the desktop build for Steam (electron/): a room is a Steam lobby, and the host and each player talk
 // through Steam's P2P, straight or through Valve's relays when no direct way gets through. Friends come in by Steam's
-// invite or by «Join game» in the friends list; anyone else types the room's code, the lobby's own Steam id written
-// short. Only the way through differs from the browser's (src/net/link.ts): the same links, pings and messages run over it.
+// invite, by «Join game» in the friends list, or by the room's code: five letters worked out of the lobby's Steam id,
+// looked for among the lobbies the player's Steam friends are in. Only the way through differs from the browser's
+// (src/net/link.ts): the same links, pings and messages run over it.
 
 import { MAX_PLAYERS } from '../data';
 import { note, RoomError, wrap, type Accept, type HostedRoom, type JoinRoom, type LinkHandlers, type OpenRoom, type Pipe } from './link';
@@ -37,6 +38,8 @@ export interface SteamBridge {
   onFail(cb: (remote: string) => void): void;
   /** The player took a friend's invite, or «Join game» on a friend, while playing. */
   onInvite(cb: (lobby: string) => void): void;
+  /** The lobbies the player's Steam friends are in now, as the friends list shows them. */
+  friendLobbies(): Promise<string[]>;
 }
 
 /** Where friends got invited from: the overlay's invite window, or Steam's own friends list. */
@@ -48,35 +51,20 @@ export const desktop: Desktop | null = (globalThis as { desktop?: Desktop }).des
 const GAME = 'disco-underground';
 
 const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const BITS = (1n << 64n) - 1n;
+
 /**
- * The upper halves of lobbies' Steam ids (public universe, chat account, lobby instance; Steam's matchmaking marks the
- * lobbies it makes with one more flag, so theirs is the first): a code carries which one, in the 3 bits 7 letters have
- * to spare, and the lower half.
+ * A lobby's code: five letters worked out of its Steam id, as the browser's codes are five. Five letters hold 25 bits of
+ * the id's 64, so a code can't be read back into a lobby: it is looked for among the lobbies of the player's friends. The
+ * id is mixed first, so that lobbies made one after another get codes nothing alike.
  */
-const LOBBY = [0x01860000n, 0x01840000n];
-
-/** A lobby's code: 7 letters, 13 for a Steam id of some other shape. */
 export function codeOf(lobby: string): string {
-  let id = BigInt(lobby), s = '';
-  const kind = LOBBY.indexOf(id >> 32n), n = kind < 0 ? 13 : 7;
-  if (kind >= 0) id = (BigInt(kind) << 32n) | (id & 0xffffffffn);
-  for (let i = 0; i < n; i++, id >>= 5n) s = LETTERS[Number(id & 31n)] + s;
+  let x = BigInt(lobby), s = '';
+  x = ((x ^ (x >> 33n)) * 0xff51afd7ed558ccdn) & BITS;
+  x = ((x ^ (x >> 33n)) * 0xc4ceb9fe1a85ec53n) & BITS;
+  x ^= x >> 33n;
+  for (let i = 0; i < 5; i++, x >>= 5n) s += LETTERS[Number(x & 31n)];
   return s;
-}
-
-/** The lobby a code stands for; null for anything that is no lobby's code. */
-export function lobbyOf(code: string): string | null {
-  code = code.toUpperCase();
-  if (code.length !== 7 && code.length !== 13) return null;
-  let id = 0n;
-  for (const ch of code) {
-    const v = LETTERS.indexOf(ch);
-    if (v < 0) return null;
-    id = (id << 5n) | BigInt(v);
-  }
-  if (code.length === 13) return id < 1n << 64n ? String(id) : null;
-  const kind = Number(id >> 32n);
-  return kind < LOBBY.length ? String((LOBBY[kind] << 32n) | (id & 0xffffffffn)) : null;
 }
 
 /**
@@ -90,7 +78,11 @@ type Packet = { c: string; k: 'o' | 'a' | 'm' | 'x'; m?: unknown };
 const JOIN_MS = 15000;
 const KNOCK_MS = 1000;
 
-const notFound = () => new RoomError('peer-unavailable', 'Комната не найдена. Проверь код, и чтобы хозяин комнаты был в лобби.');
+/** A friend's lobby just made may take Steam a moment to show in the friends list, so a code is looked for twice. */
+const LOOKS = 2;
+const LOOK_MS = 2000;
+
+const notFound = () => new RoomError('peer-unavailable', 'Комната не найдена. Проверь код и что хозяин комнаты у тебя в друзьях Steam.');
 const noAnswer = () => new RoomError('timeout', 'Не удалось подключиться к комнате. Проверь код, и чтобы хозяин комнаты был в лобби.');
 const noSteam = () => new RoomError('steam', 'Сетевая игра идёт через Steam. Запусти Steam и открой игру снова.');
 
@@ -144,7 +136,14 @@ class SteamPipe implements Pipe {
  * Rooms and links over Steam. `leave` lets go of the lobby for good (the player left the room): a player whose link
  * dropped stays in it meanwhile, so a host back from a crash finds its lobby still there and its players in it.
  */
-export function steamNet(steam: SteamBridge | null): { open: OpenRoom; join: JoinRoom; leave(): void; invite(): Promise<Invite> } {
+export function steamNet(steam: SteamBridge | null): {
+  open: OpenRoom;
+  join: JoinRoom;
+  leave(): void;
+  invite(): Promise<Invite>;
+  /** The code of a lobby Steam named (a friend's invite), kept so that joining it needs no looking for. */
+  code(lobby: string): string;
+} {
   /** Live links by `<Steam id>/<link>`, and the player's knocks still waiting for an answer. */
   const pipes = new Map<string, SteamPipe>();
   const knocks = new Map<string, { peer: string; ok(): void; no(e: RoomError): void }>();
@@ -155,6 +154,13 @@ export function steamNet(steam: SteamBridge | null): { open: OpenRoom; join: Joi
   let using: string | null = null;
   /** Bumped by each attempt and by leave(), so an attempt overtaken by another lets its lobby go. */
   let turn = 0;
+  /** The lobbies of the codes this side knows without looking: its own rooms and the invites it took. */
+  const known = new Map<string, string>();
+  const remember = (lobby: string) => {
+    const code = codeOf(lobby);
+    known.set(code, lobby);
+    return code;
+  };
 
   const post = (to: string, p: Packet) => steam?.send(to, JSON.stringify(p));
   const pipe = (peer: string, c: string) => {
@@ -172,6 +178,31 @@ export function steamNet(steam: SteamBridge | null): { open: OpenRoom; join: Joi
     if (my === turn) return keepOnly(lobby);
     if (lobby !== using) { steam?.leave(lobby); inside.delete(lobby); }
     throw new RoomError('cancelled', '');
+  };
+
+  /**
+   * Goes into the lobby behind a code, if `fits` takes its data: the lobby this side knows the code of, else a friend's
+   * with that code (two lobbies of friends may share one, so each is tried). Gives the lobby and its data, or null.
+   */
+  const enterBy = async (steam: SteamBridge, code: string, fits: (d: Record<string, string>) => boolean, looks: number) => {
+    const tried = new Set<string>();
+    const among = async (lobbies: string[]) => {
+      for (const lobby of lobbies) {
+        if (tried.has(lobby)) continue;
+        tried.add(lobby);
+        const d = await steam.enter(lobby).catch(() => null);
+        if (d && fits(d)) return { lobby, d };
+        if (d && !inside.has(lobby)) steam.leave(lobby);
+      }
+      return null;
+    };
+    const mine = known.get(code);
+    let found = mine ? await among([mine]) : null;
+    for (let look = 0; !found && look < looks; look++) {
+      if (look) await new Promise(ok => setTimeout(ok, LOOK_MS));
+      found = await among((await steam.friendLobbies().catch(() => [] as string[])).filter(l => codeOf(l) === code));
+    }
+    return found;
   };
 
   steam?.onPacket((from, data) => {
@@ -211,19 +242,14 @@ export function steamNet(steam: SteamBridge | null): { open: OpenRoom; join: Joi
     const my = ++turn;
     let lobby: string | null = null;
     // back from a crash: the players wait in the old lobby, so the host goes back into it if it is still its own
-    const old = again ? lobbyOf(code) : null;
-    if (old) {
-      const d = await steam.enter(old).catch(() => null);
-      if (d?.game === GAME && d.host === steam.id) lobby = old;
-      else if (d) steam.leave(old);
-    }
+    if (again) lobby = (await enterBy(steam, code, d => d.game === GAME && d.host === steam.id, 1))?.lobby ?? null;
     lobby ??= await steam.host(MAX_PLAYERS, { game: GAME, host: steam.id }).catch(() => {
       throw new RoomError('network', 'Нет связи с сервером комнат. Проверь интернет.');
     });
     settle(my, lobby);
     hosting = onConnection;
     const room: HostedRoom = {
-      code: codeOf(lobby),
+      code: remember(lobby),
       close: () => {
         if (hosting === onConnection) hosting = null;
         if (inside.delete(lobby)) steam.leave(lobby);
@@ -236,16 +262,12 @@ export function steamNet(steam: SteamBridge | null): { open: OpenRoom; join: Joi
 
   const join: JoinRoom = async (code, h: LinkHandlers) => {
     if (!steam) throw noSteam();
-    const my = ++turn, lobby = lobbyOf(code);
-    if (!lobby) throw notFound();
-    const d = await steam.enter(lobby).catch(() => null);
-    if (!d) throw notFound();
-    const host = d.host;
-    // another game's lobby (they share AppID 480 while testing), or this side's own room
-    if (d.game !== GAME || !host || host === steam.id) {
-      if (!inside.has(lobby)) steam.leave(lobby);
-      throw notFound();
-    }
+    const my = ++turn;
+    code = code.toUpperCase();
+    // not another game's lobby (they share AppID 480 while testing), nor this side's own room
+    const found = await enterBy(steam, code, d => d.game === GAME && !!d.host && d.host !== steam.id, LOOKS);
+    if (!found) throw notFound();
+    const { lobby } = found, host = found.d.host;
     settle(my, lobby);
     const c = Math.random().toString(36).slice(2, 10), key = `${host}/${c}`;
     const link = await new Promise<SteamPipe>((ok, no) => {
@@ -275,5 +297,6 @@ export function steamNet(steam: SteamBridge | null): { open: OpenRoom; join: Joi
       keepOnly(null);
     },
     invite: async () => (using && steam ? steam.invite(using) : null),
+    code: remember,
   };
 }

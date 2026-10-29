@@ -11,6 +11,7 @@
 /** steamworks.js's numbers for what its typings keep as const enums. */
 const FRIENDS_ONLY = 1; // matchmaking.LobbyType: friends see the room in their list and join it from there
 const RELIABLE = 2; // networking.SendType
+const IMMEDIATE = 4; // friends.FriendFlags: the player's own friends
 /** How often packets are taken off Steam, in ms. */
 const READ_MS = 4;
 /** How long a player who isn't in any of this side's lobbies yet may wait for their packets to be let in. */
@@ -163,6 +164,13 @@ function startSteam({ appId, fake, page, overlay = true, log = () => {} }) {
     },
     send(to, data) {
       p2p.sendP2PPacket(BigInt(to), RELIABLE, Buffer.from(data, 'utf8'));
+    },
+    /** The lobbies friends are in now, as the friends list shows them: a room's code is looked for among them. */
+    friendLobbies() {
+      const friends = client.friends.getFriends(IMMEDIATE);
+      const ids = [...new Set(friends.map(f => f.gamePlayed?.lobbyId).filter(id => id).map(String))];
+      log(`Steam: ${friends.length} friends, ${ids.length} lobbies among them`);
+      return ids;
     },
   };
 }

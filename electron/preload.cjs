@@ -22,5 +22,6 @@ contextBridge.exposeInMainWorld('desktop', {
     onPacket: listen('steam:packet'),
     onFail: listen('steam:fail'),
     onInvite: listen('steam:invited'),
+    friendLobbies: () => ipcRenderer.invoke('steam:friendLobbies'),
   },
 });
