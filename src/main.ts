@@ -1094,14 +1094,29 @@ if (desktop) sound.unlock();
 /** A campaign to go on with: the one on screen, or after the game was closed (or played online) the one this browser kept. */
 const unfinished = () => (mode === 'solo' ? !runOver : !!loadCampaign());
 
-function openMenu() {
+/** The main menu; `play` opens it on «Играть»'s list (the campaign, the run to go on with and the online game), where
+ *  their screens' «Назад» comes back to. */
+function openMenu(play = false) {
   $('mContinue').hidden = !unfinished();
+  playList(play);
   show('menu');
 }
+/** «Играть» swaps the menu's buttons for its own list in the same place, the hall and the logo staying as they are. */
+function playList(on: boolean) {
+  const menu = $('menu'), was = menu.classList.contains('play'), keys = menu.contains(document.activeElement);
+  menu.classList.toggle('play', on);
+  $('menuMain').inert = on;
+  $('menuPlay').inert = !on;
+  // the keys go on from the list on screen
+  if (on !== was && keys) (on ? $('menuPlay').querySelector<HTMLElement>('button:not([hidden])') : $('mPlay'))?.focus();
+}
+$('mPlay').addEventListener('click', () => { $('mContinue').hidden = !unfinished(); playList(true); });
+$('mPlayBack').addEventListener('click', () => playList(false));
+window.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('menu').hidden && $('menu').classList.contains('play')) playList(false); });
 
 $('mContinue').addEventListener('click', () => (mode === 'solo' ? show(null) : resumeCampaign()));
 $('mCampaign').addEventListener('click', openHeroSelect);
-$('heroBack').addEventListener('click', openMenu);
+$('heroBack').addEventListener('click', () => openMenu(true));
 $('heroGo').addEventListener('click', () => {
   if (settings.party.length !== settings.size) return;
   // the run under way would be gone
@@ -1112,7 +1127,7 @@ $('heroGo').addEventListener('click', () => {
 $('mOnline').addEventListener('click', () => { shelveCampaign(); $<HTMLInputElement>('lobbyName').value = settings.name; resetLobby(); show('lobby'); });
 $('mCollection').addEventListener('click', () => { renderCollection(); show('collection'); });
 $('mStats').addEventListener('click', () => { flushStats(); renderStats(); show('statsScreen'); });
-$('statsBack').addEventListener('click', openMenu);
+$('statsBack').addEventListener('click', () => openMenu());
 /** The settings open from the main menu or from the pause menu in a game, and «Назад» goes back where they came from. */
 let settingsFrom: 'menu' | 'pause' = 'menu';
 function openSettings(from: typeof settingsFrom) {
@@ -1146,7 +1161,7 @@ tutor.me = meHero;
 $('mSettings').addEventListener('click', () => openSettings('menu'));
 document.querySelectorAll<HTMLButtonElement>('#collection .tab').forEach(b => b.addEventListener('click', () => renderCollection(b.dataset.tab as ColTab)));
 bindCollection();
-$('colBack').addEventListener('click', openMenu);
+$('colBack').addEventListener('click', () => openMenu());
 $('setBack').addEventListener('click', () => (settingsFrom === 'pause' ? show('pause') : openMenu()));
 const syncSettings = bindSettings(() => { applyQuality(); sizeCanvas(); });
 
@@ -1272,7 +1287,7 @@ function backToLobby() {
   show('lobby');
 }
 
-$('lobbyBack').addEventListener('click', () => { leaveOnline(); resetLobby(); openMenu(); });
+$('lobbyBack').addEventListener('click', () => { leaveOnline(); resetLobby(); openMenu(true); });
 $('lobbyName').addEventListener('input', () => { settings.name = $<HTMLInputElement>('lobbyName').value.trim(); saveSettings(); });
 $('lobbyHost').addEventListener('click', async () => {
   // a room of one's own: a seat still being tried after a reload is given up

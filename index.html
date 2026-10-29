@@ -183,15 +183,21 @@
     <canvas id="menuFx" class="menu-fx" aria-hidden="true"></canvas>
     <div class="menu-panel">
       <h1 class="logo"><img class="logo-pic" width="1080" height="807" alt="Disco Underground"></h1>
-      <nav class="menu-btns">
-        <button class="btn big" id="mContinue" hidden><i data-art="m_continue" aria-hidden="true"></i>Продолжить</button>
-        <button class="btn big" id="mCampaign"><i data-art="m_campaign" aria-hidden="true"></i>Кампания</button>
-        <button class="btn big" id="mOnline"><i data-art="m_online" aria-hidden="true"></i>Сетевая игра</button>
+      <div class="menu-lists">
+      <nav class="menu-btns" id="menuMain">
+        <button class="btn big" id="mPlay"><i data-art="m_continue" aria-hidden="true"></i>Играть</button>
         <button class="btn big" id="mCollection"><i data-art="m_collection" aria-hidden="true"></i>Коллекция</button>
         <button class="btn big" id="mStats"><i data-art="m_stats" aria-hidden="true"></i>Статистика</button>
         <button class="btn big" id="mSettings"><i data-art="m_settings" aria-hidden="true"></i>Настройки</button>
         <button class="btn big desktop-only" id="mQuit"><i data-art="m_close" aria-hidden="true"></i>Выход</button>
       </nav>
+      <nav class="menu-btns" id="menuPlay" inert>
+        <button class="btn big" id="mContinue" hidden><i data-art="m_continue" aria-hidden="true"></i>Продолжить</button>
+        <button class="btn big" id="mCampaign"><i data-art="m_campaign" aria-hidden="true"></i>Кампания</button>
+        <button class="btn big" id="mOnline"><i data-art="m_online" aria-hidden="true"></i>Сетевая игра</button>
+        <button class="btn big" id="mPlayBack"><i data-art="m_back" aria-hidden="true"></i>Назад</button>
+      </nav>
+      </div>
     </div>
     <small class="menu-ver" id="menuVer"></small>
   </section>

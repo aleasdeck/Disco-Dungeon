@@ -788,6 +788,17 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .logo-pic { display: block; width: 100%; height: auto; }
 .menu-panel .logo { margin-bottom: 20px; }
 .menu-btns { display: grid; gap: 12px; }
+/* «Играть» swaps the menu's buttons for its own list in the same place: both lie in one cell from the top, so the logo
+   over them stays put whichever is shorter, and the one on screen is laid down once from the left */
+.menu-lists { display: grid; }
+.menu-lists > .menu-btns { grid-area: 1 / 1; align-content: start; }
+#menu.play #menuMain, #menu:not(.play) #menuPlay { visibility: hidden; }
+:is(#menu:not(.play) #menuMain, #menu.play #menuPlay) .btn.big { animation: menu-deal 0.22s ease-out backwards; }
+#menu :is(#menuMain, #menuPlay) .btn.big:not([hidden]) ~ .btn.big { animation-delay: 0.04s; }
+#menu :is(#menuMain, #menuPlay) .btn.big:not([hidden]) ~ .btn.big ~ .btn.big { animation-delay: 0.08s; }
+#menu :is(#menuMain, #menuPlay) .btn.big:not([hidden]) ~ .btn.big ~ .btn.big ~ .btn.big { animation-delay: 0.12s; }
+@keyframes menu-deal { from { opacity: 0; translate: -18px 0; } }
+@media (prefers-reduced-motion: reduce) { #menu .menu-btns .btn.big { animation: none !important; } }
 /* the game's version, small in the bottom right corner */
 .menu-ver {
   position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: calc(8px + var(--safe-b));
@@ -1809,13 +1820,13 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .art-opt .fg-name .lvl i { border-color: #2a1a0d; background: none; }
 .art-opt .fg-name .lvl i.on { background: #2a1a0d; }
 /* the menu's and the pause's buttons, each a plate of its own shape (Vladislav asked), laid a little askew by hand */
-.art-mb_go :is(#mContinue, #pResume) { background-image: var(--ui-mb_go); }
+.art-mb_go :is(#mPlay, #mContinue, #pResume) { background-image: var(--ui-mb_go); }
 .art-mb_arrow #mCampaign { background-image: var(--ui-mb_arrow); }
 .art-mb_ticket #mOnline { background-image: var(--ui-mb_ticket); }
 .art-mb_mark :is(#mCollection, #pHelp) { background-image: var(--ui-mb_mark); }
 .art-mb_slant :is(#mSettings, #pSettings) { background-image: var(--ui-mb_slant); }
 .art-mb_steps #mStats { background-image: var(--ui-mb_steps); }
-.art-mb_back #pMenu { background-image: var(--ui-mb_back); }
+.art-mb_back :is(#pMenu, #mPlayBack) { background-image: var(--ui-mb_back); }
 .art-mb_go .menu-btns .btn.big:nth-child(odd) { rotate: -0.8deg; }
 .art-mb_go .menu-btns .btn.big:nth-child(even) { rotate: 0.6deg; }
 /* the board behind my hero's portrait: bare cardboard under the button, over it the print in the hero's colour where
