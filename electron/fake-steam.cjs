@@ -11,8 +11,8 @@
 'use strict';
 const net = require('node:net');
 
-/** A lobby's Steam id: the upper half every lobby has, then a number of the hub's. */
-const LOBBY = 0x01840000n << 32n;
+/** A lobby's Steam id: the upper half Steam's matchmaking lobbies have, then a number of the hub's. */
+const LOBBY = 0x01860000n << 32n;
 /** The callbacks steam.cjs registers, numbered as steamworks.js numbers them. */
 const SteamCallback = { LobbyDataUpdate: 4, LobbyChatUpdate: 5, P2PSessionRequest: 6, P2PSessionConnectFail: 7, GameLobbyJoinRequested: 8, GameOverlayActivated: 10 };
 

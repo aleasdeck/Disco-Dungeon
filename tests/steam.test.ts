@@ -18,7 +18,7 @@ function steamWorld() {
     return {
       id, name, launch: null,
       host: async (_max, data) => {
-        const lobby = String((0x01840000n << 32n) | BigInt(next++));
+        const lobby = String((0x01860000n << 32n) | BigInt(next++));
         lobbies.set(lobby, { data: { ...data }, members: new Set([id]) });
         return lobby;
       },
@@ -61,12 +61,17 @@ function netOf(steam: SteamBridge) {
 
 describe('Steam room codes', () => {
   it('writes a lobby in seven letters and reads it back', () => {
-    for (const low of [0n, 1n, 123456789n, 0xffffffffn]) {
-      const lobby = String((0x01840000n << 32n) | low), code = codeOf(lobby);
-      expect(code).toMatch(/^[A-Z2-9]{7}$/);
-      expect(lobbyOf(code)).toBe(lobby);
-      expect(lobbyOf(code.toLowerCase())).toBe(lobby);
+    // Steam's matchmaking lobbies (a real one: 109775241047675327), and lobbies without its flag
+    for (const high of [0x01860000n, 0x01840000n]) {
+      for (const low of [0n, 1n, 123456789n, 0xffffffffn]) {
+        const lobby = String((high << 32n) | low), code = codeOf(lobby);
+        expect(code).toMatch(/^[A-Z2-9]{7}$/);
+        expect(lobbyOf(code)).toBe(lobby);
+        expect(lobbyOf(code.toLowerCase())).toBe(lobby);
+      }
     }
+    expect(codeOf('109775241047675327')).toHaveLength(7);
+    expect(lobbyOf(codeOf('109775241047675327'))).toBe('109775241047675327');
   });
 
   it('takes a Steam id of another shape in thirteen', () => {
@@ -76,7 +81,7 @@ describe('Steam room codes', () => {
   });
 
   it('is no lobby for the browser\'s codes or anything mistyped', () => {
-    for (const code of ['ABCDE', 'ABCDEF', 'ABCDEF0', 'ABCDEFI', '', '99999999']) expect(lobbyOf(code)).toBeNull();
+    for (const code of ['ABCDE', 'ABCDEF', 'ABCDEF0', 'ABCDEFI', '', '99999999', 'ZZZZZZZ']) expect(lobbyOf(code)).toBeNull();
   });
 });
 

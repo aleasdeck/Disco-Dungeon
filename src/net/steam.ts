@@ -48,14 +48,18 @@ export const desktop: Desktop | null = (globalThis as { desktop?: Desktop }).des
 const GAME = 'disco-underground';
 
 const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-/** The upper half of every lobby's Steam id (public universe, chat account, lobby instance): a code carries the rest. */
-const LOBBY = 0x01840000n;
+/**
+ * The upper halves of lobbies' Steam ids (public universe, chat account, lobby instance; Steam's matchmaking marks the
+ * lobbies it makes with one more flag, so theirs is the first): a code carries which one, in the 3 bits 7 letters have
+ * to spare, and the lower half.
+ */
+const LOBBY = [0x01860000n, 0x01840000n];
 
-/** A lobby's code: 7 letters, 13 for a Steam id of some other shape (never seen). */
+/** A lobby's code: 7 letters, 13 for a Steam id of some other shape. */
 export function codeOf(lobby: string): string {
   let id = BigInt(lobby), s = '';
-  const n = id >> 32n === LOBBY ? 7 : 13;
-  if (n === 7) id &= 0xffffffffn;
+  const kind = LOBBY.indexOf(id >> 32n), n = kind < 0 ? 13 : 7;
+  if (kind >= 0) id = (BigInt(kind) << 32n) | (id & 0xffffffffn);
   for (let i = 0; i < n; i++, id >>= 5n) s = LETTERS[Number(id & 31n)] + s;
   return s;
 }
@@ -71,7 +75,8 @@ export function lobbyOf(code: string): string | null {
     id = (id << 5n) | BigInt(v);
   }
   if (code.length === 13) return id < 1n << 64n ? String(id) : null;
-  return id <= 0xffffffffn ? String((LOBBY << 32n) | id) : null;
+  const kind = Number(id >> 32n);
+  return kind < LOBBY.length ? String((LOBBY[kind] << 32n) | (id & 0xffffffffn)) : null;
 }
 
 /**
