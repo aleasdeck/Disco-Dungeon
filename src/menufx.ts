@@ -1,11 +1,14 @@
-// The hall behind the main menu a little alive (thread «Оживить фон главного меню», Vladislav picked «всё понемногу» of
-// four, 2026-10-28): the mirror ball turns and its spots drift over the walls and the floor, a spark flashes on it on
-// every beat, the torches breathe, dust floats where the three beams catch it, and the dancers move to the music, each
-// one whole, as a cut-out figure moves: a dip on the beat, a sway, the rat a hop.
-// The dancers are pictures of their own (menu_dancer_*) in front of the hall without them (menu_hall / menu_hall_tall);
-// the light is a canvas over both. All of it is redrawn at most 20 times a second and only while the main menu is up, so
-// the phone does less than in a room standing still; with less motion asked of the system or the graphics set to save,
-// the menu keeps the still hall with its dancers in it (menu_bg). Everything is placed in the hall picture's own pixels
+// The hall behind the main menu and its screens a little alive (thread «Оживить фон главного меню», Vladislav picked
+// «всё понемногу» of four, 2026-10-28, and wanted it on every screen with the hall, 2026-10-29): the mirror ball turns and
+// its spots drift over the walls and the floor, a spark flashes on it on every beat, the torches breathe, dust floats
+// where the three beams catch it, and the dancers move to the music, each one whole, as a cut-out figure moves: a dip on
+// the beat, a sway, the rat a hop.
+// It is one layer (#hall) under whichever of those screens is up, which then leaves its own still picture off: the hall
+// without its dancers (menu_hall / menu_hall_tall), the dancers as pictures of their own (menu_dancer_*) and the light as
+// a canvas over both. All of it is redrawn at most 20 times a second and only while such a screen is up, so the phone does
+// less than in a room standing still; it holds still under a window that blurs what is under it (the rules, the online
+// wait), and with less motion asked of the system or the graphics set to save, the screens keep the still hall with its
+// dancers in it (menu_bg). Everything is placed in the hall picture's own pixels
 // (art: /mnt/project-files/discodungeon/menu-fx/tools/split.py) and follows it as the stylesheet covers the screen with it.
 // The light comes round again every 40 beats exactly, and the dancers every 4, so a recording of 40 beats loops clean.
 
@@ -210,8 +213,13 @@ class MenuFx {
   private spots: Spot[] = [];
   private motes: Partial<Record<'pc' | 'tall', Mote[]>> = {};
   private still = matchMedia('(prefers-reduced-motion: reduce)');
+  private upright = matchMedia('(orientation: portrait)');
 
-  constructor(private menu: HTMLElement, private canvas: HTMLCanvasElement, private floor: HTMLElement) {
+  /**
+   * `screens` show the hall behind them; `over` are the windows after them in the page that may come up over them (the
+   * rules, the online wait, the pause, the loading screen): under one the hall holds still.
+   */
+  constructor(private layer: HTMLElement, private canvas: HTMLCanvasElement, private floor: HTMLElement, private screens: HTMLElement[], private over: HTMLElement[]) {
     this.ctx = canvas.getContext('2d')!;
     window.addEventListener('resize', () => (this.sized = false));
     // each spot has a twin on the ball's far side: half a turn later the room shows the same spots, so the light loops
@@ -229,14 +237,13 @@ class MenuFx {
 
   private size() {
     this.sized = true;
-    // the menu's own box, which its picture covers (the canvas may be hidden yet)
-    const w = this.menu.clientWidth, h = this.menu.clientHeight;
+    const w = this.layer.clientWidth, h = this.layer.clientHeight;
     // one canvas pixel to a screen point is plenty for soft light, and each pixel more is work 20 times a second
     const q = Math.min(1, Math.sqrt(MAX_PIXELS / Math.max(1, w * h)));
     this.canvas.width = Math.round(w * q);
     this.canvas.height = Math.round(h * q);
     // the same picture as the stylesheet's: the tall one on an upright screen
-    this.key = matchMedia('(orientation: portrait)').matches ? 'tall' : 'pc';
+    this.key = this.upright.matches ? 'tall' : 'pc';
     this.hall = HALLS[this.key];
     const s = Math.max(w / this.hall.w, h / this.hall.h), ox = (w - this.hall.w * s) / 2, oy = (h - this.hall.h * s) / 2;
     this.s = s * q;
@@ -257,15 +264,12 @@ class MenuFx {
     });
   }
 
-  /** Light and dancers on (the hall without its dancers behind them) or off (the still hall with them). */
+  /** The live hall up behind the screens (they leave their still one off) or gone (they show it again). */
   private set(on: boolean) {
     if (on === this.on) return;
     this.on = on;
-    this.menu.classList.toggle('alive', on);
-    if (!on) {
-      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    }
+    this.layer.hidden = !on;
+    document.documentElement.classList.toggle('hall-alive', on);
   }
 
   /** Each beam's dust: somewhere in it or a little past its edges, so a mote drifts in and out of the light. */
@@ -283,16 +287,13 @@ class MenuFx {
     return (this.motes[this.key] = out);
   }
 
-  /** Called from the game's loop each frame; draws only when it is time and the main menu is on screen. */
+  /** Called from the game's loop each frame; draws only when it is time and a screen with the hall is up. */
   tick(now: number) {
-    if (this.menu.hidden) return;
-    if (this.still.matches || settings.quality === 'low') return this.set(false);
-    if (!this.sized) {
-      const key = matchMedia('(orientation: portrait)').matches ? 'tall' : 'pc';
-      if (!this.ready(HALLS[key])) return this.set(false);
-      this.size();
-    }
-    if (now - this.drawnAt < 1000 / FPS - 4) return;
+    const up = this.screens.some(s => !s.hidden) && !this.still.matches && settings.quality !== 'low' && this.ready(HALLS[this.upright.matches ? 'tall' : 'pc']);
+    this.set(up);
+    if (!up) return;
+    if (!this.sized) this.size();
+    if (now - this.drawnAt < 1000 / FPS - 4 || this.over.some(o => !o.hidden)) return;
     this.drawnAt = now;
     const t = now / 1000;
     // the dancers keep to the tune when it plays, else to a clock at its pace
@@ -376,13 +377,16 @@ class MenuFx {
 }
 
 let fx: MenuFx | null = null;
-/** The menu's life: call from the game's loop every frame. */
+/** The hall's life: call from the game's loop every frame. */
 export function menuFx(now: number) {
   if (!fx) {
     const $ = (id: string) => document.getElementById(id);
-    const menu = $('menu'), canvas = $('menuFx') as HTMLCanvasElement | null, floor = $('menuDancers');
-    if (!menu || !canvas || !floor) return;
-    fx = new MenuFx(menu, canvas, floor);
+    const layer = $('hall'), canvas = $('hallFx') as HTMLCanvasElement | null, floor = $('hallDancers');
+    if (!layer || !canvas || !floor) return;
+    // every full screen with the hall for its picture, and every window that comes after it, over it
+    const screens = [...document.querySelectorAll<HTMLElement>('.overlay.solid:not(.boot)')];
+    const over = [...document.querySelectorAll<HTMLElement>('.overlay')].filter(o => !screens.includes(o) && layer.compareDocumentPosition(o) & Node.DOCUMENT_POSITION_FOLLOWING);
+    fx = new MenuFx(layer, canvas, floor, screens, over);
   }
   fx.tick(now);
 }
