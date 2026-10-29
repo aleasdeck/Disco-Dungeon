@@ -789,19 +789,24 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .muted { color: var(--muted, #b2a38c); font-size: 13px; }
 
 /* ---------- main menu */
-.menu-panel { position: relative; text-align: center; width: min(420px, 100%); justify-self: center; }
-/* the live hall (src/menufx.ts): its dancers stand in front of the hall without them and its light is a canvas over both,
-   all held to the screen as the picture is while the menu scrolls; without it the menu keeps the still hall */
-.menu-fx, .menu-dancers { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.menu-dancers { overflow: hidden; }
-.menu-dancers img { position: absolute; display: block; max-width: none; will-change: transform; }
-#menu:not(.alive) :is(.menu-fx, .menu-dancers) { display: none; }
+.menu-panel { text-align: center; width: min(420px, 100%); justify-self: center; }
 /* the game's name as its picture (logo_en / logo_ru), wider than the buttons under it, less wide on a low screen: the
    picture is about three quarters as tall as wide, so the buttons under it still fit on a 720 px laptop and a small phone */
 .logo { margin: 0 0 0 50%; width: clamp(240px, min(92vw, 50vh), 540px); line-height: 0; transform: translateX(-50%) rotate(-2deg); }
 .logo-pic { display: block; width: 100%; height: auto; }
 .menu-panel .logo { margin-bottom: 20px; }
 .menu-btns { display: grid; gap: 12px; }
+/* «Играть» swaps the menu's buttons for its own list in the same place: both lie in one cell from the top, so the logo
+   over them stays put whichever is shorter, and the one on screen is laid down once from the left */
+.menu-lists { display: grid; }
+.menu-lists > .menu-btns { grid-area: 1 / 1; align-content: start; }
+#menu.play #menuMain, #menu:not(.play) #menuPlay { visibility: hidden; }
+:is(#menu:not(.play) #menuMain, #menu.play #menuPlay) .btn.big { animation: menu-deal 0.22s ease-out backwards; }
+#menu :is(#menuMain, #menuPlay) .btn.big:not([hidden]) ~ .btn.big { animation-delay: 0.04s; }
+#menu :is(#menuMain, #menuPlay) .btn.big:not([hidden]) ~ .btn.big ~ .btn.big { animation-delay: 0.08s; }
+#menu :is(#menuMain, #menuPlay) .btn.big:not([hidden]) ~ .btn.big ~ .btn.big ~ .btn.big { animation-delay: 0.12s; }
+@keyframes menu-deal { from { opacity: 0; translate: -18px 0; } }
+@media (prefers-reduced-motion: reduce) { #menu .menu-btns .btn.big { animation: none !important; } }
 /* the game's version, small in the bottom right corner */
 .menu-ver {
   position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: calc(8px + var(--safe-b));
@@ -1453,8 +1458,14 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 /* the menus stand on a painted disco dungeon instead of the dimmed room */
 .art-menu_bg .overlay.solid { background: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_bg) center / cover no-repeat; }
 @media (orientation: portrait) { .art-menu_bg_tall .overlay.solid { background-image: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_bg_tall); } }
-.art-menu_hall #menu.alive { background-image: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_hall); }
-@media (orientation: portrait) { .art-menu_hall_tall #menu.alive { background-image: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_hall_tall); } }
+/* the live hall (src/menufx.ts), one layer under whichever of the main menu and its screens is up, which then leaves its
+   own still picture off: the hall without its dancers, the dancers in front of it and its light as a canvas over both;
+   it sits just under those screens and over everything before them */
+.hall { position: fixed; inset: 0; z-index: 20; overflow: hidden; pointer-events: none; background: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_hall) center / cover no-repeat; }
+@media (orientation: portrait) { .hall { background-image: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_hall_tall); } }
+.hall-fx, .hall-dancers { position: absolute; inset: 0; width: 100%; height: 100%; }
+.hall-dancers img { position: absolute; display: block; max-width: none; will-change: transform; }
+.hall-alive .overlay.solid:not(.boot) { background: none; }
 
 /* who already pressed the turn button: their faces stuck on its top edge */
 /* on the right end, clear of the words */
@@ -1823,13 +1834,13 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .art-opt .fg-name .lvl i { border-color: #2a1a0d; background: none; }
 .art-opt .fg-name .lvl i.on { background: #2a1a0d; }
 /* the menu's and the pause's buttons, each a plate of its own shape (Vladislav asked), laid a little askew by hand */
-.art-mb_go :is(#mContinue, #pResume) { background-image: var(--ui-mb_go); }
+.art-mb_go :is(#mPlay, #mContinue, #pResume) { background-image: var(--ui-mb_go); }
 .art-mb_arrow #mCampaign { background-image: var(--ui-mb_arrow); }
 .art-mb_ticket #mOnline { background-image: var(--ui-mb_ticket); }
 .art-mb_mark :is(#mCollection, #pHelp) { background-image: var(--ui-mb_mark); }
 .art-mb_slant :is(#mSettings, #pSettings) { background-image: var(--ui-mb_slant); }
 .art-mb_steps #mStats { background-image: var(--ui-mb_steps); }
-.art-mb_back #pMenu { background-image: var(--ui-mb_back); }
+.art-mb_back :is(#pMenu, #mPlayBack) { background-image: var(--ui-mb_back); }
 .art-mb_go .menu-btns .btn.big:nth-child(odd) { rotate: -0.8deg; }
 .art-mb_go .menu-btns .btn.big:nth-child(even) { rotate: 0.6deg; }
 /* the board behind my hero's portrait: bare cardboard under the button, over it the print in the hero's colour where
@@ -1960,7 +1971,7 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .pick-print::before, .pick-print::after { content: ''; position: absolute; z-index: 1; top: -12px; width: 90px; height: 28px; background: rgba(226, 205, 160, 0.86); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); }
 .pick-print::before { left: -24px; rotate: -35deg; }
 .pick-print::after { right: -24px; rotate: 33deg; }
-.pick-print canvas { display: block; width: 100%; height: 100%; }
+.pick-print canvas, .pick-print img { display: block; width: 100%; height: 100%; }
 /* a phone's small photo lifted over the screen at full size (zoomable() in menu.ts) */
 .pick-panel .pick-print.zoomed { --ph: min(calc(100vw - 32px), calc(100dvh - 32px)); position: fixed; z-index: 60; left: 50%; top: 50%; margin: 0; padding: 10px; translate: -50% -50%; rotate: -1deg; box-shadow: 0 0 0 100vmax rgba(10, 6, 4, 0.82), 0 10px 22px rgba(0, 0, 0, 0.55); --cur: zoom-out; }
 .pick-tools { display: flex; gap: 10px; }

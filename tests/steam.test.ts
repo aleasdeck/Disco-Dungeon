@@ -1,16 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Net, type Msg } from '../src/net';
-import { codeOf, lobbyOf, steamNet, type SteamBridge } from '../src/net/steam';
+import { codeOf, steamNet, type SteamBridge } from '../src/net/steam';
 
 afterEach(() => {
   vi.useRealTimers();
 });
 
-/** Pretend Steam for a few players: lobbies with data and members, and packets passed on a tick later, as over IPC. */
-function steamWorld() {
+/**
+ * Pretend Steam for a few players, all friends of each other: lobbies with data and members, and packets passed on a
+ * tick later, as over IPC.
+ */
+function steamWorld(first = 7000) {
   const players = new Map<string, { packet: ((from: string, data: string) => void)[]; invite: ((lobby: string) => void)[] }>();
   const lobbies = new Map<string, { data: Record<string, string>; members: Set<string> }>();
-  let next = 7000;
+  let next = first;
   const later = (f: () => void) => setTimeout(f, 1);
   const player = (id: string, name = id): SteamBridge & { lobbies(): string[] } => {
     const me = { packet: [] as ((from: string, data: string) => void)[], invite: [] as ((lobby: string) => void)[] };
@@ -18,7 +21,7 @@ function steamWorld() {
     return {
       id, name, launch: null,
       host: async (_max, data) => {
-        const lobby = String((0x01840000n << 32n) | BigInt(next++));
+        const lobby = String((0x01860000n << 32n) | BigInt(next++));
         lobbies.set(lobby, { data: { ...data }, members: new Set([id]) });
         return lobby;
       },
@@ -41,6 +44,7 @@ function steamWorld() {
       onPacket: cb => { me.packet.push(cb); },
       onFail: () => {},
       onInvite: cb => { me.invite.push(cb); },
+      friendLobbies: async () => [...lobbies].filter(([, l]) => [...l.members].some(m => m !== id)).map(([k]) => k),
       lobbies: () => [...lobbies].filter(([, l]) => l.members.has(id)).map(([k]) => k),
     };
   };
@@ -60,23 +64,13 @@ function netOf(steam: SteamBridge) {
 }
 
 describe('Steam room codes', () => {
-  it('writes a lobby in seven letters and reads it back', () => {
-    for (const low of [0n, 1n, 123456789n, 0xffffffffn]) {
-      const lobby = String((0x01840000n << 32n) | low), code = codeOf(lobby);
-      expect(code).toMatch(/^[A-Z2-9]{7}$/);
-      expect(lobbyOf(code)).toBe(lobby);
-      expect(lobbyOf(code.toLowerCase())).toBe(lobby);
-    }
-  });
-
-  it('takes a Steam id of another shape in thirteen', () => {
-    const id = '76561197960287930', code = codeOf(id);
-    expect(code).toHaveLength(13);
-    expect(lobbyOf(code)).toBe(id);
-  });
-
-  it('is no lobby for the browser\'s codes or anything mistyped', () => {
-    for (const code of ['ABCDE', 'ABCDEF', 'ABCDEF0', 'ABCDEFI', '', '99999999']) expect(lobbyOf(code)).toBeNull();
+  it('writes a lobby in five letters, the same every time, and lobbies made one after another unlike', () => {
+    const high = 0x01860000n << 32n, codes = [0n, 1n, 2n, 123456789n].map(low => codeOf(String(high | low)));
+    for (const code of codes) expect(code).toMatch(/^[A-HJ-NP-Z2-9]{5}$/);
+    expect(new Set(codes).size).toBe(4);
+    expect([...codes[1]].filter((ch, i) => ch === codes[2][i]).length).toBeLessThan(3);
+    // a real lobby's id
+    expect(codeOf('109775241047675327')).toBe(codeOf('109775241047675327'));
   });
 });
 
@@ -85,17 +79,17 @@ describe('online play over Steam', () => {
     vi.useFakeTimers();
     const w = steamWorld(), a = w.player('100'), b = w.player('200');
     const host = netOf(a), client = netOf(b);
-    const code = await host.net.hostRoom();
-    expect(code).toHaveLength(7);
+    const code = await host.net.hostRoom(), lobby = a.lobbies()[0];
+    expect(code).toBe(codeOf(lobby));
     expect(host.net.code).toBe(code);
-    expect(w.lobbies.get(lobbyOf(code)!)?.data).toEqual({ game: 'disco-underground', host: '100' });
+    expect(w.lobbies.get(lobby)?.data).toEqual({ game: 'disco-underground', host: '100' });
 
     const joining = client.net.joinRoom(code);
     await wait(50);
     await joining;
     await wait(50);
     expect(host.joined).toHaveLength(1);
-    expect(b.lobbies()).toEqual([lobbyOf(code)]);
+    expect(b.lobbies()).toEqual([lobby]);
 
     client.net.send({ t: 'hello', name: 'Гость', key: 'k' });
     host.net.broadcast({ t: 'lobby', players: [] });
@@ -115,19 +109,24 @@ describe('online play over Steam', () => {
     // another game testing on AppID 480
     const other = await a.host(4, { game: 'spacewar' });
     const client = netOf(b);
-    await expect(client.net.joinRoom(codeOf(other))).rejects.toMatchObject({ type: 'peer-unavailable' });
+    const first = client.net.joinRoom(codeOf(other)).catch(e => e);
+    await wait(5000);
+    expect(await first).toMatchObject({ type: 'peer-unavailable' });
     expect(b.lobbies()).toEqual([]);
-    await expect(client.net.joinRoom('ZZZZZZZ')).rejects.toMatchObject({ type: 'peer-unavailable' });
+    const second = client.net.joinRoom(codeOf(other) === 'ZZZZZ' ? 'YYYYY' : 'ZZZZZ').catch(e => e);
+    await wait(5000);
+    expect(await second).toMatchObject({ type: 'peer-unavailable' });
   });
 
   it('tells a player at once when the host has no room open any more', async () => {
     vi.useFakeTimers();
     const w = steamWorld(), a = w.player('100'), b = w.player('200');
     const host = netOf(a), client = netOf(b);
-    const code = await host.net.hostRoom();
+    const code = await host.net.hostRoom(), lobby = a.lobbies()[0];
     // the host's page went to the menu without leaving the lobby for good
     host.net.close();
-    w.lobbies.set(lobbyOf(code)!, { data: { game: 'disco-underground', host: '100' }, members: new Set(['100']) });
+    w.lobbies.set(lobby, { data: { game: 'disco-underground', host: '100' }, members: new Set(['100']) });
+    expect(codeOf(lobby)).toBe(code);
     const joining = client.net.joinRoom(code).catch(e => e);
     await wait(100);
     expect(await joining).toMatchObject({ type: 'peer-unavailable' });
@@ -148,7 +147,7 @@ describe('online play over Steam', () => {
     vi.useFakeTimers();
     const w = steamWorld(), a = w.player('100'), b = w.player('200');
     const host = netOf(a), client = netOf(b);
-    const code = await host.net.hostRoom();
+    const code = await host.net.hostRoom(), lobby = a.lobbies()[0];
     const joining = client.net.joinRoom(code);
     await wait(50);
     await joining;
@@ -157,7 +156,7 @@ describe('online play over Steam', () => {
     w.gone('100');
     await wait(15000);
     expect(client.lost).toHaveBeenCalled();
-    expect(b.lobbies()).toEqual([lobbyOf(code)]);
+    expect(b.lobbies()).toEqual([lobby]);
     client.way.leave();
     expect(b.lobbies()).toEqual([]);
   });
@@ -170,9 +169,10 @@ describe('online play over Steam', () => {
     const joining = client.net.joinRoom(code);
     await wait(50);
     await joining;
-    // the host's game crashed: Steam took it out of the lobby, the player is still in it
+    // the host's game crashed: Steam took it out of the lobby, the player is still in it, and the page that comes back
+    // knows only the code, and finds the lobby among its friends'
     w.gone('100');
-    a.leave(lobbyOf(code)!);
+    a.leave(a.lobbies()[0]);
     await wait(15000);
     const back = netOf(w.player('100'));
     expect(await back.net.hostRoom(code)).toBe(code);
@@ -194,7 +194,7 @@ describe('online play over Steam', () => {
     expect(w.lobbies.size).toBe(0);
     const again = await host.net.hostRoom(code);
     expect(again).not.toBe(code);
-    expect(again).toHaveLength(7);
+    expect(again).toHaveLength(5);
   });
 
   it('a host who starts another room leaves the first one\'s lobby', async () => {
@@ -202,7 +202,7 @@ describe('online play over Steam', () => {
     const w = steamWorld(), a = w.player('100'), host = netOf(a);
     await host.net.hostRoom();
     const second = await host.net.hostRoom();
-    expect(a.lobbies()).toEqual([lobbyOf(second)]);
+    expect(a.lobbies().map(codeOf)).toEqual([second]);
   });
 
   it('invites friends into the room\'s lobby, and a friend who takes it gets the room\'s code', async () => {
@@ -214,6 +214,39 @@ describe('online play over Steam', () => {
     expect(await host.way.invite()).toBe('overlay');
     await wait(50);
     expect(taken).toEqual([code]);
+  });
+
+  it('finds a room by its code among two friends\' lobbies with the same one', async () => {
+    vi.useFakeTimers();
+    // two lobby ids with the same five letters: the host's room gets the later, another game's lobby, met first, the other
+    const high = 0x01860000n << 32n, seen = new Map<string, bigint>();
+    let low = 0n;
+    for (; !seen.has(codeOf(String(high | low))); low++) seen.set(codeOf(String(high | low)), low);
+    const twin = String(high | seen.get(codeOf(String(high | low)))!);
+    const w = steamWorld(Number(low)), a = w.player('100'), b = w.player('200');
+    w.player('300');
+    w.lobbies.set(twin, { data: { game: 'spacewar' }, members: new Set(['300']) });
+    const host = netOf(a), code = await host.net.hostRoom(), real = a.lobbies()[0];
+    expect(codeOf(twin)).toBe(code);
+    const client = netOf(b), joining = client.net.joinRoom(code);
+    await wait(50);
+    await joining;
+    expect(b.lobbies()).toEqual([real]);
+    expect(w.lobbies.get(twin)?.members).toEqual(new Set(['300']));
+  });
+
+  it('takes a friend\'s lobby that shows up in the friends list a moment late', async () => {
+    vi.useFakeTimers();
+    const w = steamWorld(), a = w.player('100'), b = w.player('200');
+    const host = netOf(a), code = await host.net.hostRoom(), lobby = a.lobbies()[0];
+    const shown = w.lobbies.get(lobby)!;
+    w.lobbies.delete(lobby);
+    const client = netOf(b), joining = client.net.joinRoom(code);
+    await wait(500);
+    w.lobbies.set(lobby, shown);
+    await wait(3000);
+    await joining;
+    expect(b.lobbies()).toEqual([lobby]);
   });
 
   it('fails plainly without Steam', async () => {

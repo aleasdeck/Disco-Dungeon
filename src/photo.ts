@@ -269,6 +269,38 @@ export function finish(c: CanvasRenderingContext2D, date?: number, flash = true)
   c.restore();
 }
 
+/** The still pictures standing in for the photo canvases on screen, and the latest drawing each one waits for. */
+const stills = new WeakMap<HTMLCanvasElement, { img: HTMLImageElement; drawn: number; url: string }>();
+
+/**
+ * Show a photo canvas just drawn as a still picture of it once that is ready. Over the live hall a canvas is composited
+ * again on every frame of the hall under it, which costs as much as the hall itself, while a picture is drawn into the
+ * screen once. The canvas shows meanwhile, so a hero under the mouse steps into the photo at once.
+ */
+export function stillPhoto(cv: HTMLCanvasElement) {
+  let s = stills.get(cv);
+  if (!s) {
+    const img = document.createElement('img');
+    img.hidden = true;
+    cv.after(img);
+    stills.set(cv, (s = { img, drawn: 0, url: '' }));
+  }
+  const st = s, n = ++st.drawn;
+  st.img.hidden = true;
+  cv.hidden = false;
+  cv.toBlob(b => {
+    if (!b || n !== st.drawn) return;
+    if (st.url) URL.revokeObjectURL(st.url);
+    st.img.src = st.url = URL.createObjectURL(b);
+    st.img.decode().then(() => {
+      if (n !== st.drawn) return;
+      st.img.alt = cv.getAttribute('aria-label') ?? '';
+      st.img.hidden = false;
+      cv.hidden = true;
+    }, () => {});
+  }, 'image/jpeg', 0.95);
+}
+
 /** Save the print in its white edge, as the players see it; a phone offers to share it instead. */
 export function savePhoto(cv: HTMLCanvasElement) {
   const m = 34, out = document.createElement('canvas');
