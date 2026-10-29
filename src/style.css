@@ -832,10 +832,14 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .join-row { display: flex; gap: 8px; }
 .join-row input { width: 7.5em; text-transform: uppercase; letter-spacing: 0.15em; font-family: Oswald, sans-serif; }
 .lobby-status { min-height: 1.4em; margin: 10px 0 0; color: #ff8a7a; }
-/* the room's code beside the lobby's title, gold as the title: a click copies it; then the button inviting friends */
+/* the room's code beside the lobby's title (a click copies it), then the button inviting friends */
 .room-code { display: flex; align-items: center; gap: 12px; }
-.room-code-btn { padding: 0 2px; border: 0; background: none; font: 700 26px/1 Oswald, sans-serif; letter-spacing: 0.16em; color: var(--gold); cursor: pointer; transition: color 0.25s; }
-.room-code-btn:hover { color: var(--gold-1); }
+/* teal as the invite's little person and dotted under, as a link: unlike the gold title, it reads as something to press */
+.room-code-btn {
+  padding: 0 2px; border: 0; background: none; font: 700 26px/1 Oswald, sans-serif; letter-spacing: 0.16em; color: #7cc7bd; cursor: pointer;
+  text-decoration: underline dotted rgba(124, 199, 189, 0.75); text-decoration-thickness: 0.12em; text-underline-offset: 0.24em; transition: color 0.25s;
+}
+.room-code-btn:hover { color: #a8e6dc; }
 .room-code-btn.copied { color: #fff; transition: none; }
 .room-code .btn.sm.icon { display: grid; place-items: center; padding: 2px 12px; }
 .room-code .btn.icon > i[data-art] { width: 32px; height: 32px; margin: 0; }
