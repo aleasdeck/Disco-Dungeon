@@ -26,6 +26,108 @@
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
+/* The labels (Oswald), the plain text (Rubik) and the words chalked on the walls (Amatic SC, Caveat, Neucha) come with
+   the game, so it looks the same with no network, as the Steam build has to: Cyrillic and Latin only, the Asian
+   languages take the system's own font. Oswald and Rubik are variable, one file for all their weights. */
+@font-face {
+  font-family: 'Amatic SC';
+  src: url('./fonts/amaticsc-700-cyrillic.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Amatic SC';
+  src: url('./fonts/amaticsc-700-latin-ext.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Amatic SC';
+  src: url('./fonts/amaticsc-700-latin.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Caveat';
+  src: url('./fonts/caveat-700-cyrillic.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Caveat';
+  src: url('./fonts/caveat-700-latin-ext.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Caveat';
+  src: url('./fonts/caveat-700-latin.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Neucha';
+  src: url('./fonts/neucha-400-cyrillic.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Neucha';
+  src: url('./fonts/neucha-400-latin.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Oswald';
+  src: url('./fonts/oswald-cyrillic.woff2') format('woff2');
+  font-weight: 500 700;
+  font-display: swap;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Oswald';
+  src: url('./fonts/oswald-latin-ext.woff2') format('woff2');
+  font-weight: 500 700;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Oswald';
+  src: url('./fonts/oswald-latin.woff2') format('woff2');
+  font-weight: 500 700;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Rubik';
+  src: url('./fonts/rubik-cyrillic.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: swap;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Rubik';
+  src: url('./fonts/rubik-latin-ext.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Rubik';
+  src: url('./fonts/rubik-latin.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
   --bg: #16110d;
   --panel: #2a211b;
@@ -46,6 +148,16 @@
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
+
+/* The mouse pointer: a rule says which one it wants in --cur (a cursor keyword). The browser shows its own until the game
+   draws the paper ones (src/cursor.ts), which read --cur under the mouse and hide the system's. */
+:root { --cur: default; }
+* { cursor: var(--cur); }
+html.own-cursor, html.own-cursor * { cursor: none !important; }
+input:not([type]), input[type="text"] { --cur: text; }
+input[type="radio"], input[type="checkbox"], input[type="range"], label:has(> input[type="radio"], > input[type="checkbox"]) { --cur: pointer; }
+.cursor-pic { position: fixed; left: 0; top: 0; z-index: 2147483647; pointer-events: none; will-change: transform; }
+.cursor-pic img { position: absolute; left: 0; top: 0; display: block; height: auto; }
 
 html, body {
   margin: 0;
@@ -76,8 +188,12 @@ html, body {
   height: 100dvh;
   display: block;
   touch-action: none;
-  cursor: grab;
+  --cur: grab;
 }
+/* over a hero or a rune; dragging the room or a hero; pulling a disc back to throw it (set by src/input.ts) */
+#stage[data-cur="hand"] { --cur: pointer; }
+#stage[data-cur="grabbing"] { --cur: grabbing; }
+#stage[data-cur="aim"] { --cur: crosshair; }
 
 button { font: inherit; color: inherit; }
 
@@ -90,12 +206,12 @@ button { font: inherit; color: inherit; }
   font-family: Oswald, sans-serif;
   font-weight: 600;
   letter-spacing: 0.02em;
-  cursor: pointer;
+  --cur: pointer;
   user-select: none;
 }
 .btn:hover { background: linear-gradient(#57442f, #3b2e22); }
 .btn:active { transform: translateY(1px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12); }
-.btn:disabled { opacity: 0.45; cursor: default; }
+.btn:disabled { opacity: 0.45; --cur: default; }
 .btn.round { width: 40px; height: 40px; padding: 0; border-radius: 50%; font-size: 18px; line-height: 1; }
 .btn.big { padding: 10px 22px; font-size: 17px; background: linear-gradient(#b8892f, #8a5f1c); }
 .btn.sm { padding: 3px 8px; font-size: 12px; border-radius: 7px; }
@@ -137,7 +253,7 @@ i.ico { display: inline-block; font-style: normal; }
   box-shadow: 0 2px 0 rgba(92, 74, 57, 0.7), 0 8px 18px rgba(0, 0, 0, 0.4);
 }
 .party { display: flex; gap: 7px; }
-.head { position: relative; width: 48px; height: 52px; padding: 0; border: 0; background: none; cursor: pointer; filter: var(--outline); }
+.head { position: relative; width: 48px; height: 52px; padding: 0; border: 0; background: none; --cur: pointer; filter: var(--outline); }
 .head canvas { display: block; width: 48px; height: 44px; clip-path: var(--cut-face); background: var(--c); }
 .head::before { content: ''; position: absolute; inset: -3px -3px 5px; clip-path: var(--cut-face); background: var(--c); z-index: -1; }
 .head.me::before { background: var(--gold-1); }
@@ -156,7 +272,7 @@ i.ico { display: inline-block; font-style: normal; }
 .head.away canvas { filter: grayscale(1) brightness(0.6); }
 .head.away .off { display: block; }
 .head.lethal { filter: var(--outline) drop-shadow(0 0 6px rgba(255, 77, 106, var(--p09, 0))); }
-.head:disabled { cursor: default; }
+.head:disabled { --cur: default; }
 .ore-chip { display: flex; align-items: center; gap: 6px; padding: 3px 14px 3px 8px; background: #2c2119; clip-path: var(--cut-slab); font: 700 20px/1 Oswald, sans-serif; color: #f3e6c8; }
 .ore-chip .ico { width: 28px; height: 28px; }
 .where { display: flex; flex-direction: column; align-items: center; min-width: 0; margin: 0 auto; text-align: center; }
@@ -179,7 +295,7 @@ i.ico { display: inline-block; font-style: normal; }
   content: ''; position: absolute; left: -17px; top: 17px; width: 11px; height: 14px; background: var(--gold-2);
   clip-path: polygon(0 0, 45% 0, 100% 50%, 45% 100%, 0 100%, 52% 50%);
 }
-.qb { position: relative; width: 48px; height: 48px; padding: 0; border: 0; background: none; cursor: pointer; filter: var(--outline); }
+.qb { position: relative; width: 48px; height: 48px; padding: 0; border: 0; background: none; --cur: pointer; filter: var(--outline); }
 .qb img { display: block; width: 100%; height: 100%; clip-path: var(--cut-tile); background: var(--red); }
 .queue li.boss .qb { width: 56px; height: 56px; margin-top: -4px; }
 .queue li.now .qb { transform: scale(1.12); }
@@ -220,7 +336,7 @@ i.ico { display: inline-block; font-style: normal; }
 
 .top-btns { display: flex; gap: 8px; }
 .ibtn {
-  position: relative; width: 44px; height: 44px; padding: 7px; border: 0; cursor: pointer;
+  position: relative; width: 44px; height: 44px; padding: 7px; border: 0; --cur: pointer;
   background: linear-gradient(#4d3c2d, #2b2018); clip-path: var(--cut-tile);
 }
 .ibtn:hover { background: linear-gradient(#5d4934, #33271d); }
@@ -283,7 +399,7 @@ i.ico { display: inline-block; font-style: normal; }
 :root { --cx: 16px; --cy: calc(16px + var(--safe-b)); --pf-w: 156px; --pf-h: 184px; --bgap: 8px; --u: 0.6px; }
 .corner > * { position: absolute; pointer-events: auto; }
 [data-turn='enemies'] .corner { filter: saturate(0.4) brightness(0.8); }
-.portrait { left: 0; bottom: 0; width: var(--pf-w); height: var(--pf-h); padding: 0; border: 0; background: none; cursor: pointer; filter: var(--outline); }
+.portrait { left: 0; bottom: 0; width: var(--pf-w); height: var(--pf-h); padding: 0; border: 0; background: none; --cur: pointer; filter: var(--outline); }
 .portrait::before { content: ''; position: absolute; inset: 0; background: var(--c); clip-path: var(--cut-face); }
 .portrait canvas { position: absolute; inset: 5px; width: calc(100% - 10px); height: calc(100% - 10px); clip-path: var(--cut-face); }
 .pname {
@@ -359,7 +475,7 @@ i.ico { display: inline-block; font-style: normal; }
 .ability {
   --bx: 421; --by: -14; --bw: 306; --bh: 295; padding: 0 0 0 20%;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
-  border: 0; cursor: pointer; background: none; filter: var(--outline); pointer-events: none;
+  border: 0; --cur: pointer; background: none; filter: var(--outline); pointer-events: none;
   --tap: polygon(24.8% 4.7%, 83% 4.7%, 95.4% 50.2%, 73.2% 95.3%, 7.5% 95.3%, 4.6% 85.5%, 9.5% 77.8%, 6.5% 67.8%, 29.4% 73.2%, 33.3% 71.2%, 37.3% 49.5%);
 }
 /* the gem's and the turn button's boxes overlap the pieces round them: a tap counts only inside their outline (--tap) */
@@ -368,7 +484,7 @@ i.ico { display: inline-block; font-style: normal; }
 .ability::after { content: ''; position: absolute; inset: 10% 10% 10% 30%; clip-path: var(--cut-gem); background: linear-gradient(160deg, #8f6fe0, #5a3aa8 60%, #3d2875); }
 .ability > * { position: relative; z-index: 1; }
 .ability b { font: 700 calc(26 * var(--u))/1 Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #120c09; }
-.ability:disabled { cursor: default; }
+.ability:disabled { --cur: default; }
 .ability:disabled::after { filter: saturate(0.45) brightness(0.7); }
 .ability.full::after { background: linear-gradient(160deg, #c7b0ff, #8f6fe0 55%, #5a3aa8); }
 .ability.full { filter: var(--outline) drop-shadow(0 0 12px #c9a8ff); }
@@ -400,7 +516,7 @@ i.ico { display: inline-block; font-style: normal; }
 .turn-btn {
   position: fixed; z-index: 6; pointer-events: none;
   left: calc(var(--cx) + var(--pf-w) + var(--bgap) + 208 * var(--u)); bottom: calc(var(--cy) + 239 * var(--u));
-  width: calc(446 * var(--u)); height: calc(170 * var(--u)); border: 0; background: none; cursor: pointer;
+  width: calc(446 * var(--u)); height: calc(170 * var(--u)); border: 0; background: none; --cur: pointer;
   /* the words in the middle of the board, below its rising top */
   padding: calc(17 * var(--u)) calc(27 * var(--u)) 0 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
@@ -420,15 +536,15 @@ i.ico { display: inline-block; font-style: normal; }
 .turn-btn.confirm { --p1: #ffb86b; --p2: #e07a2e; --p3: #9a4112; }
 .turn-btn.wait { --p1: #8a7a5c; --p2: #6b5b40; --p3: #46392a; --tc: #f3e6c8; }
 .turn-btn.wait b { opacity: calc(1 - 0.4 * var(--p14, 0)); }
-.turn-btn.enemy { --p1: #e2525e; --p2: #b8323f; --p3: #6e1520; --tc: #fff; cursor: default; }
+.turn-btn.enemy { --p1: #e2525e; --p2: #b8323f; --p3: #6e1520; --tc: #fff; --cur: default; }
 .turn-btn:not(:disabled):active { transform: translateY(3px); }
-.turn-btn:disabled:not(.enemy):not(.wait) { cursor: default; }
+.turn-btn:disabled:not(.enemy):not(.wait) { --cur: default; }
 /* the ore cave's «Уходим с рудой» (src/collapse.ts): a slate piece of the corner right of the turn button, its top carrying
    on the button's rising top (art/ui/draw_corner.py, the box and outline it prints) */
 .leave-btn {
   position: fixed; z-index: 6; pointer-events: none;
   left: calc(var(--cx) + var(--pf-w) + var(--bgap) + 512 * var(--u)); bottom: calc(var(--cy) + 263 * var(--u));
-  width: calc(215 * var(--u)); height: calc(175 * var(--u)); border: 0; background: none; cursor: pointer;
+  width: calc(215 * var(--u)); height: calc(175 * var(--u)); border: 0; background: none; --cur: pointer;
   /* the words in the piece's wide upper part along its top, set to its straight right side: its left one slants in */
   padding: 0 calc(26 * var(--u)) calc(40 * var(--u)) 0;
   display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 3px;
@@ -456,7 +572,7 @@ i.ico { display: inline-block; font-style: normal; }
   display: grid; grid-template-columns: repeat(2, auto); gap: 8px; filter: var(--outline);
 }
 .art-btn_tile .camctl { filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
-.camctl .ibtn:disabled { cursor: default; filter: grayscale(0.6) brightness(0.55); }
+.camctl .ibtn:disabled { --cur: default; filter: grayscale(0.6) brightness(0.55); }
 @media (max-height: 520px) and (orientation: landscape) {
   .camctl { right: max(8px, env(safe-area-inset-right)); gap: 6px; }
   .camctl .ibtn { width: 34px; height: 34px; padding: 5px; }
@@ -587,7 +703,7 @@ html.intro .camctl { animation: bi-hide 0.3s both; pointer-events: none !importa
   inset: 0;
   z-index: 12;
   overflow: hidden;
-  cursor: pointer;
+  --cur: pointer;
   -webkit-user-select: none;
   user-select: none;
   --s: min(calc(100vw / 390), calc(100vh / 600), 1.5px);
@@ -699,10 +815,23 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 
 /* ---------- main menu */
 .menu-panel { text-align: center; width: min(420px, 100%); justify-self: center; }
-.logo { margin: 0; font: 700 clamp(44px, 12vw, 72px)/1 Oswald, sans-serif; letter-spacing: 0.02em; color: #f0e5d0; text-shadow: 0 4px 0 #120d0a; transform: rotate(-2deg); }
-.logo span { color: #d9733a; }
-.menu-panel .logo { margin-bottom: 26px; }
+/* the game's name as its picture (logo_en / logo_ru), wider than the buttons under it, less wide on a low screen: the
+   picture is about three quarters as tall as wide, so the buttons under it still fit on a 720 px laptop and a small phone */
+.logo { margin: 0 0 0 50%; width: clamp(240px, min(92vw, 50vh), 540px); line-height: 0; transform: translateX(-50%) rotate(-2deg); }
+.logo-pic { display: block; width: 100%; height: auto; }
+.menu-panel .logo { margin-bottom: 20px; }
 .menu-btns { display: grid; gap: 12px; }
+/* «Играть» swaps the menu's buttons for its own list in the same place: both lie in one cell from the top, so the logo
+   over them stays put whichever is shorter, and the one on screen is laid down once from the left */
+.menu-lists { display: grid; }
+.menu-lists > .menu-btns { grid-area: 1 / 1; align-content: start; }
+#menu.play #menuMain, #menu:not(.play) #menuPlay { visibility: hidden; }
+:is(#menu:not(.play) #menuMain, #menu.play #menuPlay) .btn.big { animation: menu-deal 0.22s ease-out backwards; }
+#menu :is(#menuMain, #menuPlay) .btn.big:not([hidden]) ~ .btn.big { animation-delay: 0.04s; }
+#menu :is(#menuMain, #menuPlay) .btn.big:not([hidden]) ~ .btn.big ~ .btn.big { animation-delay: 0.08s; }
+#menu :is(#menuMain, #menuPlay) .btn.big:not([hidden]) ~ .btn.big ~ .btn.big ~ .btn.big { animation-delay: 0.12s; }
+@keyframes menu-deal { from { opacity: 0; translate: -18px 0; } }
+@media (prefers-reduced-motion: reduce) { #menu .menu-btns .btn.big { animation: none !important; } }
 /* the game's version, small in the bottom right corner */
 .menu-ver {
   position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: calc(8px + var(--safe-b));
@@ -719,7 +848,7 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .boot-langs { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-width: 360px; margin: 16px auto 0; }
 .boot-langs button {
   font: 500 13px/1.2 Oswald, Rubik, sans-serif; color: var(--text); background: rgba(0, 0, 0, 0.28); border: 1.5px solid var(--edge);
-  border-radius: 8px; padding: 5px 10px; cursor: pointer;
+  border-radius: 8px; padding: 5px 10px; --cur: pointer;
 }
 .boot-langs button[aria-checked='true'] { color: #2a1c10; background: var(--gold); border-color: var(--gold); }
 /* the first start, everything in: the languages alone wait for the pick */
@@ -747,11 +876,17 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .join-row { display: flex; gap: 8px; }
 .join-row input { width: 7.5em; text-transform: uppercase; letter-spacing: 0.15em; font-family: Oswald, sans-serif; }
 .lobby-status { min-height: 1.4em; margin: 10px 0 0; color: #ff8a7a; }
-.room-code { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 16px; }
-.room-code b { font: 700 28px Oswald, sans-serif; letter-spacing: 0.18em; color: var(--gold); }
-.pick { position: relative; padding: 0; border: 2px solid var(--ink); border-radius: 12px; background: var(--c); overflow: hidden; cursor: pointer; color: #fff; font: 600 15px Oswald, sans-serif; }
+/* the room's code beside the lobby's title (a click copies it), then the button inviting friends */
+.room-code { display: flex; align-items: center; gap: 12px; }
+/* warm white: unlike the gold title, it reads as something to press; copied, it flashes gold */
+.room-code-btn { padding: 0 2px; border: 0; background: none; font: 700 26px/1 Oswald, sans-serif; letter-spacing: 0.16em; color: #f6efe0; --cur: pointer; transition: color 0.25s; }
+.room-code-btn:hover { color: #fff; }
+.room-code-btn.copied { color: var(--gold-1); transition: none; }
+.room-code .btn.sm.icon { display: grid; place-items: center; padding: 2px 12px; }
+.room-code .btn.icon > i[data-art] { width: 32px; height: 32px; margin: 0; }
+.pick { position: relative; padding: 0; border: 2px solid var(--ink); border-radius: 12px; background: var(--c); overflow: hidden; --cur: pointer; color: #fff; font: 600 15px Oswald, sans-serif; }
 .pick.mine { outline: 3px solid var(--gold); outline-offset: 2px; }
-.pick.taken { filter: grayscale(0.7) brightness(0.6); cursor: default; }
+.pick.taken { filter: grayscale(0.7) brightness(0.6); --cur: default; }
 /* the campaign's party size: three tabs by the title, and the picks' order on the faces once there are several */
 .hero-size { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 4px; }
 .pick-n { position: absolute; top: 5px; left: 5px; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--gold); color: #1c120a; font: 700 15px/1 Oswald, sans-serif; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45); }
@@ -763,63 +898,250 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .players .rdy.on::before { content: '✓ '; }
 .lobby-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; color: #b2a38c; }
 
-/* ---------- collection */
-.collection-panel { width: min(980px, 100%); }
+/* ---------- collection: a case folder per tab (src/collection.ts), the whole of it on one screen */
 .tab.on { background: linear-gradient(#b8892f, #8a5f1c); }
-.col-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 14px; }
-.card { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 10px; align-items: start; background: rgba(0, 0, 0, 0.22); border: 1.5px solid var(--ink); border-radius: 12px; padding: 10px; }
-.card canvas, .card img { width: 72px; height: 72px; border-radius: 10px; border: 1.5px solid var(--ink); background: #1d1611; }
-.card h3 { margin: 0 0 4px; font: 600 18px Oswald, sans-serif; }
-.card p { margin: 0 0 6px; font-size: 13px; color: #d6cfbd; }
-.card dl { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; margin: 0; font-size: 12px; color: #b2a38c; }
-.card dd { margin: 0; color: #f0e5d0; }
-.col-art-ico { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 10px; border: 1.5px solid var(--ink); background: #1d1611; }
-.col-art-ico > .ico, .col-art-ico > .art { width: 56px; height: 56px; border: 0; background: none; border-radius: 0; }
-/* the trinkets: what is open of the heroes' lines about each */
-.tr-head { grid-column: 1 / -1; margin: 0; color: #d6cfbd; font-size: 14px; }
-.tr-head b { color: var(--gold); font: 600 16px Oswald, sans-serif; }
-.col-grid:has(.tr-card) { grid-template-columns: 1fr; }
-/* the events: a picture of the scene; the trophies and events not opened yet, dark, with the feat or the hint and how far it got */
-.col-ev-pic { width: 72px; height: 72px; overflow: hidden; clip-path: var(--cut-tile); background: #2a2019; }
-.card .col-ev-pic img { width: 100%; height: 100%; border: 0; border-radius: 0; clip-path: none; object-fit: cover; }
-.card.shut .col-art-ico > * { filter: brightness(0) opacity(0.55); }
-.card.shut .col-ev-pic img { filter: blur(5px) brightness(0.4) saturate(0.4); scale: 1.15; }
-.card.shut h3 { color: var(--muted); }
-.col-feat { margin-top: 4px; font-weight: 700; color: var(--gold); }
-/* the enemies' dossier (src/dossier.ts): a shape until met, then its two lines, the shut ones saying how far */
-.card img.dark { filter: brightness(0) opacity(0.55); }
-.dos-n { font-weight: 700; color: var(--gold) !important; }
-.dos-lines { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.dos-lines li { font-size: 13px; color: #f0e5d0; padding-left: 10px; border-left: 2px solid var(--gold); }
-.dos-lines q { quotes: none; font-style: italic; }
-.dos-lines li.off { color: var(--muted); border-left-color: rgba(255, 255, 255, 0.15); font-size: 12px; }
-.tr-card { grid-template-columns: 84px minmax(0, 1fr); }
-.tr-card h3 small { margin-left: 6px; font: 500 14px Oswald, sans-serif; color: var(--muted); }
-.tr-pic { display: grid; place-items: center; width: 84px; height: 84px; background: #2a2019; clip-path: var(--cut-tile); }
-.card .tr-pic img, .tr-pic img { width: 64px; height: 64px; object-fit: contain; border: 0; background: none; clip-path: none; }
-.tr-pic.dark img { filter: brightness(0) opacity(0.55); }
-.tr-lines { grid-column: 1 / -1; list-style: none; margin: 2px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 4px 14px; }
-.tr-lines li { display: grid; grid-template-columns: 30px minmax(0, 1fr); column-gap: 8px; align-items: center; min-height: 32px; font-size: 13px; }
-.card .tr-lines li img { grid-row: span 2; width: 30px; height: 30px; border: 0; background: var(--c); clip-path: var(--cut-face, none); }
-.tr-lines li b { font: 600 13px Oswald, sans-serif; color: var(--c); line-height: 1.1; }
-.tr-lines li q { font: 700 17px/1.1 Hand, cursive; color: #f0e5d0; quotes: '«' '»'; }
-.tr-lines li.off img { filter: grayscale(1) brightness(0.5); }
-.tr-lines li.off span { grid-row: span 2; color: #6f6150; font: 600 14px Oswald, sans-serif; letter-spacing: 2px; }
-.tr-tiles { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
-.tr-tile { display: grid; justify-items: center; gap: 2px; padding: 8px 4px; background: #3b2d22 var(--grain) 0 0 / 160px; background-blend-mode: overlay; border: 0; clip-path: var(--cut-card); color: inherit; cursor: pointer; }
-.tr-tile.on { box-shadow: inset 0 0 0 3px var(--gold-1); background-color: #4a3826; }
-.tr-tile .tr-pic { width: 72px; height: 72px; }
-.tr-tile .tr-pic img { width: 56px; height: 56px; }
-.tr-tile b { font: 600 14px Oswald, sans-serif; text-align: center; }
-.tr-tile small { color: var(--muted); font-size: 12px; }
-.tr-open { grid-column: 1 / -1; }
-/* on a phone the tiles are one strip swiped sideways, so the opened card stays right under the finger */
-@media (max-width: 600px) {
-  .tr-tiles { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 96px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; padding-bottom: 4px; }
-  .tr-tile { scroll-snap-align: start; }
-  .tr-tile .tr-pic { width: 64px; height: 64px; }
-  .tr-tile .tr-pic img { width: 50px; height: 50px; }
-  .tr-tile b { font-size: 13px; }
+.collection-panel { position: relative; width: min(1240px, 100%); height: min(calc(100dvh - 32px), 860px); display: flex; flex-direction: column; gap: 12px; }
+.art-panel .panel.collection-panel { padding: 26px 32px 24px; }
+.collection-panel .panel-head { flex: none; flex-wrap: nowrap; justify-content: flex-start; gap: 16px; }
+.col-tabs { display: flex; gap: 6px; margin-left: auto; }
+.col-ico { display: none; }
+.cs-folder { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+/* the groups on the folder's own tabs, the one open joined to the folder */
+.cs-gtabs { flex: none; display: flex; gap: 4px; padding-left: 14px; }
+.cs-gt {
+  margin-bottom: -1px; padding: 5px 14px 8px; border: 0; --cur: pointer; white-space: nowrap;
+  font: 600 14px Oswald, sans-serif; color: #3a2716; background: #b0844a var(--grain) 0 0 / 200px; background-blend-mode: soft-light;
+  clip-path: polygon(8% 0, 92% 0, 100% 100%, 0 100%);
+}
+.cs-gt b { font-weight: 500; color: #6b4a2c; margin-left: 4px; }
+.cs-gt.on { background-color: #c69c5e; color: #1a1210; }
+.cs-desk {
+  flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: clamp(220px, 30%, 380px) minmax(0, 1fr); gap: 20px; padding: 16px 18px 18px;
+  background: #c69c5e var(--grain) 0 0 / 200px; background-blend-mode: soft-light; clip-path: polygon(0 0.6%, 100% 0, 100% 100%, 0.4% 99.4%);
+}
+/* the list: two columns of the group's files, a face and a name each, ‹ › at its foot */
+.cs-list { min-height: 0; display: flex; flex-direction: column; gap: 8px; container-type: inline-size; }
+.cs-list h3 {
+  flex: none; margin: 0; padding-bottom: 3px; border-bottom: 2px solid rgba(58, 39, 22, 0.35); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font: 700 15px Oswald, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: #3a2716;
+}
+.cs-items { flex: 0 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(var(--rows), minmax(0, 58px)); gap: 6px; }
+.cs-it {
+  position: relative; min-width: 0; min-height: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; padding: 4px 8px 4px 4px;
+  border: 0; --cur: pointer; text-align: left; color: #2a1a0d; background: #efe3c8; clip-path: polygon(0 0, 100% 3%, 99% 100%, 1% 96%);
+}
+.cs-it:hover { background: #f8eed6; }
+.cs-it.on { background: #ffe9a8; box-shadow: inset 0 0 0 2px #c9962f; }
+.cs-it .cs-face { height: 100%; max-height: 50px; }
+.cs-face { position: relative; display: block; aspect-ratio: 1; background: var(--c, #6b4a2c); clip-path: var(--cut-face); overflow: hidden; }
+.cs-face img, .cs-face svg { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.cs-desk[data-tab='arts'] .cs-face, .cs-desk[data-tab='trinkets'] .cs-face { background: #6b4a2c; }
+.cs-desk[data-tab='arts'] .cs-face > *, .cs-desk[data-tab='trinkets'] .cs-face img { padding: 4px; object-fit: contain; object-position: center; }
+/* a file not open: a dark shape (a hero's is drawn dark already), an event's scene blurred */
+.cs-it.shut .cs-face > * { filter: brightness(0) opacity(0.55); }
+.cs-desk[data-tab='heroes'] .cs-it.shut .cs-face > * { filter: none; }
+.cs-desk[data-tab='events'] .cs-it.shut .cs-face > * { filter: blur(3px) brightness(0.4) saturate(0.4); }
+.cs-in { min-width: 0; }
+.cs-in b, .cs-in small { display: block; overflow: hidden; }
+.cs-in b { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font: 600 15px/1.1 Oswald, sans-serif; overflow-wrap: break-word; }
+.cs-in small { white-space: nowrap; text-overflow: ellipsis; font: 500 11.5px/1.3 Rubik, sans-serif; color: #8b6d4c; }
+.cs-it.shut b { color: #8b6d4c; }
+/* a narrow list (a small laptop): one column, so the names keep their words whole */
+@container (max-width: 300px) {
+  .cs-items { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(var(--n), minmax(0, 52px)); }
+}
+.cs-nav { flex: none; display: flex; gap: 8px; margin-top: auto; }
+.cs-nav button { flex: 1; height: 40px; border: 0; --cur: pointer; font: 700 26px/1 Oswald, sans-serif; color: #2a1a0d; background: #efe3c8; clip-path: polygon(2% 0, 100% 4%, 98% 100%, 0 94%); }
+.cs-nav button:hover { background: #f8eed6; }
+/* the sheet: the title line, the photo on its clip with the stamp, the fields beside it and the rest of the file below */
+.cs-sheet {
+  --pw: clamp(150px, min(31dvh, 22vw), 270px);
+  position: relative; min-width: 0; min-height: 0; display: grid; grid-template-columns: var(--pw) minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr); grid-template-areas: 'top top' 'photo fields' 'photo flav' 'txt txt'; gap: 10px 24px; padding: 14px 20px 14px; color: #2a1a0d;
+  background: #f1e6cc var(--grain) 0 0 / 260px; background-blend-mode: soft-light; clip-path: polygon(0 0.5%, 100% 0, 99.6% 100%, 0.3% 99.5%);
+  touch-action: pan-y; user-select: none; -webkit-user-select: none;
+}
+.cs-top {
+  grid-area: top; display: flex; justify-content: space-between; gap: 12px; padding-bottom: 4px; border-bottom: 1.5px solid rgba(60, 35, 15, 0.3); white-space: nowrap; overflow: hidden;
+  font: 600 12px Oswald, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: #6b4a2c;
+}
+.cs-photo { grid-area: photo; position: relative; width: var(--pw); aspect-ratio: 4 / 5; margin: 8px 0 2px 4px; padding: 7px 7px 20px; background: #fbf6ea; rotate: -2deg; box-shadow: 0 3px 6px rgba(40, 20, 5, 0.35); }
+.cs-photo.cs-scene { aspect-ratio: 10 / 11; }
+.cs-photo.zoom { --cur: zoom-in; }
+.cs-pin {
+  display: flex; align-items: flex-end; justify-content: center; width: 100%; height: 100%; overflow: hidden;
+  background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--c) 30%, #fff3d6), color-mix(in srgb, var(--c) 65%, #2a1a0d));
+}
+/* a figure cut out as a sticker: a white edge round its outline */
+.cs-fig .cs-pin img { max-width: 94%; max-height: 96%; object-fit: contain; filter: drop-shadow(3px 0 0 #fcf8ee) drop-shadow(-3px 0 0 #fcf8ee) drop-shadow(0 3px 0 #fcf8ee) drop-shadow(0 -3px 0 #fcf8ee) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.3)); }
+.cs-thing .cs-pin { align-items: center; }
+.cs-thing .cs-pin > * { width: 74%; height: 74%; object-fit: contain; filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.35)); }
+.cs-scene .cs-pin img { width: 100%; height: 100%; object-fit: cover; }
+.cs-photo.shut .cs-pin > * { filter: brightness(0) opacity(0.55); }
+.cs-scene.shut .cs-pin img { filter: blur(5px) brightness(0.4) saturate(0.4); scale: 1.15; }
+.cs-clip { position: absolute; z-index: 2; top: -12px; left: 22px; width: 16px; height: 46px; border: 3px solid #8d96a0; border-radius: 9px; }
+.cs-clip::after { content: ''; position: absolute; left: 2px; right: 2px; top: 6px; bottom: 10px; border: 2px solid #8d96a0; border-radius: 6px; }
+.cs-stamp {
+  position: absolute; z-index: 3; right: 3%; bottom: 3%; rotate: -11deg; max-width: 86%; padding: 0.05em 0.45em; border: 3px solid rgba(163, 38, 26, 0.72); background: rgba(246, 236, 214, 0.72); text-align: center; pointer-events: none;
+  font: 700 clamp(12px, calc(var(--pw) * 0.075), 20px)/1.15 Oswald, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(163, 38, 26, 0.8);
+}
+.cs-stamp.g { border-color: rgba(44, 106, 28, 0.7); color: rgba(44, 106, 28, 0.8); }
+/* a long word on the stamp (other languages): smaller and tighter, so it stays inside the photo */
+.cs-stamp.long { font-size: clamp(10px, calc(var(--pw) * 0.058), 16px); letter-spacing: 0.04em; }
+.cs-fields { grid-area: fields; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+.cs-flav { grid-area: flav; align-self: start; min-width: 0; }
+.cs-flav-in { display: none; }
+.cs-fd { min-width: 0; }
+.cs-fd > i { display: block; font: 600 calc(11px * var(--f, 1)) Oswald, sans-serif; font-style: normal; letter-spacing: 0.14em; text-transform: uppercase; color: #8b6d4c; }
+.cs-fd > span { font: 600 17px/1.2 Oswald, sans-serif; }
+.cs-name { display: block; font: 700 clamp(22px, calc(var(--pw) * 0.12), 32px)/1.05 Oswald, sans-serif; overflow-wrap: anywhere; }
+.cs-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 5px; margin: 3px 0 0; padding: 0; }
+.cs-chips li { display: flex; align-items: center; gap: 4px; padding: 3px 9px 3px 5px; background: #e2cfa8; clip-path: var(--cut-bar); font: 700 16px/1 Oswald, sans-serif; }
+.cs-chips img { width: 20px; height: 20px; object-fit: contain; }
+.cs-chips small { font: 500 11px Rubik, sans-serif; opacity: 0.7; }
+/* the rest of the file: its words shrink with --f until they fit (fit() in src/collection.ts) */
+.cs-txt { grid-area: txt; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: calc(9px * var(--f, 1)); }
+.cs-scroll .cs-txt { overflow-y: auto; overscroll-behavior: contain; }
+:is(.cs-txt, .cs-flav) p { margin: 0; font: 500 calc(15px * var(--f, 1))/1.32 Rubik, sans-serif; }
+:is(.cs-txt, .cs-flav) .cs-hand { font: 700 calc(22px * var(--f, 1))/1.08 var(--hand); color: #3a2716; }
+:is(.cs-txt, .cs-flav) .cs-long { font-size: calc(19px * var(--f, 1)); }
+.cs-txt .cs-foot { padding-top: 5px; border-top: 1px dashed rgba(60, 35, 15, 0.3); font-size: calc(12.5px * var(--f, 1)); color: #6b5440; }
+.cs-foot::before { content: '* '; }
+.cs-more { display: none; padding: 0; border: 0; background: none; --cur: pointer; font: 600 0.9em Oswald, sans-serif; color: #8a5a00; text-decoration: underline; text-underline-offset: 2px; }
+.cs-short .cs-foot { display: none; }
+.cs-short .cs-more { display: inline; }
+.cs-txt .cs-stand { display: flex; align-items: center; gap: 8px; font: 700 calc(17px * var(--f, 1))/1.05 var(--hand); color: #6b4a2c; }
+.cs-stand img { width: calc(40px * var(--f, 1)); height: auto; flex: none; }
+.cs-txt .cs-next, .cs-txt .pc-next { margin: 0; font-size: calc(17px * var(--f, 1)); color: #6b4a2c; }
+.cs-txt .stars { font-size: calc(20px * var(--f, 1)); text-shadow: 0 1px 0 rgba(60, 35, 15, 0.6); }
+.cs-txt .stars i { color: #6a5640; opacity: 0.45; }
+.cs-lines { list-style: none; display: grid; gap: calc(6px * var(--f, 1)); margin: 3px 0 0; padding: 0; }
+.cs-lines li { padding-left: 9px; border-left: 2px solid #d9b24a; font: 700 calc(19px * var(--f, 1))/1.1 var(--hand); color: #3a2716; }
+.cs-lines q { quotes: none; }
+.cs-lines li.off { border-left-color: rgba(60, 35, 15, 0.2); }
+.cs-lines li.off small { display: block; margin-top: 3px; font: 500 calc(12px * var(--f, 1))/1.3 Rubik, sans-serif; color: #8a5a00; }
+.cs-red { padding: 0 2px; background: linear-gradient(transparent 10%, #1a1210 10% 90%, transparent 90%); color: transparent; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.cs-txt .cs-count, .cs-txt .cs-prog { font: 600 calc(14px * var(--f, 1)) Oswald, sans-serif; color: #8a5a00; }
+.cs-prog { display: flex; align-items: center; gap: 8px; margin-top: 4px !important; }
+.cs-bar { flex: 1; max-width: 180px; height: 8px; background: rgba(60, 35, 15, 0.25); clip-path: var(--cut-bar); }
+.cs-bar i { display: block; height: 100%; background: #c9962f; }
+.cs-choices { list-style: none; display: flex; flex-wrap: wrap; gap: 5px; margin: 3px 0 0; padding: 0; }
+.cs-choices li { display: flex; align-items: center; gap: 6px; padding: 3px 8px; background: #e2cfa8; clip-path: polygon(2% 0, 100% 4%, 98% 100%, 0 94%); font: 500 calc(13.5px * var(--f, 1))/1.25 Rubik, sans-serif; }
+.cs-choices b { display: inline-flex; align-items: center; gap: 2px; font: 600 calc(13px * var(--f, 1)) Oswald, sans-serif; color: #8a5a00; }
+.cs-choices .ico { width: 1.15em; height: 1.15em; }
+.cs-faces { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.cs-faces .cs-face { width: calc(36px * var(--f, 1)); padding: 0; border: 0; --cur: pointer; }
+.cs-faces .cs-face.off img { filter: grayscale(1) brightness(0.45); }
+.cs-face.on::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 0 3px #e3a42e; }
+.cs-txt .cs-bub { margin-top: 6px; padding: 6px 10px 7px; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); clip-path: polygon(0 0, 100% 3%, 98% 100%, 2% 96%); font: 700 calc(20px * var(--f, 1))/1.08 var(--hand); }
+.cs-bub b { display: block; margin-bottom: 1px; font: 600 calc(12px * var(--f, 1)) Oswald, sans-serif; color: color-mix(in srgb, var(--c) 70%, #000); }
+.cs-bub q { quotes: '«' '»'; }
+.cs-txt .cs-bub.off { font: 500 calc(13px * var(--f, 1))/1.3 Rubik, sans-serif; color: #8a7a62; }
+/* the next sheet slides in once from the side it comes from */
+@keyframes cs-in-pop { from { transform: scale(0.95); opacity: 0.4; } }
+@keyframes cs-in-next { from { transform: translateX(36px); opacity: 0.3; } }
+@keyframes cs-in-prev { from { transform: translateX(-36px); opacity: 0.3; } }
+.cs-sheet.cs-in-pop { animation: cs-in-pop 0.2s ease-out; }
+.cs-sheet.cs-in-next { animation: cs-in-next 0.22s ease-out; }
+.cs-sheet.cs-in-prev { animation: cs-in-prev 0.22s ease-out; }
+/* a photo looked at whole */
+.cs-look { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 24px; background: rgba(10, 6, 4, 0.92); --cur: zoom-out; }
+.cs-look img { max-width: min(92vw, 900px); max-height: 88dvh; object-fit: contain; animation: cs-in-pop 0.22s ease-out; }
+.cs-look.cs-fig img { filter: drop-shadow(5px 0 0 #fcf8ee) drop-shadow(-5px 0 0 #fcf8ee) drop-shadow(0 5px 0 #fcf8ee) drop-shadow(0 -5px 0 #fcf8ee); }
+.cs-look.cs-scene img { padding: 12px; background: #f3ead8; rotate: -1deg; }
+.cs-note { max-width: min(560px, 100%); margin: 0; padding: 16px 18px; background: #f1e6cc; color: #2a1a0d; clip-path: polygon(0 1%, 100% 0, 99% 100%, 1% 98%); font: 500 16px/1.4 Rubik, sans-serif; animation: cs-in-pop 0.2s ease-out; }
+.cs-note::before { content: '* '; }
+@media (prefers-reduced-motion: reduce) { .cs-sheet, .cs-look img, .cs-note { animation: none !important; } }
+
+/* an upright screen: the group's faces in a row over the sheet */
+@media (orientation: portrait) and (max-width: 1100px) {
+  .cs-desk { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 10px; }
+  .cs-list { flex-direction: row; align-items: center; gap: 4px; }
+  .cs-list h3 { display: none; }
+  .cs-items { flex: 1 1 auto; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+  .cs-it { flex: 0 0 calc((100% - (var(--per) - 1) * 4px) / var(--per)); max-width: 60px; display: block; padding: 0; background: none; clip-path: none; }
+  .cs-it.on, .cs-it:hover { background: none; box-shadow: none; }
+  .cs-it .cs-face { width: 100%; height: auto; max-height: none; }
+  .cs-it.on .cs-face::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 0 3px #e3a42e; }
+  .cs-in { display: none; }
+  .cs-nav { display: contents; }
+  .cs-nav button { flex: none; width: 32px; height: 46px; }
+  .cs-nav [data-go='-1'] { order: -1; }
+  .cs-sheet { --pw: clamp(150px, 30vw, 270px); }
+}
+
+/* an upright phone: besides, the tabs as a bar of pictures at the foot, and the character under the photo */
+@media (orientation: portrait) and (max-width: 700px) {
+  #collection { padding: 8px; place-items: stretch; }
+  .collection-panel { height: calc(100dvh - 16px); gap: 8px; padding-bottom: 86px; }
+  .art-panel .panel.collection-panel { border-image-width: 34px 24px; padding: 18px 14px 88px; }
+  .collection-panel .panel-head h2 { font-size: 22px; }
+  #colBack { margin-left: auto; padding: 6px 12px; font-size: 14px; }
+  .col-tabs { position: absolute; left: 14px; right: 14px; bottom: 16px; height: 64px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; margin: 0; }
+  #collection .col-tabs .tab { display: grid; grid-template-rows: minmax(0, 1fr) auto; justify-items: center; align-items: center; padding: 4px 2px 5px; font-size: 10.5px; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .col-ico { display: block; }
+  .col-ico img { display: block; width: 34px; height: 30px; object-fit: contain; }
+  .cs-gtabs { padding-left: 8px; }
+  .cs-gt { flex: 1 1 auto; padding: 4px 8px 7px; font-size: 13px; }
+  .cs-desk { gap: 8px; padding: 10px 8px 8px; }
+  .cs-it { max-width: 44px; }
+  .cs-nav button { width: 24px; height: 40px; font-size: 22px; }
+  .cs-sheet { --pw: clamp(104px, 32vw, 140px); grid-template-rows: auto auto minmax(0, 1fr); grid-template-areas: 'top top' 'photo fields' 'txt txt'; gap: 8px 14px; padding: 10px 12px 10px; }
+  .cs-flav { display: none; }
+  .cs-flav-in { display: block; }
+  .cs-top { font-size: 10.5px; letter-spacing: 0.08em; }
+  .cs-photo { margin-top: 6px; padding: 5px 5px 14px; }
+  .cs-clip { left: 14px; width: 13px; height: 38px; }
+  .cs-fields { gap: 5px; }
+  .cs-fd > span { font-size: 15px; }
+  .cs-chips { gap: 3px; }
+  .cs-chips li { padding: 2px 6px 2px 3px; font-size: 14px; }
+  .cs-chips img { width: 16px; height: 16px; }
+  .cs-chips small { display: none; }
+}
+
+/* a short upright phone: the faces on one row, a smaller photo and tab bar, so the file keeps its height */
+@media (orientation: portrait) and (max-width: 700px) and (max-height: 720px) {
+  .collection-panel { padding-bottom: 72px; }
+  .art-panel .panel.collection-panel { padding-bottom: 72px; }
+  .col-tabs { height: 52px; bottom: 14px; }
+  .col-ico img { width: 28px; height: 24px; }
+  .cs-it { flex-basis: calc((100% - (var(--n) - 1) * 4px) / var(--n)); }
+  .cs-items { flex-wrap: nowrap; }
+  .cs-sheet { --pw: clamp(92px, 27vw, 120px); }
+}
+
+/* a phone on its side: the group's faces in a small grid on the left, the photo down the sheet's left side */
+@media (max-height: 520px) and (orientation: landscape) {
+  #collection { padding: 6px 10px; }
+  .collection-panel { height: calc(100dvh - 12px); gap: 6px; }
+  .art-panel .panel.collection-panel { border-image-width: 30px 22px; padding: 12px 18px 12px; }
+  .collection-panel .panel-head { gap: 10px; }
+  .collection-panel .panel-head h2 { font-size: 20px; }
+  .collection-panel .panel-head .btn { padding: 4px 10px; font-size: 13px; }
+  .col-tabs { gap: 4px; }
+  .cs-gt { padding: 3px 10px 6px; font-size: 12px; }
+  .cs-desk { grid-template-columns: 122px minmax(0, 1fr); gap: 12px; padding: 8px 10px; }
+  .cs-list { gap: 6px; }
+  .cs-list h3 { display: none; }
+  .cs-items { flex: 0 1 auto; grid-template-columns: repeat(3, 38px); grid-template-rows: none; grid-auto-rows: 38px; gap: 4px; }
+  .cs-it { display: block; padding: 0; background: none; clip-path: none; }
+  .cs-it.on, .cs-it:hover { background: none; box-shadow: none; }
+  .cs-it .cs-face { width: 100%; height: 100%; max-height: none; }
+  .cs-it.on .cs-face::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 0 3px #e3a42e; }
+  .cs-in { display: none; }
+  .cs-nav button { height: 32px; font-size: 22px; }
+  .cs-sheet { --pw: min(23vw, calc((100dvh - 168px) * 0.8)); grid-template-rows: auto auto minmax(0, 1fr); grid-template-areas: 'top top' 'photo fields' 'photo txt'; gap: 6px 18px; padding: 8px 14px 8px; }
+  .cs-flav { display: none; }
+  .cs-flav-in { display: block; }
+  .cs-top { font-size: 10.5px; }
+  .cs-photo { align-self: start; margin-top: 6px; padding: 5px 5px 14px; }
+  .cs-fields { flex-direction: row; flex-wrap: wrap; align-items: flex-end; gap: 4px 18px; padding: 0; }
+  .cs-name { font-size: 22px; }
+  .cs-fd > span { font-size: 15px; }
+  .cs-chips li { padding: 2px 6px 2px 3px; font-size: 14px; }
+  .cs-chips img { width: 16px; height: 16px; }
+  .cs-chips small { display: none; }
 }
 
 /* ---------- statistics: three big numbers, the favourite hero, every hero's runs, the totals and the records */
@@ -914,7 +1236,7 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
   #help #helpClose { padding: 6px 28px; font-size: 15px; }
 }
 
-.map-panel { width: min(440px, 100%); padding: 12px 14px; display: flex; flex-direction: column; max-height: calc(100dvh - 32px); }
+.map-panel { width: min(440px, 100%); padding: 12px 14px; display: flex; flex-direction: column; max-height: calc(100dvh - var(--top-h, 0px) - 32px); }
 .map-panel .panel-head { flex-wrap: nowrap; }
 .map-panel h2 { font-size: 20px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .map-panel h2 span { font: 15px var(--hand); color: var(--muted); margin-left: 8px; }
@@ -946,11 +1268,11 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 #map .gate path { fill: #6b5a48; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; }
 #map .mnode .disc { stroke: var(--ink); stroke-width: 2.5; }
 #map .mnode .halo { fill: none; stroke: transparent; stroke-width: 3; }
-#map .mnode.reach { cursor: pointer; }
+#map .mnode.reach { --cur: pointer; }
 /* the rooms to go to glow steadily and the token stands still: a pulse under the overlay's blur re-blurred the whole
    screen every frame and was most of what the map cost a phone */
 #map .mnode.reach .halo { stroke: var(--gold); }
-#map .mnode { cursor: pointer; outline: none; }
+#map .mnode { --cur: pointer; outline: none; }
 #map .mnode:focus-visible .halo { stroke: #fff; stroke-width: 3; }
 #map .mnode.visited .halo { stroke: var(--gold-2); stroke-width: 2.5; }
 #map .mnode.past { opacity: 0.32; }
@@ -971,18 +1293,6 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .fl-dots i { width: 10px; height: 10px; clip-path: var(--cut-gem); background: #4a3b2e; }
 .fl-dots i.done { background: var(--gold-3); }
 .fl-dots i.cur { background: var(--gold-1); box-shadow: 0 0 6px var(--gold-1); }
-/* the heroes' health and the party's ore over the map */
-.map-party { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-.mp-hero { display: flex; align-items: center; gap: 6px; flex: 1 1 0; min-width: 0; max-width: 150px; filter: var(--outline); }
-.mp-hero img { width: 34px; height: 34px; flex: none; clip-path: var(--cut-face); background: var(--c); }
-.mp-hp { position: relative; flex: 1; height: 16px; background: #241a14; clip-path: var(--cut-bar); }
-.mp-hp i { position: absolute; inset: 0 auto 0 0; background: var(--hp); }
-.mp-hp u { position: absolute; inset: 0; text-decoration: none; text-align: center; font: 600 12px/16px Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #000; }
-.mp-hero.dead { filter: var(--outline) grayscale(1) brightness(0.6); }
-.mp-ore { display: flex; align-items: center; gap: 4px; margin-left: auto; padding: 2px 12px 2px 6px; background: #2c2119; clip-path: var(--cut-slab); font: 700 17px/1 Oswald, sans-serif; color: #f3e6c8; }
-.mp-ore .ico { width: 22px; height: 22px; }
-.mp-o { display: flex; align-items: center; gap: 2px; flex: none; font: 700 13px/1 Oswald, sans-serif; font-style: normal; color: #ffcf6a; }
-.mp-o .ico { width: 15px; height: 15px; }
 
 /* ---------- small screens */
 @media (max-width: 820px), (max-height: 520px) {
@@ -1028,6 +1338,7 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
   transform: rotate(-2deg);
 }
 .overlay.win .end-panel p:not(.muted) { color: var(--text); }
+.confetti-box { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .confetti {
   position: absolute; top: -16px; width: 8px; height: 14px; border-radius: 2px; pointer-events: none;
   animation: win-fall linear infinite;
@@ -1112,10 +1423,6 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .btn.big:has(> i[data-art]:not(:empty)) { padding-left: 40px; }
 .menu-panel .menu-btns { padding-left: 12px; }
 .menu-btns .btn.big > i[data-art] { width: 52px; height: 52px; left: -18px; }
-/* the disco ball hangs over the name on its chain, swung from main.ts (swing()) at most 20 times a second: a CSS animation
-   of its own would have the phone make a new frame of the whole screen 60 or 120 times a second while the menu stands still */
-.logo-art { display: block !important; width: 76px; height: 76px; margin: 0 auto 2px; filter: drop-shadow(0 4px 0 #120d0a); transform-origin: 50% 0; will-change: transform; }
-.logo-art:empty { display: none !important; }
 .end-art { display: none !important; }
 .overlay.lose .end-art:not(:empty) { display: block !important; width: 96px; height: 96px; margin: -6px auto 4px; transform: rotate(-4deg); filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); }
 .forge-ore { display: flex; align-items: center; gap: 6px; font: 700 22px/1 Oswald, sans-serif; }
@@ -1169,6 +1476,14 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 /* the menus stand on a painted disco dungeon instead of the dimmed room */
 .art-menu_bg .overlay.solid { background: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_bg) center / cover no-repeat; }
 @media (orientation: portrait) { .art-menu_bg_tall .overlay.solid { background-image: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_bg_tall); } }
+/* the live hall (src/menufx.ts), one layer under whichever of the main menu and its screens is up, which then leaves its
+   own still picture off: the hall without its dancers, the dancers in front of it and its light as a canvas over both;
+   it sits just under those screens and over everything before them */
+.hall { position: fixed; inset: 0; z-index: 20; overflow: hidden; pointer-events: none; background: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_hall) center / cover no-repeat; }
+@media (orientation: portrait) { .hall { background-image: linear-gradient(rgba(10, 7, 5, 0.2), rgba(10, 7, 5, 0.2)), var(--ui-menu_hall_tall); } }
+.hall-fx, .hall-dancers { position: absolute; inset: 0; width: 100%; height: 100%; }
+.hall-dancers img { position: absolute; display: block; max-width: none; will-change: transform; }
+.hall-alive .overlay.solid:not(.boot) { background: none; }
 
 /* who already pressed the turn button: their faces stuck on its top edge */
 /* on the right end, clear of the words */
@@ -1194,10 +1509,10 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .ev-panel h2 { font-size: 30px; line-height: 1.1; }
 .ev-text { margin: 0; font: 20px/1.28 var(--hand); color: var(--text); }
 .ev-opts { display: grid; gap: 9px; margin-top: 2px; }
-.ev-opt { position: relative; display: grid; gap: 1px; justify-items: start; width: 100%; text-align: left; padding: 9px 16px 10px 18px; border: 0; cursor: pointer; background: linear-gradient(#3a2c21, #241a14); clip-path: var(--cut-slab); color: var(--text); transition: transform 0.12s, filter 0.12s; }
+.ev-opt { position: relative; display: grid; gap: 1px; justify-items: start; width: 100%; text-align: left; padding: 9px 16px 10px 18px; border: 0; --cur: pointer; background: linear-gradient(#3a2c21, #241a14); clip-path: var(--cut-slab); color: var(--text); transition: transform 0.12s, filter 0.12s; }
 .ev-opt b { font: 600 19px/1.15 Oswald, sans-serif; color: var(--gold-1); letter-spacing: 0.01em; }
 .ev-opt:not(:disabled):hover, .ev-opt:focus-visible { transform: translateX(4px); filter: brightness(1.18); outline: none; }
-.ev-opt:disabled { cursor: default; filter: saturate(0.3) brightness(0.65); }
+.ev-opt:disabled { --cur: default; filter: saturate(0.3) brightness(0.65); }
 .ev-opt small { font: 15px var(--hand); color: #ff8a7a; }
 /* plain running text, so a long effect wraps inside itself rather than dropping whole under its odds */
 .ev-fx { display: block; font: 18px/1.2 var(--hand); }
@@ -1243,12 +1558,15 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
   .ev-text { font-size: 17px; }
   .ev-fx { font-size: 16px; }
 }
-/* the top strip stays in sight over the event, the camp and the blacksmith's (Vladislav asked): the window starts under
-   it and lends it its dim, the strip names the room and drops what belongs to the room behind; a tap on a face opens that
-   hero's card */
-#eventScreen, #campScreen, #forgeScreen { top: var(--top-h, 0px); }
+/* the top strip stays in sight over the event, the camp, the blacksmith's and the map (Vladislav asked): the window starts
+   under it and lends it its dim, the strip names the room and drops what belongs to the room behind; a tap on a face opens
+   that hero's card. Over the map it names nothing (the map's title says the floor) and keeps the journal and the menu */
+#eventScreen, #campScreen, #forgeScreen, #mapScreen { top: var(--top-h, 0px); }
 .at-window .hud-top { background: rgba(10, 7, 5, 0.55); backdrop-filter: blur(3px); }
-.at-window :is(.where-sub, .queue, #btnMap, #btnLog) { display: none; }
+.at-window :is(.where-sub, .queue, #btnMap), .at-window:not(.at-map) #btnLog, .at-map .where { display: none; }
+.at-map .top-btns { margin-left: auto; }
+/* the journal opens over the map, as a hero's card does */
+.at-map .log-panel { z-index: 21; top: calc(var(--top-h, 0px) + 6px); }
 .hero-card.hero-peek { position: fixed; z-index: 21; bottom: auto; overflow: auto; }
 .hero-peek .mc-head img { clip-path: var(--cut-face); background: var(--c); }
 /* the health is what the card is opened for: a bigger bar with bigger numbers than an enemy's */
@@ -1256,11 +1574,11 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .hero-peek .mc-hp u { font-size: 14px; line-height: 20px; }
 .mc-hp s { position: absolute; top: 0; bottom: 0; background: #8fc6ea; }
 @media (max-height: 520px) and (orientation: landscape) {
-  #eventScreen, #campScreen, #forgeScreen { padding-top: 6px; padding-bottom: 6px; }
+  #eventScreen, #campScreen, #forgeScreen, #mapScreen { padding-top: 6px; padding-bottom: 6px; }
   .at-window .ev-art { max-width: calc(100dvh - 80px - var(--top-h, 0px)); }
 }
 @media (orientation: portrait) and (max-width: 700px) {
-  #eventScreen, #campScreen, #forgeScreen { padding-top: 6px; }
+  #eventScreen, #campScreen, #forgeScreen, #mapScreen { padding-top: 6px; }
   /* the queue is gone, so the ore comes up beside the faces and the strip keeps to one row */
   .at-window .hud-top::after { display: none; }
   .at-window .ore-chip { order: 1; margin-top: 0; align-self: center; }
@@ -1280,7 +1598,7 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .camp-who.dead img { filter: grayscale(1) brightness(0.6); }
 /* a party by the fire, one player for all: whose pick the window asks for, the heroes still to pick as buttons, and a line
    with each hero's face once all have picked */
-button.camp-who { padding: 2px 10px 2px 2px; border: 0; background: rgba(0, 0, 0, 0.28); clip-path: var(--cut-card); cursor: pointer; }
+button.camp-who { padding: 2px 10px 2px 2px; border: 0; background: rgba(0, 0, 0, 0.28); clip-path: var(--cut-card); --cur: pointer; }
 button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .camp-for { display: flex; align-items: center; gap: 8px; color: var(--text); }
 .camp-for img { width: 30px; height: 30px; clip-path: var(--cut-face); background: var(--c); }
@@ -1355,9 +1673,9 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .ev-bottle img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
 .ev-bottle i { display: block; width: 100%; height: 100%; background: linear-gradient(90deg, #24572d, #4f9a5a 45%, #24572d); clip-path: polygon(38% 0, 62% 0, 62% 30%, 90% 45%, 90% 100%, 10% 100%, 10% 45%, 38% 30%); }
 .ev-cups { position: relative; width: 256px; height: 132px; --ms: 400ms; }
-.ev-cup { position: absolute; bottom: 6px; left: calc(var(--x) * 90px); width: 76px; height: 98px; padding: 0; border: 0; background: none; cursor: pointer; z-index: 2; transition: left var(--ms) ease-in-out, transform 0.3s; }
+.ev-cup { position: absolute; bottom: 6px; left: calc(var(--x) * 90px); width: 76px; height: 98px; padding: 0; border: 0; background: none; --cur: pointer; z-index: 2; transition: left var(--ms) ease-in-out, transform 0.3s; }
 .ev-cup.front { z-index: 3; }
-.ev-cup:disabled { cursor: default; }
+.ev-cup:disabled { --cur: default; }
 .ev-cup img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
 .ev-cup > i { display: block; width: 62px; height: 84px; margin: 14px auto 0; background: linear-gradient(90deg, #8f2a1e, #c8432f 45%, #8f2a1e); clip-path: polygon(18% 0, 82% 0, 100% 100%, 0 100%); }
 .ev-cup.up { transform: translateY(-38px); }
@@ -1401,8 +1719,15 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .loot-whose { display: flex; align-items: center; gap: 6px; font: 600 15px Oswald, sans-serif; color: var(--c); }
 .loot-whose img { width: 26px; height: 26px; clip-path: var(--cut-face); background: var(--c); }
 #lootLeave { justify-self: end; align-self: flex-end; margin-top: 4px; }
-@media (max-height: 520px) and (orientation: landscape) {
+/* a low window on its side (the PC's smallest, 960×540, or a phone): the window closes up to the screen's edges, so the
+   boss's line and all three trophies fit without a scrollbar */
+@media (max-height: 620px) and (orientation: landscape) {
+  #lootScreen { padding-top: 6px; padding-bottom: 6px; }
   .art-panel #lootScreen .ev-panel { padding: 20px 24px; }
+  #lootScreen .ev-body { gap: 8px; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  .art-panel #lootScreen .ev-panel { padding: 14px 22px; }
   .loot-opt { padding-left: 58px; min-height: 0; }
   .loot-ico { left: 8px; width: 40px; height: 40px; }
 }
@@ -1422,7 +1747,7 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .fg-me span { font: 16px var(--hand); color: var(--muted); }
 /* alone with a party: a tab for each hero, the open one lit in its colour, «даром» on a tab still owed a free level */
 .fg-team { display: flex; flex-wrap: wrap; gap: 8px; }
-.fg-tab { display: flex; align-items: center; gap: 7px; padding: 4px 12px 4px 4px; border: 0; background: rgba(0, 0, 0, 0.28); clip-path: var(--cut-card); color: var(--muted); font: 600 16px Oswald, sans-serif; cursor: pointer; }
+.fg-tab { display: flex; align-items: center; gap: 7px; padding: 4px 12px 4px 4px; border: 0; background: rgba(0, 0, 0, 0.28); clip-path: var(--cut-card); color: var(--muted); font: 600 16px Oswald, sans-serif; --cur: pointer; }
 .fg-tab img { width: 34px; height: 34px; clip-path: var(--cut-face); background: var(--c); }
 .fg-tab.on { background: var(--c); color: #fff; }
 .fg-tab em { font: 600 12px/1 Oswald, sans-serif; font-style: normal; text-transform: uppercase; letter-spacing: 0.04em; color: #7be39a; }
@@ -1432,12 +1757,12 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 /* online: hand a teammate one ore of your own */
 .fg-chip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font: 16px var(--hand); color: var(--muted); }
 .fg-mates { display: flex; gap: 8px; }
-.fg-give { display: flex; align-items: center; gap: 5px; padding: 3px 10px 3px 3px; border: 0; background: rgba(0, 0, 0, 0.28); clip-path: var(--cut-card); color: var(--text); font: 600 15px Oswald, sans-serif; cursor: pointer; }
+.fg-give { display: flex; align-items: center; gap: 5px; padding: 3px 10px 3px 3px; border: 0; background: rgba(0, 0, 0, 0.28); clip-path: var(--cut-card); color: var(--text); font: 600 15px Oswald, sans-serif; --cur: pointer; }
 .fg-give img { width: 28px; height: 28px; clip-path: var(--cut-face); background: var(--c); }
 .fg-give .ico { width: 18px; height: 18px; }
 .fg-give:not(:disabled):hover { background: rgba(0, 0, 0, 0.42); }
 .fg-give:not(:disabled):active { transform: translateY(2px); }
-.fg-give:disabled { opacity: 0.45; cursor: default; }
+.fg-give:disabled { opacity: 0.45; --cur: default; }
 .fg-up > i[data-art] { position: absolute; left: 12px; top: 50%; width: 52px; height: 52px; transform: translateY(-50%) rotate(-6deg); filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45)); }
 .fg-name { display: flex; align-items: center; gap: 10px; }
 .fg-name .lvl { display: inline-flex; gap: 3px; }
@@ -1492,8 +1817,8 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
   --cut-card: polygon(0 1.5%, 98.5% 0, 100% 97%, 1.5% 100%);
 }
 .art-board { --grain: var(--ui-board); }
-.head::before, .portrait::before, .qb img, .ib, .statuses .st, .boss-bar, .mp-ore, .ev-out, .way, .card, .pick-role,
-.col-art-ico, .fl-dots i, .players .rdy, .st-tile, .st-fav {
+.head::before, .portrait::before, .qb img, .ib, .statuses .st, .boss-bar, .ev-out, .way, .pick-role,
+.fl-dots i, .players .rdy, .st-tile, .st-fav {
   background-image: var(--grain); background-size: 160px; background-blend-mode: overlay;
 }
 /* the top strip is no band any more (Vladislav's pick): the room shows up to the top edge, and each thing on it stands
@@ -1505,10 +1830,9 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .ib { border: 0; }
 .ib.go { background-image: none; }
 /* the boxes inside windows: a darker print on the board, cut a little unevenly, no ink line or rounded corner */
-.way, .card, .pick-role, .st-tile, .st-fav { border: 0; border-radius: 0; clip-path: var(--cut-card); background-color: #3b2d22; }
+.way, .pick-role, .st-tile, .st-fav { border: 0; border-radius: 0; clip-path: var(--cut-card); background-color: #3b2d22; }
 .st-fav canvas, .st-heroes img { border: 0; border-radius: 0; clip-path: var(--cut-face); }
 .st-bar { border: 0; border-radius: 0; clip-path: var(--cut-bar); }
-.card canvas, .card img, .col-art-ico { border: 0; border-radius: 0; clip-path: var(--cut-tile); background-color: #2a2019; }
 .pick { border: 0; border-radius: 0; background-image: var(--grain); background-size: 160px; background-blend-mode: overlay; }
 .pick.mine { outline: 0; box-shadow: 0 0 0 3px var(--gold-1); }
 .players i { border: 0; }
@@ -1540,13 +1864,13 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .art-opt .fg-name .lvl i { border-color: #2a1a0d; background: none; }
 .art-opt .fg-name .lvl i.on { background: #2a1a0d; }
 /* the menu's and the pause's buttons, each a plate of its own shape (Vladislav asked), laid a little askew by hand */
-.art-mb_go :is(#mContinue, #pResume) { background-image: var(--ui-mb_go); }
+.art-mb_go :is(#mPlay, #mContinue, #pResume) { background-image: var(--ui-mb_go); }
 .art-mb_arrow #mCampaign { background-image: var(--ui-mb_arrow); }
 .art-mb_ticket #mOnline { background-image: var(--ui-mb_ticket); }
 .art-mb_mark :is(#mCollection, #pHelp) { background-image: var(--ui-mb_mark); }
 .art-mb_slant :is(#mSettings, #pSettings) { background-image: var(--ui-mb_slant); }
 .art-mb_steps #mStats { background-image: var(--ui-mb_steps); }
-.art-mb_back #pMenu { background-image: var(--ui-mb_back); }
+.art-mb_back :is(#pMenu, #mPlayBack) { background-image: var(--ui-mb_back); }
 .art-mb_go .menu-btns .btn.big:nth-child(odd) { rotate: -0.8deg; }
 .art-mb_go .menu-btns .btn.big:nth-child(even) { rotate: 0.6deg; }
 /* the board behind my hero's portrait: bare cardboard under the button, over it the print in the hero's colour where
@@ -1583,7 +1907,7 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 /* a socket is cut into the board down to a brown layer a shade darker than it (Vladislav: brown, not black, so they
    don't stand out) */
 .sock {
-  position: relative; flex: none; width: var(--tr-s); height: var(--tr-s); padding: 0; border: 0; border-radius: 50%; cursor: pointer;
+  position: relative; flex: none; width: var(--tr-s); height: var(--tr-s); padding: 0; border: 0; border-radius: 50%; --cur: pointer;
   background: #462d1b var(--grain) 0 0 / 120px; background-blend-mode: overlay;
   box-shadow: inset 0 3px 5px rgba(30, 14, 4, 0.7), 0 1px 0 rgba(255, 230, 190, 0.16);
 }
@@ -1604,23 +1928,6 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 /* the hero's card from the portrait opens over the portrait and the discs, whichever stands taller */
 .corner .hero-card { bottom: calc(max(var(--pf-h), 327 * var(--u)) + 8px); }
 
-.art-tip { width: 270px; }
-.art-tip .mc-head .tok { position: relative; flex: none; width: 44px; height: 44px; }
-.art-tip .mc-head b { color: var(--gold); }
-.art-tip p { margin: 6px 0 0; font-size: 18px; line-height: 1.1; color: var(--text); }
-.art-tip small { display: block; margin-top: 5px; font-size: 15px; line-height: 1.1; color: var(--muted); }
-.art-tip .at-state { display: inline-block; margin-top: 7px; padding: 2px 8px; font: 600 11px/1.4 Oswald, sans-serif; color: #2a1a0d; background: #c9a877; }
-/* a little tail to the left, at the token it speaks of */
-.art-tip::after { content: ''; position: absolute; left: -9px; top: var(--ay, 30px); width: 10px; height: 16px; background: #2a201a; clip-path: polygon(100% 0, 100% 100%, 0 50%); }
-/* on a phone it takes the width beside the column (6 + 94 + 6 px of portrait, the column, 12 px to the tail, 8 after) */
-@media (orientation: portrait) and (max-width: 700px) { .art-tip { width: calc(100vw - 126px - 78 * var(--u)); } }
-@media (max-height: 520px) and (orientation: landscape) {
-  .art-tip { width: 250px; padding-top: 8px; padding-bottom: 8px; }
-  .art-tip .mc-head .tok { width: 32px; height: 32px; }
-  .art-tip p { margin-top: 4px; font-size: 15px; }
-  .art-tip small { margin-top: 3px; font-size: 13px; }
-}
-
 /* ---------- the hero's lines (coach.ts): light paper under the top strip, the speaker's face on its corner, chalk on the room */
 #coach { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
 .coach-dim { position: absolute; inset: 0; pointer-events: auto; }
@@ -1630,7 +1937,7 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .coach-chalk .chalk-t { fill: rgba(250, 246, 232, 0.95); font: 700 16px var(--hand); filter: url(#chalkRough); }
 .coach-line {
   /* --fw is the face sticker's size; --fx where the words start, clear of the sticker that sticks out over the paper's corner */
-  position: absolute; --fw: 74px; --fx: calc(var(--fw) * 0.78 + 14px); pointer-events: auto; cursor: default;
+  position: absolute; --fw: 74px; --fx: calc(var(--fw) * 0.78 + 14px); pointer-events: auto; --cur: default;
   filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.45)) drop-shadow(0 10px 18px rgba(0, 0, 0, 0.5));
 }
 .coach-line.big { --fw: 92px; --fx: calc(var(--fw) * 0.78 + 8px); }
@@ -1660,7 +1967,7 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .coach-more { display: block; margin: 4px -4px -6px 0; text-align: right; font: 600 11px/1 Oswald, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; color: #7a4f24; }
 .coach-btns { display: flex; gap: 10px; margin-top: 12px; }
 .coach-btns button {
-  flex: 1; padding: 11px 8px 10px; border: 0; cursor: pointer;
+  flex: 1; padding: 11px 8px 10px; border: 0; --cur: pointer;
   font: 600 15px/1 Oswald, sans-serif; letter-spacing: 0.03em; text-transform: uppercase; color: #2a1a0d;
   background: #d8c49a var(--ui-btn_sub) center / 100% 100% no-repeat;
 }
@@ -1674,7 +1981,8 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .pick-panel .panel-head > .btn:last-child { margin-left: auto; }
 .pick-panel .hero-size { margin: 0; flex-wrap: nowrap; }
 .pick-panel .lobby-room { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
-.pick-panel .lobby-status { margin: 0; min-height: 0; }
+/* under the right column: the photo's print hangs a little past the board's foot and would cover a line on the left */
+.pick-panel .lobby-status { margin: 0; min-height: 0; text-align: right; }
 .pick-panel .lobby-status:empty { display: none; }
 /* the row across the whole panel, the photo under it on the left, the room code, the card and the button beside the photo */
 .pick-body {
@@ -1684,7 +1992,6 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
   gap: 14px 34px; align-items: start;
 }
 .pick-side { display: contents; }
-.pick-side .room-code { grid-column: 2; grid-row: 2; margin: 0; }
 /* the photo: a square print in a white edge, taped to the board like the events' pictures; its two buttons sit left of the
    start button under the card, so the photo gets all the height */
 .pick-pic { display: contents; }
@@ -1694,9 +2001,9 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .pick-print::before, .pick-print::after { content: ''; position: absolute; z-index: 1; top: -12px; width: 90px; height: 28px; background: rgba(226, 205, 160, 0.86); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); }
 .pick-print::before { left: -24px; rotate: -35deg; }
 .pick-print::after { right: -24px; rotate: 33deg; }
-.pick-print canvas { display: block; width: 100%; height: 100%; }
+.pick-print canvas, .pick-print img { display: block; width: 100%; height: 100%; }
 /* a phone's small photo lifted over the screen at full size (zoomable() in menu.ts) */
-.pick-panel .pick-print.zoomed { --ph: min(calc(100vw - 32px), calc(100dvh - 32px)); position: fixed; z-index: 60; left: 50%; top: 50%; margin: 0; padding: 10px; translate: -50% -50%; rotate: -1deg; box-shadow: 0 0 0 100vmax rgba(10, 6, 4, 0.82), 0 10px 22px rgba(0, 0, 0, 0.55); cursor: zoom-out; }
+.pick-panel .pick-print.zoomed { --ph: min(calc(100vw - 32px), calc(100dvh - 32px)); position: fixed; z-index: 60; left: 50%; top: 50%; margin: 0; padding: 10px; translate: -50% -50%; rotate: -1deg; box-shadow: 0 0 0 100vmax rgba(10, 6, 4, 0.82), 0 10px 22px rgba(0, 0, 0, 0.55); --cur: zoom-out; }
 .pick-tools { display: flex; gap: 10px; }
 .pick-tools .btn { padding: 6px 16px 7px; font-size: 15px; }
 /* the twelve on one row, kind after kind, each kind on its own piece of cardboard with its name over its faces */
@@ -1709,14 +2016,14 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .pick-row .pick span { display: none; }
 .pick-row .pick:hover, .pick-row .pick:focus-visible { translate: 0 -3px; outline: 0; }
 .pick-row .pick.mine { clip-path: none; box-shadow: 0 0 0 3px var(--gold-1); }
-.pick-row .pick.taken { filter: grayscale(0.65) brightness(0.55); cursor: help; }
+.pick-row .pick.taken { filter: grayscale(0.65) brightness(0.55); --cur: help; }
 .pick-row .pick-n { top: 3px; left: 3px; width: auto; min-width: 20px; height: 20px; padding: 0 4px; border-radius: 0; clip-path: var(--cut-gem); background: var(--gold-1); font-size: 12px; box-shadow: none; }
 .pick-row .taken .pick-n { background: #d8b98a; }
 .pick-row .eyed .pick-n { clip-path: none; background: rgba(18, 12, 9, 0.75); color: #f3e6c8; box-shadow: inset 0 0 0 1.5px #f3e6c8; }
 /* a hero not opened yet (src/progress.ts) and the demo's other heroes: a dark shape in a frame, a «?» for its name; the
    full game's can be tapped to read how they open */
-.pick.shut { --c: #6e5c49; container-type: inline-size; cursor: default; box-shadow: inset 0 0 0 3px #2a2019, inset 0 0 0 5px #a8916f; }
-.pick.shut:not(:disabled) { cursor: pointer; }
+.pick.shut { --c: #6e5c49; container-type: inline-size; --cur: default; box-shadow: inset 0 0 0 3px #2a2019, inset 0 0 0 5px #a8916f; }
+.pick.shut:not(:disabled) { --cur: pointer; }
 .pick-row .pick.shut:disabled:hover { translate: none; }
 /* a hero's stars toward the next one: the ones got in gold, the rest dim */
 .stars { color: var(--gold-1); letter-spacing: 1px; white-space: nowrap; text-shadow: 0 1px 0 #1c120a; }
@@ -1730,17 +2037,17 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .ps-mats { display: flex; flex: none; gap: 4px; }
 .ps-mat { display: grid; place-items: center; flex: none; width: 62px; height: 44px; padding: 0; border: 0; background: rgba(0, 0, 0, 0.28); }
 .ps-mat img { width: 56px; height: 36px; }
-button.ps-mat { cursor: pointer; }
+button.ps-mat { --cur: pointer; }
 button.ps-mat:hover, button.ps-mat:focus-visible { background: rgba(243, 230, 200, 0.14); outline: 0; }
-.ps-mat.on { background: rgba(217, 178, 74, 0.3); box-shadow: inset 0 0 0 2px var(--gold-1); cursor: default; }
+.ps-mat.on { background: rgba(217, 178, 74, 0.3); box-shadow: inset 0 0 0 2px var(--gold-1); --cur: default; }
 .ps-mat.on:hover { background: rgba(217, 178, 74, 0.3); }
 .ps-mat.shut img { filter: grayscale(1) brightness(0.7); opacity: 0.35; }
 .pc-shut .stars i { color: #6a5640; opacity: 0.45; }
 .pick-q { position: absolute; inset: 0; display: grid; place-items: center; padding-top: 12%; font: 700 42cqw/1 Oswald, sans-serif; color: #f3e6c8; text-shadow: 0 2px 0 #1c120a, 0 0 8px rgba(0, 0, 0, 0.8); pointer-events: none; }
-.card.shut canvas { background-color: #6e5c49; }
-.card.shut h3 { color: var(--muted); }
 /* «Как играть» says what the demo has, and the full game what it has */
 body:not(.demo) .demo-only, body.demo .full-only { display: none !important; }
+/* the desktop build for Steam (electron/): codes and Steam invites instead of links, and a way out of the game */
+body:not(.desktop) .desktop-only, body.desktop .web-only { display: none !important; }
 /* the card of the hero being read: the name and the numbers on one line, the ability whole on a note, never a scrollbar */
 .pick-card { grid-column: 2; grid-row: 3; align-self: stretch; display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; overflow: hidden; }
 .pc-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px; }
@@ -1773,9 +2080,9 @@ body:not(.demo) .demo-only, body.demo .full-only { display: none !important; }
 .vol-token.sm b { display: none; }
 .vol-knob { position: relative; display: flex; align-items: center; gap: 2px; min-width: 0; }
 .vol-knob[hidden] { display: none; }
-.vol-knob button { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.vol-knob button { padding: 0; border: 0; background: none; color: inherit; font: inherit; --cur: pointer; }
 .vk-arrow { flex: none; width: 28px; height: 48px; color: var(--text) !important; font: 700 36px/1 Oswald, sans-serif !important; text-shadow: 0 2px 0 #120c09; }
-.vk-arrow:disabled { opacity: 0.22; cursor: default; }
+.vk-arrow:disabled { opacity: 0.22; --cur: default; }
 .vk-face { flex: none; padding: 0 4px !important; }
 /* the tokens are not all as wide: the face of a knob with arrows is as wide as the widest, so «громче» never moves */
 .vol-knob:not(.mini) .vk-face { width: 54px; }
@@ -1814,11 +2121,16 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
   .pick-panel .hero-size .btn { padding: 6px 12px; font-size: 14px; }
   .pick-panel .lobby-foot .btn.big { padding: 10px 26px; font-size: 18px; }
   .pick-body { grid-template-rows: auto auto minmax(0, 1fr) auto auto; gap: 8px 10px; }
-  .pick-side .room-code { grid-column: 1 / -1; grid-row: 1; gap: 6px; font-size: 14px; }
-  .pick-side .room-code b { font-size: 20px; }
+  .room-code { gap: 8px; }
+  .room-code-btn { font-size: 20px; letter-spacing: 0.1em; }
+  /* the title, the code and the invite on one line with «Назад», which keeps only its arrow */
+  #lobby .pick-panel .panel-head { flex-wrap: nowrap; gap: 10px; }
+  #lobby .pick-panel .panel-head h2 { font-size: 20px; white-space: nowrap; }
+  #lobby .pick-panel #lobbyBack { padding-inline: 10px; font-size: 0; }
+  #lobby .pick-panel #lobbyBack > i[data-art] { margin: 0; }
   /* the photo's own place keeps its size while the photo is lifted out */
   .pick-pic { --ph: 128px; grid-column: 1; grid-row: 2; display: grid; grid-template-rows: calc(var(--ph) + 8px) auto; justify-items: center; gap: 8px; }
-  .pick-print { grid-column: 1; grid-row: 1; margin-top: 8px; padding: 5px; cursor: zoom-in; }
+  .pick-print { grid-column: 1; grid-row: 1; margin-top: 8px; padding: 5px; --cur: zoom-in; }
   .pick-print::before, .pick-print::after { width: 44px; height: 15px; top: -6px; }
   .pick-print::before { left: -12px; }
   .pick-print::after { right: -12px; }
@@ -1863,15 +2175,13 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
   .pick-panel .btn.big { padding: 7px 22px; font-size: 16px; }
   .pick-panel .lobby-room, .pick-body { display: contents; }
   .pick-pic { grid-column: 1; grid-row: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
-  .pick-print { --ph: min(calc(100dvh - 104px), 32vw); margin-top: 6px; padding: 7px; cursor: zoom-in; }
+  .pick-print { --ph: min(calc(100dvh - 104px), 32vw); margin-top: 6px; padding: 7px; --cur: zoom-in; }
   .pick-print::before, .pick-print::after { width: 60px; height: 20px; top: -8px; }
   .pick-tools .btn { padding: 4px 10px 5px; font-size: 12px; }
-  /* the room's code in the middle of the title line, its link button only an icon: the card gets the height */
-  #lobby .pick-panel .panel-head h2 { display: none; }
-  .pick-side .room-code { grid-column: 2 / -1; grid-row: 1; justify-self: start; align-self: center; padding-left: 26px; gap: 6px; font-size: 0; }
-  .pick-side .room-code b { font-size: 20px; }
-  .pick-side .room-code .btn { padding: 4px 7px; font-size: 0; }
-  .pick-side .room-code .btn > i[data-art] { margin: 0; }
+  .room-code { gap: 8px; }
+  .room-code-btn { font-size: 20px; }
+  .pick-panel .room-code .btn.sm.icon { padding: 2px 9px; }
+  .room-code .btn.icon > i[data-art] { width: 26px; height: 26px; }
   .pick-row { grid-column: 2 / -1; grid-row: 2; }
   .pick-card { grid-column: 2 / -1; grid-row: 3; }
   .pick-go { grid-column: 3; grid-row: 4; }
@@ -1901,8 +2211,10 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
 
 /* ---------- the end of the run (src/albumview.ts): the album's prints pegged on a line to dry, ДО, the bosses beaten and
    ПОСЛЕ, under the congratulation, with the run in numbers on a board below (Vladislav's pick of three layouts, 2026-10-22) */
-.overlay.run-end { background: rgba(10, 7, 5, 0.8); place-items: start center; padding: 14px 16px calc(16px + var(--safe-b)); }
-.re-wrap { width: min(1280px, 100%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.overlay.run-end { --pt: 14px; --pb: 16px; background: rgba(10, 7, 5, 0.8); place-items: start center; padding: var(--pt) 16px calc(var(--pb) + var(--safe-b)); }
+/* the album keeps to the screen's height, so a PC has no scrollbar over it (Vladislav, 2026-10-28): the rest keeps its
+   size and the line of prints gives way; under it room for the board rising 24px into place */
+.re-wrap { width: min(1280px, 100%); max-height: calc(100dvh - var(--pt) - max(var(--pb), 25px) - var(--safe-b)); display: flex; flex-direction: column; align-items: center; gap: 6px; container-type: inline-size; }
 .re-head { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding-top: 6px; }
 .re-ribbon {
   font: 600 14px Oswald, sans-serif; letter-spacing: 0.16em; text-transform: uppercase; color: #1c120a;
@@ -1915,7 +2227,12 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
 }
 .re-head h2.lose { color: #eadfc8; }
 .re-gag { margin: 0; max-width: 760px; font: 700 clamp(19px, 2.2vw, 26px)/1.1 var(--hand); color: var(--text); text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8); }
-.re-ropes { width: 100%; }
+/* the line stands as tall as its biggest print at full size (--nat, albumview.ts) with the peg's room, the caption and
+   the room under it; squeezed lower, the biggest print is cut to the width that still fits (--fit) */
+.re-ropes {
+  --cap-h: calc(clamp(14px, 1.45vw, 21px) + 14px); --fit: calc((100cqh - 28px - var(--cap-h)) / 0.96);
+  width: 100%; flex: 0 1 calc(var(--nat, 300px) * 0.96 + 28px + var(--cap-h)); min-height: 150px; container-type: size;
+}
 .re-tall { display: none; }
 .re-line { position: relative; width: 100%; padding-top: 14px; }
 /* the string from edge to edge of the screen, sagging in the middle */
@@ -1924,7 +2241,7 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
 .re-prints { position: relative; display: flex; justify-content: center; align-items: flex-start; gap: 2%; padding-bottom: 14px; }
 /* a print in its white edge, hung by a wooden peg; it swings in after the one before it */
 .pol {
-  position: relative; margin: 0; flex: none; padding: 0; background: #f3ead8; cursor: zoom-in;
+  position: relative; margin: 0; flex: none; padding: 0; background: #f3ead8; --cur: zoom-in;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.6); transform-origin: 50% -10px;
   transform: translateY(var(--dy)) rotate(var(--r));
   animation: re-hang 0.7s cubic-bezier(0.2, 1.5, 0.45, 1) both; animation-delay: calc(0.15s + var(--i) * 0.22s);
@@ -1960,6 +2277,16 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
 .re-vol .vol-token img { width: auto; height: 100%; clip-path: none; background: none; border-radius: 0; }
 .re-vol .vol-token b { display: grid; font: 700 14px/1 Oswald, sans-serif; color: #1a1210; min-width: 22px; height: 22px; }
 .re-new em { display: block; font: 600 13px/1.1 Oswald, sans-serif; font-style: normal; color: var(--gold-1); text-transform: uppercase; letter-spacing: 0.08em; }
+/* the demo's end of a run, won or lost: the full game's heroes as dark shapes, what else it holds, the way to its Steam page */
+.re-full { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; padding: 8px 12px; background: rgba(18, 12, 9, 0.45); box-shadow: inset 0 0 0 2px var(--gold-1); }
+.re-full-faces { display: flex; flex: none; gap: 6px; }
+.re-full-faces:empty { display: none; }
+.re-full-faces img { width: 44px; height: 44px; clip-path: var(--cut-face); background: #6e5c49; }
+.re-full-txt { flex: 1 1 260px; min-width: 0; }
+.re-full-txt b { display: block; font: 600 13px/1.1 Oswald, sans-serif; color: var(--gold-1); text-transform: uppercase; letter-spacing: 0.08em; }
+.re-full-txt p { margin: 3px 0 0; font: 700 19px/1.1 var(--hand); color: var(--text); }
+.re-full-btns { display: flex; flex: none; flex-wrap: wrap; gap: 10px; margin-left: auto; }
+.re-full-btns:not(:has(button:not([hidden]))) { display: none; }
 /* the numbers' board */
 .re-panel { width: min(1180px, 100%); display: flex; flex-direction: column; gap: 14px; animation: re-up 0.5s 1.2s ease-out both; }
 @keyframes re-up { from { opacity: 0; transform: translateY(24px); } }
@@ -1982,13 +2309,16 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
 .re-btns { flex: none; display: flex; gap: 14px; align-items: center; margin-left: auto; }
 .re-btns .muted { margin: 0; max-width: 220px; }
 /* a print at full size */
-.re-lb { position: fixed; inset: 0; z-index: 1; display: grid; place-items: center; padding: 16px; background: rgba(8, 5, 3, 0.9); cursor: zoom-out; }
+.re-lb { position: fixed; inset: 0; z-index: 1; display: grid; place-items: center; padding: 16px; background: rgba(8, 5, 3, 0.9); --cur: zoom-out; }
 .re-lb figure { margin: 0; width: min(92vw, 82dvh, 860px); background: #f3ead8; box-shadow: 0 10px 40px #000; }
 .re-lb img { display: block; width: 94%; margin: 3% 3% 0; aspect-ratio: 1; }
 .re-lb figcaption { font: 700 30px/1 var(--hand); color: #2a1a0d; text-align: center; padding: 10px 0 14px; }
 /* an upright phone: ДО and ПОСЛЕ on one line, the bosses on a second, the numbers three to a row */
 @media (orientation: portrait) and (max-width: 700px) {
-  .overlay.run-end { padding: 10px 8px calc(12px + var(--safe-b)); }
+  .overlay.run-end { --pt: 10px; --pb: 12px; padding-left: 8px; padding-right: 8px; }
+  /* here the album runs on down the screen, its prints at full size */
+  .re-wrap { max-height: none; }
+  .re-ropes { flex: none; min-height: 0; container-type: normal; --fit: initial; }
   .re-wide { display: none; }
   .re-tall { display: block; }
   .re-line { padding-top: 12px; }
@@ -2000,6 +2330,11 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
   .re-gain img { width: 34px; height: 34px; }
   .re-stand img { width: 48px; height: 31px; }
   .re-gain b { font-size: 16px; }
+  .re-full { gap: 8px 12px; padding: 8px; }
+  .re-full-faces { gap: 4px; }
+  .re-full-faces img { width: 32px; height: 32px; }
+  .re-full-txt p { font-size: 16px; }
+  .re-full-btns { width: 100%; justify-content: space-between; }
   .re-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
   .re-tile { min-height: 46px; padding: 4px 4px 4px 32px; }
   .re-tile img { left: 4px; width: 24px; height: 24px; }
@@ -2013,14 +2348,73 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
   .re-nom span { font-size: 15px; }
   .re-btns { margin: 0; justify-content: space-between; }
 }
+/* a low screen on its side (a 720 px laptop, the Deck, a phone): the heading and the board close up, so the prints keep
+   more of the height; what the run opened and the full game's word share a row */
+@media (orientation: landscape) and (max-height: 820px) {
+  .overlay.run-end { --pt: 8px; --pb: 10px; }
+  .re-head { gap: 4px; padding-top: 0; }
+  .re-ribbon { font-size: 12px; padding: 3px 12px; }
+  .re-head h2 { font-size: clamp(30px, 7.5dvh, 66px); }
+  .re-gag { max-width: 1000px; font-size: clamp(16px, 3dvh, 24px); }
+  .art-panel .re-panel { padding: 16px 26px; border-image-width: 40px 28px; }
+  .re-panel { flex-flow: row wrap; gap: 10px 16px; }
+  .re-panel > * { flex: 1 1 100%; }
+  .re-panel > .re-gains { flex: 0 1 auto; }
+  .re-panel > .re-full { flex: 1 1 360px; }
+  .re-tile { min-height: 50px; }
+}
 @media (prefers-reduced-motion: reduce) {
   .pol, .re-panel { animation: none; }
 }
-.overlay.run-end.win { overflow: auto; }
+/* it scrolls only down, and only where it is taller than the screen: the string to the screen's edges and the prints
+   swinging in never push it sideways */
+.overlay.run-end, .overlay.run-end.win { overflow: hidden auto; }
 
 /* the quotes each language writes round a name it quotes (the button names in the hero's lines, the trinkets' lines) */
-:lang(en) :is(.coach-paper, .tr-lines li) q, :lang(pt) :is(.coach-paper, .tr-lines li) q, :lang(ko) :is(.coach-paper, .tr-lines li) q, :lang(zh) :is(.coach-paper, .tr-lines li) q { quotes: '“' '”'; }
-:lang(de) :is(.coach-paper, .tr-lines li) q { quotes: '„' '“'; }
-:lang(pl) :is(.coach-paper, .tr-lines li) q { quotes: '„' '”'; }
-:lang(fr) :is(.coach-paper, .tr-lines li) q { quotes: '« ' ' »'; }
-:lang(ja) :is(.coach-paper, .tr-lines li) q { quotes: '「' '」'; }
+:lang(en) :is(.coach-paper, .cs-bub) q, :lang(pt) :is(.coach-paper, .cs-bub) q, :lang(ko) :is(.coach-paper, .cs-bub) q, :lang(zh) :is(.coach-paper, .cs-bub) q { quotes: '“' '”'; }
+:lang(de) :is(.coach-paper, .cs-bub) q { quotes: '„' '“'; }
+:lang(pl) :is(.coach-paper, .cs-bub) q { quotes: '„' '”'; }
+:lang(fr) :is(.coach-paper, .cs-bub) q { quotes: '« ' ' »'; }
+:lang(ja) :is(.coach-paper, .cs-bub) q { quotes: '「' '」'; }
+
+/* ---------- the hints (tip.ts): a torn slip of white paper over the thing a mouse rests on, like the hero's lines
+   (Vladislav's pick «Записка», 2026-10-26): ink on it, the thing's name on a red sticker over its top edge, its tail at
+   the thing. The trophy's hint over the sockets is the same slip, and a tap pins it there on a phone. */
+.tip {
+  --tip-bg: #f3e7cc; --tip-red: #9e1f12;
+  position: fixed; z-index: 60; left: 0; top: 0; width: max-content; max-width: min(290px, calc(100vw - 16px));
+  pointer-events: none; color: #24170b;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.42)) drop-shadow(0 8px 14px rgba(0, 0, 0, 0.45));
+}
+/* the paper is drawn under the words, so the sticker can stand over its torn edge */
+.tip-paper { position: relative; margin-top: 12px; padding: 16px 14px 10px; rotate: -1deg; isolation: isolate; }
+.tip-paper::before {
+  content: ''; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 45%, rgba(110, 72, 32, 0.12)), repeating-linear-gradient(90deg, rgba(120, 84, 44, 0.07) 0 4px, rgba(255, 255, 255, 0.06) 4px 11px), var(--tip-bg);
+  clip-path: polygon(0 4px, 5% 0, 62% 3px, 97% 0, 100% 7px, 99% calc(100% - 5px), 96% 100%, 40% calc(100% - 3px), 3% 100%, 0 calc(100% - 6px));
+}
+.tip-paper:not(:has(.tip-h)) { margin-top: 0; padding-top: 10px; }
+/* the sticker takes its room on the paper, so a long name widens the slip instead of running off it */
+.tip-h {
+  display: flex; align-items: center; gap: 8px; width: fit-content; margin: -28px 0 8px -6px; padding: 3px 10px 2px; rotate: -3deg;
+  font: 600 13px/1.15 Oswald, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; color: #fff8e8;
+  background: var(--tip-red) var(--grain) 0 0 / 160px; background-blend-mode: overlay; clip-path: polygon(0 8%, 100% 0, 96% 100%, 3% 92%);
+}
+.tip-h .tok { position: relative; flex: none; width: 24px; height: 24px; margin: -1px 0 -1px -4px; }
+.tip p { margin: 3px 0 0; font: 700 18px/1.05 var(--hand); }
+.tip-h + p, .tip p:first-child { margin-top: 0; }
+.tip-f { display: block; margin-top: 6px; font: 500 12px/1.25 Oswald, sans-serif; letter-spacing: 0.02em; color: #8a5a2a; }
+/* a hint that is only a name is the sticker alone */
+.tip.only-h .tip-paper { margin: 0; padding: 0; rotate: none; }
+.tip.only-h .tip-paper::before { display: none; }
+.tip.only-h .tip-h { margin: 0; rotate: -2deg; }
+.tip-tail { position: absolute; width: 18px; height: 10px; background: var(--tip-bg); }
+.tip.only-h .tip-tail { background: var(--tip-red); }
+.tip[data-dir=down] .tip-tail { left: calc(var(--ax) - 9px); top: calc(100% - 1px); clip-path: polygon(0 0, 100% 0, 40% 100%); }
+.tip[data-dir=up] .tip-tail { left: calc(var(--ax) - 9px); bottom: calc(100% - 1px); clip-path: polygon(60% 0, 100% 100%, 0 100%); }
+.tip[data-dir=left] .tip-tail { top: calc(var(--ay) - 9px); right: calc(100% - 1px); width: 10px; height: 18px; clip-path: polygon(0 40%, 100% 0, 100% 100%); }
+@media (max-height: 520px) and (orientation: landscape) {
+  .tip { max-width: min(250px, calc(100vw - 16px)); }
+  .tip p { font-size: 15px; }
+  .tip-h { font-size: 12px; }
+}

@@ -10,8 +10,10 @@
 // «Громкость» (src/volume.ts): the first won run opens its first step, and a run won at the highest step opens the next.
 // «Подставки мастерства» (src/stands.ts): the runs won with a hero dress it in a new stand; on the pick screens the player
 // may put it back on any stand it has earned before.
-// The demo has its own three heroes and events, all the trophies, no stars, no «Громкость» and no stands. `?progress=full`
-// in the address opens everything for a test without writing it down, and `?stand=wood` puts every hero on that stand.
+// The demo has its own three heroes and events, the twelve starting trophies, no stars, no «Громкость» and no stands. Its
+// first won run opens one hero, the next up the ladder of the party's first hero (online the player's own), and no other
+// hero opens in the demo after it. `?progress=full` in the address opens everything for a test without writing it down,
+// and `?stand=wood` puts every hero on that stand.
 
 import { HEROES } from './data';
 import { DEMO, DEMO_EVENTS, DEMO_HEROES, stored } from './demo';
@@ -31,6 +33,8 @@ export const LADDERS = [
   ['ash', 'electra', 'bum', 'genius'],
   ['ricochet', 'sharp', 'kid', 'model'],
 ];
+/** The heroes the demo's first win may open: the next up its heroes' ladders, Поварёшка, Электра, Шулер. */
+export const DEMO_OPENS = LADDERS.map(l => l[1]);
 /** Stars a hero needs to open the next hero of its ladder: a whole run won gives exactly this many. */
 export const STARS_TO_OPEN = 6;
 /** Stars a floor's boss gives every hero of the party that beats it: the floor's number, 1 to 3. */
@@ -133,6 +137,8 @@ function load(): Progress {
     if (o && o.v === 1) return { v: 1, stars: o.stars ?? {}, open: o.open ?? [], events: o.events ?? [], due: o.due ?? [], arts: o.arts ?? [], vol: o.vol ?? (wonBefore() ? 1 : 0), worn: o.worn ?? {}, cur: o.cur ?? null };
   } catch { /* unreadable: start over below */ }
   const p: Progress = { v: 1, stars: {}, open: [], events: [], due: [], arts: [], vol: wonBefore() ? 1 : 0, worn: {}, cur: null };
+  // the demo opens its one hero only by a win
+  if (DEMO) return p;
   for (const [k, h] of Object.entries(stats.heroes)) {
     if (!HEROES.some(d => d.key === k)) continue;
     if (h.runs > 0 && !START_HEROES.includes(k)) p.open.push(k);
@@ -193,14 +199,17 @@ function openNext(p: Progress, key: string) {
   return true;
 }
 
-/** Whether this player can't take the hero `key`: in the demo, any but its three; in the full game, one not opened yet. */
+/** Whether this player can't take the hero `key`: in the demo, any but its three and the one it has opened; in the full game, one not opened yet. */
 export function locked(key: string) {
-  if (DEMO) return !DEMO_HEROES.includes(key);
+  if (DEMO) return !isOpen(progress, key);
   return !ALL && !isOpen(progress, key);
 }
 
-/** The hero `key` stays out of the demo; the full game lets anyone's own heroes in, whatever the host has opened. */
-export const demoLocked = (key: string) => DEMO && !DEMO_HEROES.includes(key);
+/** The hero `key` stays out of the demo, which never opens it; the full game lets anyone's own heroes in, whatever the host has opened. */
+export const demoLocked = (key: string) => DEMO && !DEMO_HEROES.includes(key) && !DEMO_OPENS.includes(key);
+
+/** The hero the demo has opened, if it has: the demo opens only one. */
+export const demoOpened = (): string | null => (DEMO ? progress.open[0] ?? null : null);
 
 /** The stars of the hero `key`. */
 export const starsOf = (key: string) => progress.stars[key] ?? 0;
@@ -229,9 +238,18 @@ export interface Deeds {
  * The same run pays each boss once, whatever comes again: a reload, a rejoin, a saved campaign.
  */
 export function creditRun(run: Run, keys: string[], o: Deeds) {
-  if (DEMO || !keys.length) return;
+  if (!keys.length) return;
   let c = progress.cur;
   if (!c || c.seed !== run.seed || c.heroes.join() !== keys.join()) c = progress.cur = { seed: run.seed, heroes: keys, floors: 0, got: {}, opened: [] };
+  // the demo's first win opens the next hero up the first hero's ladder, and nothing opens in the demo after it
+  if (DEMO) {
+    const next = nextOf(keys[0]);
+    if (!o.won || progress.open.length || !next) return;
+    progress.open.push(next);
+    c.opened.push(next);
+    save();
+    return;
+  }
   let changed = false;
   const beaten = o.won ? FLOORS : Math.min(run.floor, FLOORS);
   if (beaten > c.floors) {
@@ -310,7 +328,7 @@ export function openedBy(ev: EventState, run: Run): { events: string[]; arts: Ar
   };
 }
 
-/** Whether this player hasn't opened the event `key`: in the demo, any but its three. */
+/** Whether this player hasn't opened the event `key`: in the demo, any but its own. */
 export function eventLocked(key: string) {
   if (DEMO) return !DEMO_EVENTS.includes(key);
   return !ALL && !START_EVENTS.includes(key) && !progress.events.includes(key);
@@ -323,9 +341,10 @@ export const dueEvents = (): readonly string[] => (DEMO ? [] : progress.due);
 /** How the event `key` opens, if it is one that opens. */
 export const meetOf = (key: string) => MEETS.find(m => m.key === key) ?? null;
 
-/** Whether this player hasn't opened the trophy `key`. The demo hands out all of them. */
+/** Whether this player hasn't opened the trophy `key`. The demo hands out the starting ones only. */
 export function artLocked(key: string) {
-  return !DEMO && !ALL && !START_ARTS.includes(key as ArtKey) && !progress.arts.includes(key);
+  if (DEMO) return !START_ARTS.includes(key as ArtKey);
+  return !ALL && !START_ARTS.includes(key as ArtKey) && !progress.arts.includes(key);
 }
 
 /** The feat that opens the trophy `key`, and how far this player has got with a counted one (null for the others). */
@@ -341,7 +360,7 @@ export interface Gains { heroes: string[]; got: Record<string, number>; opened: 
 /** What `run` brought this player; null if it isn't the run counted. */
 export function runGains(run: Run): Gains | null {
   const c = progress.cur;
-  return !DEMO && c && c.seed === run.seed ? { got: c.got, opened: c.opened, heroes: c.heroes, events: c.events ?? [], arts: c.arts ?? [], ...(c.vol ? { vol: c.vol } : {}), ...(c.stands ? { stands: c.stands } : {}) } : null;
+  return c && c.seed === run.seed ? { got: c.got, opened: c.opened, heroes: c.heroes, events: c.events ?? [], arts: c.arts ?? [], ...(c.vol ? { vol: c.vol } : {}), ...(c.stands ? { stands: c.stands } : {}) } : null;
 }
 
 /** The highest «Громкость» step this player can turn the knob to: none in the demo, all of them with `?progress=full`. */

@@ -4,11 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <meta name="theme-color" content="#16110d" />
-  <title>DiscoDungeon</title>
-  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Rubik:wght@400;500;700&family=Amatic+SC:wght@700&family=Caveat:wght@700&family=Neucha&display=swap" rel="stylesheet" />
+  <title>Disco Underground</title>
+  <link rel="icon" href="./favicon.png" type="image/png" />
 </head>
 <body>
   <canvas id="stage" aria-label="Игровое поле"></canvas>
@@ -17,22 +14,22 @@
 
   <header class="hud-top" id="hudTop">
     <div class="party" id="allies" aria-label="Отряд"></div>
-    <div class="ore-chip" title="Руда, общая на отряд"><i class="ico ico-ore" aria-hidden="true"></i><b id="hOre">0</b></div>
+    <div class="ore-chip" data-tip-h="Руда отряда"><i class="ico ico-ore" aria-hidden="true"></i><b id="hOre">0</b></div>
     <div class="where">
-      <b id="locName">DiscoDungeon</b>
+      <b id="locName">Disco Underground</b>
       <span class="where-sub"><span id="hTurn"></span><span id="hSide" class="side"></span><span id="hRage" class="rage" hidden></span><span id="hCurse" class="curse" hidden></span></span>
     </div>
     <ol class="queue" id="queue" aria-label="Очередь врагов: кто левее, тот ходит раньше"></ol>
     <div class="top-btns">
-      <button class="ibtn" id="btnMap" aria-label="Карта" title="Карта"><i class="ico ico-map" aria-hidden="true"></i></button>
-      <button class="ibtn" id="btnLog" aria-label="Журнал хода врагов" title="Журнал хода врагов" aria-expanded="false"><i class="ico ico-log" aria-hidden="true"></i></button>
-      <button class="ibtn" id="btnMenu" aria-label="Меню" title="Меню"><i class="ico ico-menu" aria-hidden="true"></i></button>
+      <button class="ibtn" id="btnMap" aria-label="Карта" data-tip-h="Карта"><i class="ico ico-map" aria-hidden="true"></i></button>
+      <button class="ibtn" id="btnLog" aria-label="Журнал хода врагов" data-tip-h="Журнал хода врагов" aria-expanded="false"><i class="ico ico-log" aria-hidden="true"></i></button>
+      <button class="ibtn" id="btnMenu" aria-label="Меню" data-tip-h="Меню"><i class="ico ico-menu" aria-hidden="true"></i></button>
     </div>
   </header>
 
   <div id="bossBar" class="boss-bar" hidden><canvas width="64" height="64"></canvas><div><b></b><span class="bb-hp"><i></i><em></em><u></u></span></div></div>
   <div id="mobCard" class="mob-card" role="tooltip" hidden></div>
-  <div id="artTip" class="mob-card art-tip" role="tooltip" hidden></div>
+  <div id="artTip" class="tip art-tip" role="tooltip" hidden></div>
   <div id="heroPeek" class="hero-card hero-peek" hidden></div>
   <div id="logPanel" class="log-panel" hidden><h3>Ход врагов</h3><ol id="logList"></ol></div>
 
@@ -62,10 +59,10 @@
   <button id="turnBtn" class="turn-btn" type="button"><span class="tb-plate" aria-hidden="true"></span><i class="tap-area" aria-hidden="true"></i><b id="turnTxt"></b><small id="turnSub"></small><span class="tb-who" id="turnWho" aria-hidden="true"></span></button>
 
   <div class="camctl" id="camctl" role="group" aria-label="Камера">
-    <button class="ibtn" id="rotL" aria-label="Повернуть комнату влево" title="Повернуть комнату влево"><i class="ico ico-rotl" aria-hidden="true"></i></button>
-    <button class="ibtn" id="rotR" aria-label="Повернуть комнату вправо" title="Повернуть комнату вправо"><i class="ico ico-rotr" aria-hidden="true"></i></button>
-    <button class="ibtn" id="zoomIn" aria-label="Приблизить" title="Приблизить"><i class="ico ico-zin" aria-hidden="true"></i></button>
-    <button class="ibtn" id="zoomOut" aria-label="Отдалить" title="Отдалить"><i class="ico ico-zout" aria-hidden="true"></i></button>
+    <button class="ibtn" id="rotL" aria-label="Повернуть комнату влево" data-tip-h="Повернуть комнату влево"><i class="ico ico-rotl" aria-hidden="true"></i></button>
+    <button class="ibtn" id="rotR" aria-label="Повернуть комнату вправо" data-tip-h="Повернуть комнату вправо"><i class="ico ico-rotr" aria-hidden="true"></i></button>
+    <button class="ibtn" id="zoomIn" aria-label="Приблизить" data-tip-h="Приблизить"><i class="ico ico-zin" aria-hidden="true"></i></button>
+    <button class="ibtn" id="zoomOut" aria-label="Отдалить" data-tip-h="Отдалить"><i class="ico ico-zout" aria-hidden="true"></i></button>
   </div>
 
   <section id="mapScreen" class="overlay" hidden>
@@ -76,7 +73,6 @@
           <button class="btn" id="mapClose"><i data-art="m_close" aria-hidden="true"></i>Закрыть</button>
         </div>
       </div>
-      <div id="mapParty" class="map-party"></div>
       <p id="mapVotes" class="map-info map-votes" aria-live="polite" hidden></p>
       <div class="map-board"><svg id="map" viewBox="0 0 320 600" role="group" aria-label="Комнаты этажа"></svg><div id="mapVol" class="vol-knob mini" hidden></div></div>
     </div>
@@ -128,7 +124,7 @@
       <div class="ev-body">
         <div class="fg-head">
           <h2 id="forgeTitle">Кузнец</h2>
-          <span class="forge-ore" title="Руда, общая на отряд"><i class="ico ico-ore" aria-hidden="true"></i><b id="forgeOre">0</b></span>
+          <span class="forge-ore" data-tip-h="Руда отряда"><i class="ico ico-ore" aria-hidden="true"></i><b id="forgeOre">0</b></span>
         </div>
         <p id="forgeText" class="ev-text"></p>
         <div id="forgeMine" class="fg-mine"></div>
@@ -157,6 +153,17 @@
       <div class="re-ropes" id="reRopes"></div>
       <div class="panel re-panel">
         <div class="re-gains" id="reGains" hidden></div>
+        <div class="re-full demo-only" id="reFull">
+          <div class="re-full-faces" id="reFullFaces" aria-hidden="true"></div>
+          <div class="re-full-txt">
+            <b>В полной версии</b>
+            <p>Подземелье уходит глубже: новые этажи и боссы, герои, события и трофеи.</p>
+          </div>
+          <div class="re-full-btns">
+            <button class="btn" id="reFeedback" hidden>Рассказать, как тебе демо</button>
+            <button class="btn big" id="reWish" hidden>В список желаемого</button>
+          </div>
+        </div>
         <div class="re-tiles" id="reTiles"></div>
         <div class="re-foot">
           <div class="re-noms" id="reNoms"></div>
@@ -171,17 +178,29 @@
     <div class="re-lb" id="reLb" hidden></div>
   </section>
 
+  <div id="hall" class="hall" aria-hidden="true" hidden>
+    <div id="hallDancers" class="hall-dancers"></div>
+    <canvas id="hallFx" class="hall-fx"></canvas>
+  </div>
+
   <section id="menu" class="overlay solid" hidden>
     <div class="menu-panel">
-      <h1 class="logo"><i class="logo-art" data-art="logo" aria-hidden="true"></i>Disco<span>Dungeon</span></h1>
-      <nav class="menu-btns">
-        <button class="btn big" id="mContinue" hidden><i data-art="m_continue" aria-hidden="true"></i>Продолжить</button>
-        <button class="btn big" id="mCampaign"><i data-art="m_campaign" aria-hidden="true"></i>Кампания</button>
-        <button class="btn big" id="mOnline"><i data-art="m_online" aria-hidden="true"></i>Сетевая игра</button>
+      <h1 class="logo"><img class="logo-pic" width="1080" height="807" alt="Disco Underground"></h1>
+      <div class="menu-lists">
+      <nav class="menu-btns" id="menuMain">
+        <button class="btn big" id="mPlay"><i data-art="m_continue" aria-hidden="true"></i>Играть</button>
         <button class="btn big" id="mCollection"><i data-art="m_collection" aria-hidden="true"></i>Коллекция</button>
         <button class="btn big" id="mStats"><i data-art="m_stats" aria-hidden="true"></i>Статистика</button>
         <button class="btn big" id="mSettings"><i data-art="m_settings" aria-hidden="true"></i>Настройки</button>
+        <button class="btn big desktop-only" id="mQuit"><i data-art="m_close" aria-hidden="true"></i>Выход</button>
       </nav>
+      <nav class="menu-btns" id="menuPlay" inert>
+        <button class="btn big" id="mContinue" hidden><i data-art="m_continue" aria-hidden="true"></i>Продолжить</button>
+        <button class="btn big" id="mCampaign"><i data-art="m_campaign" aria-hidden="true"></i>Кампания</button>
+        <button class="btn big" id="mOnline"><i data-art="m_online" aria-hidden="true"></i>Сетевая игра</button>
+        <button class="btn big" id="mPlayBack"><i data-art="m_back" aria-hidden="true"></i>Назад</button>
+      </nav>
+      </div>
     </div>
     <small class="menu-ver" id="menuVer"></small>
   </section>
@@ -192,7 +211,7 @@
       <div class="pick-body">
         <div class="pick-pic">
           <div class="pick-print"><canvas id="heroPhoto" width="1024" height="1024" role="img" aria-label="Фото отряда"></canvas></div>
-          <div class="pick-tools"><button class="btn" id="heroBg" title="Другой фон"><i data-art="m_bg" aria-hidden="true"></i>Фон</button><button class="btn" id="heroSave" title="Сохранить фото"><i data-art="m_photo" aria-hidden="true"></i>Фото</button></div>
+          <div class="pick-tools"><button class="btn" id="heroBg" data-tip-h="Другой фон"><i data-art="m_bg" aria-hidden="true"></i>Фон</button><button class="btn" id="heroSave" data-tip-h="Сохранить фото"><i data-art="m_photo" aria-hidden="true"></i>Фото</button></div>
         </div>
         <div class="pick-side">
           <div id="heroPicks" class="pick-row" role="group" aria-label="Герои"></div>
@@ -206,13 +225,14 @@
 
   <section id="lobby" class="overlay solid" hidden>
     <div class="panel lobby-panel">
-      <div class="panel-head"><h2>Сетевая игра</h2><button class="btn" id="lobbyBack"><i data-art="m_back" aria-hidden="true"></i>Назад</button></div>
+      <div class="panel-head"><h2>Сетевая игра</h2><div id="lobbyCodeBox" class="room-code" hidden><button class="room-code-btn" id="lobbyRoomCode" data-tip-h="Скопировать код"></button><button class="btn sm icon" id="lobbyInvite" aria-label="Пригласить друзей" data-tip-h="Пригласить друзей"><i data-art="m_invite" aria-hidden="true"></i></button></div><button class="btn" id="lobbyBack"><i data-art="m_back" aria-hidden="true"></i>Назад</button></div>
       <div id="lobbyStart" class="lobby-start">
         <label class="field">Твоё имя <input id="lobbyName" maxlength="16" autocomplete="nickname" placeholder="Игрок" /></label>
         <div class="lobby-ways">
           <div class="way">
             <h3>Собрать отряд</h3>
-            <p>Создай комнату и отправь друзьям код или ссылку.</p>
+            <p class="web-only">Создай комнату и отправь друзьям код или ссылку.</p>
+            <p class="desktop-only">Создай комнату и позови друзей через Steam или отправь им код.</p>
             <button class="btn big" id="lobbyHost"><i data-art="m_host" aria-hidden="true"></i>Создать комнату</button>
           </div>
           <div class="way">
@@ -226,10 +246,9 @@
         <div class="pick-body">
           <div class="pick-pic">
             <div class="pick-print"><canvas id="lobbyPhoto" width="1024" height="1024" role="img" aria-label="Фото отряда"></canvas></div>
-            <div class="pick-tools"><button class="btn" id="lobbyBg" title="Другой фон"><i data-art="m_bg" aria-hidden="true"></i>Фон</button><button class="btn" id="lobbySave" title="Сохранить фото"><i data-art="m_photo" aria-hidden="true"></i>Фото</button></div>
+            <div class="pick-tools"><button class="btn" id="lobbyBg" data-tip-h="Другой фон"><i data-art="m_bg" aria-hidden="true"></i>Фон</button><button class="btn" id="lobbySave" data-tip-h="Сохранить фото"><i data-art="m_photo" aria-hidden="true"></i>Фото</button></div>
           </div>
           <div class="pick-side">
-            <div class="room-code">Код комнаты <b id="lobbyRoomCode"></b> <button class="btn sm" id="lobbyCopy"><i data-art="m_link" aria-hidden="true"></i>Скопировать ссылку</button></div>
             <div id="lobbyHeroes" class="pick-row" role="group" aria-label="Герои"></div>
             <article id="lobbyInfo" class="pick-card"></article>
             <ul id="lobbyPlayers" class="players sr-only"></ul>
@@ -246,9 +265,10 @@
     <div class="panel collection-panel">
       <div class="panel-head">
         <h2>Коллекция</h2>
-        <div class="panel-btns"><button class="btn tab on" data-tab="heroes">Герои</button><button class="btn tab" data-tab="mobs">Враги</button><button class="btn tab" data-tab="arts">Трофеи</button><button class="btn tab" data-tab="events">События</button><button class="btn tab" data-tab="trinkets">Безделушки</button><button class="btn" id="colBack"><i data-art="m_back" aria-hidden="true"></i>Назад</button></div>
+        <div class="col-tabs"><button class="btn tab on" data-tab="heroes"><i class="col-ico" aria-hidden="true"></i>Герои</button><button class="btn tab" data-tab="mobs"><i class="col-ico" aria-hidden="true"></i>Враги</button><button class="btn tab" data-tab="arts"><i class="col-ico" aria-hidden="true"></i>Трофеи</button><button class="btn tab" data-tab="events"><i class="col-ico" aria-hidden="true"></i>События</button><button class="btn tab" data-tab="trinkets"><i class="col-ico" aria-hidden="true"></i>Безделушки</button></div>
+        <button class="btn" id="colBack"><i data-art="m_back" aria-hidden="true"></i>Назад</button>
       </div>
-      <div id="colGrid" class="col-grid"></div>
+      <div id="colGrid" class="cs-folder"></div>
     </div>
   </section>
 
@@ -361,18 +381,21 @@
             <li><i class="help-ico help-face" data-face="skel" aria-hidden="true"></i><p data-t><b>Рукопашники.</b> Идут к ближайшему герою в обход ям и колонн и бьют с соседней клетки.</p></li>
             <li><i class="help-ico help-face" data-face="archer" aria-hidden="true"></i><p><b data-t>Стрелки</b> <i class="ico ico-bow help-inl" aria-hidden="true"></i> <span data-t>Бьют через всю комнату, но только того, кого видят. Колонны, камни и ресурсы закрывают, ямы, враги и герои нет. Не видят: идут на линию огня.</span></p></li>
             <li><i class="help-ico help-face" data-face="necro" aria-hidden="true"></i><p data-t><b>Колдуны.</b> Призывают подмогу, лечат своих или поднимают павших. <em class="k-spk">Круг призыва</em> светится за ход до подмоги: бей колдуна первым. Других подкреплений нет, остальные враги в комнате с самого начала.</p></li>
-            <li><i class="help-ico help-face" data-face="golem" aria-hidden="true"></i><p data-t><b>Бронированные.</b> Броня у самых крепких врагов и почти у всех боссов. Слабым диском её не пробить: бей сильнее, <em class="k-fire">огнём</em>, <em class="k-gas">газом</em> или <em class="k-ice">молнией</em>.</p></li>
+            <li class="demo-only"><i class="help-ico help-face" data-face="headsman" aria-hidden="true"></i><p data-t><b>Бронированные.</b> Броня у самых крепких врагов и почти у всех боссов. Слабым диском её не пробить: бей сильнее, <em class="k-fire">огнём</em>, <em class="k-gas">газом</em> или <em class="k-ice">молнией</em>.</p></li>
+            <li class="full-only"><i class="help-ico help-face" data-face="golem" aria-hidden="true"></i><p data-t><b>Бронированные.</b> Броня у самых крепких врагов и почти у всех боссов. Слабым диском её не пробить: бей сильнее, <em class="k-fire">огнём</em>, <em class="k-gas">газом</em> или <em class="k-ice">молнией</em>.</p></li>
             <li><i class="help-ico help-face" data-face="headsman" aria-hidden="true"></i><p data-t><b>Элита.</b> Победа: каждому герою <em class="k-btn">уровень прокачки даром</em>.</p></li>
-            <li class="demo-only"><i class="help-ico help-face" data-face="king" aria-hidden="true"></i><p data-t><b>Босс.</b> Ждёт на самом верху карты. Большой, с фазами и фокусами. Победишь его, и демо пройдено.</p></li>
+            <li class="demo-only"><i class="help-ico help-face" data-face="king" aria-hidden="true"></i><p data-t><b>Босс.</b> Один из трёх, кто именно, видно на самом верху карты. Большой, с фазами и фокусами. Победишь его, и демо пройдено.</p></li>
             <li class="full-only"><i class="help-ico help-face" data-face="king" aria-hidden="true"></i><p data-t><b>Боссы.</b> На этаже один из трёх, кто именно, видно на карте. Большие, с фазами и фокусами. Победа: всем <em class="k-heal">+половина HP</em>, павшие встают, а после 1-го и 2-го этажа каждый герой берёт <em class="k-btn">трофей</em>.</p></li>
         </ul>
         <ul class="help-list" data-tab="run" hidden>
             <li class="demo-only"><i class="help-ico" data-art="ico_map" aria-hidden="true"></i><p data-t><b>Карта.</b> В демо один этаж, путь снизу вверх к боссу. Выбирай комнаты: бой, элита, рудная пещера, костёр, кузнец, событие.</p></li>
             <li class="full-only"><i class="help-ico" data-art="ico_map" aria-hidden="true"></i><p data-t><b>Карта.</b> Три этажа, на каждом путь снизу вверх к боссу. Выбирай комнаты: бой, элита, рудная пещера, костёр, кузнец, событие.</p></li>
-            <li><i class="help-ico" data-art="room_forge" aria-hidden="true"></i><p data-t><b>Кузнец.</b> Только здесь тратится <em class="k-ore">руда</em>. «Урон» +25%, «Скорость» +15%, «Отскок» +8% за уровень (<em class="k-ore">4, 6 и 7 руды</em>), второй диск за ход за <em class="k-ore">12</em>. Третий диск бывает только трофеем «Третья рука». Ещё кузнец дарит <em class="k-ore">0–3 руды</em>.</p></li>
+            <li class="demo-only"><i class="help-ico" data-art="room_forge" aria-hidden="true"></i><p data-t><b>Кузнец.</b> Только здесь тратится <em class="k-ore">руда</em>. «Урон» +25%, «Скорость» +15%, «Отскок» +8% за уровень (<em class="k-ore">4, 6 и 7 руды</em>), второй диск за ход за <em class="k-ore">12</em>. Ещё кузнец дарит <em class="k-ore">0–3 руды</em>.</p></li>
+            <li class="full-only"><i class="help-ico" data-art="room_forge" aria-hidden="true"></i><p data-t><b>Кузнец.</b> Только здесь тратится <em class="k-ore">руда</em>. «Урон» +25%, «Скорость» +15%, «Отскок» +8% за уровень (<em class="k-ore">4, 6 и 7 руды</em>), второй диск за ход за <em class="k-ore">12</em>. Третий диск бывает только трофеем «Третья рука». Ещё кузнец дарит <em class="k-ore">0–3 руды</em>.</p></li>
             <li><i class="help-ico" data-art="room_camp" aria-hidden="true"></i><p data-t><b>Костёр.</b> Каждый герой делает одно: отдыхает (<em class="k-heal">+8 HP</em>), перевязывает товарища (<em class="k-heal">+8 HP</em>) или копает <em class="k-ore">0–3 руды</em>. Павший встаёт с половиной HP.</p></li>
             <li><i class="help-ico" data-art="room_treasure" aria-hidden="true"></i><p data-t><b>Рудная пещера.</b> Врагов нет, но потолок рушится всё сильнее. Пыль на полу показывает, куда упадут камни после хода, а жила под пылью даёт вдвое больше руды. Со 2-го хода в его начале можно уйти с рудой, но только всем вместе: в сети отряд уходит, когда это нажмут все. На 6-м ходу рушится весь потолок: −10 HP и половина добытой здесь руды.</p></li>
             <li><i class="help-ico" data-art="room_event" aria-hidden="true"></i><p data-t><b>События.</b> Сцена и выбор: <em class="k-heal">зелёное</em> хорошо, <em class="k-hurt">красное</em> плохо, у риска написан шанс. Бывает и <em class="k-hurt">проклятие</em> на следующий бой. В сети выбор общий: все жмут одно и то же.</p></li>
+            <li class="demo-only"><i class="help-ico" data-art="art_cup" aria-hidden="true"></i><p data-t><b>Трофеи.</b> Их прячет «Влюблённый сундук», он попадается чаще других событий. Сунь в него руку, и если повезёт, отряду выпадут три: каждый герой берёт свой. Трофей работает до конца забега, его видно в карточке героя.</p></li>
             <li class="full-only"><i class="help-ico" data-art="art_hand" aria-hidden="true"></i><p data-t><b>Трофеи.</b> После босса 1-го и 2-го этажа отряду выпадают три, и каждый герой берёт свой. Трофей работает до конца забега, его видно в карточке героя. Бывают и в событиях.</p></li>
         </ul>
       </div>
@@ -383,7 +406,7 @@
   <!-- up from the first paint until every picture and font is in -->
   <section id="boot" class="overlay solid boot">
     <div class="menu-panel">
-      <h1 class="logo">Disco<span>Dungeon</span></h1>
+      <h1 class="logo"><img class="logo-pic" width="1080" height="807" alt="Disco Underground"></h1>
       <div class="boot-bar" id="bootBar" role="progressbar" aria-label="Загрузка" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="bootFill"></i></div>
       <p class="boot-note" id="bootGag"></p>
       <div class="boot-langs" id="bootLangs" role="radiogroup" aria-label="Язык"></div>

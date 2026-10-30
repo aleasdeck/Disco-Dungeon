@@ -46,10 +46,10 @@ const skipped = (node, src) => {
   return false;
 };
 
-/** The lines of the TypeScript sources, and the places where code glues Russian together. */
-function scanTs(add, bad) {
+/** The lines of the TypeScript sources, and the places where code glues Russian together; `read` gives a file's text. */
+function scanTs(add, bad, read) {
   for (const f of tsFiles(SRC)) {
-    const text = readFileSync(f, 'utf8'), src = ts.createSourceFile(f, text, ts.ScriptTarget.ES2022, true), rel = relative(ROOT, f);
+    const text = read(f), src = ts.createSourceFile(f, text, ts.ScriptTarget.ES2022, true), rel = relative(ROOT, f);
     const at = n => `${rel}:${src.getLineAndCharacterOfPosition(n.getStart(src)).line + 1}`;
     const cyr = n => (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) && CYR.test(n.text)
       || ts.isTemplateExpression(n) && [n.head, ...n.templateSpans.map(s => s.literal)].some(p => CYR.test(p.text));
@@ -72,12 +72,11 @@ function scanTs(add, bad) {
 }
 
 const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
-const ATTRS = ['title', 'aria-label', 'placeholder', 'alt'];
+const ATTRS = ['title', 'aria-label', 'placeholder', 'alt', 'data-tip', 'data-tip-h', 'data-tip-f'];
 const unent = s => s.replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
 
-/** The Russian text of index.html, keyed the way src/i18n.ts scanDom keys it. */
-function scanHtml(add) {
-  const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
+/** The Russian text of index.html (or of `html`), keyed the way src/i18n.ts scanDom keys it. */
+function scanHtml(add, html = readFileSync(join(ROOT, 'index.html'), 'utf8')) {
   const body = html.slice(html.indexOf('<body'));
   const tag = /<!--[\s\S]*?-->|<script[\s\S]*?<\/script>|<\/?([a-zA-Z0-9-]+)([^>]*)>/g;
   let last = 0, m, unit = null, depth = 0;
@@ -103,12 +102,15 @@ function scanHtml(add) {
   }
 }
 
-/** Every line of the game: Russian → where it is used; and what is wrong in the code. */
-export function catalog() {
+/**
+ * Every line of the game: Russian → where it is used; and what is wrong in the code. The demo's build (scripts/demo-build.mjs)
+ * passes the sources as it builds them: `read` gives a file's text, `html` the page's.
+ */
+export function catalog(o = {}) {
   const lines = new Map(), bad = [];
   const add = (s, at) => { if (!lines.has(s)) lines.set(s, []); lines.get(s).push(at); };
-  scanTs(add, bad);
-  scanHtml(add);
+  scanTs(add, bad, o.read ?? (f => readFileSync(f, 'utf8')));
+  scanHtml(add, o.html);
   return { lines, bad };
 }
 

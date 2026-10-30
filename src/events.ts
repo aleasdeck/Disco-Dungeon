@@ -11,7 +11,7 @@ import type { Bank, HeroState } from './game';
 import { artDef, artsLeft, drop, give, room, type ArtKey } from './artifacts';
 import { REST_ROW, nodeById, type MapNode, type Run } from './run';
 import { makeRng } from './rng';
-import { DEMO, DEMO_EVENTS } from './demo';
+import { DEMO, DEMO_CHEST, DEMO_CHEST_ODDS, DEMO_EVENTS } from './demo';
 import { M, t, type Arg } from './i18n';
 import { deal, give as giveOre, own, partyOre, payAll, rob } from './ore';
 
@@ -541,8 +541,13 @@ export function eventOf(seed: number, seen: readonly string[] = [], open?: reado
   const pool = DEMO ? EVENTS.filter(e => DEMO_EVENTS.includes(e.key)) : open ? EVENTS.filter(e => open.includes(e.key)) : EVENTS;
   const first = due.find(k => !seen.includes(k) && pool.some(e => e.key === k));
   if (first) return first;
-  const fresh = pool.filter(e => !seen.includes(e.key));
-  return makeRng(seed).pick(fresh.length ? fresh : pool).key;
+  const fresh = pool.filter(e => !seen.includes(e.key)), rng = makeRng(seed);
+  // the demo's chest, its one way to a trophy, comes far more often than the rest until the run has met it
+  if (DEMO && fresh.some(e => e.key === DEMO_CHEST)) {
+    const rest = fresh.filter(e => e.key !== DEMO_CHEST);
+    return rng.next() < DEMO_CHEST_ODDS || !rest.length ? DEMO_CHEST : rng.pick(rest).key;
+  }
+  return rng.pick(fresh.length ? fresh : pool).key;
 }
 
 /** The choices the event offers now: the slot machine's change with every pull, the sphinx's are the answers to its riddle. */
@@ -750,6 +755,7 @@ export function loseArts(party: HeroState[], seed: number) {
  */
 export function settleBet(b: Bet, ok: boolean, party: HeroState[], seed: number) {
   const R = makeRng(seed * 29 + 1);
+  // demo-cut: the bookie is not in the demo
   if (b === 'art') {
     const notes = ok ? giftArts(party, seed) : loseArts(party, seed);
     if (ok) return notes.length ? M('Пари выиграно, букмекер отдал трофеи: {0}.', notes) : 'Пари выиграно, букмекер отдал трофеи: свободных гнёзд не было.';

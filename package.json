@@ -2,18 +2,25 @@
   "name": "disco-dungeon",
   "private": true,
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:demo": "tsc --noEmit && vite build --mode demo",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "desktop": "npm run build:demo && electron .",
+    "pack:demo": "npm run build:demo && electron-builder --config electron/builder.cjs"
   },
   "devDependencies": {
+    "electron": "44.9.3",
+    "electron-builder": "26.17.0",
+    "peerjs": "^1.5.5",
     "typescript": "~5.9.3",
     "vite": "^8.3.4",
     "vitest": "^5.0.4"
   },
   "dependencies": {
-    "peerjs": "^1.5.5"
+    "@pipelab/steamworks.js": "0.12.2"
   }
 }

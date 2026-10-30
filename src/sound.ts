@@ -197,6 +197,14 @@ class Sound {
     this.lowpass.frequency.setTargetAtTime(on ? MUFFLED_HZ : 20000, this.ctx.currentTime, on ? 0.12 : 0.25);
   }
 
+  /** Seconds into `track`'s loop where the ear is now, while that tune is heard (null otherwise): to move to its beat. */
+  heard(track: Track): number | null {
+    const ctx = this.ctx, p = this.playing;
+    if (!ctx || !p || p.track !== track || ctx.state !== 'running' || settings.music <= 0) return null;
+    const pos = ctx.currentTime - (ctx.outputLatency || 0) - p.at;
+    return pos < 0 ? null : pos % p.loop;
+  }
+
   /** Which tune plays (null: none); a change cross-fades. */
   music(track: Track | null) {
     const ctx = this.ctx;

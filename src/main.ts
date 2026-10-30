@@ -3,15 +3,16 @@ import { AB_COST, BOOT_GAGS, COMBAT_ROOMS, HEROES, MAX_PLAYERS, MOBS, RISE_HP, W
 import { Camera } from './camera';
 import { Game, newBank, newParty, newTally, type HeroState } from './game';
 import { Net, type Player } from './net';
+import { desktop, steamNet } from './net/steam';
 import { applySnapshot, snapshot, type MapState } from './sync';
 import { saveSettings, settings } from './settings';
-import { bindSettings, campPhotoBg, lobbyStatus, renderCollection, renderHeroSelect, renderLobby, renderStats, resetLobby, show, startable } from './menu';
+import { bindSettings, campPhotoBg, lobbyStatus, renderHeroSelect, renderLobby, renderStats, resetLobby, show, startable } from './menu';
 import { Input } from './input';
 import { Hud, faceUrl, mobFace } from './ui';
 import { hl } from './hl';
-import { MapView, type MapParty, type MapVotes } from './mapview';
+import { MapView, type MapVotes } from './mapview';
 import { SceneRenderer } from './draw/scene';
-import { loadAll } from './assets';
+import { assetUrl, loadAll } from './assets';
 import { BACKDROP_COUNT } from './photo';
 import { sound, type Track } from './sound';
 import { CAMPAIGN, clearCampaign, clearSeat, keepKey, keyFor, loadCampaign, loadHost, loadSeat, newKey, saveCampaign, saveHost, saveSeat, type Ending, type HostSave } from './resume';
@@ -35,11 +36,16 @@ import { creditRun, demoLocked, dueEvents, locked, openEvents, openedBy, runGain
 import { STAND_MATS, type StandMat } from './stands';
 import { noteRoom } from './dossier';
 import { setOut } from './volume';
-import { deal, oreOf, own } from './ore';
+import { deal } from './ore';
+import { bindCollection, renderCollection, type ColTab } from './collection';
 import { LANGS, M, Mjoin, detectLang, isLang, lang, onLang, scanDom, setLang, t, type Lang } from './i18n';
+import { initTips } from './tip';
+import { initCursor } from './cursor';
+import { menuFx } from './menufx';
 
 // the page's own Russian text, found before the game writes anything into the page
 scanDom();
+initTips();
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -186,11 +192,12 @@ function showMap(open: boolean) {
   const was = !$('mapScreen').hidden;
   $('mapScreen').hidden = !open;
   $('mapClose').hidden = choosing;
+  liftStrip();
   if (open) {
     // the host's or a lone player's own new event comes in the next event room; a client's map can't tell
     mapView.fresh = mode !== 'client' && dueEvents().some(k => !(run.seen ?? []).includes(k));
     mapView.vol = game.bank.vol ?? 0;
-    mapView.render(run, choosing, mapParty(), mapVotes());
+    mapView.render(run, choosing, mapHeroes(), mapVotes());
     // on a short screen the map scrolls; bring the rooms to choose from into view
     if (!was) document.querySelector('#map .mnode.reach, #map .mnode.cur')?.scrollIntoView({ block: 'center' });
   }
@@ -199,7 +206,9 @@ function showMap(open: boolean) {
 type Mode = 'menu' | 'solo' | 'host' | 'client';
 /** 'menu' until a game starts; online the host runs the game and clients mirror it. */
 let mode: Mode = 'menu';
-const net = new Net();
+/** The desktop build plays online through Steam (src/net/steam.ts), the browser through PeerJS and MQTT brokers. */
+const steamWay = desktop ? steamNet(desktop.steam) : null;
+const net = steamWay ? new Net(steamWay.open, steamWay.join) : new Net();
 /** Online: the lobby, and once the game starts, who plays which hero. */
 let players: Player[] = [];
 let started = false;
@@ -216,7 +225,7 @@ let ending: HostSave['ending'] = null;
 /** Client: bumped to cancel a reconnect in progress. */
 let reconnecting = 0;
 
-const playerName = () => settings.name || t('Игрок');
+const playerName = () => settings.name || desktop?.steam?.name || t('Игрок');
 const ownerOf = (i: number) => players.find(p => p.hero === i)?.id ?? 'host';
 
 /** A player who drops out mid-game is waited for this long before the others go on without them: a reload is back sooner. */
@@ -468,9 +477,12 @@ function choose(id: string) {
   shareMap();
 }
 
-/** The top strip stays in sight over the event's and the camp's windows: the heroes' health and the ore while deciding. */
+/**
+ * The top strip stays in sight over the event's and the camp's windows and over the map (Vladislav asked): the heroes'
+ * health and the ore while deciding, its buttons working.
+ */
 function liftStrip() {
-  const at = !$('eventScreen').hidden ? 'event' : !$('campScreen').hidden ? 'camp' : null;
+  const at = !$('eventScreen').hidden ? 'event' : !$('campScreen').hidden ? 'camp' : !$('mapScreen').hidden ? 'map' : null;
   hud.setWindow(at && { floor: run.floor, type: at });
 }
 
@@ -623,7 +635,7 @@ function settleEvent(opt: number) {
   afterEvent();
 }
 
-/** The event has moved on: once it is over, a trophy is shared out before the map opens again, once the outcome is read. */
+/** The event has moved on: once it is over, a trophy it gave is shared out before the map opens again, once the outcome is read. */
 function afterEvent() {
   if (!ev) return;
   if (ev.done) {
@@ -885,10 +897,10 @@ function shareMap() {
   if (!$('mapScreen').hidden) showMap(true);
 }
 
-/** Who walks the map, this screen's own hero first, and the party's ore. */
-function mapParty(): MapParty {
-  const mine = game.online ? myHero() : game.party[0]?.i ?? null, me = game.party.find(h => h.i === mine) ?? null;
-  return { heroes: me ? [me, ...game.party.filter(h => h !== me)] : game.party, me, ore: oreOf(me, game.bank), own: own(game.bank) };
+/** Who walks the map, this screen's own hero first. */
+function mapHeroes() {
+  const mine = game.online ? myHero() : game.party[0]?.i ?? null, me = game.party.find(h => h.i === mine);
+  return me ? [me, ...game.party.filter(h => h !== me)] : game.party;
 }
 
 /** Online: whose token stands on which room, and whom the party still waits for. Alone there is nothing to show. */
@@ -1017,15 +1029,19 @@ function showEnd(e: Ending) {
 /** Dress a result screen up as the victory banner: a spinning disco ball and confetti falling over it. */
 function victory(el: HTMLElement, on: boolean) {
   el.classList.toggle('win', on);
-  el.querySelectorAll('.confetti').forEach(c => c.remove());
+  el.querySelectorAll('.confetti-box').forEach(c => c.remove());
   if (!on) return;
+  // the confetti fall in a box the size of the screen, so what falls past its bottom gives the screen no scrollbar
+  const box = document.createElement('div');
+  box.className = 'confetti-box';
   const cols = ['#d9b24a', '#d9733a', '#3fc4b6', '#b8323f', '#9a7bd9', '#f0e5d0'];
   for (let k = 0; k < 40; k++) {
     const c = document.createElement('i');
     c.className = 'confetti';
     c.style.cssText = `left:${Math.random() * 100}%;background:${cols[k % cols.length]};animation-delay:${-Math.random() * 4}s;animation-duration:${3 + Math.random() * 3}s;--dx:${Math.random() * 80 - 40}px`;
-    el.prepend(c);
+    box.append(c);
   }
+  el.prepend(box);
 }
 
 function hideEnd() {
@@ -1080,18 +1096,36 @@ const showVer = () => { $('menuVer').textContent = DEMO ? t('{0} · демо', _
 showVer();
 onLang(showVer);
 document.body.classList.toggle('demo', DEMO);
+document.body.classList.toggle('desktop', !!desktop);
+// the desktop app lets sound play from the start (electron/main.cjs): the menu's music doesn't wait for a first click
+if (desktop) sound.unlock();
 
 /** A campaign to go on with: the one on screen, or after the game was closed (or played online) the one this browser kept. */
 const unfinished = () => (mode === 'solo' ? !runOver : !!loadCampaign());
 
-function openMenu() {
+/** The main menu; `play` opens it on «Играть»'s list (the campaign, the run to go on with and the online game), where
+ *  their screens' «Назад» comes back to. */
+function openMenu(play = false) {
   $('mContinue').hidden = !unfinished();
+  playList(play);
   show('menu');
 }
+/** «Играть» swaps the menu's buttons for its own list in the same place, the hall and the logo staying as they are. */
+function playList(on: boolean) {
+  const menu = $('menu'), was = menu.classList.contains('play'), keys = menu.contains(document.activeElement);
+  menu.classList.toggle('play', on);
+  $('menuMain').inert = on;
+  $('menuPlay').inert = !on;
+  // the keys go on from the list on screen
+  if (on !== was && keys) (on ? $('menuPlay').querySelector<HTMLElement>('button:not([hidden])') : $('mPlay'))?.focus();
+}
+$('mPlay').addEventListener('click', () => { $('mContinue').hidden = !unfinished(); playList(true); });
+$('mPlayBack').addEventListener('click', () => playList(false));
+window.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('menu').hidden && $('menu').classList.contains('play')) playList(false); });
 
 $('mContinue').addEventListener('click', () => (mode === 'solo' ? show(null) : resumeCampaign()));
 $('mCampaign').addEventListener('click', openHeroSelect);
-$('heroBack').addEventListener('click', openMenu);
+$('heroBack').addEventListener('click', () => openMenu(true));
 $('heroGo').addEventListener('click', () => {
   if (settings.party.length !== settings.size) return;
   // the run under way would be gone
@@ -1100,9 +1134,9 @@ $('heroGo').addEventListener('click', () => {
   else startCampaign(settings.party);
 });
 $('mOnline').addEventListener('click', () => { shelveCampaign(); $<HTMLInputElement>('lobbyName').value = settings.name; resetLobby(); show('lobby'); });
-$('mCollection').addEventListener('click', () => { renderCollection('heroes'); show('collection'); });
+$('mCollection').addEventListener('click', () => { renderCollection(); show('collection'); });
 $('mStats').addEventListener('click', () => { flushStats(); renderStats(); show('statsScreen'); });
-$('statsBack').addEventListener('click', openMenu);
+$('statsBack').addEventListener('click', () => openMenu());
 /** The settings open from the main menu or from the pause menu in a game, and «Назад» goes back where they came from. */
 let settingsFrom: 'menu' | 'pause' = 'menu';
 function openSettings(from: typeof settingsFrom) {
@@ -1134,8 +1168,9 @@ tutor.where = () => {
 };
 tutor.me = meHero;
 $('mSettings').addEventListener('click', () => openSettings('menu'));
-document.querySelectorAll<HTMLButtonElement>('#collection .tab').forEach(b => b.addEventListener('click', () => renderCollection(b.dataset.tab as 'heroes' | 'mobs' | 'arts' | 'events' | 'trinkets')));
-$('colBack').addEventListener('click', openMenu);
+document.querySelectorAll<HTMLButtonElement>('#collection .tab').forEach(b => b.addEventListener('click', () => renderCollection(b.dataset.tab as ColTab)));
+bindCollection();
+$('colBack').addEventListener('click', () => openMenu());
 $('setBack').addEventListener('click', () => (settingsFrom === 'pause' ? show('pause') : openMenu()));
 const syncSettings = bindSettings(() => { applyQuality(); sizeCanvas(); });
 
@@ -1168,6 +1203,7 @@ function leaveOnline() {
   if (game.forge) { game.forge = 0; game.whet = false; hud.refresh(); }
   if (mode === 'host') net.broadcast({ t: 'bye' });
   if (net.active) net.close();
+  steamWay?.leave();
   clearSeat();
   players = [];
   leftAt.clear();
@@ -1260,7 +1296,7 @@ function backToLobby() {
   show('lobby');
 }
 
-$('lobbyBack').addEventListener('click', () => { leaveOnline(); resetLobby(); openMenu(); });
+$('lobbyBack').addEventListener('click', () => { leaveOnline(); resetLobby(); openMenu(true); });
 $('lobbyName').addEventListener('input', () => { settings.name = $<HTMLInputElement>('lobbyName').value.trim(); saveSettings(); });
 $('lobbyHost').addEventListener('click', async () => {
   // a room of one's own: a seat still being tried after a reload is given up
@@ -1284,9 +1320,24 @@ $('lobbyHost').addEventListener('click', async () => {
 });
 $('lobbyJoin').addEventListener('click', () => join($<HTMLInputElement>('lobbyCode').value.trim()));
 $('lobbyCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('lobbyJoin').click(); });
-$('lobbyCopy').addEventListener('click', () => {
+// the room's code in the title: a click copies it, and it lights up for a moment
+$('lobbyRoomCode').addEventListener('click', () => {
+  const code = net.code, el = $('lobbyRoomCode');
+  navigator.clipboard?.writeText(code).then(() => {
+    lobbyStatus('Код скопирован.');
+    el.classList.add('copied');
+    setTimeout(() => el.classList.remove('copied'), 700);
+  }, () => lobbyStatus(code));
+});
+// friends come by Steam's invite in the desktop build and by the room's link in the browser; anyone else by the code
+$('lobbyInvite').hidden = !!desktop && !desktop.steam;
+$('lobbyInvite').addEventListener('click', async () => {
+  if (steamWay) {
+    if ((await steamWay.invite()) === 'friends') lobbyStatus('Открыл список друзей Steam: нажми на друга правой кнопкой и пригласи в игру.');
+    return;
+  }
   const url = `${location.origin}${location.pathname}${location.search}#${net.code}`;
-  navigator.clipboard?.writeText(url).then(() => lobbyStatus('Ссылка скопирована.'), () => lobbyStatus(url));
+  navigator.clipboard?.writeText(url).then(() => lobbyStatus('Ссылка на комнату скопирована: отправь её друзьям.'), () => lobbyStatus(url));
 });
 $('lobbyStartBtn').addEventListener('click', () => {
   if (!startable(players)) return;
@@ -1791,18 +1842,6 @@ function pulse(t: number) {
   }
 }
 
-/**
- * The disco ball over the main menu's name swings on its chain, 6° and back every 4 s, turned from here with the other
- * pulses at most 20 times a second (see style.css); with the motion turned off in the system it hangs still.
- */
-const logo = document.querySelector<HTMLElement>('.logo-art')!, LOGO_SWING = 6, LOGO_PERIOD = 4;
-let swungAt = -Infinity;
-function swing(t: number) {
-  if (stillMotion || $('menu').hidden || Math.abs(t - swungAt) < IDLE_GAP / 1000) return;
-  swungAt = t;
-  logo.style.transform = `rotate(${(LOGO_SWING * (0.5 - 0.5 * Math.cos((2 * Math.PI * t) / LOGO_PERIOD))).toFixed(2)}deg)`;
-}
-
 function applyQuality() {
   dprCap = settings.quality === 'low' ? 1 : 2;
 }
@@ -1838,7 +1877,7 @@ function frame(now: number) {
   keepSeat(now);
   keepRun(now);
   countStats(now, raw);
-  swing(T);
+  menuFx(now);
   const camKey = `${cam.panX},${cam.panY},${cam.zoom},${cam.rot}`;
   const changed = stale || camKey !== drawnCam || game.S !== drawnRoom || busy();
   const covered = document.querySelector('.overlay:not([hidden])') !== null;
@@ -1871,8 +1910,9 @@ resize();
 game.loadRoom({ seed: Math.floor(Math.random() * 1e6), depth: 1, floor: 0, type: 'fight' });
 controls.fit();
 window.addEventListener('resize', resize);
-// closing the tab tells the others right away instead of after the heartbeat timeout
-window.addEventListener('pagehide', () => { keepRun(performance.now(), true); flushStats(); if (net.active) net.close(); });
+/** The page is going: what is under way is kept, and the others hear right away instead of after the heartbeat timeout. */
+const goodbye = () => { keepRun(performance.now(), true); flushStats(); if (net.active) net.close(); };
+window.addEventListener('pagehide', goodbye);
 // a phone may kill a page in the background without a pagehide
 document.addEventListener('visibilitychange', () => { if (document.hidden) { keepRun(performance.now(), true); flushStats(); } });
 
@@ -1888,6 +1928,26 @@ let loaded = false;
 // the language: the one picked before, or for a new player the browser's until they pick one on the loading screen; its
 // table comes in beside the pictures
 let langIn = setLang(isLang(settings.lang) ? settings.lang : detectLang());
+
+/**
+ * The game's name on the loading screen and in the main menu is a picture (art/logo in the README): «Диско-подполье» in
+ * Russian, Disco Underground in every other language. Put in at once in the language being fetched, so a Russian player
+ * never sees the English one first, and again on each change of language.
+ */
+// i18n-skip: each name as its picture spells it, not a line to translate
+const LOGOS = { en: { w: 1080, h: 807, alt: 'Disco Underground' }, ru: { w: 1080, h: 692, alt: 'Диско-подполье' } };
+function showLogo(code: Lang) {
+  const k = code === 'ru' ? 'ru' : 'en', l = LOGOS[k], src = assetUrl(`ui/logo_${k}.webp`);
+  for (const img of document.querySelectorAll<HTMLImageElement>('img.logo-pic')) {
+    if (img.getAttribute('src') === src) continue;
+    img.width = l.w;
+    img.height = l.h;
+    img.alt = l.alt;
+    img.src = src;
+  }
+}
+showLogo(isLang(settings.lang) ? settings.lang : detectLang());
+onLang(() => showLogo(lang()));
 
 /** The languages on the loading screen, each by its own name, the one on (or just tapped) lit. */
 function bootLangs(on: Lang = lang()) {
@@ -1921,11 +1981,11 @@ const gagTimer = setInterval(() => {
 
 /**
  * Once everything is in, the game goes on in the language picked. On the first start it waits for the pick: the bar and the
- * gags make way for the languages alone.
+ * gags make way for the languages alone. Steam's language for the game counts as picked (in Steam's properties of it).
  */
 function go() {
   if (!loaded) return;
-  if (!isLang(settings.lang)) { $('boot').classList.add('langs-only'); return; }
+  if (!isLang(settings.lang) && !isLang(desktop?.lang)) { $('boot').classList.add('langs-only'); return; }
   langIn.then(start);
 }
 
@@ -1943,14 +2003,43 @@ onLang(() => {
   dirty = true;
 });
 
+/** The room of a friend's Steam invite taken before the menu came up: Steam started the game for it, or it came while loading. */
+let invited = steamWay && desktop?.steam?.launch ? steamWay.code(desktop.steam.launch) : '';
+
+/**
+ * A friend's Steam invite taken, or «Join game» on a friend, while the game is running: their room is joined from wherever
+ * the player is. A campaign waits behind as from the menu's «Сетевая игра»; another room is left once the player says so.
+ */
+function takeInvite(code: string) {
+  if (!booted) { invited = code; return; }
+  if (net.active && net.code === code) return;
+  if (mode === 'solo') shelveCampaign();
+  else if (net.active) {
+    if (!confirm(t('Выйти из сетевой игры?'))) return;
+    leaveOnline();
+    showMap(false);
+    hideEnd();
+  }
+  $<HTMLInputElement>('lobbyName').value = settings.name;
+  $<HTMLInputElement>('lobbyCode').value = code;
+  resetLobby();
+  show('lobby');
+  join(code);
+}
+desktop?.steam?.onInvite(lobby => steamWay && takeInvite(steamWay.code(lobby)));
+
+// the desktop build's way out: what is under way is kept first, as when a tab is closed
+$('mQuit').addEventListener('click', () => { goodbye(); desktop?.quit(); });
+
 /** Leaves the loading screen for the menu, or for the lobby of a shared link or a room this browser dropped out of. */
 function start() {
   if (booted) return;
   booted = true;
   $('boot').hidden = true;
   clearInterval(gagTimer);
-  // a shared link (…#CODE) opens straight into that room's lobby; a room this browser dropped out of is rejoined
-  const linkCode = location.hash.slice(1).toUpperCase(), seat = loadSeat();
+  // a shared link (…#CODE) or a friend's Steam invite opens straight into that room's lobby; a room this browser dropped
+  // out of is rejoined
+  const linkCode = (invited || location.hash.slice(1)).toUpperCase(), seat = loadSeat();
   if (linkCode) history.replaceState(null, '', location.pathname + location.search);
   if (seat && (!linkCode || linkCode === seat.code)) {
     myKey = seat.key;
@@ -1961,7 +2050,7 @@ function start() {
       show('lobby');
       join(seat.code, seat.key);
     }
-  } else if (/^[A-Z0-9]{4,6}$/.test(linkCode)) {
+  } else if (/^[A-Z0-9]{4,13}$/.test(linkCode)) {
     $<HTMLInputElement>('lobbyCode').value = linkCode;
     resetLobby();
     show('lobby');
@@ -1979,9 +2068,11 @@ loadAll(part => {
   hud.refresh();
   stale = true;
   loaded = true;
+  initCursor();
   go();
   // the offline cache, filled once the game has what it needs, so the two don't share the first download
-  if (import.meta.env.PROD && 'serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+  // (the desktop build has every file on the disk already)
+  if (import.meta.env.PROD && 'serviceWorker' in navigator && !desktop) navigator.serviceWorker.register('./sw.js').catch(() => {});
 });
 $('waitLeave').addEventListener('click', () => { leaveOnline(); hideEnd(); showMap(false); openMenu(); });
 requestAnimationFrame(frame);

@@ -11,6 +11,7 @@ import { artIcon } from './icons';
 import { faceUrl } from './ui';
 import { UPS } from './data';
 import { t } from './i18n';
+import { tipAttrs } from './tip';
 import {
   BOTTLE, SELL, choicesOf, doneOf, eventDef, fxParts, needOf, reelsOf, riddleOf, sceneOf, shuffleOf, shutWhy, stageOf,
   type Choice, type EventState, type Fx, type Reel, type Table,
@@ -127,14 +128,14 @@ export class EventView {
       : c.then === 'cups' ? `<span class="ev-fx">${line([{ k: 'note', t: 'Угадаешь:', good: true }, ...c.win.fx], solo, c.pay)}</span>`
       : c.odds ? `<span class="ev-fx"><i class="odds">${pct(c.odds)}</i>${line(c.win.fx, solo, c.pay)}</span><span class="ev-fx"><i class="odds">${pct(1 - c.odds)}</i>${line(c.lose!.fx, solo, c.pay)}</span>`
       : `<span class="ev-fx">${line(c.win.fx, solo, c.pay, c.one ? one : undefined)}</span>`;
-    const who = (votes?.faces[k] ?? []).map(p => `<img src="${p.face}" alt="" title="${p.name}" style="--c:${p.col}"${p.me ? ' class="me"' : ''}>`).join('');
+    const who = (votes?.faces[k] ?? []).map(p => `<img src="${p.face}" alt=""${tipAttrs({ h: p.name })} style="--c:${p.col}"${p.me ? ' class="me"' : ''}>`).join('');
     return `<button class="ev-opt${votes?.mine === k ? ' mine' : ''}" data-opt="${k}"${why ? ' disabled' : ''}>`
       + `<b>${t(c.label)}${need && !why ? `<i class="ev-need">${need}</i>` : ''}</b>${fx}${why ? `<small>${why}</small>` : ''}${who ? `<span class="ev-who">${who}</span>` : ''}</button>`;
   }
 
   /** A hero who could lie down on the tattooist's couch: face, name and where it stands on what the tattoo gives. */
   private heroOpt(h: HeroState, c: Choice, votes?: EventVotes) {
-    const who = (votes?.faces[h.i] ?? []).map(p => `<img src="${p.face}" alt="" title="${p.name}" style="--c:${p.col}"${p.me ? ' class="me"' : ''}>`).join('');
+    const who = (votes?.faces[h.i] ?? []).map(p => `<img src="${p.face}" alt=""${tipAttrs({ h: p.name })} style="--c:${p.col}"${p.me ? ' class="me"' : ''}>`).join('');
     return `<button class="ev-opt ev-hero${votes?.mine === h.i ? ' mine' : ''}" data-opt="${h.i}" style="--c:${h.def.col}">`
       + `<img class="ev-face" src="${faceUrl(h)}" alt=""><b>${t(h.def.name)}</b><span class="ev-fx"><em class="none">${heroNow(h, c)}</em></span>`
       + (who ? `<span class="ev-who">${who}</span>` : '') + '</button>';
@@ -147,7 +148,7 @@ export class EventView {
       : `<p class="camp-ask${solo ? '' : ' camp-for'}" style="--c:${me.def.col}">${solo ? '' : `<img src="${faceUrl(me)}" alt="">`}${solo ? t('Что сдаёшь?') : t('Что сдаёт {0}?', me.def.name)}</p>`;
     const opts = mine.map((k, i) => {
       const a = artDef(k);
-      return `<button class="ev-opt loot-opt${picked === k ? ' mine' : ''}" data-opt="${i}" title="${t(a.gag)}"><i class="loot-ico" aria-hidden="true">${artIcon(k)}</i>`
+      return `<button class="ev-opt loot-opt${picked === k ? ' mine' : ''}" data-opt="${i}"${tipAttrs({ p: t(a.gag) })}><i class="loot-ico" aria-hidden="true">${artIcon(k)}</i>`
         + `<b>${t(a.name)}</b><span class="ev-fx"><em class="good">${t('+{0} руды', SELL)}</em><em class="bad">${t('Пропадёт: {0}', a.txt)}</em></span></button>`;
     }).join('');
     const others = tb.party.filter(h => h !== me && h.arts?.length).map(h => {
@@ -197,7 +198,7 @@ export class EventView {
     const box = $('evPlay'), k = ev.done?.slice, bottle = uiArt.get('ev_bottle');
     const slices = BOTTLE.map((s, i) => {
       const img = uiArt.get(SLICE_PIC[i]);
-      return `<div class="ev-slice s${i}${k === i ? ' hit' : ''}" title="${t(s.name)}">${img ? `<img src="${img.src}" alt="" draggable="false">` : ''}<span>${t(s.name)}</span></div>`;
+      return `<div class="ev-slice s${i}${k === i ? ' hit' : ''}"${tipAttrs({ h: t(s.name) })}>${img ? `<img src="${img.src}" alt="" draggable="false">` : ''}<span>${t(s.name)}</span></div>`;
     }).join('');
     const turn = k === undefined ? 0 : 1440 + k * 90;
     // before the spin, what each of the four does, by the wheel
@@ -259,7 +260,7 @@ export class EventView {
     for (const b of document.querySelectorAll<HTMLElement>('#evPlay .ev-cup')) {
       const k = Number(b.dataset.cup), who = b.querySelector('.ev-who')!;
       b.classList.toggle('mine', votes?.mine === k);
-      who.innerHTML = (votes?.faces[k] ?? []).map(p => `<img src="${p.face}" alt="" title="${p.name}" style="--c:${p.col}"${p.me ? ' class="me"' : ''}>`).join('');
+      who.innerHTML = (votes?.faces[k] ?? []).map(p => `<img src="${p.face}" alt=""${tipAttrs({ h: p.name })} style="--c:${p.col}"${p.me ? ' class="me"' : ''}>`).join('');
     }
   }
 

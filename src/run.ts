@@ -1,7 +1,7 @@
 // Run structure: 3 floors (the demo's one), each a layered branching map of rooms; a path takes 8 rooms ending at the boss.
 
 import { ROOM_TYPES, type RoomType } from './data';
-import { DEMO } from './demo';
+import { DEMO, DEMO_FLOORS } from './demo';
 import { makeRng } from './rng';
 import type { Shot, StartPhoto } from './album';
 
@@ -24,7 +24,7 @@ export interface Run {
   shots?: (Shot | null)[];
 }
 
-export const FLOORS = DEMO ? 1 : 3;
+export const FLOORS = DEMO ? DEMO_FLOORS : 3;
 /** Rows of a floor: the entrance fight, five rows of choices, the rest row and the boss. */
 export const LAYERS = 8;
 /** The row before the boss: a camp and a blacksmith's, and a route comes to one of them only, so the party picks it on the way there. */
@@ -38,6 +38,8 @@ export const FORGE_ROWS = [2, 3, 4];
 export const FIGHTS: [number, number] = [4, 5];
 /** Most elites on one route, and fewest on a floor. */
 export const ELITES = { path: 2, floor: 2 };
+/** The demo's first event of a run gives a trophy (src/demo.ts): every entrance keeps a route to an event by this row. */
+export const DEMO_EVENT_ROW = 2;
 
 /** Rooms that are not fights: never the same one twice in a row on a route. */
 const SPECIAL: RoomType[] = ['elite', 'camp', 'forge', 'event', 'treasure'];
@@ -65,6 +67,7 @@ export function floorOk(layers: MapNode[][]): boolean {
   if (!layers[REST_ROW - 1].every(n => n.next.length === 1)) return false;
   const all = routes(layers);
   if (!layers[0].every(e => all.some(p => p[0] === e && p.some(n => n.type === 'forge' && n.l < REST_ROW)))) return false;
+  if (DEMO && !layers[0].every(e => all.some(p => p[0] === e && p.some(n => n.type === 'event' && n.l <= DEMO_EVENT_ROW)))) return false;
   return all.every(p => {
     const k = p.filter(n => isFight(n.type)).length;
     return k >= FIGHTS[0] && k <= FIGHTS[1] && p.filter(n => n.type === 'elite').length <= ELITES.path;

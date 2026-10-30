@@ -5,7 +5,6 @@ import type { Bet, Floor } from './events';
 import { BIOMES, MOB_HP_MUL, MOBS, NODES, TILE, isRanged, mobSize, toughOf, type Biome, type MobKind, type NodeKind, type RoomType } from './data';
 import { VOL, VOL_BOSS_HP, loud } from './volume';
 import { makeRng, mulberry32 } from './rng';
-import { DEMO, DEMO_BOSS } from './demo';
 import { LAYERS } from './run';
 import { TRINKET_CHANCE, trinketsOf } from './trinkets';
 
@@ -185,6 +184,8 @@ export interface Mob {
   hop: number;
   /** The stretch of route walked this enemy turn, from (fx, fy) to (tx, ty). */
   walk?: { x: number; y: number }[];
+  /** The heroes (by hero index) the rolling ball has run over so far this roll: each hurt as the ball reached them, once. */
+  crushed?: number[];
   /** Index in the room's mob list of the mob that summoned this one, or -1. */
   owner: number;
   /** Counts down from 1 while a summoned mob rises out of its circle. */
@@ -624,8 +625,7 @@ export const castOf = (f: number) => CASTS[Math.min(f, CASTS.length - 1)];
  * map before it all meet the same one, and the next run may bring another.
  */
 export const bossOf = (spec: Pick<RoomSpec, 'seed' | 'floor' | 'boss'>) => {
-  // the demo has the king alone
-  const list = DEMO ? [DEMO_BOSS] : castOf(spec.floor).bosses;
+  const list = castOf(spec.floor).bosses;
   return spec.boss ?? list[makeRng(spec.seed * 13 + spec.floor * 7 + 991).int(0, list.length - 1)];
 };
 

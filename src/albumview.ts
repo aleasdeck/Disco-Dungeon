@@ -7,15 +7,15 @@ import { eventArt, uiArt } from './assets';
 import { eventDef } from './events';
 import { artDef } from './artifacts';
 import { artIcon } from './icons';
-import { faceUrl, standIcon } from './ui';
+import { faceUrl, shadowUrl, standIcon } from './ui';
 import { standDef } from './stands';
 import { FLOORS, LAYERS } from './run';
 import { drawAfter, drawShot, drawStart, type Album } from './album';
 import { saveCanvas } from './photo';
 import type { Tally } from './game';
 import { escapeHtml, starRow } from './menu';
-import { DEMO } from './demo';
-import { nextOf, opening, starsOf, type Gains } from './progress';
+import { DEMO, DEMO_BUILD, FEEDBACK_URL, STORE_URL } from './demo';
+import { demoLocked, nextOf, opening, starsOf, type Gains } from './progress';
 import { VOL_RULES } from './volume';
 import { volToken } from './volview';
 import { langTag, t } from './i18n';
@@ -33,11 +33,19 @@ const WON: Record<string, string> = {
   discoball: 'Диско-шар разбит. Семь лет без удачи, зато какая была вечеринка.',
   dragon: 'Дымыч докурил своё. Яйца сдали в зоопарк, диско продолжается.',
 };
+/** A line under the demo's victory, by the boss beaten. */
+const DEMO_WON: Record<string, string> = {
+  king: 'Король остался без короны, казематы ваши. Дальше подземелье ждёт в полной версии.',
+  ratswarm: 'Свора разбежалась по щелям, казематы ваши. Дальше подземелье ждёт в полной версии.',
+  pahan: 'Пахан сдал общак, казематы ваши. Дальше подземелье ждёт в полной версии.',
+};
 /** A line under the defeat, by the floor it came on. */
 const LOST = [
   'Казематы оставили вас себе. Кости срастутся, приходите ещё.',
-  'Склеп сохранит вас свежими. Кости срастутся, приходите ещё.',
-  'Кузня переплавит вас на диски. Кости срастутся, приходите ещё.',
+  ...(DEMO_BUILD ? [] : [
+    'Склеп сохранит вас свежими. Кости срастутся, приходите ещё.',
+    'Кузня переплавит вас на диски. Кости срастутся, приходите ещё.',
+  ]),
 ];
 
 const clock = (s: number) => {
@@ -58,9 +66,12 @@ function paint(draw: (cv: HTMLCanvasElement) => void, cap: string, big: boolean)
 
 /**
  * A line with prints pegged on it, sagging in the middle: each print hangs from its peg a little lower towards the
- * middle and turned a little, and comes in after the one before it. `widths` are the prints' widths in % of the line.
+ * middle and turned a little, and comes in after the one before it. `widths` are the prints' widths in % of the line,
+ * `caps` in px; where the screen is too low for them, the biggest print is cut to the width `--fit` gives (style.css,
+ * .re-ropes) and the others in step with it.
  */
 function line(ps: Print[], widths: number[], caps: number[], sag: number, from: number) {
+  const top = Math.max(...caps);
   const el = document.createElement('div');
   el.className = 're-line';
   el.innerHTML = `<svg class="re-rope" viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true"><path d="M0 1 Q50 ${1 + sag / 4} 100 1"/></svg>`;
@@ -69,7 +80,7 @@ function line(ps: Print[], widths: number[], caps: number[], sag: number, from: 
   ps.forEach((p, k) => {
     const t = (k + 0.5) / ps.length, f = document.createElement('figure');
     f.className = 'pol';
-    f.style.cssText = `--i:${from + k};--r:${((k * 7 + from * 3) % 5) - 2}deg;--dy:${(sag * 4 * t * (1 - t)).toFixed(1)}px;width:min(${widths[k]}%, ${caps[k]}px)`;
+    f.style.cssText = `--i:${from + k};--r:${((k * 7 + from * 3) % 5) - 2}deg;--dy:${(sag * 4 * t * (1 - t)).toFixed(1)}px;width:min(${widths[k]}%, ${caps[k]}px, calc(var(--fit, 9999px) * ${(caps[k] / top).toFixed(3)}))`;
     f.innerHTML = `<span class="peg" aria-hidden="true"></span><img alt="" src="${p.url}"><figcaption>${p.cap}</figcaption>`;
     f.addEventListener('click', () => zoom(p));
     row.append(f);
@@ -140,7 +151,7 @@ export function showAlbum(a: Album, o: { gains?: Gains | null; button: string | 
   $('reTitle').textContent = t(a.win ? (solo ? (solo.fem ? 'Ты победила!' : 'Ты победил!') : 'Вы победили!')
     : solo ? (solo.fem ? 'Героиня пала' : 'Герой пал') : 'Отряд пал');
   $('reTitle').classList.toggle('lose', !a.win);
-  $('reGag').textContent = a.win ? t(DEMO ? 'Король остался без короны, казематы ваши. Дальше подземелье ждёт в полной версии.' : WON[lastBoss ?? ''] ?? 'Все три этажа позади. Диско продолжается.')
+  $('reGag').textContent = a.win ? t((DEMO ? DEMO_WON : WON)[lastBoss ?? ''] ?? (DEMO ? DEMO_WON.king : 'Все три этажа позади. Диско продолжается.'))
     : killer ? t('{0} {1?оставила|оставил} вас себе. Кости срастутся, приходите ещё.', killer.name, killer.fem) : t(LOST[a.floor] ?? LOST[0]);
   // the prints: ДО, the bosses beaten floor by floor, ПОСЛЕ
   prints = [
@@ -154,13 +165,17 @@ export function showAlbum(a: Album, o: { gains?: Gains | null; button: string | 
   const wide = document.createElement('div');
   wide.className = 're-wide';
   const weight = prints.map(p => (p.big ? 1.3 : 1)), sum = weight.reduce((s, v) => s + v, 0), room = 96 - 2 * (prints.length - 1);
-  wide.append(line(prints, weight.map(v => (v / sum) * room), prints.map(p => (p.big ? 300 : 230)), 26, 0));
+  const widths = weight.map(v => (v / sum) * room), caps = prints.map(p => (p.big ? 300 : 230));
+  wide.append(line(prints, widths, caps, 26, 0));
+  // the biggest print's width at full size, which the line's height at full size follows (style.css, .re-ropes)
+  ropes.style.setProperty('--nat', `min(${Math.max(...widths).toFixed(2)}cqw, ${Math.max(...caps)}px)`);
   const tall = document.createElement('div');
   tall.className = 're-tall';
   tall.append(line(ends, [46, 46], [260, 260], 14, 0));
   if (bosses.length) tall.append(line(bosses, bosses.map(() => 30), bosses.map(() => 180), 12, 2));
   ropes.append(wide, tall);
   showGains(o.gains ?? null);
+  if (DEMO) showFull();
   // the run in numbers: the party's sums, the best blow and who dealt it
   const sumOf = (k: keyof Tally) => party.reduce((s, h) => s + h.t[k], 0);
   const best = (k: keyof Tally) => party.reduce((p, h) => (h.t[k] > p.t[k] ? h : p));
@@ -211,7 +226,7 @@ export function showAlbum(a: Album, o: { gains?: Gains | null; button: string | 
 function showGains(g: Gains | null) {
   const box = $('reGains'), got = g ? g.heroes.filter(k => g.got[k] > 0) : [];
   const stands = Object.entries(g?.stands ?? {});
-  box.hidden = !g || !(got.length || g.events.length || g.arts.length || g.vol || stands.length);
+  box.hidden = !g || !(got.length || g.opened.length || g.events.length || g.arts.length || g.vol || stands.length);
   if (!g || box.hidden) return;
   const at = (k: string) => HEROES.findIndex(h => h.key === k);
   const face = (i: number) => `<img alt="" src="${faceUrl({ i, def: HEROES[i] })}">`;
@@ -234,6 +249,19 @@ function showGains(g: Gains | null) {
       const def = HEROES[at(k)];
       return `<div class="re-gain re-new re-thing re-stand" style="--c:${def.col}"><img alt="" src="${standIcon(mat, def.col)}"><div><em>${t('Новая подставка')}</em><b>${t('{0}: {1}', def.name, standDef(mat).name)}</b></div></div>`;
     }).join('');
+}
+
+/**
+ * The demo's end of a run, won or lost: the full game's heroes as dark shapes and what else it holds, and the way to the
+ * game's Steam page and to the feedback form, once they are up.
+ */
+function showFull() {
+  $('reFullFaces').innerHTML = HEROES.map((def, i) => (demoLocked(def.key) ? `<img alt="" src="${shadowUrl({ i, def })}">` : '')).join('');
+  const wish = $('reWish'), say = $('reFeedback');
+  wish.hidden = !STORE_URL;
+  say.hidden = !FEEDBACK_URL;
+  wish.onclick = () => window.open(STORE_URL, '_blank', 'noopener');
+  say.onclick = () => window.open(FEEDBACK_URL, '_blank', 'noopener');
 }
 
 export function hideAlbum() {

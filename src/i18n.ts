@@ -36,8 +36,14 @@ export const PLURAL: Record<Lang, string[]> = {
 
 export const isLang = (s: unknown): s is Lang => LANGS.some(l => l.code === s);
 
-/** The language a new player most likely reads, from the browser's: Russian for the neighbours who read it, else English. */
+/**
+ * The language a new player most likely reads: Steam's for the game, or the browser's, Russian for the neighbours who
+ * read it, else English.
+ */
 export function detectLang(): Lang {
+  // the desktop build for Steam: the language the player picked for the game in Steam (electron/steam.cjs)
+  const steam = (globalThis as { desktop?: { lang: string | null } }).desktop?.lang;
+  if (isLang(steam)) return steam;
   const all = typeof navigator === 'undefined' ? [] : navigator.languages?.length ? navigator.languages : [navigator.language];
   for (const l of all) {
     const s = (l ?? '').toLowerCase(), c = s.slice(0, 2);
@@ -171,7 +177,7 @@ export function Mjoin(...parts: string[]): string {
 /** A piece of index.html in Russian: a text, an attribute, or a paragraph with its markup (`data-t`). */
 interface Spot { el: Element | Text; attr?: string; html?: boolean; src: string; lead: string; trail: string; shown: string }
 const spots: Spot[] = [];
-const ATTRS = ['title', 'aria-label', 'placeholder', 'alt'];
+const ATTRS = ['title', 'aria-label', 'placeholder', 'alt', 'data-tip', 'data-tip-h', 'data-tip-f'];
 const CYR = /[А-Яа-яЁё]/;
 
 /** How a Russian piece of the page is keyed: its text with the spaces between words made single. */

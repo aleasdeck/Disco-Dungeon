@@ -27,8 +27,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1 # the web build has no use for Electron (desktop.yml packs it)
       - run: npm test
       - run: npm run build
+      - run: npm run build:demo # the demo for Steam: fails on anything of the full game left in it
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name != 'pull_request'
         with:

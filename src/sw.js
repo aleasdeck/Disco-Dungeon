@@ -5,8 +5,6 @@
 /* global FILES */
 
 const CACHE = 'dd-files';
-/** Google Fonts: the stylesheet and the font files it points to, kept as they come. */
-const FONTS = 'dd-fonts';
 /** Header the cached copy carries its content hash in, so an unchanged file isn't downloaded again. */
 const REV = 'x-dd-rev';
 /** How long the page waits for the network before it opens from the cache. */
@@ -53,7 +51,8 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil((async () => {
-    for (const name of await caches.keys()) if (name.startsWith('dd-') && name !== CACHE && name !== FONTS) await caches.delete(name);
+    // the other caches of older versions go, the Google Fonts one too: the fonts are the game's own files now
+    for (const name of await caches.keys()) if (name.startsWith('dd-') && name !== CACHE) await caches.delete(name);
     const cache = await caches.open(CACHE);
     for (const req of await cache.keys()) if (!wanted.has(req.url)) await cache.delete(req);
     await self.clients.claim();
@@ -63,10 +62,9 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
-  const { origin, hostname } = new URL(req.url);
+  const { origin } = new URL(req.url);
   if (req.mode === 'navigate') e.respondWith(page(req));
   else if (origin === self.location.origin) e.respondWith(caches.open(CACHE).then(c => c.match(req)).then(hit => hit ?? fetch(req)));
-  else if (hostname === 'fonts.googleapis.com' || hostname === 'fonts.gstatic.com') e.respondWith(font(e, hostname === 'fonts.gstatic.com'));
 });
 
 /**
@@ -81,15 +79,3 @@ async function page(req) {
   return (await (await caches.open(CACHE)).match(scope)) ?? net;
 }
 
-/** Font files never change at their address; the stylesheet is served from the cache and refreshed behind it. */
-async function font(e, immutable) {
-  const req = e.request, cache = await caches.open(FONTS), hit = await cache.match(req);
-  if (hit && immutable) return hit;
-  const net = fetch(req).then(async res => {
-    if (res.ok || res.type === 'opaque') await cache.put(req, res.clone());
-    return res;
-  });
-  if (!hit) return net;
-  e.waitUntil(net.catch(() => {}));
-  return hit;
-}

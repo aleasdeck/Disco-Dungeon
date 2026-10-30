@@ -4813,6 +4813,21 @@ describe("the floors' other bosses", () => {
     expect(m.x).toBe(it.to!.x);
   });
 
+  it('the rolling ball hurts the hero the moment it reaches them, not at the end of its roll, and only once', () => {
+    const g = arena([['discoball2', 4, 3]]), [m] = g.S.mobs, [h] = g.party;
+    h.at = cellCentre(8, 3);
+    g.S.turn = 2;
+    g.pickIntents();
+    const it = m.intent!, hp = h.hp;
+    endAll(g);
+    for (let k = 0; k < 4000 && h.hp === hp; k++) g.update(1 / 60);
+    expect(h.hp).toBe(hp - it.dmg);
+    expect(m.x).toBeLessThan(it.to!.x);
+    for (let k = 0; k < 4000 && g.S.turn === 2; k++) g.update(1 / 60);
+    expect(m.x).toBe(it.to!.x);
+    expect(h.hp).toBe(hp - it.dmg);
+  });
+
   it('breaking a dragon egg sends the dragon after that hero twice as hard; eggs hatch one a third turn, and all at half its health', () => {
     const g = arena([['dragon', 4, 3], ['egg', 3, 3], ['egg', 7, 4]]), [d, e1, e2] = g.S.mobs;
     for (const e of [e1, e2]) { e.owner = 0; e.hold = 'imp'; }
