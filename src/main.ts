@@ -36,6 +36,7 @@ import { creditRun, demoLocked, dueEvents, locked, openEvents, openedBy, runGain
 import { STAND_MATS, type StandMat } from './stands';
 import { noteRoom } from './dossier';
 import { setOut } from './volume';
+import { deal } from './ore';
 import { bindCollection, renderCollection, type ColTab } from './collection';
 import { LANGS, M, Mjoin, detectLang, isLang, lang, onLang, scanDom, setLang, t, type Lang } from './i18n';
 import { initTips } from './tip';
@@ -316,7 +317,8 @@ function startRun(picks?: number[], vol = 0) {
   for (const h of game.party) h.stand = mode === 'host' ? players.find(p => p.hero === h.i)?.stand : standFor(h.def.key);
   const mine = myHeroes();
   if (mine.length) beginRun(run, mine.map(h => h.def.key), mode === 'host');
-  game.bank = newBank(vol);
+  // online every player keeps their own ore
+  game.bank = newBank(vol, mode === 'host');
   setOut(game.party, vol);
   game.pickActiveParty();
   hud.buildAllies();
@@ -452,7 +454,7 @@ function choose(id: string) {
   } else if (n.type === 'forge') {
     // the blacksmith's gives the party 0 to 3 ore; everyone upgrades their own discs and goes back to the map when done
     game.gift = forgeOre(run.seed + depth * 131);
-    game.bank.ore += game.gift;
+    deal(game.gift, game.party, game.bank);
     game.forge = depth;
     showMap(false);
     game.onChange();
@@ -981,7 +983,9 @@ game.onRoomEnd = win => {
     // an elite pays a stat level for every hero, taken in the sharpening window the result screen leads to
     const elite = S.spec.type === 'elite';
     if (elite) game.sharpen(S.spec.depth);
-    showEnd({ title: boss ? M('Этаж {0} пройден', run.floor) : cave ? (game.cleared() ? 'Пещера выбрана дочиста' : 'Ходы кончились') : elite ? 'Элита повержена' : 'Комната зачищена',
+    // the ore cave: picked clean, its ceiling came down on whoever stayed, or the heroes walked out with their ore
+    const caveEnd = game.S.nodes.every(n => n.left <= 0) ? 'Пещера выбрана дочиста' : game.caved ? 'Пещера обвалилась' : 'Ушли с рудой';
+    showEnd({ title: boss ? M('Этаж {0} пройден', run.floor) : cave ? caveEnd : elite ? 'Элита повержена' : 'Комната зачищена',
       // the bookie's bet comes after the ore
       text: cave ? Mjoin(M('Добыто руды: {0}.', game.mined), rooms)
         : Mjoin(M('Ходов: {0}.', S.turn), healed, rise, clean, game.betLine, elite ? 'Гном-кузнец бесплатно заточит каждому диск.' : '', rooms),
@@ -1510,6 +1514,8 @@ net.onMsg = (from, m) => {
   else if (m.t === 'start') {
     players = m.players;
     started = true;
+    // every player keeps their own ore from the start; the host's snapshots fill it in
+    game.bank = newBank(roomVol, true);
     setOnline('client');
     show(null);
     wait('');

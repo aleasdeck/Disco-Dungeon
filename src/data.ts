@@ -717,7 +717,7 @@ export type RoomType = 'fight' | 'elite' | 'treasure' | 'camp' | 'forge' | 'even
 export const ROOM_TYPES: Record<RoomType, { name: string; col: string; min: number; txt: string }> = {
   fight: { name: 'Бой', col: '#c2364f', min: 2, txt: 'Обычные мобы, рудная жила, кристалл искр и грибы.' },
   elite: { name: 'Элитный бой', col: '#7a1d33', min: 3, txt: 'Сильный враг со свитой и две рудные жилы.' },
-  treasure: { name: 'Рудная пещера', col: '#d39612', min: 1, txt: 'Без врагов: рудные жилы и грибы. Ходов 4 минус число героев.' },
+  treasure: { name: 'Рудная пещера', col: '#d39612', min: 1, txt: 'Без врагов, но потолок рушится. Уходите с рудой до 6-го хода.' },
   camp: { name: 'Костёр', col: '#e8642c', min: 0.5, txt: 'Каждый выбирает одно: отдых, перевязка товарища или руда.' },
   forge: { name: 'Кузнец', col: '#5d6488', min: 1, txt: M('Прокачка дисков за руду и 0–{0} руды в подарок.', FORGE_ORE) },
   event: { name: 'Событие', col: '#6b4fa8', min: 0.75, txt: 'Странная встреча и выбор: награда, риск или беда.' },

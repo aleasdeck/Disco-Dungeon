@@ -8,9 +8,11 @@ import { has, type ArtKey, type Kept } from './artifacts';
 import type { Sfx } from './audio/sfx';
 import { TRINKET_R } from './trinkets';
 import { BET_TURNS, FLOOR_FR, settleBet, type Bet, type Floor } from './events';
-import { CASTS, caveTurns, cellAt, cellCentre, clearLine, fireCells, generate, hazKey, ICICLE_HP, inPit, isFloor, mobDmg, muAt, newMob, partyScale, pitAt, standing, stops, volBlow, type Intent, type Layout, type Mob, type RoomSpec, type Zone } from './room';
+import { CASTS, cellAt, cellCentre, clearLine, fireCells, generate, hazKey, ICICLE_HP, inPit, isFloor, mobDmg, muAt, newMob, partyScale, pitAt, standing, stops, volBlow, type Intent, type Layout, type Mob, type RoomSpec, type Zone } from './room';
 import { VOL, loud } from './volume';
 import { M } from './i18n';
+import { chipIn, deal, give, oreOf, own, spend, take } from './ore';
+import { FALL, planFall, spill, type Fall } from './collapse';
 import type { StandMat } from './stands';
 
 export type Phase = 'place' | 'throw' | 'resolve' | 'enemy' | 'over';
@@ -62,10 +64,15 @@ export interface HeroState {
   tally?: Tally;
   /** Stat levels an elite owes the hero: the next one costs no ore (the sharpening window right after it, or the next blacksmith's). */
   free?: number;
+  /** Online: the hero's own ore (src/ore.ts), and how much of what the party won together it has been dealt this run. */
+  ore?: number;
+  got?: number;
   /** The cop's «Наручники»: the enemies (by index) his discs have hit this turn, the first two; the second hit cuffs them. */
   cuffing?: number[];
   /** Online: the boss's trophies kept for the hero while its player was away at the share-out, to pick one from once back. */
   kept?: Kept | null;
+  /** In the ore cave: the hero has walked out with its ore and waits at the way out for the others (src/collapse.ts). */
+  out?: boolean;
   /** What the hero's stand is made of: its player's pick of the ones their wins with it have earned (src/stands.ts); plain painted plastic when not given. */
   stand?: StandMat;
 }
@@ -243,6 +250,12 @@ export interface State extends Layout {
   log: { turn: number; txt: string }[];
   /** Some hero has lost health in this room: no ore «Без царапины» for it. */
   hurt?: boolean;
+  /** The ore cave's ceiling: where it comes down after this turn, and the rubble that fell last turn (src/collapse.ts). */
+  fall?: Fall | null;
+  /** Ore each hero (by `i`) has got in the ore cave, half of which it spills if buried there. */
+  took?: Record<number, number>;
+  /** Online: the heroes whose players want to walk out of the ore cave this turn; the party goes once everyone at the table does. */
+  vote?: number[];
   /** The dragon has belched the room full of smoke: it hangs there through the heroes' next turn, clear only round them. */
   smog?: boolean;
 }
@@ -252,6 +265,8 @@ export type Action =
   | { k: 'throw'; h: number; dx: number; dy: number }
   | { k: 'move'; h: number; pad: number }
   | { k: 'disc'; h: number }
+  | { k: 'chip'; h: number; to: number }
+  | { k: 'leave'; h: number }
   | { k: 'up'; h: number; stat: StatKey }
   | { k: 'ability'; h: number }
   | { k: 'ready'; h: number }
@@ -375,7 +390,8 @@ export function pointAt(w: Pt[], d: number): Pt {
 }
 
 /**
- * Ore belongs to the whole party: any hero's hit fills the pool, any hero spends from it, and it lasts the whole run.
+ * Ore belongs to the whole party alone: any hero's hit fills the pool, any hero spends from it, and it lasts the whole run.
+ * Online (`split`) every hero keeps its own instead, and the party's winnings are dealt out to them alike (src/ore.ts).
  * Sparks are each hero's own to spend (`HeroState.sparks`), though a crystal fills everyone's, and last the whole run; the
  * altar's gift tops every hero up to `boon` of them at the next fight (usually none). An event may also leave the next fight a `shield`
  * for every hero, `rage`: that much harder blows from its enemies, or a curse that room's spec carries: `smoke` over the
@@ -383,16 +399,16 @@ export function pointAt(w: Pt[], d: number): Pt {
  * which waits for a fight (the ore cave has nobody to fight).
  */
 export interface Bank {
-  ore: number; boon?: number; shield?: number; rage?: number; smoke?: boolean; strobe?: boolean;
+  ore: number; split?: boolean; boon?: number; shield?: number; rage?: number; smoke?: boolean; strobe?: boolean;
   /** The next fight's floor, its bet and one disc a turn more in it: they go with the room's spec too. */
   ground?: Floor; bet?: Bet; extra?: number;
   /** The run's «Громкость» step (src/volume.ts), for the whole run: every room's spec carries it, the blacksmith and the camp read it. */
   vol?: number;
 }
 
-/** The party's pool for a new run at «Громкость» step `vol`. */
-export function newBank(vol = 0): Bank {
-  return { ore: 0, boon: 0, vol };
+/** The party's pool for a new run at «Громкость» step `vol`; online (`split`) every hero keeps its own ore instead. */
+export function newBank(vol = 0, split = false): Bank {
+  return { ore: 0, boon: 0, vol, ...(split ? { split } : {}) };
 }
 
 /** A fresh party for the run with seed `run`; `picks` lists which heroes (by index into HEROES) take part, the first three by default. */
@@ -452,6 +468,8 @@ export class Game {
   clean = 0;
   /** Host: how the bookie's bet came out in this room, a line for the room's result; empty without one. */
   betLine = '';
+  /** The ore cave's whole ceiling came down on the heroes still inside (src/collapse.ts); host only, for the room's result. */
+  caved = false;
   /** Host: each hero's health as the floor's boss fell, before it gave half back: the run's album shows them beaten so. */
   wounds: { i: number; hp: number; max: number }[] | null = null;
   /** A blow in the warm-up room that would have laid the hero down left it standing: the hero says so (tutor.ts). */
@@ -490,6 +508,7 @@ export class Game {
     this.mined = 0;
     this.clean = 0;
     this.betLine = '';
+    this.caved = false;
     this.walked = { key: '', n: 0 };
     this.hopped.clear();
     this.passing = -1;
@@ -504,7 +523,7 @@ export class Game {
       if (h.hp > 0 && cup) this.pop(h, 'cup');
       Object.assign(h, {
         pad: null, at: null, from: null, leap: 0, hand: h.hp > 0 ? this.handOf(h, spec) : 0, thrown: false, shield: h.hp > 0 ? shield + cup : 0, flash: 0, chill: 0, daze: 0, fire: 0,
-        boost: false, sparks: Math.min(AB_COST, Math.max(h.sparks, full)), boomed: 0, lucky: false,
+        boost: false, sparks: Math.min(AB_COST, Math.max(h.sparks, full)), boomed: 0, lucky: false, out: false,
       });
       delete h.cuffing;
       delete h.pin;
@@ -570,12 +589,14 @@ export class Game {
   alive = () => this.S.heroes.filter(h => h.hp > 0);
   /** The enemies still standing; Пахан's empty bunk is only cover, never one of them. */
   liveMobs = () => this.S.mobs.filter(m => m.hp > 0 && !MOBS[m.k].fixed);
-  /** The ore cave: no enemies, only veins and mushrooms, and a few turns to mine or heal. */
+  /** The ore cave: no enemies, only veins and mushrooms, and a ceiling that comes down around the party (src/collapse.ts). */
   cave = () => this.S.spec.type === 'treasure';
+  /** The heroes still in the room: on their feet and not walked out of the ore cave. */
+  inside = () => this.alive().filter(h => !h.out);
   /** Turns the room gives the party, 0 for no limit: a fight lasts as long as its enemies stand. */
-  turnsMax = () => (this.cave() ? caveTurns(this.S.spec) : 0);
+  turnsMax = () => (this.cave() ? FALL.end - 1 : 0);
   /** The room is done: every enemy is down, or in the ore cave nothing is left to hit, veins and mushrooms alike. */
-  cleared = () => (this.cave() ? !this.S.nodes.some(n => n.left > 0) : !this.liveMobs().length);
+  cleared = () => (this.cave() ? !this.S.nodes.some(n => n.left > 0) || !this.inside().length : !this.liveMobs().length);
   stat = (h: HeroState, k: StatKey) => {
     const step = stepOf(h.def, k);
     return k === 'e' ? Math.min(E_MAX, h.def.e + h.up.e * step) : h.def[k] * (1 + h.up[k] * step);
@@ -724,10 +745,55 @@ export class Game {
   /** Take the press back while the heroes' turn lasts: the hero may throw again. */
   cancelEndTurn(h = this.hero) {
     const S = this.S;
-    if (S.phase !== 'throw' || !this.ended(h)) return;
+    if (S.phase !== 'throw' || !this.ended(h) || h.out) return;
     if (this.send) { this.send({ k: 'end', h: h.i, on: false }); return; }
     S.done = S.done.filter(i => i !== h.i);
+    // a player who wanted out of the ore cave takes it back: the hero digs on with its whole hand
+    if (S.vote?.includes(h.i)) { S.vote = S.vote.filter(i => i !== h.i); h.hand = this.handOf(h); }
     this.onChange();
+  }
+
+  /** The hero may say «Уходим с рудой» in the ore cave: from the second turn on, at its start, before it has thrown. */
+  mayLeave(h = this.hero) {
+    const S = this.S;
+    return this.cave() && S.phase === 'throw' && S.turn >= FALL.leaveFrom && h.hp > 0 && !h.out && !h.thrown && !this.ended(h);
+  }
+
+  /** The heroes still inside the ore cave whose players are at the table: they all have to want out for the party to go. */
+  voters = () => this.inside().filter(h => this.here(h));
+
+  /**
+   * «Уходим с рудой»: the party walks out of the ore cave together. The hero's player wants out and throws no more this
+   * turn; once every player at the table does, everyone goes at once, before the stones come. One who digs on holds the
+   * party, and the ones who waited stand where they are as the ceiling comes down; their wish is gone with the turn.
+   */
+  leave(h = this.hero) {
+    if (!this.mayLeave(h)) return;
+    if (this.send) { this.send({ k: 'leave', h: h.i }); return; }
+    // alone with a party the one press takes every hero out, if none of them has thrown yet this turn
+    if (!this.online) { if (this.inside().every(o => this.mayLeave(o))) this.walkOut(); return; }
+    const S = this.S, p = this.spot(h);
+    (S.vote ??= []).push(h.i);
+    h.hand = 0;
+    S.done.push(h.i);
+    if (this.voters().every(o => S.vote!.includes(o.i))) { this.walkOut(); return; }
+    if (p) this.float(p.x, p.y - 8, 'хочет уйти', '#ffd34d');
+    this.onChange();
+  }
+
+  /** Every hero still inside walks out of the ore cave with the party's ore, and the cave is over. */
+  private walkOut() {
+    const S = this.S;
+    for (const h of this.inside()) {
+      const p = this.spot(h);
+      h.out = true;
+      h.hand = 0;
+      if (p) this.burst(p.x, p.y, '#ffd34d', 8);
+    }
+    S.vote = [];
+    S.fall = null;
+    this.float(S.Wx / 2, S.Wy / 2, 'УШЛИ С РУДОЙ', '#ffd34d');
+    this.finish();
   }
 
   /**
@@ -743,7 +809,7 @@ export class Game {
    * leaves from the same cell, so it may bounce off the ones already lying on the table.
    */
   canThrow(h: HeroState) {
-    return this.S.phase === 'throw' && h.hand > 0 && h.hp > 0 && !!this.spot(h) && !this.ended(h);
+    return this.S.phase === 'throw' && h.hand > 0 && h.hp > 0 && !h.out && !!this.spot(h) && !this.ended(h);
   }
 
   /** Throw the hero's next disc. (dx, dy) is the pull-back vector in world units, up to 60. */
@@ -859,10 +925,19 @@ export class Game {
 
   buyDisc(h = this.hero) {
     const c = this.discCost(h);
-    if (!this.forge || this.whet || !c || this.bank.ore < c) return;
+    if (!this.forge || this.whet || !c || oreOf(h, this.bank) < c) return;
     if (this.send) { this.send({ k: 'disc', h: h.i }); return; }
-    this.bank.ore -= c;
+    spend(h, c, this.bank);
     h.discs++;
+    this.onChange();
+  }
+
+  /** Online at the blacksmith's: the hero hands one ore of its own to the teammate `to` («Скинуться»). */
+  chipIn(h: HeroState, to: number) {
+    const o = this.party.find(p => p.i === to);
+    if (!this.forge || this.whet || !o || o === h || !own(this.bank) || (h.ore ?? 0) < 1) return;
+    if (this.send) { this.send({ k: 'chip', h: h.i, to }); return; }
+    chipIn(h, o, this.bank);
     this.onChange();
   }
 
@@ -880,10 +955,10 @@ export class Game {
 
   upgrade(k: StatKey, h = this.hero) {
     const c = this.upCost(h, k), free = this.freeUp(h);
-    if (!this.forge || !c || (!free && (this.whet || this.bank.ore < c))) return;
+    if (!this.forge || !c || (!free && (this.whet || oreOf(h, this.bank) < c))) return;
     if (this.send) { this.send({ k: 'up', h: h.i, stat: k }); return; }
     if (free) h.free!--;
-    else this.bank.ore -= c;
+    else spend(h, c, this.bank);
     h.up[k]++;
     this.onChange();
   }
@@ -1449,6 +1524,8 @@ export class Game {
     if (a.k === 'throw') this.throwDisc(h, a.dx, a.dy);
     else if (a.k === 'move') this.movePad(h, a.pad);
     else if (a.k === 'disc') this.buyDisc(h);
+    else if (a.k === 'chip') this.chipIn(h, a.to);
+    else if (a.k === 'leave') this.leave(h);
     else if (a.k === 'up') this.upgrade(a.stat, h);
     else if (a.k === 'ability') this.useAbility(h);
     else if (a.k === 'ready') this.startFight(h);
@@ -1545,6 +1622,8 @@ export class Game {
   }
 
   pickIntents() {
+    // the ore cave has nobody to mean anything: its ceiling marks where it comes down once the heroes' turn is on
+    if (this.cave()) { if (this.S.phase === 'throw') this.planCave(); return; }
     const hs = this.alive().filter(h => this.spot(h));
     if (!hs.length) return;
     const taken: { x: number; y: number }[] = [];
@@ -1974,10 +2053,12 @@ export class Game {
     if (m.hp > 0) this.phase(m);
     if (m.hp <= 0) {
       m.dead = 0.001; this.burst(m.x, m.y, '#ffd34d', 22); this.float(m.x, m.y - 6, m.k === 'egg' ? 'хрусь!' : 'повержен', '#ffd34d');
-      // Пахан's «общак» comes back to the party twice over
+      // Пахан's «общак» comes back to the party twice over: online to each hero as much as he took from it
       if (m.pot) {
         const ore = m.pot * 2;
-        this.bank.ore += ore; this.mined += ore; m.pot = 0;
+        if (own(this.bank) && m.potBy) for (const [i, n] of Object.entries(m.potBy)) { const o = this.party.find(p => p.i === Number(i)); if (o) give(o, n * 2, this.bank); }
+        else deal(ore, this.party, this.bank);
+        this.mined += ore; m.pot = 0; delete m.potBy;
         this.float(m.x, m.y + 8, M('общак +{0} руды', ore), '#ffb070');
         this.note(M('Общак {0} вернулся отряду: +{1} руды', MOBS[m.k].acc, ore));
       }
@@ -2006,7 +2087,7 @@ export class Game {
       if (p) this.float(p.x, p.y - 4, `+${hl} HP`, '#7be39a');
       this.pop(h, 'fangs');
     }
-    if (has(h, 'piggy')) { this.bank.ore++; this.mined++; tallyOf(h).ore++; this.float(m.x, m.y + 8, '+1 руда', '#ffb070'); this.pop(h, 'piggy'); }
+    if (has(h, 'piggy')) { give(h, 1, this.bank); this.mined++; tallyOf(h).ore++; this.float(m.x, m.y + 8, '+1 руда', '#ffb070'); this.pop(h, 'piggy'); }
   }
 
   /** A burning enemy falls: what is left of its fire leaps onto the nearest enemy still standing. */
@@ -2202,11 +2283,11 @@ export class Game {
     this.repick(dr);
   }
 
-  /** Пахан's blow has landed: it takes `pot` ore from the party into its «общак», as much as the party has. */
+  /** Пахан's blow has landed: it takes `pot` ore into its «общак», as much as there is: alone the party's, online the hero's own. */
   private steal(m: Mob, h: HeroState) {
-    const n = Math.min(MOBS[m.k].pot ?? 0, this.bank.ore), p = this.spot(h);
+    const n = take(h, MOBS[m.k].pot ?? 0, this.bank), p = this.spot(h);
     if (n <= 0) return;
-    this.bank.ore -= n;
+    if (own(this.bank)) (m.potBy ??= {})[h.i] = (m.potBy[h.i] ?? 0) + n;
     m.pot = (m.pot ?? 0) + n;
     if (p) this.float(p.x, p.y - 14, M('−{0} руды в общак', n), '#ffb070');
     this.note(M('{0} {2?забрала|забрал} {1} руды в общак', m.name, n, MOBS[m.k].fem));
@@ -2955,7 +3036,21 @@ export class Game {
         // and eats as many mushrooms as it takes to heal up (one at the least)
         const all = has(h, 'denture');
         if (all) this.pop(h, 'denture');
-        if (n.k === 'ore') { const k = all ? n.left : 1, got = q * k; n.left -= k; this.bank.ore += got; this.mined += got; tallyOf(h).ore += got; this.float(n.x, n.y, M('+{0} руда', got), '#ffb070'); }
+        if (n.k === 'ore') {
+          // a vein under the ore cave's dust has cracked open and pays more till the stones come; the ore is dealt out as in a
+          // fight, and in the cave every hero keeps count of what it got there (the pool's alone: what its own discs dug)
+          const k = all ? n.left : 1, crack = this.cracked(n), got = q * k * (crack ? FALL.crack : 1);
+          n.left -= k;
+          const dealt = deal(got, this.party, this.bank, h);
+          if (this.cave()) {
+            const took = (S.took ??= {});
+            if (this.bank.split) for (const [o, c] of dealt) took[o.i] = (took[o.i] ?? 0) + c;
+            else took[h.i] = (took[h.i] ?? 0) + got;
+          }
+          this.mined += got;
+          tallyOf(h).ore += got;
+          this.float(n.x, n.y, crack ? M('+{0} руда из трещины', got) : M('+{0} руда', got), '#ffb070');
+        }
         // sparks go to every hero still standing, whoever threw the disc, each up to what one ability costs; the crystal
         // loses only what was taken, so sparks nobody had room for stay in it for later
         if (n.k === 'spk') {
@@ -3612,13 +3707,99 @@ export class Game {
     if (p) this.float(p.x, p.y - 8, 'звон в ушах', '#e8d6ff');
   }
 
+  /** The cell a point is on, as a key. */
+  private cellKey(x: number, y: number) {
+    return hazKey(...cellAt(x, y));
+  }
+
+  /** A vein under the ore cave's dust: it has cracked open and pays FALL.crack times as much till the stones come down. */
+  cracked(n: { x: number; y: number }) {
+    return !!this.S.fall?.marks.includes(this.cellKey(n.x, n.y));
+  }
+
+  /** Floor a stone from the ore cave's ceiling may lie on: no hole, block, hazard, resource or trinket on it. */
+  private rubbleOk(i: number, j: number) {
+    const S = this.S, k = hazKey(i, j);
+    if (!isFloor(S, i, j) || S.haz.has(k) || S.pits.some(p => inPit(p, i, j))) return false;
+    if (standing(S.blocks).some(b => b.x0 === i * TILE && b.y0 === j * TILE)) return false;
+    if (S.nodes.some(n => n.left > 0 && this.cellKey(n.x, n.y) === k)) return false;
+    return !S.trinket || S.trinket.by !== undefined || this.cellKey(S.trinket.x, S.trinket.y) !== k;
+  }
+
+  /** As the heroes' turn begins in the ore cave, its ceiling marks where it comes down after the turn (src/collapse.ts). */
+  private planCave() {
+    const S = this.S, fresh = S.fall?.fresh ?? [];
+    const veins = S.nodes.filter(n => n.k === 'ore' && n.left > 0).map(n => cellAt(n.x, n.y));
+    const heroes = this.inside().map(h => this.spot(h)).filter((p): p is Pt => !!p).map(p => cellAt(p.x, p.y));
+    S.fall = { ...planFall({ gw: S.gw, gh: S.gh, open: (i, j) => this.rubbleOk(i, j), veins, heroes }, S.spec.seed, S.turn, fresh), fresh };
+  }
+
+  /**
+   * The ore cave's marked ceiling comes down once the heroes have hopped to their discs: a stone hurts a hero still under it,
+   * chips an ore off a vein (the vein stays) and buries a mushroom patch, and lies as a block anywhere else.
+   */
+  private collapse() {
+    const S = this.S, f = S.fall;
+    if (!f?.marks.length) return;
+    const slab = new Set(f.slab), fresh: string[] = [], inside = this.inside();
+    for (const c of f.marks) {
+      const [i, j] = c.split(',').map(Number), p = cellCentre(i, j);
+      this.burst(p.x, p.y, '#a8987f', 6);
+      const hs = inside.filter(h => { const q = this.spot(h); return !!q && this.cellKey(q.x, q.y) === c; });
+      if (hs.length) {
+        for (const h of hs) this.stoned(h, slab.has(c) ? FALL.slab : FALL.stone, slab.has(c) ? 'плитой' : 'камнем');
+        continue;
+      }
+      const n = S.nodes.find(o => o.left > 0 && this.cellKey(o.x, o.y) === c);
+      if (n) {
+        n.left = n.k === 'ore' ? n.left - 1 : 0;
+        n.hit = 0.2;
+        this.float(n.x, n.y - 6, n.left > 0 ? 'откололо' : 'завалило', '#c7cbe0');
+        continue;
+      }
+      if (!this.rubbleOk(i, j)) continue;
+      S.blocks.push({ x0: i * TILE, y0: j * TILE, x1: (i + 1) * TILE, y1: (j + 1) * TILE, v: (i * 7 + j * 3) % 8, made: true, rub: true });
+      fresh.push(c);
+    }
+    S.fall = { marks: [], slab: [], fresh };
+    S.shake = Math.max(S.shake, 0.3);
+    this.sfx('slam');
+  }
+
+  /** A stone of the ore cave's ceiling on a hero: a hero it buries spills half the ore it dug there. */
+  private stoned(h: HeroState, n: number, why: string) {
+    this.hurtHero(h, n, why);
+    if (h.hp <= 0) this.spillOre(h);
+  }
+
+  /** A hero buried in the ore cave, or caught under its whole ceiling, spills half the ore it dug there (src/collapse.ts). */
+  private spillOre(h: HeroState) {
+    const S = this.S, n = take(h, spill(S.took?.[h.i] ?? 0), this.bank), p = this.spot(h);
+    if (!n) return;
+    S.took![h.i] -= n;
+    this.mined -= n;
+    if (p) this.float(p.x, p.y + 10, M('рассыпано {0} руды', n), '#ffb070');
+  }
+
+  /** The ore cave's last turn is up: the whole ceiling comes down on every hero still inside, and each spills half its ore. */
+  private caveIn() {
+    const S = this.S;
+    for (const h of this.inside()) { this.hurtHero(h, FALL.endDmg, 'обвал'); this.spillOre(h); }
+    this.caved = true;
+    this.float(S.Wx / 2, S.Wy / 2, 'ОБВАЛ', '#ff4d6a');
+    S.shake = 0.6;
+    this.sfx('slam');
+  }
+
   private nextTurn() {
     const S = this.S;
-    // the ore cave also ends once its turns are up
-    if (!this.alive().length || this.cleared() || (this.turnsMax() && S.turn >= this.turnsMax())) { this.finish(); return; }
+    if (!this.alive().length || this.cleared()) { this.finish(); return; }
+    // the ore cave's last turn is up: the whole ceiling comes down on whoever is still inside
+    if (this.cave() && S.turn + 1 >= FALL.end) { this.caveIn(); this.finish(); return; }
     S.turn++;
     S.discs = [];
     S.done = [];
+    S.vote = [];
     this.passing = -1;
     // the frost wears off after one enemy turn, a kiss after its turns, a cloud of gas thins out turn by turn, a firecracker
     // nobody came to fizzles out
@@ -3634,7 +3815,9 @@ export class Game {
     for (const b of S.bombs) if (--b.left <= 0) { this.float(b.x, b.y - 10, 'пшик', '#c9c2b4'); this.burst(b.x, b.y, '#9a948a', 8); }
     S.bombs = S.bombs.filter(b => b.left > 0);
     for (const h of S.heroes) if (h.hp > 0 && has(h, 'cup')) this.pop(h, 'cup');
-    for (const h of S.heroes) { delete h.cuffing; h.shield = h.hp > 0 && has(h, 'cup') ? ART.cup : 0; h.thrown = false; h.boost = false; h.hand = h.hp > 0 ? this.handOf(h) : 0; if (h.chill > 0) h.chill--; if (h.daze > 0) h.daze--; if (h.pin && --h.pin <= 0) delete h.pin; }
+    for (const h of S.heroes) { delete h.cuffing; h.shield = h.hp > 0 && has(h, 'cup') ? ART.cup : 0; h.thrown = false; h.boost = false; h.hand = h.hp > 0 && !h.out ? this.handOf(h) : 0; if (h.chill > 0) h.chill--; if (h.daze > 0) h.daze--; if (h.pin && --h.pin <= 0) delete h.pin; }
+    // the heroes who walked out of the ore cave are done for good
+    S.done = S.heroes.filter(h => h.out).map(h => h.i);
     S.phase = 'throw';
     this.sfx('yourTurn');
     this.pickActive();
@@ -3653,7 +3836,7 @@ export class Game {
     // a fight won without a scratch pays the party ore, as much for any party; the ore cave has nobody to scratch them
     if (win && S.spec.type !== 'treasure' && !S.hurt) {
       this.clean = CLEAN_ORE;
-      this.bank.ore += this.clean;
+      deal(this.clean, this.party, this.bank);
       this.float(S.Wx / 2, S.Wy / 2, M('БЕЗ ЦАРАПИНЫ +{0}', this.clean), '#ffd34d');
     }
     // the bookie's bet: a trophy on a fight without a scratch, a level on one won in three turns
@@ -3691,8 +3874,8 @@ export class Game {
     else if (S.phase === 'throw' && this.allDone() && !this.moving()) {
       S.phase = 'resolve'; S.timer = 0.9; this.resolve(); this.onChange();
     } else if (S.phase === 'resolve' && (S.timer -= dt) <= 0) {
-      // nobody moves against the party in the ore cave: its next turn comes at once
-      if (this.cave()) this.nextTurn();
+      // nobody moves against the party in the ore cave: the marked ceiling comes down, and its next turn comes at once
+      if (this.cave()) { this.collapse(); this.nextTurn(); }
       else { S.phase = 'enemy'; this.mobsStart(); this.onChange(); }
     } else if (S.phase === 'enemy') this.enemyTurn(dt);
     this.fade(dt);

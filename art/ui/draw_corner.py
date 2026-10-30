@@ -4,7 +4,9 @@ sketch of 2026-10-18: next to the portrait a column for the stack of discs (draw
 health bar like a bow tie (a dip on top, a waist below, its right end a point), the sparks as a crystal strip under it
 split in two by a crack, and the ability gem standing the full height on the right with a notch the health bar's point
 goes into and a foot under the bar's end: the gem is the third spark, so the strip's second crack is the gem's edge. Over
-the bar's right half and the gem the turn button, its bottom following the bar's top.
+the bar's right half and the gem the turn button, its bottom following the bar's top. Right of the turn button, over the
+gem's top, the ore cave's «Уходим с рудой» (2026-10-26: he wanted it in that corner, in the corner's own look): its top
+carries on the button's rising top, its left side runs along the button's right one a cut apart.
 
 All pieces share one plan: the block is 713 x 267 units (x right, y down; the column starts at x 0; the turn button stands
 above it, at negative y). Pieces sit apart by a cut of 9..15 units; a rim, if one is asked for, only reaches halfway
@@ -12,9 +14,9 @@ across a cut, so two pieces never paint over each other. Run from the repo root:
 
     python3 art/ui/draw_corner.py [folder] [rim]
 
-It writes hp_empty|hp_full|hp_shield, spk_1..2_on|off, gem, turn and the grain tile board (.webp) to public/assets/ui/
+It writes hp_empty|hp_full|hp_shield, spk_1..2_on|off, gem, turn, leave and the grain tile board (.webp) to public/assets/ui/
 (or the folder; rim is a beige rim's width in pixels to try one, none by default) and prints the numbers style.css needs:
-each picture's box in units, the red span of the health bar, and the outlines of the gem and the button as clip-path
+each picture's box in units, the red span of the health bar, and the outlines of the gem and the buttons as clip-path
 polygons, for where a tap lands.
 """
 import sys
@@ -44,6 +46,9 @@ CRACKS = [[(268, 0), (258, 0.4), (273, 0.7), (264, 1)], [(436, 0), (445, 0.35), 
 CUT = 5
 # the turn button: its top rising to the right, its bottom 10 over the bar's top and the gem
 TURN = [(265, -93), (510, -128), (640, -10), (485, -10), (390, 14), (222, -6)]
+# «Уходим с рудой»: the turn button's top carried on to the block's right end, down to the bar's top, and back up along
+# the turn button's right side 12 units off it
+LEAVE = [(526, -130), (713, -157), (713, -10), (658, -10)]
 
 
 def edge_y(e, x):
@@ -76,7 +81,7 @@ foot = crack(CRACKS[1], CUT)
 GEM = BODY[:4] + foot[::-1] + [q for q in SPK_T if q[0] > foot[0][0]][:-1] + [(511, 202), (523, 196)] + BODY[5:]
 
 # the disc column has no picture (style.css stacks chips in it), but its cut still bounds the others' rims
-PIECES = {'discs': DISC, 'hp': HP, 'spk_1': SPK[0], 'spk_2': SPK[1], 'gem': GEM, 'turn': TURN}
+PIECES = {'discs': DISC, 'hp': HP, 'spk_1': SPK[0], 'spk_2': SPK[1], 'gem': GEM, 'turn': TURN, 'leave': LEAVE}
 
 
 # ---------- who owns each pixel of the cuts: the nearest piece ----------
@@ -96,7 +101,7 @@ def poly_dist(px, py, p):
 
 
 G = 0.5  # units per cell of the ownership grid
-G0, GY0 = -M - 2, -150  # where the grid starts, across and down
+G0, GY0 = -M - 2, -175  # where the grid starts, across and down
 gy, gx = np.mgrid[GY0:BH + M + 2:G, G0:BW + M + 2:G]
 dist = np.stack([poly_dist(gx, gy, p) for p in PIECES.values()])
 owner = np.argmin(dist, axis=0)
@@ -222,6 +227,24 @@ def paint_turn(d, px):
 save(sticker('turn', paint_turn), 'turn', 41, 'turn')
 css['turn'] = box('turn')
 
+# ---------- «Уходим с рудой»: dark slate with a lighter band along its top and gold nuggets in the rock ----------
+SLATE = (62, 66, 80)
+leave_band = [(510, -140), (730, -170), (730, -128), (516, -100)]
+NUGGETS = [(700, -36, 9), (684, -22, 6), (703, -142, 6), (545, -116, 6)]
+
+
+def paint_leave(d, px):
+    d.rectangle([px((500, -180)), px((740, 10))], fill=SLATE + (255,))
+    d.polygon([px(q) for q in leave_band], fill=lighter(SLATE, 9) + (255,))
+    for x, y, r in NUGGETS:
+        lump = [(x + r * np.cos(a) * (1 + 0.25 * np.sin(3 * a + x)), y + 0.8 * r * np.sin(a) * (1 + 0.25 * np.cos(2 * a + y))) for a in np.linspace(0, 2 * np.pi, 9)[:-1]]
+        d.polygon([px(q) for q in lump], fill=(214, 168, 56, 255))
+        d.polygon([px((qx - 0.25 * (qx - x), qy - 0.35 * r - 0.25 * (qy - y))) for qx, qy in lump[4:8]], fill=(246, 214, 112, 255))
+
+
+save(sticker('leave', paint_leave), 'leave', 61, 'leave')
+css['leave'] = box('leave')
+
 board_tile(51).save(OUT + 'board.webp', quality=90)
 
 # ---------- the numbers for style.css ----------
@@ -231,7 +254,7 @@ for k, (x, y, w, h) in css.items():
 print(f'hp picture {HW} px wide: red runs x {r0}..{r1}')
 print(f'  .track inset: 0 {100 * (HW - r1) / HW:.3f}% 0 {100 * r0 / HW:.3f}%;'
       f' fill background: calc(-{100 * r0 / (r1 - r0):.3f}cqw - var(--x, 0) * 1cqw) 0 / {100 * HW / (r1 - r0):.2f}cqw 100cqh')
-for k in ('gem', 'turn'):
+for k in ('gem', 'turn', 'leave'):
     bx, by, bw, bh = css[k]
     print(f'  {k} outline: polygon(' + ', '.join(f'{100 * (x - bx) / bw:.1f}% {100 * (y - by) / bh:.1f}%' for x, y in PIECES[k]) + ')')
 gx0, gy0, gw, gh = css['gem']

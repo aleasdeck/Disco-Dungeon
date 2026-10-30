@@ -16,6 +16,8 @@ import { hl } from './hl';
 import { DEMO } from './demo';
 import { OreCounters } from './orefx';
 import { M, t } from './i18n';
+import { oreOf, own } from './ore';
+import { FALL } from './collapse';
 import { fillTip, placeTip, setTip, tipAttrs, type Tip } from './tip';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -174,13 +176,13 @@ const forgeTxt = (ore: number) => ore
 
 /**
  * The blacksmith's slab for each of a hero's upgrades: what it is, its level, where the stat goes with the next level,
- * and the price in the party's ore. A slab the ore does not cover, or a stat at its top, is shut.
+ * and the price in ore (the party's alone, the hero's own online). A slab the ore does not cover, or a stat at its top, is shut.
  */
 function forgeRows(g: Game, h: HeroState, team: boolean) {
   // a stat level an elite owes the hero costs nothing; in the sharpening window that is all there is
   const free = g.freeUp(h);
   const row = (k: string, name: string, txt: string, n: number, lv: number, now: string, next: string, cost: number, gratis = false) => {
-    const sold = !g.whet || gratis, short = !gratis && cost > g.bank.ore;
+    const sold = !g.whet || gratis, short = !gratis && cost > oreOf(h, g.bank);
     return `<button class="ev-opt fg-up" data-k="${k}"${tipAttrs({ p: t(txt) })}${cost && sold && !short ? '' : ' disabled'}>`
       + `<i data-art="${UP_ART[k]}" aria-hidden="true"></i><span class="fg-name"><b>${t(name)}</b>${pips(n, lv)}</span>`
       + `<span class="fg-fx">${cost ? `${now}<i>→</i>${next}` : t('{0}, больше некуда', now)}</span>`
@@ -191,12 +193,16 @@ function forgeRows(g: Game, h: HeroState, team: boolean) {
     ? `<div class="fg-team">${g.party.map(o => `<button class="fg-tab${o === h ? ' on' : ''}" data-hero="${o.i}" style="--c:${o.def.col}" aria-pressed="${o === h}">`
       + `<img src="${faceUrl(o)}" alt=""><b>${t(o.def.name)}</b>${g.freeUp(o) ? `<em>${t('даром')}</em>` : ''}</button>`).join('')}</div>`
     : `<div class="fg-me"><img src="${faceUrl(h)}" alt=""><b>${t(h.def.name)}</b><span>${h.hp > 0 ? `${h.hp}/${h.max} HP` : t('пал')}</span></div>`;
+  // online a player may hand ore of their own to a teammate, one at a tap: «Скинуться»
+  const mates = own(g.bank) && !g.whet && !team ? g.party.filter(o => o !== h) : [];
+  const chip = mates.length ? `<div class="fg-chip"><span>${t('Скинуться товарищу')}</span><span class="fg-mates">${mates.map(o => `<button class="fg-give" data-to="${o.i}" style="--c:${o.def.col}"${tipAttrs({ h: t(o.def.name), p: t('Скинуться товарищу') })}${(h.ore ?? 0) < 1 ? ' disabled' : ''}>`
+    + `<img src="${faceUrl(o)}" alt="${t(o.def.name)}"><b>+1</b>${icon('ore')}</button>`).join('')}</span></div>` : '';
   return head
     + (g.whet ? '' : row('n', 'Диски за ход', 'Больше бросков за ход. Самое сильное улучшение', HAND_MAX - HAND_START, h.discs - HAND_START, String(g.handOf(h)), String(g.handOf(h) + 1), g.discCost(h)))
     + UPS.map(u => {
       const lv = h.up[u.k], v = g.stat(h, u.k), next = u.k === 'e' ? Math.min(E_MAX, v + stepOf(h.def, 'e')) : v;
       return row(u.k, u.name, u.txt, UP_COST.length, lv, u.fmt(lv * u.step, v), u.fmt((lv + 1) * u.step, next), g.upCost(h, u.k), free);
-    }).join('');
+    }).join('') + chip;
 }
 
 /** The sharpening window's scene after an elite: the hero still owed a level picks it, then it is done. */
@@ -297,11 +303,14 @@ export class Hud {
     new ResizeObserver(() => document.documentElement.style.setProperty('--top-h', top.offsetHeight + 'px')).observe(top);
     $('abBtn').addEventListener('click', () => g.useAbility());
     $('turnBtn').addEventListener('click', () => this.pressTurn());
+    $('leaveBtn').addEventListener('click', () => { for (const o of this.leavers()) this.g.leave(o); this.turnButton(); });
     $('pfBtn').addEventListener('click', e => { e.stopPropagation(); this.toggleCard(); });
     $('btnLog').addEventListener('click', e => { e.stopPropagation(); this.toggleLog(); });
     $('forgeMine').addEventListener('click', e => {
       const t = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-hero]');
       if (t) { this.forgeFor = Number(t.dataset.hero); this.forge(); return; }
+      const give = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-to]'), me = this.forgeHero();
+      if (give) { if (!give.disabled && me) g.chipIn(me, Number(give.dataset.to)); return; }
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-k]'), h = this.forgeHero();
       if (!b || b.disabled || !h) return;
       if (b.dataset.k === 'n') g.buyDisc(h);
@@ -400,7 +409,7 @@ export class Hud {
       b.id = 'ally' + h.i;
       b.style.setProperty('--c', h.def.col);
       b.setAttribute('aria-label', t(h.def.name));
-      b.innerHTML = `<canvas></canvas><b class="who"></b><span class="a-hp"><i></i><s></s><em></em></span><span class="tick">${icon('check')}</span><span class="off">${icon('plug')}</span>`;
+      b.innerHTML = `<canvas></canvas><b class="who"></b><span class="a-hp"><i></i><s></s><em></em></span><span class="tick">${icon('check')}</span><span class="off">${icon('plug')}</span><span class="a-ore" hidden></span>`;
       drawPortrait(b.querySelector('canvas')!, h);
       // a face opens its hero's card, with the trophies on it (Vladislav: the allies' trophies are seen there); only in a
       // fight a face of another hero this screen plays (the host's for players who left) picks it to throw with instead
@@ -430,10 +439,19 @@ export class Hud {
     $('hTurn').textContent = S.phase === 'place' ? t('Расстановка') : max ? t('Ход {0} из {1}', S.turn, max) : t('Ход {0}', S.turn);
     // enemies grow angrier every turn once a fight drags on; warn a turn ahead
     const rage = $('hRage'), fighting = S.phase !== 'place' && S.phase !== 'over' && !g.cave(), soon = g.rageFrom() - S.turn;
-    rage.hidden = !fighting || (g.rage() === 0 && soon > 1);
-    rage.classList.toggle('soon', g.rage() === 0);
-    rage.textContent = g.rage() ? t('ярость +{0}', g.rage()) : t('ярость со след. хода');
-    setTip(rage, { h: t('Ярость'), p: t('С {0}-го хода враги каждый ход бьют на 1 сильнее.', g.rageFrom()) });
+    if (g.cave()) {
+      // the ore cave counts down to its whole ceiling coming down instead
+      const left = FALL.end - S.turn;
+      rage.hidden = S.phase === 'place' || S.phase === 'over';
+      rage.classList.toggle('soon', left <= 1);
+      rage.textContent = t('обвал через {0}', left);
+      setTip(rage, { h: t('Обвал'), p: t('На {0}-м ходу рушится весь потолок: кто внутри, получает −{1} HP и теряет половину добытой здесь руды.', FALL.end, FALL.endDmg) });
+    } else {
+      rage.hidden = !fighting || (g.rage() === 0 && soon > 1);
+      rage.classList.toggle('soon', g.rage() === 0);
+      rage.textContent = g.rage() ? t('ярость +{0}', g.rage()) : t('ярость со след. хода');
+      setTip(rage, { h: t('Ярость'), p: t('С {0}-го хода враги каждый ход бьют на 1 сильнее.', g.rageFrom()) });
+    }
     // an event's curse on this fight
     // and what else an event left this fight: the foam party's floor, the bookie's bet, a disc more
     const curse = $('hCurse'), on = CHIPS.filter(c => c.on(S.spec));
@@ -504,9 +522,13 @@ export class Hud {
       // a tick: placed and ready (online placement), or done with the turn
       const done = !ev && (S.phase === 'place' ? g.online && S.ready.includes(o.i) : S.phase === 'throw' && g.ended(o));
       el.classList.toggle('done', done);
+      // online each teammate's own ore by the face; this screen's own is on the ore chip
+      const ore = el.querySelector<HTMLElement>('.a-ore')!, mate = own(g.bank) && o !== this.me();
+      ore.hidden = !mate;
+      if (mate && ore.textContent !== String(o.ore ?? 0)) ore.textContent = String(o.ore ?? 0);
       setTip(el, {
         h: who ? `${t(o.def.name)} · ${who}` : t(o.def.name),
-        p: [o.hp > 0 ? `${o.hp}/${o.max} HP` : t('пал'), o.shield ? t('щит {0}', o.shield) : ''].filter(Boolean).join(', '),
+        p: [o.hp > 0 ? `${o.hp}/${o.max} HP` : t('пал'), o.shield ? t('щит {0}', o.shield) : '', mate ? t('{0} руды', o.ore ?? 0) : ''].filter(Boolean).join(', '),
         f: away ? t('Нет связи: ход его не ждёт') : done ? (S.phase === 'place' ? t('готов') : t('закончил ход')) : '',
       });
     }
@@ -938,6 +960,17 @@ export class Hud {
     // «готовы N из M» counts the players at the table: the ones who dropped out hold nobody up
     const here = g.alive().filter(o => g.here(o)).map(o => o.i), alive = here.length;
     // alone with a party the button speaks for every hero, so it stays when the picked one has fallen
+    // the ore cave: «Уходим с рудой» over the turn button at the start of a turn, before this player's heroes have thrown
+    $('leaveBtn').hidden = !this.leavers().length;
+    // online the party goes once every player has pressed it: how many want out already
+    const votes = (S.vote ?? []).length, voters = g.voters().length;
+    const leaveTxt = t('Уходим с рудой');
+    $('leaveTxt').textContent = leaveTxt;
+    // a longer line in another language takes smaller letters, so its longest word still fits the narrow piece
+    $('leaveBtn').classList.toggle('long', leaveTxt.length > 16 || Math.max(...leaveTxt.split(' ').map(w => w.length)) > 8);
+    $('leaveSub').textContent = votes ? t('{0} из {1}', votes, voters) : '';
+    $('leaveSub').hidden = !votes;
+    setTip($('leaveBtn'), votes ? { p: t('уходят {0} из {1}', votes, voters) } : {});
     if (S.phase === 'over' || h.hp <= 0 && S.phase !== 'enemy' && S.phase !== 'resolve' && !this.team()) {
       b.hidden = true;
       this.act = 'none';
@@ -956,7 +989,9 @@ export class Hud {
       else { txt = 'Конец хода'; cls = left > 0 ? 'idle' : 'lit'; act = 'end'; }
     } else if (S.phase === 'throw') {
       const done = S.done.filter(i => here.includes(i)).length;
-      if (g.ended(h)) { txt = 'Ждём…'; sub = alive > 1 ? t('готовы {0} из {1}', done, alive) : ''; cls = 'wait'; act = 'cancel'; }
+      // wants out of the ore cave: waits for the others to want it too, and may take it back
+      if (S.vote?.includes(h.i)) { txt = 'Ждём…'; sub = t('уходят {0} из {1}', votes, voters); cls = 'wait'; act = 'cancel'; }
+      else if (g.ended(h)) { txt = 'Ждём…'; sub = alive > 1 ? t('готовы {0} из {1}', done, alive) : ''; cls = 'wait'; act = 'cancel'; }
       else if (h.hand > 0 && performance.now() < this.confirmUntil) { txt = 'Точно?'; sub = t('не брошено: {0}', h.hand); cls = 'confirm'; act = 'end'; }
       else { txt = 'Конец хода'; cls = h.hand > 0 ? 'idle' : 'lit'; act = g.canEndTurn(h) ? 'end' : 'none'; sub = alive > 1 && done ? t('готовы {0} из {1}', done, alive) : ''; }
     } else if (g.cave()) {
@@ -983,6 +1018,15 @@ export class Hud {
     $('turnSub').hidden = !sub;
     setTip(b, { p: act === 'cancel' ? t('Нажми ещё раз, чтобы отменить') : '' });
     this.act = act;
+  }
+
+  /** This player's heroes that may walk out of the ore cave now: alone with a party all of them, online the player's own. */
+  private leavers() {
+    const g = this.g;
+    if (!g.cave()) return [];
+    // the party walks out together: alone the one press takes everyone, so long as nobody has thrown yet this turn
+    if (!g.online) return g.inside().length && g.inside().every(o => g.mayLeave(o)) ? g.inside().slice(0, 1) : [];
+    return [g.hero].filter(o => g.canControl(o) && g.mayLeave(o));
   }
 
   /** One player plays the whole party (the campaign of two or three): the turn button speaks for every hero. */
@@ -1076,10 +1120,13 @@ export class Hud {
    * sticker when it was another hero.
    */
   private ore() {
-    const g = this.g, ore = g.bank.ore, at = this.atForge && !g.whet ? String(g.forge) : '', was = this.oreWas, visit = this.oreAt;
+    // online this screen's own hero's ore, alone the party's
+    const g = this.g, ore = oreOf(this.forgeHero(), g.bank), at = this.atForge && !g.whet ? String(g.forge) : '', was = this.oreWas, visit = this.oreAt;
     const seen = this.levels, sp = g.S.spec, room = `${sp.floor}:${sp.depth}:${sp.seed}`, behind = this.oreRoom;
     this.levels = new Map(g.party.map(h => [h.i, [h.discs, ...UPS.map(u => h.up[u.k])]]));
     this.oreRoom = room;
+    const tip = { h: own(g.bank) ? t('Твоя руда') : t('Руда отряда') };
+    for (const el of [$('hOre').parentElement!, $('forgeOre').parentElement!]) setTip(el, tip);
     if (ore === was && at === visit) return;
     this.oreWas = ore;
     this.oreAt = at;

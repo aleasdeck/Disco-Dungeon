@@ -1,6 +1,7 @@
 // Events on the run map, the way Slay the Spire shows them: a picture with a gag, the scene, and a few choices.
 // A choice may be safe, may cost ore, or may be a toss-up between a good and a bad outcome. Effects on heroes reach
-// every hero of the party, ore goes to or from the party's shared pool.
+// every hero of the party, ore goes to or from the party's shared pool (online it is dealt out to the heroes alike, and
+// they chip in alike to pay: src/ore.ts).
 // Some events take more than one tap: the slot machine is pulled again and again, the tattoo waits for the hero who lies
 // down for it, the thimbles for the cup with the ball, the pawnshop for the trophy each hero hands over. The host (or a
 // lone player) settles every tap and shares the event with the map, so every screen shows the same.
@@ -12,6 +13,7 @@ import { REST_ROW, nodeById, type MapNode, type Run } from './run';
 import { makeRng } from './rng';
 import { DEMO, DEMO_CHEST, DEMO_CHEST_ODDS, DEMO_EVENTS } from './demo';
 import { M, t, type Arg } from './i18n';
+import { deal, give as giveOre, own, partyOre, payAll, rob } from './ore';
 
 /** The floor of the next fight, from the foam party: discs keep their speed off the walls, or roll twice as far, or stick. */
 export type Floor = 'slick' | 'soap' | 'sticky';
@@ -27,7 +29,8 @@ export type Fx =
   | { k: 'heal' }
   /** Most health; a gain heals by as much, a loss cuts what is over the new top. */
   | { k: 'max'; n: number }
-  | { k: 'ore'; n: number }
+  /** Ore for the party; `by` the heroes who earned it (the pawnshop's sellers): online it goes to them alike, not to everyone. */
+  | { k: 'ore'; n: number; by?: number[] }
   /** Every hero starts the next fight with full sparks. */
   | { k: 'sparks' }
   /** Every hero starts the next fight with this much shield: it takes the enemies' first blows. */
@@ -570,8 +573,8 @@ export function sceneOf(ev: EventState): string {
 const canGrow = (h: HeroState, k: StatKey) =>
   UP_COST[h.up[k]] !== undefined && (k !== 'e' || h.def.e + h.up.e * stepOf(h.def, 'e') < E_MAX);
 
-/** Whether the party can take a choice now: it has the ore it costs. */
-export const canPick = (c: Choice, bank: Bank) => bank.ore >= (c.pay ?? 0);
+/** Whether the party can take a choice now: it has the ore it costs (online all of it together, chipping in). */
+export const canPick = (c: Choice, bank: Bank, party: HeroState[] = []) => partyOre(party, bank) >= (c.pay ?? 0);
 
 const KIND_NONE = ['Толстяка в отряде нет', 'Чувака в отряде нет', 'Дрища в отряде нет'];
 const MAP_NONE: Record<Redraw, string> = { cave: 'Впереди негде рисовать', beer: 'Впереди нет элиты', camp: 'Костёр и так за углом' };
@@ -579,8 +582,8 @@ const MAP_NONE: Record<Redraw, string> = { cave: 'Впереди негде ри
 /** Why a choice is shut now, in a line on its slab in the player's language; null while it can be taken. */
 export function shutWhy(c: Choice, tb: Table): string | null {
   const solo = tb.party.length === 1;
-  if (!canPick(c, tb.bank)) return t('Нужно {0} руды', c.pay);
-  if (c.ore && tb.bank.ore < c.ore) return t('Нужно {0} руды', c.ore);
+  if (!canPick(c, tb.bank, tb.party)) return t('Нужно {0} руды', c.pay);
+  if (c.ore && partyOre(tb.party, tb.bank) < c.ore) return t('Нужно {0} руды', c.ore);
   if (c.kind !== undefined && !tb.party.some(h => h.hp > 0 && h.def.r === KINDS[c.kind!].r)) return t(KIND_NONE[c.kind]);
   if (c.arts && !tb.party.some(h => h.arts?.length)) return t(solo ? 'У тебя нет трофеев' : 'Трофеев ни у кого нет');
   const m = c.win.fx.find(f => f.k === 'map');
@@ -607,7 +610,7 @@ export function take(ev: EventState, opt: number, t: Table): boolean {
   const c = choicesOf(ev)[opt];
   if (!c || shutWhy(c, t)) return false;
   ev.votes = {};
-  t.bank.ore -= c.pay ?? 0;
+  payAll(c.pay ?? 0, t.party, t.bank);
   if (ev.key === 'slot' && opt === 0) return pull(ev, c, t);
   if (c.then) {
     // a lone hero lies down on the couch himself
@@ -678,7 +681,7 @@ export function sellDone(ev: EventState, t: Table, table: number[]): boolean {
     drop(o, a as ArtKey);
     return M('{0}: «{1}»', o.def.name, artDef(a).name);
   });
-  settle(ev, ev.step!, true, c.label, { fx: [{ k: 'ore', n: SELL * sold.length }], txt: c.win.txt }, t, { pay: c.pay, notes });
+  settle(ev, ev.step!, true, c.label, { fx: [{ k: 'ore', n: SELL * sold.length, by: sold.map(([i]) => Number(i)) }], txt: c.win.txt }, t, { pay: c.pay, notes });
   return true;
 }
 
@@ -766,7 +769,12 @@ export function settleBet(b: Bet, ok: boolean, party: HeroState[], seed: number)
 export function applyFx(fx: Fx[], party: HeroState[], bank: Bank, seed: number, run?: Run): string[] {
   const R = makeRng(seed + 1), notes: string[] = [];
   for (const f of fx) {
-    if (f.k === 'ore') bank.ore = Math.max(0, bank.ore + f.n);
+    if (f.k === 'ore') {
+      const by = f.by ? party.filter(h => f.by!.includes(h.i)) : [];
+      if (f.n < 0) payAll(Math.min(-f.n, partyOre(party, bank)), party, bank);
+      else if (by.length && own(bank)) by.forEach((h, k) => giveOre(h, Math.floor(f.n / by.length) + (k < f.n % by.length ? 1 : 0), bank));
+      else deal(f.n, party, bank);
+    }
     else if (f.k === 'sparks') bank.boon = AB_COST;
     else if (f.k === 'shield') bank.shield = (bank.shield ?? 0) + f.n;
     else if (f.k === 'rage') bank.rage = (bank.rage ?? 0) + f.n;
@@ -776,9 +784,7 @@ export function applyFx(fx: Fx[], party: HeroState[], bank: Bank, seed: number, 
     else if (f.k === 'floor') bank.ground = f.f;
     else if (f.k === 'bet') bank.bet = f.b;
     else if (f.k === 'rob') {
-      const n = Math.min(bank.ore, Math.max(ROB_MIN, Math.ceil(bank.ore / 2)));
-      bank.ore -= n;
-      notes.push(M('Забрали {0} руды', n));
+      notes.push(M('Забрали {0} руды', rob(party, bank, ROB_MIN)));
     } else if (f.k === 'nosparks') {
       bank.boon = 0;
       for (const h of party) h.sparks = 0;

@@ -267,6 +267,8 @@ i.ico { display: inline-block; font-style: normal; }
 .head .who { position: absolute; left: -2px; right: -2px; bottom: 7px; font: 600 10px/1.3 Oswald, sans-serif; color: #fff; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: rgba(18, 12, 9, 0.72); pointer-events: none; }
 .head .who:empty { display: none; }
 .head .off { position: absolute; left: -6px; top: -5px; width: 20px; height: 20px; display: none; }
+/* online a teammate's own ore by the face */
+.head .a-ore { position: absolute; right: -6px; bottom: 7px; z-index: 1; min-width: 16px; padding: 0 3px; background: #2c2119; clip-path: var(--cut-bar); font: 700 11px/14px Oswald, sans-serif; color: #ffcf6a; text-align: center; pointer-events: none; }
 .head.away canvas { filter: grayscale(1) brightness(0.6); }
 .head.away .off { display: block; }
 .head.lethal { filter: var(--outline) drop-shadow(0 0 6px rgba(255, 77, 106, var(--p09, 0))); }
@@ -537,6 +539,29 @@ i.ico { display: inline-block; font-style: normal; }
 .turn-btn.enemy { --p1: #e2525e; --p2: #b8323f; --p3: #6e1520; --tc: #fff; --cur: default; }
 .turn-btn:not(:disabled):active { transform: translateY(3px); }
 .turn-btn:disabled:not(.enemy):not(.wait) { --cur: default; }
+/* the ore cave's «Уходим с рудой» (src/collapse.ts): a slate piece of the corner right of the turn button, its top carrying
+   on the button's rising top (art/ui/draw_corner.py, the box and outline it prints) */
+.leave-btn {
+  position: fixed; z-index: 6; pointer-events: none;
+  left: calc(var(--cx) + var(--pf-w) + var(--bgap) + 512 * var(--u)); bottom: calc(var(--cy) + 263 * var(--u));
+  width: calc(215 * var(--u)); height: calc(175 * var(--u)); border: 0; background: none; --cur: pointer;
+  /* the words in the piece's wide upper part along its top, set to its straight right side: its left one slants in */
+  padding: 0 calc(26 * var(--u)) calc(40 * var(--u)) 0;
+  display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 3px;
+  filter: var(--outline) drop-shadow(0 5px 0 rgba(0, 0, 0, 0.55));
+  --plate: polygon(6.5% 23.4%, 93.5% 8%, 93.5% 92%, 67.9% 92%);
+  --tap: var(--plate);
+}
+.leave-btn[hidden] { display: none; }
+.leave-btn > .tap-area { position: absolute; inset: 0; z-index: 2; pointer-events: auto; clip-path: var(--tap); }
+.lv-plate { position: absolute; inset: 0; clip-path: var(--plate); background: linear-gradient(#4a4f5e, #3e4250 55%, #2c2f3a); }
+.leave-btn b, .leave-btn small { position: relative; transform: rotate(-8deg); transform-origin: right center; text-align: right; text-transform: uppercase; color: #f2c94c; }
+.leave-btn b { max-width: calc(120 * var(--u)); font: 700 calc(26 * var(--u))/1.02 Oswald, sans-serif; letter-spacing: 0.02em; text-wrap: balance; }
+.leave-btn small { font: 600 max(8px, calc(16 * var(--u)))/1 Oswald, sans-serif; opacity: 0.85; }
+.leave-btn.long b { max-width: calc(132 * var(--u)); font-size: calc(21 * var(--u)); }
+.leave-btn small[hidden] { display: none; }
+.leave-btn:hover { filter: var(--outline) drop-shadow(0 5px 0 rgba(0, 0, 0, 0.55)) brightness(1.12); }
+.leave-btn:active { transform: translateY(3px); }
 /* the pulses above (--p09, --p14, --p16: 0 to 1 and back) are set by main.ts each time it draws the room, so they beat
    with it: an animation of their own would have the phone redraw the screen every frame while the room stands still */
 
@@ -1333,6 +1358,9 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 /* ---------- painted cardboard plates and icons (public/assets/ui): each takes over from the drawn one once its picture loads */
 /* the turn button (turn, drawn by art/ui/draw_corner.py): mustard board standing on the block, its top rising to the right,
    its bottom following the health's dip; the words tilted along its top */
+.art-leave .leave-btn { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)); }
+.art-leave .leave-btn:hover { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) brightness(1.12); }
+.art-leave .lv-plate { clip-path: none; background: var(--ui-leave) center / 100% 100% no-repeat; }
 .art-turn .turn-btn { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)); }
 .art-turn .tb-plate { clip-path: none; background: var(--ui-turn) center / 100% 100% no-repeat; transition: filter 0.2s; }
 .art-turn .tb-plate::before, .art-turn .tb-plate::after { display: none; }
@@ -1726,6 +1754,15 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .fg-tab.on em { color: #e9f7ea; }
 .fg-tab:not(.on):hover { background: rgba(0, 0, 0, 0.4); color: var(--text); }
 .fg-up { padding: 8px 92px 9px 72px; }
+/* online: hand a teammate one ore of your own */
+.fg-chip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font: 16px var(--hand); color: var(--muted); }
+.fg-mates { display: flex; gap: 8px; }
+.fg-give { display: flex; align-items: center; gap: 5px; padding: 3px 10px 3px 3px; border: 0; background: rgba(0, 0, 0, 0.28); clip-path: var(--cut-card); color: var(--text); font: 600 15px Oswald, sans-serif; --cur: pointer; }
+.fg-give img { width: 28px; height: 28px; clip-path: var(--cut-face); background: var(--c); }
+.fg-give .ico { width: 18px; height: 18px; }
+.fg-give:not(:disabled):hover { background: rgba(0, 0, 0, 0.42); }
+.fg-give:not(:disabled):active { transform: translateY(2px); }
+.fg-give:disabled { opacity: 0.45; --cur: default; }
 .fg-up > i[data-art] { position: absolute; left: 12px; top: 50%; width: 52px; height: 52px; transform: translateY(-50%) rotate(-6deg); filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45)); }
 .fg-name { display: flex; align-items: center; gap: 10px; }
 .fg-name .lvl { display: inline-flex; gap: 3px; }

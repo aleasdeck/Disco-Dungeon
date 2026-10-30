@@ -347,6 +347,7 @@
     "spk_2_on": "ui/spk_2_on.webp",
     "tray": "ui/tray.webp",
     "turn": "ui/turn.webp",
+    "leave": "ui/leave.webp",
     "up_bounce": "ui/up_bounce.webp",
     "up_discs": "ui/up_discs.webp",
     "up_dmg": "ui/up_dmg.webp",

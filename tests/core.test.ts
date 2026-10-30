@@ -4,7 +4,7 @@ import { Camera, FIT, KEEP, type Vec } from '../src/camera';
 import { AB_BOUNCES, AB_BURN, AB_COST, AB_SHIELD, AB_SPEED, BOSS_HEAL, CRIT, E_MAX, FAN_ANGLE, FAN_M, FAN_R, CUFF_TURNS, FOOD_HEAL, FOOD_PER_DISC, CLEAN_ORE, FORGE_ORE, FROST_SLOW_VULN, FROST_STEPS, FROST_VULN, GAS_TURNS, GAS_WEAK, HAND_COST, HAND_MAX, HAND_START, HEROES, HERO_FIG, KISS_TURNS, MAX_PLAYERS, MOBS, MOB_HP_MUL, NODES, NODE_E, PETARD_DMG, PETARD_LURE, PETARD_TURNS, KINDS, RAGE_FROM, RISE_HP, SHOVE_DMG, TILE, UPS, UP_COST, ZAP, ZAP_REACH, forgeOre, gasDmg, heroFig, heroesByKind, isRanged, kindOf, mobSize, toughOf } from '../src/data';
 import { ART, DOOR_MUL, DRAFT, FOOD_FLY, FOOD_TOSS, Game, newBank, newParty, stepsOf, wayLen, type Action, type Disc, type HeroState } from '../src/game';
 import { applySnapshot, snapshot } from '../src/sync';
-import { ARENA_TRIES, BOSS_UP, COVER, COVER_TRIES, ICICLE_HP, ROOMY, SMALL_PIT, coverOf, BURROW_APART, BURROW_NEAR, CASTS, CAVE, MOB_CAP, arenaFit, bossOf, fireCells, lanesOf, mobPool, caveStock, PARTY_SCALE, RUNE_AREA, SPK_AREA, caveTurns, crystals, runes, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, dmgBonus, floorAt, generate, hazKey, inPit, isFloor, mobDmg, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob, type ResNode } from '../src/room';
+import { ARENA_TRIES, BOSS_UP, COVER, COVER_TRIES, ICICLE_HP, ROOMY, SMALL_PIT, coverOf, BURROW_APART, BURROW_NEAR, CASTS, CAVE, MOB_CAP, arenaFit, bossOf, fireCells, lanesOf, mobPool, caveStock, PARTY_SCALE, RUNE_AREA, SPK_AREA, crystals, runes, PIT_CELLS, PIT_KINDS, PIT_SHAPES, cellAt, cellCentre, clearOfRock, dmgBonus, floorAt, generate, hazKey, inPit, isFloor, mobDmg, muAt, newMob, pitAt, tierOf, type Intent, type Layout, type Mob, type ResNode } from '../src/room';
 import { ELITES, FIGHTS, FLOORS, FORGE_ROWS, LAYERS, REST_ROW, agreed, floorOk, genFloor, isFight, newRun, nodeById, reachable, routes, runDone } from '../src/run';
 import { makeRng } from '../src/rng';
 import { t as shown } from '../src/i18n';
@@ -129,10 +129,6 @@ describe('ore cave', () => {
     expect([...seen.herb].sort()).toEqual([0, 1, 2]);
   });
 
-  it('gives 4 minus the heroes turns: three alone, one for three heroes', () => {
-    expect([1, 2, 3].map(heroes => caveTurns({ heroes }))).toEqual([3, 2, 1]);
-  });
-
   // a cave with the clump, in a clear line from the first rune, and a mushroom patch
   const FULL = 4;
   const enter = (picks: number[], seed = FULL) => {
@@ -145,23 +141,6 @@ describe('ore cave', () => {
     return { g, won: () => won };
   };
   const play = (g: Game, until: () => boolean) => { for (let k = 0; k < 20000 && !until(); k++) g.update(1 / 60); };
-
-  it('ends once the turns are up, with no enemy turn in between', () => {
-    for (const picks of [[0], [0, 1], [0, 1, 2]]) {
-      const { g, won } = enter(picks), seen = new Set<string>();
-      expect(g.turnsMax()).toBe(4 - picks.length);
-      for (let t = 1; t <= g.turnsMax(); t++) {
-        expect(g.S.turn).toBe(t);
-        expect(g.S.phase).toBe('throw');
-        endAll(g);
-        play(g, () => { seen.add(g.S.phase); return g.S.phase === 'throw' && g.S.turn > t || g.S.phase === 'over'; });
-      }
-      expect(g.S.phase).toBe('over');
-      expect(won()).toBe(true);
-      expect(seen.has('enemy')).toBe(false);
-      expect(g.S.turn).toBe(4 - picks.length);
-    }
-  });
 
   it('stays open while mushrooms are left, ends at once when everything is spent, and counts the ore mined', () => {
     expect(caveStock({ seed: FULL, depth: LAYERS + 2 })).toMatchObject({ clump: 1, herb: 1 });

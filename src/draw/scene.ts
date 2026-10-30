@@ -14,6 +14,7 @@ import { has } from '../artifacts';
 import { intro, bossKind } from '../intro';
 import { SAY_TIME, justOpened, trinketDef } from '../trinkets';
 import { t } from '../i18n';
+import { FALL } from '../collapse';
 
 export interface Aim { hero: HeroState; dx: number; dy: number }
 /** A piece of the room kept as a picture (SceneRenderer.keep): the picture, what it shows, what the last frame asked for, where it lies, the brush it leaves. */
@@ -233,7 +234,7 @@ export class SceneRenderer {
   private stoneBlocks() {
     const S = this.g.S;
     if (this.blockSet?.S === S) return this.blockSet;
-    const cells = new Set(S.blocks.filter(b => !b.ice).map(b => hazKey(b.x0 / TILE, b.y0 / TILE))), deco = new Set<string>(), seen = new Set<string>();
+    const cells = new Set(S.blocks.filter(b => !b.ice && !b.rub).map(b => hazKey(b.x0 / TILE, b.y0 / TILE))), deco = new Set<string>(), seen = new Set<string>();
     for (const k of cells) {
       if (seen.has(k)) continue;
       const group: [number, number][] = [], todo = [k];
@@ -455,11 +456,13 @@ export class SceneRenderer {
     this.drawIntroFloor();
     this.drawAimLine(aim);
     this.drawHammer();
+    this.drawFall();
     this.drawEyes();
 
     const items: [number, () => void][] = [];
     for (const d of S.discs) if (!d.gone) items.push([cam.depth(d.x, d.y), () => this.drawDisc(d)]);
-    for (const hs of S.heroes) { const p = g.figureAt(hs); if (p) items.push([cam.depth(p.x, p.y) + 2, () => this.drawHero(hs)]); }
+    // a hero who walked out of the ore cave is gone from the room
+    for (const hs of S.heroes) { const p = !hs.out && g.figureAt(hs); if (p) items.push([cam.depth(p.x, p.y) + 2, () => this.drawHero(hs)]); }
     const cr = this.carry;
     if (cr) {
       const [wx, wy] = cam.screenToWorld(cr.x, cr.y);
@@ -1123,6 +1126,69 @@ export class SceneRenderer {
     }
   }
 
+  /**
+   * The ore cave's ceiling coming down after this turn (src/collapse.ts): warm dust and grit on every marked cell, under
+   * the figures so whoever stands in it stands on it, ringed round each patch; red where a slab comes down.
+   */
+  private drawFall() {
+    const { c, P, g } = this, f = g.S.fall;
+    if (!f?.marks.length || g.S.phase === 'over') return;
+    const a = reduce ? 0.9 : 0.8 + 0.2 * Math.sin(this.t * 4), slab = new Set(f.slab), all = new Set(f.marks);
+    for (const heavy of [false, true]) {
+      const own = (k: string) => all.has(k) && slab.has(k) === heavy;
+      c.beginPath();
+      for (const k of f.marks) {
+        if (!own(k)) continue;
+        const [i, j] = k.split(',').map(Number), x0 = i * TILE, y0 = j * TILE, x1 = x0 + TILE, y1 = y0 + TILE;
+        c.moveTo(...P(x0, y0)); c.lineTo(...P(x1, y0)); c.lineTo(...P(x1, y1)); c.lineTo(...P(x0, y1)); c.closePath();
+      }
+      c.fillStyle = heavy ? `rgba(214,48,30,${0.42 * a})` : `rgba(255,138,36,${0.36 * a})`;
+      c.fill();
+      // the ring goes round the patch, not round every cell of it
+      c.beginPath();
+      for (const k of f.marks) {
+        if (!own(k)) continue;
+        const [i, j] = k.split(',').map(Number);
+        for (const [di, dj, ax, ay, bx, by] of SIDES) {
+          if (own(hazKey(i + di, j + dj))) continue;
+          c.moveTo(...P((i + ax) * TILE, (j + ay) * TILE)); c.lineTo(...P((i + bx) * TILE, (j + by) * TILE));
+        }
+      }
+      c.strokeStyle = heavy ? `rgba(190,24,16,${a})` : `rgba(226,104,18,${a})`;
+      c.lineWidth = heavy ? 1.9 : 1.4;
+      c.stroke();
+    }
+    // grit on the floor, the same specks every frame: dark crumbs and pale dust
+    for (const k of f.marks) {
+      const [i, j] = k.split(',').map(Number);
+      for (let q = 0; q < 5; q++) {
+        const [x, y] = P(i * TILE + 2 + ((q * 37 + i * 11) % 12), j * TILE + 2 + ((q * 23 + j * 7) % 12));
+        c.fillStyle = q % 2 ? 'rgba(70,44,24,.7)' : 'rgba(250,236,206,.85)';
+        c.fillRect(x - 0.7, y - 0.7, 1.4, 1.4);
+      }
+    }
+  }
+
+  /** A vein under the ore cave's dust has cracked open: a gold seam over it, and «×2» till the stones come down. */
+  private drawCrack(n: ResNode) {
+    const { c, P, g } = this;
+    if (g.S.phase === 'over' || !g.S.fall?.marks.length || !g.cracked(n)) return;
+    const a = reduce ? 0.9 : 0.65 + 0.35 * Math.sin(this.t * 7), [x, y] = P(n.x, n.y - 3);
+    c.beginPath();
+    c.moveTo(x - 7, y - 2); c.lineTo(x - 2, y + 1); c.lineTo(x + 1, y - 4); c.lineTo(x + 7, y + 1);
+    c.strokeStyle = `rgba(255,214,107,${a})`;
+    c.lineWidth = 1.6;
+    c.stroke();
+    c.font = '700 7px Oswald, sans-serif';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.lineWidth = 2.4;
+    c.strokeStyle = 'rgba(20,12,6,.85)';
+    c.strokeText('×' + FALL.crack, x + 8, y - 9);
+    c.fillStyle = '#ffd36b';
+    c.fillText('×' + FALL.crack, x + 8, y - 9);
+  }
+
   /** The rat swarm down a burrow: pairs of eyes glowing in the hole it will come up by, blinking now and then. */
   private drawEyes() {
     const { c, P, g } = this, S = g.S;
@@ -1246,6 +1312,7 @@ export class SceneRenderer {
       return;
     }
     if (b.ice) return this.drawIcicle(b);
+    if (b.rub) return this.drawRubble(b);
     const { c, P, cam } = this;
     const B = this.g.S.biome, H = 24, wt = env(`wall_${this.bk}`), cap = wt && env(`cap_${this.bk}`);
     // blocks standing side by side are one pillar: no wall, cap edge or ink line between them
@@ -1296,6 +1363,49 @@ export class SceneRenderer {
     c.beginPath();
     for (const [di, dj, ax, ay, bx, by] of SIDES) {
       if (solid(i + di, j + dj)) continue;
+      c.moveTo(...P(b.x0 + ax * TILE, b.y0 + ay * TILE, H)); c.lineTo(...P(b.x0 + bx * TILE, b.y0 + by * TILE, H));
+    }
+    c.strokeStyle = INK; c.lineWidth = BL; c.lineCap = 'round'; c.stroke();
+  }
+
+  /** The ore cave's rubble cells this frame: a heap lying on the next cell is one heap with it. */
+  private rubSet: { frame: number; cells: Set<string> } = { frame: -1, cells: new Set() };
+
+  /** Rubble the ore cave's ceiling dropped (src/collapse.ts): a low heap of stones, well under a pillar, crumbs on its top. */
+  private drawRubble(b: Block) {
+    const { c, P, cam } = this, B = this.g.S.biome, H = 9, i = b.x0 / TILE, j = b.y0 / TILE;
+    if (this.rubSet.frame !== this.frame) this.rubSet = { frame: this.frame, cells: new Set(this.g.S.blocks.filter(o => o.rub).map(o => hazKey(o.x0 / TILE, o.y0 / TILE))) };
+    const heap = (a: number, d: number) => this.rubSet.cells.has(hazKey(a, d));
+    const faces: { a: Vec; b: Vec; n: Vec }[] = [
+      { a: [b.x1, b.y0], b: [b.x1, b.y1], n: [1, 0] },
+      { a: [b.x0, b.y1], b: [b.x1, b.y1], n: [0, 1] },
+      { a: [b.x0, b.y0], b: [b.x0, b.y1], n: [-1, 0] },
+      { a: [b.x0, b.y0], b: [b.x1, b.y0], n: [0, -1] },
+    ];
+    for (const f of faces) {
+      if (cam.facing(f.n[0], f.n[1]) <= 1e-6 || heap(i + f.n[0], j + f.n[1])) continue;
+      const face: Pt[] = [P(...f.a), P(...f.b), P(...f.b, H), P(...f.a, H)];
+      const alongX = f.a[1] === f.b[1], u0 = alongX ? f.a[0] : f.a[1], u1 = alongX ? f.b[0] : f.b[1];
+      const at = (u: number, h: number) => (alongX ? P(u, f.a[1], h) : P(f.a[0], u, h));
+      this.stones(face, at, u0, u1, H, this.shade(f.n, B.w), (alongX ? f.a[1] : f.a[0]) * 3 + b.v, 9);
+      c.beginPath();
+      c.moveTo(...P(...f.a)); c.lineTo(...P(...f.b));
+      c.moveTo(...P(...f.a, H)); c.lineTo(...P(...f.b, H));
+      c.strokeStyle = INK; c.lineWidth = BL; c.lineCap = 'round'; c.stroke();
+    }
+    pth(c, [P(b.x0, b.y0, H), P(b.x1, b.y0, H), P(b.x1, b.y1, H), P(b.x0, b.y1, H)]);
+    c.fillStyle = mix(B.cap, '#000000', 0.18);
+    c.fill();
+    // a few lumps of stone lying on top, the same ones every frame: a shadow, the lump, a lit edge
+    for (let q = 0; q < 3; q++) {
+      const [x, y] = P(b.x0 + 3 + ((q * 5 + b.v * 3) % 10), b.y0 + 3 + ((q * 7 + b.v) % 10), H), rx = 2.6 - q * 0.5, ry = 1.7 - q * 0.3;
+      ell(c, x + 0.6, y + 0.5, rx, ry); c.fillStyle = 'rgba(15,8,4,.35)'; c.fill();
+      ell(c, x, y - 0.6, rx, ry); c.fillStyle = mix(B.cap, '#ffffff', 0.1); c.fill();
+      ell(c, x - 0.5, y - 1.1, rx * 0.5, ry * 0.4); c.fillStyle = mix(B.cap, '#ffffff', 0.35); c.fill();
+    }
+    c.beginPath();
+    for (const [di, dj, ax, ay, bx, by] of SIDES) {
+      if (heap(i + di, j + dj)) continue;
       c.moveTo(...P(b.x0 + ax * TILE, b.y0 + ay * TILE, H)); c.lineTo(...P(b.x0 + bx * TILE, b.y0 + by * TILE, H));
     }
     c.strokeStyle = INK; c.lineWidth = BL; c.lineCap = 'round'; c.stroke();
@@ -1407,6 +1517,7 @@ export class SceneRenderer {
     if (this.veins.frame !== this.frame) this.veins = { frame: this.frame, key: S.nodes.map(o => (o.k === 'ore' ? `${o.x},${o.y},${o.s ?? 1},${o.left},${o.ch}` : '')).join(' ') };
     // its cells and a margin round them for the bulges and the nuggets, from the floor up to well over its highest stone
     this.keep(this.keptRocks, n, `${n.hit > 0 ? 1 : 0}|${envArt.size}|${this.veins.key}`, [x0 - M, y0 - M, x0 + z * TILE + M, y0 + z * TILE + M, 32], () => this.rockStraight(n));
+    this.drawCrack(n);
   }
 
   private rockStraight(n: ResNode) {
