@@ -19,6 +19,7 @@ import { M, t } from './i18n';
 import { oreOf, own } from './ore';
 import { FALL } from './collapse';
 import { fillTip, placeTip, setTip, tipAttrs, type Tip } from './tip';
+import { ui } from './scale';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -122,7 +123,7 @@ export function shadowUrl(h: Pick<HeroState, 'i' | 'def'>) {
 
 /** Draw a hero's bust into a square canvas: the artist's picture when loaded, else the placeholder. */
 export function drawPortrait(cv: HTMLCanvasElement, h: Pick<HeroState, 'i' | 'def'>) {
-  const size = 96, r = 2;
+  const size = 96, r = 3;
   cv.width = size * r;
   cv.height = size * r;
   const c = cv.getContext('2d')!;
@@ -712,9 +713,10 @@ export class Hud {
       + (sp && sp.turns > 0 ? `<p class="mc-cd">${t('{0:u} через {1} {1|ход|хода|ходов}', sp.name, sp.turns)}</p>` : '')
       + `<div class="mc-st">${statusHtml(this.mobStatus(m))}</div><p class="mc-txt">${t(d.txt)}</p>`;
     card.hidden = false;
+    // in the zoomed interface's pixels, as the card's own size is (src/scale.ts)
     const r = li.getBoundingClientRect(), w = card.offsetWidth;
-    card.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
-    card.style.top = r.bottom + 10 + 'px';
+    card.style.left = Math.max(8, Math.min(ui(window.innerWidth) - w - 8, ui(r.left + r.width / 2) - w / 2)) + 'px';
+    card.style.top = ui(r.bottom) + 10 + 'px';
     if (this.card !== i) { this.card = i; hl.mob = i; hl.changed(); }
   }
 
@@ -850,9 +852,9 @@ export class Hud {
     card.hidden = false;
     // under the face, kept on the screen; a short screen scrolls the card
     const r = head.getBoundingClientRect(), w = card.offsetWidth;
-    card.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left)) + 'px';
-    card.style.top = r.bottom + 8 + 'px';
-    card.style.maxHeight = window.innerHeight - r.bottom - 16 + 'px';
+    card.style.left = Math.max(8, Math.min(ui(window.innerWidth) - w - 8, ui(r.left))) + 'px';
+    card.style.top = ui(r.bottom) + 8 + 'px';
+    card.style.maxHeight = ui(window.innerHeight - r.bottom) - 16 + 'px';
     if (this.peek !== i) { $('ally' + this.peek)?.setAttribute('aria-expanded', 'false'); head.setAttribute('aria-expanded', 'true'); }
     this.peek = i;
   }
