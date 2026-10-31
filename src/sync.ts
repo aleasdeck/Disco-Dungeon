@@ -139,8 +139,8 @@ export function applySnapshot(g: Game, s: Snapshot): { party: boolean; room: boo
     g.party = heroes.map(h => ({ ...h, def: HEROES[h.i] }));
     party = true;
   } else {
-    // keep the same objects so discs and the HUD can hold on to them
-    g.party.forEach((h, k) => Object.assign(h, heroes[k]));
+    // keep the same objects so discs and the HUD can hold on to them; a hero the host has no longer reeling has no `knock` to copy
+    g.party.forEach((h, k) => Object.assign(h, { knock: undefined }, heroes[k]));
   }
   if (!g.S || !sameSpec(g.S.spec, s.spec)) { g.showRoom(s.spec); room = true; }
   const S = g.S;

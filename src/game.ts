@@ -279,6 +279,11 @@ const STEP = 1 / 120;
  * more than RESYNC_MS starts the count afresh (the host page was asleep or reloaded). REPLAY caps the physics steps run at once.
  */
 const LAG_WINDOW = 3000, RESYNC_MS = 2500, REPLAY = 360;
+/**
+ * Online client: when the host turns out to be further back than the screen shows, the screen plays this much slower
+ * until it is there; further back than EASE_MAX steps, it is set back at once.
+ */
+const EASE = 0.1, EASE_MAX = 60;
 
 /**
  * Enemy turn pacing, in seconds: a pause before the first enemy goes (the "Ход врагов" banner has the stage),
@@ -486,6 +491,8 @@ export class Game {
    * the snapshot came. The smallest is the least delayed snapshot: it tells where the host is now.
    */
   private lags: { at: number; lag: number }[] = [];
+  /** Online client: the delay the screen goes by now, in steps (it eases towards the least of `lags`), and when it was taken. */
+  private behind: { lag: number; at: number } | null = null;
   /**
    * Chips and sparks scatter by this, seeded afresh on every physics step, so a hit throws the same ones on every screen
    * and the host's snapshot doesn't swap them for others.
@@ -3870,7 +3877,7 @@ export class Game {
 
   update(dt: number) {
     const S = this.S;
-    if (this.send) { this.updateRemote(dt); return; }
+    if (this.send) { this.updateRemote(); return; }
     this.acc += dt;
     while (this.acc >= STEP) { this.step(STEP); this.acc -= STEP; }
     // alone with a party, the next hero with discs takes over once the last disc of the one in hand has stopped
@@ -3954,49 +3961,62 @@ export class Game {
    * Online client: the host owns the rules; between its snapshots the discs roll on here by the same rules, step for step
    * with the host's count, so they bounce where the host's do, and the enemy making its move keeps walking.
    */
-  private updateRemote(dt: number) {
+  private updateRemote() {
     const S = this.S;
     this.rollOn();
-    if (S.phase === 'enemy') {
-      S.clock += dt;
-      const m = S.mobs[S.actor];
-      if (m) this.walkMob(m);
-    }
-    this.fade(dt);
-  }
-
-  /** Online client: run the physics on to the host's step count now. */
-  private rollOn() {
-    const to = this.hostTick();
-    for (let n = 0; this.tick < to && n < REPLAY; n++) this.step(STEP);
-  }
-
-  /** Online client: where the host's step count is now, as near as the snapshots tell. */
-  private hostTick() {
-    if (!this.lags.length) return this.tick;
-    return Math.floor((this.clock() / 1000) / STEP - Math.min(...this.lags.map(l => l.lag)) + 1e-6);
+    const m = S.phase === 'enemy' && S.mobs[S.actor];
+    if (m) this.walkMob(m);
   }
 
   /**
-   * Online client: the state of the host's step `tick` was just put in place. It is already a little old, so the discs
-   * are played on to where the host's are now, not where they were. The rest (what the enemies do, the effects of it)
-   * shows as the host had it, a moment late but from its start. `own` are the sparks this screen's discs have thrown:
-   * the snapshot leaves them out.
+   * Online client: play the game on to the host's step count now, step by step: the discs roll, and the clocks of
+   * everything else run with them (the numbers over a hit, a struck enemy reeling, a hero's hop, the enemy taking its
+   * move), so a snapshot played on to now finds each of them where this screen already had it, not back at its start.
+   */
+  private rollOn() {
+    const S = this.S, to = this.hostTick();
+    for (let n = 0; this.tick < to && n < REPLAY; n++) {
+      this.step(STEP);
+      if (S.phase === 'enemy') S.clock += STEP;
+      this.fade(STEP);
+    }
+  }
+
+  /**
+   * Online client: where the host's step count is now, as near as the snapshots tell. When the least delayed snapshot
+   * of the last few seconds drops out of the count, the next least delayed one says the host is a little further back:
+   * the screen isn't set back for it but plays a little slower until it is there, unless that is too far to make up.
+   */
+  private hostTick() {
+    if (!this.lags.length) return this.tick;
+    const now = this.clock(), least = Math.min(...this.lags.map(l => l.lag)), was = this.behind;
+    const lag = !was || least <= was.lag || least - was.lag > EASE_MAX ? least : Math.min(least, was.lag + ((now - was.at) / 1000 / STEP) * EASE);
+    this.behind = { lag, at: now };
+    return Math.floor((now / 1000) / STEP - lag + 1e-6);
+  }
+
+  /**
+   * Online client: the state of the host's step `tick` was just put in place. It is already a little old, so it is
+   * played on to where the host is now, not where it was: the discs and the effects alike. What the host alone does
+   * (the enemies' blows, a new turn) shows a moment late. `own` are the sparks this screen's discs have thrown: the
+   * snapshot leaves them out.
    */
   synced(tick: number, own: Spark[] = []) {
     const S = this.S, now = this.clock(), lag = (now / 1000) / STEP - tick, was = this.tick;
     this.lags = this.lags.filter(l => now - l.at < LAG_WINDOW);
-    if (this.lags.some(l => lag - l.lag > (RESYNC_MS / 1000) / STEP)) this.lags = [];
+    if (this.lags.some(l => lag - l.lag > (RESYNC_MS / 1000) / STEP)) { this.lags = []; this.behind = null; }
     this.lags.push({ at: now, lag });
     // the host started its count over: so does what was heard; joining, or waking up far behind, the catch-up plays in silence
     if (tick < this.heard - 2 * REPLAY) this.heard = tick;
     if (tick - was > REPLAY) this.heard = Math.max(this.heard, this.hostTick());
     this.tick = tick;
-    const zn = S.zaps.length;
+    // this screen's lightning stays out of the catch-up: it has run its time here already
+    const zaps = S.zaps;
+    S.zaps = [];
     this.rollOn();
     // hits this screen had already played come again as the discs are played on: their sparks and lightning go on as they were
     S.sparks = S.sparks.filter(p => p.b === undefined || p.b > was).concat(own);
-    S.zaps = S.zaps.slice(0, zn).concat(S.zaps.slice(zn).filter(z => z.b > was));
+    S.zaps = zaps.concat(S.zaps.filter(z => z.b > was));
   }
 
   /** A chip in flight: it falls, bounces off the floor and the walls, slides to a stop; one that drops into a hole is gone. */
