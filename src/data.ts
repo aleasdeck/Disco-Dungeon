@@ -161,15 +161,15 @@ export interface Biome {
  */
 export const WALL_WORDS: Record<string, string[]> = {
   all: [
-    'KILROY\nWAS HERE', 'WTF', 'LOSER', 'FUCK', 'FUCK\nTHIS', 'BUTT', 'LOL', 'YOLO', 'NO HOPE', 'HELP', 'RUN', 'TURN\nBACK',
+    'KILROY\nWAS HERE', 'WTF', 'LOSER', 'BUTT', 'LOL', 'YOLO', 'NO HOPE', 'HELP', 'RUN', 'TURN\nBACK',
     "IT'S A\nTRAP", 'GAME\nOVER', 'NOOB', 'GIT GUD', 'TRY\nAGAIN', 'DEAD\nEND', 'SEND\nHELP', 'I WAS\nHERE', 'NOBODY\nCARES',
     'NICE\nBUTT', 'WASH ME', 'BITE ME', 'KISS\nMY ASS', 'SUCKS', 'BOO', 'FREE\nHUGS', 'NO EXIT', 'THIS\nWAY', 'WRONG\nWAY',
     "DON'T\nLOOK UP", 'BEHIND\nYOU', 'DIG\nHERE', 'DAY 1', 'BORED', 'OUCH', 'OOPS', 'SHH', 'LOOT IS\nA LIE', 'NO\nREFUNDS',
     'BEER\nTOMORROW', 'PEE\nHERE', 'SMELLS\nLIKE FEET', 'HEROES\nSUCK', 'MIND\nTHE DISC', 'ROLL\nFOR DMG', 'NAT 1', 'CRIT!',
     'MISSED', 'SO CLOSE', 'NOT\nTODAY', 'WHO\nFARTED?', 'FART\nZONE', 'BRB', 'AFK', 'GG', 'EZ', 'REKT', 'OWNED', 'RIP',
-    'RIP BOB', 'BOB WAS\nHERE', 'BOB\nSUCKS', 'ASS', 'BOOBS', 'DAMN', 'HELL\nYEAH', 'SHIT', 'HOLY\nSHIT', 'MEH', 'NO\nSMOKING',
+    'RIP BOB', 'BOB WAS\nHERE', 'BOB\nSUCKS', 'ASS', 'BOOBS', 'DAMN', 'HELL\nYEAH', 'MEH', 'NO\nSMOKING',
     'WET\nPAINT', 'CALL\nMOM', 'U MAD?', 'NICE\nTRY', 'TOO\nEASY', 'PANTS\nOFF', 'WHERE\nAM I?', 'MONSTERS\nAHEAD',
-    'ХУЙ', 'ЛОХ', 'ЖОПА', 'СУКА', 'БЛИН', 'ГОВНО', 'ПИПЕЦ', 'ДНО', 'ДУРАК', 'ТУТ БЫЛ\nВАСЯ', 'ВАСЯ\nЛОХ', 'МАМА\nПРОСТИ',
+    'ЛОХ', 'ЖОПА', 'БЛИН', 'ПИПЕЦ', 'ДНО', 'ДУРАК', 'ТУТ БЫЛ\nВАСЯ', 'ВАСЯ\nЛОХ', 'МАМА\nПРОСТИ',
     'ВЫХОДА\nНЕТ', 'НЕ ВЛЕЗАЙ\nУБЬЁТ', 'ГЕРОИ\nЛОХИ', 'БЕГИ', 'ПОМОГИТЕ', 'ЗДЕСЬ\nНЕ ССАТЬ',
   ],
   prison: [
@@ -180,7 +180,7 @@ export const WALL_WORDS: Record<string, string[]> = {
   ice: [
     'COLD\nAS HELL', 'FROZEN\nBUTT', 'BRRR', 'YETI\nSTINKS', 'LICH\nSUX', 'NO\nSKATING', 'THIN ICE', 'FREEZE!', 'CHILL',
     'COLD\nFEET', 'NUMB\nNUTS', 'WITCH\nIS UGLY', 'GHOST\nFARTS', 'SNOWBALL\nFIGHT', 'NO TONGUE\nON POLES',
-    'ХОЛОДНО\nБЛИН', 'ЖОПА\nМЁРЗНЕТ', 'ЛИЧ\nЛОХ', 'ЙЕТИ\nСУКА',
+    'ХОЛОДНО\nБЛИН', 'ЖОПА\nМЁРЗНЕТ', 'ЛИЧ\nЛОХ',
   ],
   forge: [
     'HOT\nAS HELL', 'NO\nPEEING', 'SMITH\nSUX', 'BURN', 'HOT\nSTUFF', 'TOO HOT', 'LAVA\nFLOOR', "DON'T\nTOUCH", 'FIRE!',
