@@ -15,6 +15,7 @@ import { intro, bossKind } from '../intro';
 import { SAY_TIME, justOpened, trinketDef } from '../trinkets';
 import { t } from '../i18n';
 import { FALL } from '../collapse';
+import { ui, zoom } from '../scale';
 
 export interface Aim { hero: HeroState; dx: number; dy: number }
 /** A piece of the room kept as a picture (SceneRenderer.keep): the picture, what it shows, what the last frame asked for, where it lies, the brush it leaves. */
@@ -1987,16 +1988,18 @@ export class SceneRenderer {
     const h = g.heroOf(tr.by), p = h && g.figureAt(h), said = h && trinketDef(tr.k)?.lines[h.def.key];
     if (!h || !p || !said) return;
     const line = t(said);
-    const { c, cam } = this, [ix, iy] = this.P(p.x, p.y), [hx, hy] = cam.isoToScreen(ix, iy - BASE_TH - heroFig(h.def) - 3);
+    const { c, cam } = this, [ix, iy] = this.P(p.x, p.y), [sx, sy] = cam.isoToScreen(ix, iy - BASE_TH - heroFig(h.def) - 3);
+    // the bubble is a piece of the interface: as big as the rest of it, so zoomed with it on a big screen (src/scale.ts)
+    const hx = ui(sx), hy = ui(sy), W = ui(view.w);
     const pop = Math.min(1, tr.t / 0.18), fade = Math.min(1, (SAY_TIME - tr.t) / 0.4);
     c.save();
-    c.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    c.setTransform(view.dpr * zoom, 0, 0, view.dpr * zoom, 0, 0);
     c.font = '700 18px Hand, Caveat, cursive';
-    const MAXW = Math.min(220, view.w * 0.6), { lines, w: textW } = this.sayLines(line, MAXW);
+    const MAXW = Math.min(220, W * 0.6), { lines, w: textW } = this.sayLines(line, MAXW);
     const LH = 19, PADX = 11, PADY = 7, TAIL = 11;
     const bw = textW + PADX * 2, bh = lines.length * LH + PADY * 2;
     // over the head, kept on the screen; the tail still points at the hero
-    const bx = Math.max(6, Math.min(view.w - bw - 6, hx - bw / 2)), by = Math.max(6, hy - TAIL - bh);
+    const bx = Math.max(6, Math.min(W - bw - 6, hx - bw / 2)), by = Math.max(6, hy - TAIL - bh);
     c.globalAlpha = fade;
     c.translate(hx, by + bh);
     c.scale(0.7 + 0.3 * pop, 0.7 + 0.3 * pop);

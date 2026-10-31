@@ -1,4 +1,5 @@
 import './style.css';
+import { zoom } from './scale';
 import { AB_COST, BOOT_GAGS, COMBAT_ROOMS, HEROES, MAX_PLAYERS, MOBS, RISE_HP, WALL_H, forgeOre, type MobKind } from './data';
 import { Camera } from './camera';
 import { Game, newBank, newParty, newTally, type HeroState } from './game';
@@ -103,7 +104,7 @@ let view = { w: 0, h: 0, dpr: 1 };
  */
 function playRect() {
   // the warm-up keeps a strip under the top bar clear for Бастион's lines
-  const m = 10, top = (document.querySelector('header')?.getBoundingClientRect().bottom ?? 50) + m + (game.S.spec.tut ? WARM_GAP : 0);
+  const m = 10, top = (document.querySelector('header')?.getBoundingClientRect().bottom ?? 50) + m + (game.S.spec.tut ? WARM_GAP * zoom : 0);
   const fr = document.getElementById('frame')?.getBoundingClientRect();
   // the camera buttons over the frame (a row above it on an upright phone) are kept clear with it
   const cc = document.getElementById('camctl')?.getBoundingClientRect();
@@ -112,7 +113,7 @@ function playRect() {
   return { x: m, y: top, w: Math.max(120, view.w - 2 * m), h: Math.max(120, view.h - top - bottom) };
 }
 
-/** Room kept clear under the top bar in the warm-up, for the hero's lines (a few lines of handwriting). */
+/** Room kept clear under the top bar in the warm-up, for the hero's lines (a few lines of handwriting), in the zoomed interface's pixels. */
 const WARM_GAP = 130;
 
 let anim: { from: number; to: number; t: number; cx: number; cy: number } | null = null;

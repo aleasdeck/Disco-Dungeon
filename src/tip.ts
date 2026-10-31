@@ -3,6 +3,8 @@
 // words, a line break starts a new line) and data-tip-f (a small line under them); tipAttrs() and setTip() write them.
 // Only a mouse brings a hint: a tap on a phone presses the thing, as it always did.
 
+import { ui } from './scale';
+
 export interface Tip {
   /** The heading: the thing's name. */
   h?: string;
@@ -66,8 +68,10 @@ export function fillTip(box: HTMLElement, o: Tip) {
  * (`side`), always on the screen, its tail at the thing's middle.
  */
 export function placeTip(box: HTMLElement, at: Element, side = false) {
-  const r = at.getBoundingClientRect(), w = box.offsetWidth, h = box.offsetHeight, gap = 11, m = 8;
-  const W = window.innerWidth, H = window.innerHeight, clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+  // all in the zoomed interface's pixels, as the slip's own size and place are (src/scale.ts)
+  const s = at.getBoundingClientRect(), r = { left: ui(s.left), top: ui(s.top), right: ui(s.right), bottom: ui(s.bottom), width: ui(s.width), height: ui(s.height) };
+  const w = box.offsetWidth, h = box.offsetHeight, gap = 11, m = 8;
+  const W = ui(window.innerWidth), H = ui(window.innerHeight), clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
   let x: number, y: number, dir: 'up' | 'down' | 'left';
   if (side && r.right + gap + w <= W - m) {
     dir = 'left';

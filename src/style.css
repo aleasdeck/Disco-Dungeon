@@ -149,6 +149,15 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
+/* Past a 1920 × 1080 window the interface is zoomed by --k (src/scale.ts) to take the same part of the screen as on
+   1080p: everything but the room's canvas, the menu's hall and the mouse pointer, which size themselves to the window.
+   Zoom grows vw and vh too, so in the zoomed pieces they are written as these, which take it back out. */
+:root {
+  --k: 1;
+  --vw: calc(1vw / var(--k)); --vh: calc(1vh / var(--k)); --dvh: calc(1dvh / var(--k)); --vmax: calc(1vmax / var(--k));
+}
+body > :not(#stage, #hall, .cursor-pic, script) { zoom: var(--k); }
+
 /* The mouse pointer: a rule says which one it wants in --cur (a cursor keyword). The browser shows its own until the game
    draws the paper ones (src/cursor.ts), which read --cur under the mouse and hide the system's. */
 :root { --cur: default; }
@@ -378,7 +387,7 @@ i.ico { display: inline-block; font-style: normal; }
 
 /* the enemy turn's journal under the scroll */
 .log-panel {
-  position: fixed; top: 70px; right: 12px; z-index: 8; width: min(320px, calc(100% - 24px)); max-height: 50vh; overflow: auto;
+  position: fixed; top: 70px; right: 12px; z-index: 8; width: min(320px, calc(100% - 24px)); max-height: calc(50 * var(--vh)); overflow: auto;
   padding: 10px 14px; background: #2a211b; border: 2px solid #120c09; outline: 2px solid var(--edge); outline-offset: -6px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
 }
@@ -495,7 +504,7 @@ i.ico { display: inline-block; font-style: normal; }
 
 /* the hero's card from the portrait */
 .hero-card {
-  left: 0; bottom: calc(var(--pf-h) + 10px); width: min(340px, calc(100vw - 32px)); padding: 10px 12px;
+  left: 0; bottom: calc(var(--pf-h) + 10px); width: min(340px, calc(100 * var(--vw) - 32px)); padding: 10px 12px;
   display: flex; flex-direction: column; gap: 6px;
   background: #2a211b; border: 2px solid #120c09; outline: 2px solid var(--edge); outline-offset: -6px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
 }
@@ -650,7 +659,7 @@ html.intro .camctl { animation: bi-hide 0.3s both; pointer-events: none !importa
   .qi { right: -7px; bottom: -6px; }
   .log-panel { top: 52px; }
   /* the block runs from the portrait to the right edge: 6 + 94 + 6 px before it, 6 after; a wide one stops growing */
-  :root { --cx: 6px; --cy: calc(6px + var(--safe-b)); --pf-w: 94px; --pf-h: 128px; --bgap: 6px; --u: min(0.48px, (100vw - 112px) / 713); }
+  :root { --cx: 6px; --cy: calc(6px + var(--safe-b)); --pf-w: 94px; --pf-h: 128px; --bgap: 6px; --u: min(0.48px, (100 * var(--vw) - 112px) / 713); }
   .corner { right: 6px; width: auto; height: 136px; }
   .corner::before {
     content: ''; position: absolute; inset: 14px -6px -14px; z-index: -1; pointer-events: none;
@@ -706,8 +715,8 @@ html.intro .camctl { animation: bi-hide 0.3s both; pointer-events: none !importa
   --cur: pointer;
   -webkit-user-select: none;
   user-select: none;
-  --s: min(calc(100vw / 390), calc(100vh / 600), 1.5px);
-  --lb: clamp(34px, 9vh, 84px);
+  --s: min(calc(100 * var(--vw) / 390), calc(100 * var(--vh) / 600), 1.5px);
+  --lb: clamp(34px, 9 * var(--vh), 84px);
 }
 .bi-dim { position: absolute; inset: 0; background: rgba(12, 7, 5, 0.6); opacity: 0; transition: opacity 0.3s; }
 .boss-intro.titled .bi-dim { opacity: 1; }
@@ -724,7 +733,7 @@ html.intro .camctl { animation: bi-hide 0.3s both; pointer-events: none !importa
   background-blend-mode: overlay, normal, normal;
   clip-path: polygon(0 6%, 9% 0, 23% 4%, 41% 1%, 58% 5%, 77% 0, 100% 4%, 100% 95%, 84% 100%, 63% 96%, 44% 100%, 26% 95%, 8% 100%, 0 96%);
 }
-.bi-in { position: relative; width: calc(390 * var(--s)); max-width: 100vw; height: 100%; margin: 0 auto; }
+.bi-in { position: relative; width: calc(390 * var(--s)); max-width: calc(100 * var(--vw)); height: 100%; margin: 0 auto; }
 .bi-lbl, .bi-name, .bi-epi { position: absolute; z-index: 1; }
 .bi-lbl { left: calc(44 * var(--s)); top: calc(30 * var(--s)); font: 600 calc(12 * var(--s))/1 Oswald, sans-serif; letter-spacing: 0.22em; text-transform: uppercase; color: #e3a92b; }
 .bi-name { left: calc(42 * var(--s)); top: calc(50 * var(--s)); width: calc(232 * var(--s)); font: 700 calc(46 * var(--s))/0.92 Oswald, sans-serif; text-transform: uppercase; color: #f3e6c8;
@@ -733,7 +742,7 @@ html.intro .camctl { animation: bi-hide 0.3s both; pointer-events: none !importa
 .bi-epi { left: calc(44 * var(--s)); bottom: calc(30 * var(--s)); width: calc(230 * var(--s)); font: 700 calc(16 * var(--s))/1 var(--hand); color: #dfbe8c; text-shadow: 0 2px 0 #3a0d14, 1.5px 0 0 #3a0d14, -1.5px 0 0 #3a0d14, 0 0 8px rgba(58, 13, 20, 0.9); }
 .bi-art { position: absolute; right: calc(12 * var(--s)); bottom: calc(6 * var(--s)); height: calc(290 * var(--s)); max-width: calc(200 * var(--s)); object-fit: contain; object-position: 100% 100%; filter: drop-shadow(0 6px 0 rgba(0, 0, 0, 0.35)); animation: bi-art 0.5s 0.12s cubic-bezier(0.25, 1.5, 0.5, 1) both; }
 .bi-q {
-  flex: none; margin: calc(22 * var(--s)) 0 0; width: calc(324 * var(--s)); max-width: calc(100vw - 32px);
+  flex: none; margin: calc(22 * var(--s)) 0 0; width: calc(324 * var(--s)); max-width: calc(100 * var(--vw) - 32px);
   background: #f0e5cc; color: #2a1d14; font: 700 calc(19 * var(--s))/1.05 var(--hand); padding: calc(14 * var(--s)) calc(16 * var(--s)) calc(16 * var(--s));
   transform: translateX(calc(-13 * var(--s))) rotate(1.5deg);
   clip-path: polygon(0 3%, 6% 0, 100% 2%, 99% 97%, 92% 100%, 2% 98%);
@@ -817,7 +826,7 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .menu-panel { text-align: center; width: min(420px, 100%); justify-self: center; }
 /* the game's name as its picture (logo_en / logo_ru), wider than the buttons under it, less wide on a low screen: the
    picture is about three quarters as tall as wide, so the buttons under it still fit on a 720 px laptop and a small phone */
-.logo { margin: 0 0 0 50%; width: clamp(240px, min(92vw, 50vh), 540px); line-height: 0; transform: translateX(-50%) rotate(-2deg); }
+.logo { margin: 0 0 0 50%; width: clamp(240px, min(92 * var(--vw), 50 * var(--vh)), 540px); line-height: 0; transform: translateX(-50%) rotate(-2deg); }
 .logo-pic { display: block; width: 100%; height: auto; }
 .menu-panel .logo { margin-bottom: 20px; }
 .menu-btns { display: grid; gap: 12px; }
@@ -900,7 +909,7 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 
 /* ---------- collection: a case folder per tab (src/collection.ts), the whole of it on one screen */
 .tab.on { background: linear-gradient(#b8892f, #8a5f1c); }
-.collection-panel { position: relative; width: min(1240px, 100%); height: min(calc(100dvh - 32px), 860px); display: flex; flex-direction: column; gap: 12px; }
+.collection-panel { position: relative; width: min(1240px, 100%); height: min(calc(100 * var(--dvh) - 32px), 860px); display: flex; flex-direction: column; gap: 12px; }
 .art-panel .panel.collection-panel { padding: 26px 32px 24px; }
 .collection-panel .panel-head { flex: none; flex-wrap: nowrap; justify-content: flex-start; gap: 16px; }
 .col-tabs { display: flex; gap: 6px; margin-left: auto; }
@@ -955,7 +964,7 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .cs-nav button:hover { background: #f8eed6; }
 /* the sheet: the title line, the photo on its clip with the stamp, the fields beside it and the rest of the file below */
 .cs-sheet {
-  --pw: clamp(150px, min(31dvh, 22vw), 270px);
+  --pw: clamp(150px, min(31 * var(--dvh), 22 * var(--vw)), 270px);
   position: relative; min-width: 0; min-height: 0; display: grid; grid-template-columns: var(--pw) minmax(0, 1fr);
   grid-template-rows: auto auto auto minmax(0, 1fr); grid-template-areas: 'top top' 'photo fields' 'photo flav' 'txt txt'; gap: 10px 24px; padding: 14px 20px 14px; color: #2a1a0d;
   background: #f1e6cc var(--grain) 0 0 / 260px; background-blend-mode: soft-light; clip-path: polygon(0 0.5%, 100% 0, 99.6% 100%, 0.3% 99.5%);
@@ -1046,7 +1055,7 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .cs-sheet.cs-in-prev { animation: cs-in-prev 0.22s ease-out; }
 /* a photo looked at whole */
 .cs-look { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 24px; background: rgba(10, 6, 4, 0.92); --cur: zoom-out; }
-.cs-look img { max-width: min(92vw, 900px); max-height: 88dvh; object-fit: contain; animation: cs-in-pop 0.22s ease-out; }
+.cs-look img { max-width: min(92 * var(--vw), 900px); max-height: calc(88 * var(--dvh)); object-fit: contain; animation: cs-in-pop 0.22s ease-out; }
 .cs-look.cs-fig img { filter: drop-shadow(5px 0 0 #fcf8ee) drop-shadow(-5px 0 0 #fcf8ee) drop-shadow(0 5px 0 #fcf8ee) drop-shadow(0 -5px 0 #fcf8ee); }
 .cs-look.cs-scene img { padding: 12px; background: #f3ead8; rotate: -1deg; }
 .cs-note { max-width: min(560px, 100%); margin: 0; padding: 16px 18px; background: #f1e6cc; color: #2a1a0d; clip-path: polygon(0 1%, 100% 0, 99% 100%, 1% 98%); font: 500 16px/1.4 Rubik, sans-serif; animation: cs-in-pop 0.2s ease-out; }
@@ -1067,13 +1076,13 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
   .cs-nav { display: contents; }
   .cs-nav button { flex: none; width: 32px; height: 46px; }
   .cs-nav [data-go='-1'] { order: -1; }
-  .cs-sheet { --pw: clamp(150px, 30vw, 270px); }
+  .cs-sheet { --pw: clamp(150px, 30 * var(--vw), 270px); }
 }
 
 /* an upright phone: besides, the tabs as a bar of pictures at the foot, and the character under the photo */
 @media (orientation: portrait) and (max-width: 700px) {
   #collection { padding: 8px; place-items: stretch; }
-  .collection-panel { height: calc(100dvh - 16px); gap: 8px; padding-bottom: 86px; }
+  .collection-panel { height: calc(100 * var(--dvh) - 16px); gap: 8px; padding-bottom: 86px; }
   .art-panel .panel.collection-panel { border-image-width: 34px 24px; padding: 18px 14px 88px; }
   .collection-panel .panel-head h2 { font-size: 22px; }
   #colBack { margin-left: auto; padding: 6px 12px; font-size: 14px; }
@@ -1086,7 +1095,7 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
   .cs-desk { gap: 8px; padding: 10px 8px 8px; }
   .cs-it { max-width: 44px; }
   .cs-nav button { width: 24px; height: 40px; font-size: 22px; }
-  .cs-sheet { --pw: clamp(104px, 32vw, 140px); grid-template-rows: auto auto minmax(0, 1fr); grid-template-areas: 'top top' 'photo fields' 'txt txt'; gap: 8px 14px; padding: 10px 12px 10px; }
+  .cs-sheet { --pw: clamp(104px, 32 * var(--vw), 140px); grid-template-rows: auto auto minmax(0, 1fr); grid-template-areas: 'top top' 'photo fields' 'txt txt'; gap: 8px 14px; padding: 10px 12px 10px; }
   .cs-flav { display: none; }
   .cs-flav-in { display: block; }
   .cs-top { font-size: 10.5px; letter-spacing: 0.08em; }
@@ -1108,13 +1117,13 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
   .col-ico img { width: 28px; height: 24px; }
   .cs-it { flex-basis: calc((100% - (var(--n) - 1) * 4px) / var(--n)); }
   .cs-items { flex-wrap: nowrap; }
-  .cs-sheet { --pw: clamp(92px, 27vw, 120px); }
+  .cs-sheet { --pw: clamp(92px, 27 * var(--vw), 120px); }
 }
 
 /* a phone on its side: the group's faces in a small grid on the left, the photo down the sheet's left side */
 @media (max-height: 520px) and (orientation: landscape) {
   #collection { padding: 6px 10px; }
-  .collection-panel { height: calc(100dvh - 12px); gap: 6px; }
+  .collection-panel { height: calc(100 * var(--dvh) - 12px); gap: 6px; }
   .art-panel .panel.collection-panel { border-image-width: 30px 22px; padding: 12px 18px 12px; }
   .collection-panel .panel-head { gap: 10px; }
   .collection-panel .panel-head h2 { font-size: 20px; }
@@ -1131,7 +1140,7 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
   .cs-it.on .cs-face::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 0 3px #e3a42e; }
   .cs-in { display: none; }
   .cs-nav button { height: 32px; font-size: 22px; }
-  .cs-sheet { --pw: min(23vw, calc((100dvh - 168px) * 0.8)); grid-template-rows: auto auto minmax(0, 1fr); grid-template-areas: 'top top' 'photo fields' 'photo txt'; gap: 6px 18px; padding: 8px 14px 8px; }
+  .cs-sheet { --pw: min(23 * var(--vw), calc((100 * var(--dvh) - 168px) * 0.8)); grid-template-rows: auto auto minmax(0, 1fr); grid-template-areas: 'top top' 'photo fields' 'photo txt'; gap: 6px 18px; padding: 8px 14px 8px; }
   .cs-flav { display: none; }
   .cs-flav-in { display: block; }
   .cs-top { font-size: 10.5px; }
@@ -1151,7 +1160,7 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .st-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
 .st-tile, .st-fav { background: rgba(0, 0, 0, 0.22); border: 1.5px solid var(--ink); border-radius: 12px; min-width: 0; }
 .st-tile { display: grid; justify-items: center; align-content: start; gap: 2px; padding: 10px 6px; text-align: center; }
-.st-tile b { font: 700 clamp(21px, 6vw, 34px)/1.05 Oswald, sans-serif; color: var(--gold); white-space: nowrap; }
+.st-tile b { font: 700 clamp(21px, 6 * var(--vw), 34px)/1.05 Oswald, sans-serif; color: var(--gold); white-space: nowrap; }
 .st-tile span { font: 600 15px Oswald, sans-serif; }
 .st-tile small { color: var(--muted); font-size: 14px; line-height: 1.1; }
 .st-fav { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; align-items: center; margin-top: 10px; padding: 10px; }
@@ -1176,7 +1185,7 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 @media (max-width: 520px) {
   .st-tiles { gap: 6px; }
   .st-tile { padding: 8px 4px; }
-  .st-tile b { font-size: clamp(17px, 5vw, 26px); }
+  .st-tile b { font-size: clamp(17px, 5 * var(--vw), 26px); }
   .st-tile small { font-size: 13px; }
   .st-heroes { grid-template-columns: 30px auto minmax(0, 1fr); }
   .st-heroes li { grid-row: span 2; grid-template-rows: auto auto; }
@@ -1185,7 +1194,7 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 }
 .end-panel p { color: var(--muted); margin: 10px 0 16px; }
 /* «Как играть»: a tab of short rules at a time; the rules scroll, the tabs and «Понятно» stay put */
-.help-panel { width: min(600px, 100%); max-height: calc(100dvh - 32px); display: flex; flex-direction: column; gap: 10px; text-align: center; }
+.help-panel { width: min(600px, 100%); max-height: calc(100 * var(--dvh) - 32px); display: flex; flex-direction: column; gap: 10px; text-align: center; }
 .help-tabs { flex-wrap: wrap; }
 .help-tabs .tab { padding-inline: 12px; }
 .help-body { flex: 1 1 auto; min-height: 0; overflow: auto; text-align: left; color: var(--muted); }
@@ -1236,7 +1245,7 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
   #help #helpClose { padding: 6px 28px; font-size: 15px; }
 }
 
-.map-panel { width: min(440px, 100%); padding: 12px 14px; display: flex; flex-direction: column; max-height: calc(100dvh - var(--top-h, 0px) - 32px); }
+.map-panel { width: min(440px, 100%); padding: 12px 14px; display: flex; flex-direction: column; max-height: calc(100 * var(--dvh) - var(--top-h, 0px) - 32px); }
 .map-panel .panel-head { flex-wrap: nowrap; }
 .map-panel h2 { font-size: 20px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .map-panel h2 span { font: 15px var(--hand); color: var(--muted); margin-left: 8px; }
@@ -1332,7 +1341,7 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 }
 .overlay.win h2 {
   margin: 12px 0 0;
-  font: 700 clamp(40px, 11vw, 60px)/1 Oswald, sans-serif;
+  font: 700 clamp(40px, 11 * var(--vw), 60px)/1 Oswald, sans-serif;
   color: var(--gold); text-transform: uppercase; letter-spacing: 0.02em;
   text-shadow: 0 4px 0 #120d0a, 0 0 24px rgba(217, 178, 74, 0.45);
   transform: rotate(-2deg);
@@ -1345,7 +1354,7 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 }
 @keyframes win-fall {
   from { transform: translate(0, 0) rotate(0); }
-  to { transform: translate(var(--dx), 110vh) rotate(720deg); }
+  to { transform: translate(var(--dx), calc(110 * var(--vh))) rotate(720deg); }
 }
 @keyframes win-spin { to { background-position: 0 0, 0 0, 44px 0; } }
 @keyframes win-pop { from { transform: scale(0.6); opacity: 0; } }
@@ -1538,7 +1547,7 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
   .ev-panel { grid-template-columns: minmax(0, 36fr) minmax(0, 64fr); gap: 16px; }
   .art-panel #eventScreen .ev-panel { padding: 20px 24px; }
   .ev-who img { width: 28px; height: 28px; }
-  .ev-art { max-width: calc(100dvh - 90px); justify-self: center; }
+  .ev-art { max-width: calc(100 * var(--dvh) - 90px); justify-self: center; }
   .ev-panel h2 { font-size: 22px; }
   .ev-text { font-size: 16px; }
   .ev-opt { padding: 6px 14px 7px; }
@@ -1575,7 +1584,7 @@ img.art { display: block; width: 100%; height: 100%; object-fit: contain; pointe
 .mc-hp s { position: absolute; top: 0; bottom: 0; background: #8fc6ea; }
 @media (max-height: 520px) and (orientation: landscape) {
   #eventScreen, #campScreen, #forgeScreen, #mapScreen { padding-top: 6px; padding-bottom: 6px; }
-  .at-window .ev-art { max-width: calc(100dvh - 80px - var(--top-h, 0px)); }
+  .at-window .ev-art { max-width: calc(100 * var(--dvh) - 80px - var(--top-h, 0px)); }
 }
 @media (orientation: portrait) and (max-width: 700px) {
   #eventScreen, #campScreen, #forgeScreen, #mapScreen { padding-top: 6px; }
@@ -1975,7 +1984,7 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 
 /* ---------- the hero pick screens: the twelve heroes on one row, the party's photo, the card of the one being read */
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-.pick-panel { width: min(1400px, 100%); max-height: calc(100dvh - 32px); display: flex; flex-direction: column; gap: 12px; }
+.pick-panel { width: min(1400px, 100%); max-height: calc(100 * var(--dvh) - 32px); display: flex; flex-direction: column; gap: 12px; }
 .art-panel .pick-panel { padding: 26px 32px 24px; }
 .pick-panel .panel-head { flex: none; flex-wrap: nowrap; justify-content: flex-start; gap: 18px; }
 .pick-panel .panel-head > .btn:last-child { margin-left: auto; }
@@ -1987,7 +1996,7 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 /* the row across the whole panel, the photo under it on the left, the room code, the card and the button beside the photo */
 .pick-body {
   /* a face of the row: as big as the height allows, and all twelve across the panel */
-  --tile: min(clamp(56px, 9dvh, 92px), calc((min(1400px, 100vw) - 240px) / 12));
+  --tile: min(clamp(56px, 9 * var(--dvh), 92px), calc((min(1400px, 100 * var(--vw)) - 240px) / 12));
   flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   gap: 14px 34px; align-items: start;
 }
@@ -1997,13 +2006,13 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .pick-pic { display: contents; }
 .pick-print { grid-column: 1; grid-row: 2 / 6; justify-self: center; }
 .pick-tools { grid-column: 2; grid-row: 5; justify-self: start; align-self: center; }
-.pick-print { --ph: min(calc(100dvh - 216px - var(--tile)), 720px, 46vw); position: relative; width: var(--ph); height: var(--ph); margin-top: 30px; padding: 12px; background: #f3ead8; rotate: -1.5deg; box-shadow: 0 10px 22px rgba(0, 0, 0, 0.55); }
+.pick-print { --ph: min(calc(100 * var(--dvh) - 216px - var(--tile)), 720px, 46 * var(--vw)); position: relative; width: var(--ph); height: var(--ph); margin-top: 30px; padding: 12px; background: #f3ead8; rotate: -1.5deg; box-shadow: 0 10px 22px rgba(0, 0, 0, 0.55); }
 .pick-print::before, .pick-print::after { content: ''; position: absolute; z-index: 1; top: -12px; width: 90px; height: 28px; background: rgba(226, 205, 160, 0.86); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); }
 .pick-print::before { left: -24px; rotate: -35deg; }
 .pick-print::after { right: -24px; rotate: 33deg; }
 .pick-print canvas, .pick-print img { display: block; width: 100%; height: 100%; }
 /* a phone's small photo lifted over the screen at full size (zoomable() in menu.ts) */
-.pick-panel .pick-print.zoomed { --ph: min(calc(100vw - 32px), calc(100dvh - 32px)); position: fixed; z-index: 60; left: 50%; top: 50%; margin: 0; padding: 10px; translate: -50% -50%; rotate: -1deg; box-shadow: 0 0 0 100vmax rgba(10, 6, 4, 0.82), 0 10px 22px rgba(0, 0, 0, 0.55); --cur: zoom-out; }
+.pick-panel .pick-print.zoomed { --ph: min(calc(100 * var(--vw) - 32px), calc(100 * var(--dvh) - 32px)); position: fixed; z-index: 60; left: 50%; top: 50%; margin: 0; padding: 10px; translate: -50% -50%; rotate: -1deg; box-shadow: 0 0 0 calc(100 * var(--vmax)) rgba(10, 6, 4, 0.82), 0 10px 22px rgba(0, 0, 0, 0.55); --cur: zoom-out; }
 .pick-tools { display: flex; gap: 10px; }
 .pick-tools .btn { padding: 6px 16px 7px; font-size: 15px; }
 /* the twelve on one row, kind after kind, each kind on its own piece of cardboard with its name over its faces */
@@ -2093,12 +2102,12 @@ body:not(.desktop) .desktop-only, body.desktop .web-only { display: none !import
 .vk-txt b { font: 700 17px/1 Oswald, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold-1); white-space: nowrap; }
 .vk-txt small { font: 18px/1.02 var(--hand); color: var(--text); }
 .vk-txt .vk-more { font-size: 15px; color: var(--muted); }
-.vk-list { position: absolute; z-index: 30; left: 0; bottom: calc(100% + 10px); width: min(440px, calc(100vw - 48px)); max-height: min(72dvh, 600px); overflow-y: auto; padding: 12px 12px 10px; background: rgb(240, 229, 204) var(--grain) 0 0 / 160px; background-blend-mode: overlay; color: #2a1a0d; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.6); rotate: -0.6deg; }
+.vk-list { position: absolute; z-index: 30; left: 0; bottom: calc(100% + 10px); width: min(440px, calc(100 * var(--vw) - 48px)); max-height: min(72 * var(--dvh), 600px); overflow-y: auto; padding: 12px 12px 10px; background: rgb(240, 229, 204) var(--grain) 0 0 / 160px; background-blend-mode: overlay; color: #2a1a0d; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.6); rotate: -0.6deg; }
 .vk-list[hidden] { display: none; }
 /* the token alone in the map's corner: its list hangs down from it */
 .vol-knob.mini .vol-token { height: 46px; }
 .vol-knob.mini .vol-token b { min-width: 21px; height: 21px; font-size: 13px; right: -7px; }
-.vol-knob.mini .vk-list { left: 0; top: calc(100% + 6px); bottom: auto; width: min(380px, calc(100vw - 48px)); }
+.vol-knob.mini .vk-list { left: 0; top: calc(100% + 6px); bottom: auto; width: min(380px, calc(100 * var(--vw) - 48px)); }
 .vk-head { margin: 0 0 8px; font: 17px/1.08 var(--hand); color: #6a5640; }
 .vk-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 3px 8px 3px 4px !important; text-align: left; font: 18px/1.05 var(--hand) !important; color: #2a1a0d !important; }
 .vk-row > span { min-width: 0; }
@@ -2113,7 +2122,7 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
 /* an upright phone: a small photo (a tap opens it big) beside the three kinds on three rows, then the card, all without scrolling */
 @media (orientation: portrait) and (max-width: 700px) {
   .overlay:has(.pick-panel:not([hidden])) { padding: 8px; place-items: stretch; }
-  .pick-panel { height: calc(100dvh - 16px); max-height: calc(100dvh - 16px); gap: 10px; }
+  .pick-panel { height: calc(100 * var(--dvh) - 16px); max-height: calc(100 * var(--dvh) - 16px); gap: 10px; }
   .art-panel .pick-panel { border-image-width: 34px 24px; padding: 18px 16px 16px; }
   .pick-panel .panel-head { flex-wrap: wrap; row-gap: 8px; }
   .pick-panel .panel-head h2 { font-size: 22px; }
@@ -2167,7 +2176,7 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
 @media (max-height: 520px) and (orientation: landscape) {
   .overlay:has(.pick-panel:not([hidden])) { padding: 6px 10px; }
   /* the start button in a column of its own at the right, so the «Громкость» knob's words beside it never run under it */
-  .pick-panel { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto auto minmax(0, 1fr) auto auto; column-gap: 18px; row-gap: 8px; max-height: calc(100dvh - 12px); }
+  .pick-panel { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto auto minmax(0, 1fr) auto auto; column-gap: 18px; row-gap: 8px; max-height: calc(100 * var(--dvh) - 12px); }
   .art-panel .pick-panel { border-image-width: 30px 22px; padding: 12px 18px 12px; }
   .pick-panel .panel-head { grid-column: 2 / -1; grid-row: 1; gap: 12px; padding-left: 26px; }
   .pick-panel .panel-head h2 { font-size: 20px; }
@@ -2175,7 +2184,7 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
   .pick-panel .btn.big { padding: 7px 22px; font-size: 16px; }
   .pick-panel .lobby-room, .pick-body { display: contents; }
   .pick-pic { grid-column: 1; grid-row: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
-  .pick-print { --ph: min(calc(100dvh - 104px), 32vw); margin-top: 6px; padding: 7px; --cur: zoom-in; }
+  .pick-print { --ph: min(calc(100 * var(--dvh) - 104px), 32 * var(--vw)); margin-top: 6px; padding: 7px; --cur: zoom-in; }
   .pick-print::before, .pick-print::after { width: 60px; height: 20px; top: -8px; }
   .pick-tools .btn { padding: 4px 10px 5px; font-size: 12px; }
   .room-code { gap: 8px; }
@@ -2214,7 +2223,7 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
 .overlay.run-end { --pt: 14px; --pb: 16px; background: rgba(10, 7, 5, 0.8); place-items: start center; padding: var(--pt) 16px calc(var(--pb) + var(--safe-b)); }
 /* the album keeps to the screen's height, so a PC has no scrollbar over it (Vladislav, 2026-10-28): the rest keeps its
    size and the line of prints gives way; under it room for the board rising 24px into place */
-.re-wrap { width: min(1280px, 100%); max-height: calc(100dvh - var(--pt) - max(var(--pb), 25px) - var(--safe-b)); display: flex; flex-direction: column; align-items: center; gap: 6px; container-type: inline-size; }
+.re-wrap { width: min(1280px, 100%); max-height: calc(100 * var(--dvh) - var(--pt) - max(var(--pb), 25px) - var(--safe-b)); display: flex; flex-direction: column; align-items: center; gap: 6px; container-type: inline-size; }
 .re-head { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding-top: 6px; }
 .re-ribbon {
   font: 600 14px Oswald, sans-serif; letter-spacing: 0.16em; text-transform: uppercase; color: #1c120a;
@@ -2222,15 +2231,15 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
 }
 .re-ribbon.lose { background: #b9ab90; }
 .re-head h2 {
-  margin: 0; font: 700 clamp(40px, 6.4vw, 66px)/0.95 Oswald, sans-serif; color: var(--gold); text-transform: uppercase;
+  margin: 0; font: 700 clamp(40px, 6.4 * var(--vw), 66px)/0.95 Oswald, sans-serif; color: var(--gold); text-transform: uppercase;
   letter-spacing: 0.02em; text-shadow: 0 3px 0 #1a120d, 0 0 20px rgba(0, 0, 0, 0.6);
 }
 .re-head h2.lose { color: #eadfc8; }
-.re-gag { margin: 0; max-width: 760px; font: 700 clamp(19px, 2.2vw, 26px)/1.1 var(--hand); color: var(--text); text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8); }
+.re-gag { margin: 0; max-width: 760px; font: 700 clamp(19px, 2.2 * var(--vw), 26px)/1.1 var(--hand); color: var(--text); text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8); }
 /* the line stands as tall as its biggest print at full size (--nat, albumview.ts) with the peg's room, the caption and
    the room under it; squeezed lower, the biggest print is cut to the width that still fits (--fit) */
 .re-ropes {
-  --cap-h: calc(clamp(14px, 1.45vw, 21px) + 14px); --fit: calc((100cqh - 28px - var(--cap-h)) / 0.96);
+  --cap-h: calc(clamp(14px, 1.45 * var(--vw), 21px) + 14px); --fit: calc((100cqh - 28px - var(--cap-h)) / 0.96);
   width: 100%; flex: 0 1 calc(var(--nat, 300px) * 0.96 + 28px + var(--cap-h)); min-height: 150px; container-type: size;
 }
 .re-tall { display: none; }
@@ -2248,7 +2257,7 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
 }
 .pol img { display: block; width: 92%; margin: 4% 4% 0; aspect-ratio: 1; }
 .pol figcaption {
-  font: 700 clamp(14px, 1.45vw, 21px)/1 var(--hand); color: #2a1a0d; text-align: center; padding: 6px 4px 8px;
+  font: 700 clamp(14px, 1.45 * var(--vw), 21px)/1 var(--hand); color: #2a1a0d; text-align: center; padding: 6px 4px 8px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .peg {
@@ -2310,7 +2319,7 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
 .re-btns .muted { margin: 0; max-width: 220px; }
 /* a print at full size */
 .re-lb { position: fixed; inset: 0; z-index: 1; display: grid; place-items: center; padding: 16px; background: rgba(8, 5, 3, 0.9); --cur: zoom-out; }
-.re-lb figure { margin: 0; width: min(92vw, 82dvh, 860px); background: #f3ead8; box-shadow: 0 10px 40px #000; }
+.re-lb figure { margin: 0; width: min(92 * var(--vw), 82 * var(--dvh), 860px); background: #f3ead8; box-shadow: 0 10px 40px #000; }
 .re-lb img { display: block; width: 94%; margin: 3% 3% 0; aspect-ratio: 1; }
 .re-lb figcaption { font: 700 30px/1 var(--hand); color: #2a1a0d; text-align: center; padding: 10px 0 14px; }
 /* an upright phone: ДО and ПОСЛЕ on one line, the bosses on a second, the numbers three to a row */
@@ -2354,8 +2363,8 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
   .overlay.run-end { --pt: 8px; --pb: 10px; }
   .re-head { gap: 4px; padding-top: 0; }
   .re-ribbon { font-size: 12px; padding: 3px 12px; }
-  .re-head h2 { font-size: clamp(30px, 7.5dvh, 66px); }
-  .re-gag { max-width: 1000px; font-size: clamp(16px, 3dvh, 24px); }
+  .re-head h2 { font-size: clamp(30px, 7.5 * var(--dvh), 66px); }
+  .re-gag { max-width: 1000px; font-size: clamp(16px, 3 * var(--dvh), 24px); }
   .art-panel .re-panel { padding: 16px 26px; border-image-width: 40px 28px; }
   .re-panel { flex-flow: row wrap; gap: 10px 16px; }
   .re-panel > * { flex: 1 1 100%; }
@@ -2382,7 +2391,7 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
    the thing. The trophy's hint over the sockets is the same slip, and a tap pins it there on a phone. */
 .tip {
   --tip-bg: #f3e7cc; --tip-red: #9e1f12;
-  position: fixed; z-index: 60; left: 0; top: 0; width: max-content; max-width: min(290px, calc(100vw - 16px));
+  position: fixed; z-index: 60; left: 0; top: 0; width: max-content; max-width: min(290px, calc(100 * var(--vw) - 16px));
   pointer-events: none; color: #24170b;
   filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.42)) drop-shadow(0 8px 14px rgba(0, 0, 0, 0.45));
 }
@@ -2414,7 +2423,7 @@ button.vk-row:hover, button.vk-row:focus-visible { background: rgba(60, 40, 20, 
 .tip[data-dir=up] .tip-tail { left: calc(var(--ax) - 9px); bottom: calc(100% - 1px); clip-path: polygon(60% 0, 100% 100%, 0 100%); }
 .tip[data-dir=left] .tip-tail { top: calc(var(--ay) - 9px); right: calc(100% - 1px); width: 10px; height: 18px; clip-path: polygon(0 40%, 100% 0, 100% 100%); }
 @media (max-height: 520px) and (orientation: landscape) {
-  .tip { max-width: min(250px, calc(100vw - 16px)); }
+  .tip { max-width: min(250px, calc(100 * var(--vw) - 16px)); }
   .tip p { font-size: 15px; }
   .tip-h { font-size: 12px; }
 }

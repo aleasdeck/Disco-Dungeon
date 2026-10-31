@@ -15,6 +15,7 @@ import { nextStand, standDef, STANDS, type StandMat } from './stands';
 import { renderKnob } from './volview';
 import { LANGS, isLang, lang, langTag, setLang, t } from './i18n';
 import { tipAttrs } from './tip';
+import { ui } from './scale';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -298,7 +299,7 @@ function heroRow(box: HTMLElement, o: {
   requestAnimationFrame(() => {
     const t = box.querySelector<HTMLElement>(`[data-i="${o.shown}"]`);
     if (!t || box.scrollWidth <= box.clientWidth) return;
-    const x0 = t.getBoundingClientRect().left - box.getBoundingClientRect().left + box.scrollLeft, x1 = x0 + t.offsetWidth;
+    const x0 = ui(t.getBoundingClientRect().left - box.getBoundingClientRect().left) + box.scrollLeft, x1 = x0 + t.offsetWidth;
     if (x0 < box.scrollLeft) box.scrollLeft = x0 - 8;
     else if (x1 > box.scrollLeft + box.clientWidth) box.scrollLeft = x1 - box.clientWidth + 8;
   });

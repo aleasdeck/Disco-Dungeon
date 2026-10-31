@@ -1,13 +1,19 @@
 // The hero's own lines (thread «Обучение от лица героя»): a scrap of light paper hanging under the top strip with the
 // speaker's face stuck on its corner, and chalk arrows at what the line is about, or the «тяни» arrow. The chalk is drawn
 // once and stands still: it is drawn again only when what it points at has moved on screen, never animated.
+// The line and its chalk are drawn in the zoomed interface's pixels (src/scale.ts): what they point at comes in the
+// screen's own and goes through ui() first.
 
 import type { HeroDef } from './data';
 import { faceUrl } from './ui';
 import { t } from './i18n';
+import { ui, zoom } from './scale';
 
-/** A box on screen, in CSS pixels. */
+/** A box on screen, in the screen's own CSS pixels (as getBoundingClientRect gives them). */
 export interface Box { x: number; y: number; w: number; h: number }
+
+/** A box on the screen in the zoomed interface's pixels. */
+const uiBox = (b: Box): Box => ({ x: ui(b.x), y: ui(b.y), w: ui(b.w), h: ui(b.h) });
 
 export interface Line {
   /** What it says; «» quotes come out as the button names they are. */
@@ -49,18 +55,19 @@ function arrow(a: [number, number], b: [number, number], bow: number, dash = fal
  * middle first), their heads just off its edge; none starts off screen, under the line's paper or over another button,
  * none ends on another button, and they would rather start over the open field than across the rest of the HUD.
  */
-function arrows(r: Box, paper: DOMRect | null, phone: boolean) {
+function arrows(r: Box, paper: Box | null, phone: boolean) {
   const cx = r.x + r.w / 2, cy = r.y + r.h / 2, hw = r.w / 2 + 6, hh = r.h / 2 + 6, len = arrowLen(phone), m = 14;
-  const toMid = Math.atan2(innerHeight / 2 - cy, innerWidth / 2 - cx), fan = [-0.75, 0, 0.75], d2r = Math.PI / 180;
-  const at = (x: number, y: number) => document.elementFromPoint(x, y);
+  const W = ui(innerWidth), H = ui(innerHeight);
+  const toMid = Math.atan2(H / 2 - cy, W / 2 - cx), fan = [-0.75, 0, 0.75], d2r = Math.PI / 180;
+  const at = (x: number, y: number) => document.elementFromPoint(x * zoom, y * zoom);
   // a button's label it would cross out; any other piece of the HUD only when there is no room over the field
   const onBtn = (x: number, y: number) => !!at(x, y)?.closest('button');
   const onHud = (x: number, y: number) => { const e = at(x, y); return !!e && e.id !== 'stage' && e !== document.body; };
   const make = (a: number, k: number, field: boolean) => {
     const ux = Math.cos(a), uy = Math.sin(a), R = 1 / Math.hypot(ux / hw, uy / hh), L = len * [0.9, 1.12, 0.96][k];
     const end: [number, number] = [cx + ux * (R + 4), cy + uy * (R + 4)], start: [number, number] = [cx + ux * (R + 4 + L), cy + uy * (R + 4 + L)];
-    const off = start[0] < m || start[0] > innerWidth - m || start[1] < m || start[1] > innerHeight - m;
-    const under = !!paper && start[0] > paper.left - 6 && start[0] < paper.right + 6 && start[1] > paper.top - 6 && start[1] < paper.bottom + 6;
+    const off = start[0] < m || start[0] > W - m || start[1] < m || start[1] > H - m;
+    const under = !!paper && start[0] > paper.x - 6 && start[0] < paper.x + paper.w + 6 && start[1] > paper.y - 6 && start[1] < paper.y + paper.h + 6;
     if (off || under) return null;
     const mid: [number, number] = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
     const bad = field ? onHud : onBtn;
@@ -183,36 +190,37 @@ export class Coach {
   place() {
     const line = this.line, el = this.wrap;
     if (!line || !el) return;
-    const W = innerWidth, H = innerHeight, phone = W < 700;
+    const W = ui(innerWidth), H = ui(innerHeight), phone = W < 700;
     const w = phone ? W - 40 : Math.min(560, W - 40);
     el.style.width = w + 'px';
     el.style.left = (phone ? 26 : (W - w) / 2) + 'px';
     el.classList.toggle('big', !phone);
-    let top = line.at === 'mid' ? Math.max(this.top(), H * 0.42 - el.offsetHeight / 2) : this.top();
+    let top = line.at === 'mid' ? Math.max(ui(this.top()), H * 0.42 - el.offsetHeight / 2) : ui(this.top());
     // a target up in the top strip right above the paper (the queue, the faces, the ore) gets room under it for the
     // arrows, the paper hanging that much lower
-    const pt = line.point?.(), left = phone ? 26 : (W - w) / 2;
+    const at = line.point?.(), pt = at && uiBox(at), left = phone ? 26 : (W - w) / 2;
     if (pt && pt.y < top && pt.x < left + w && pt.x + pt.w > left) top = Math.max(top, pt.y + pt.h + arrowLen(phone) * 1.2 + 16);
     el.style.top = Math.round(top) + 'px';
     this.chalk(phone);
   }
 
   /** The chalk of the line up now, drawn again only if it would come out different. */
-  chalk(phone = innerWidth < 700) {
+  chalk(phone = ui(innerWidth) < 700) {
     const line = this.line;
     if (!line) return;
     let svg = '', hole: [number, number, number] | null = null;
-    const pt = line.point?.();
+    const at = line.point?.(), pt = at && uiBox(at), paper = this.wrap?.getBoundingClientRect();
     if (pt) {
-      svg += arrows(pt, this.wrap?.getBoundingClientRect() ?? null, phone);
+      svg += arrows(pt, paper ? uiBox({ x: paper.x, y: paper.y, w: paper.width, h: paper.height }) : null, phone);
       hole = [pt.x + pt.w / 2, pt.y + pt.h / 2, Math.max(pt.w, pt.h) / 2 + 70];
     }
     const pl = line.pull?.();
     if (pl) {
-      const { foot, to } = pl, dx = foot[0] - to[0], dy = foot[1] - to[1], L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
+      const foot = pl.foot.map(ui), to = pl.to.map(ui), dx = foot[0] - to[0], dy = foot[1] - to[1], L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
       // the arrow pulls straight back from the target, shorter where the screen's edge is near
       let len = phone ? 70 : 110;
-      while (len > 40 && (foot[1] + uy * len > innerHeight - 34 || foot[0] + ux * len > innerWidth - 60 || foot[0] + ux * len < 20 || foot[1] + uy * len < 20)) len -= 4;
+      const W = ui(innerWidth), H = ui(innerHeight);
+      while (len > 40 && (foot[1] + uy * len > H - 34 || foot[0] + ux * len > W - 60 || foot[0] + ux * len < 20 || foot[1] + uy * len < 20)) len -= 4;
       const back: [number, number] = [foot[0] + ux * len, foot[1] + uy * len];
       svg += arrow([foot[0] + ux * 16, foot[1] + uy * 16], back, 0.12);
       // the word stands off the arrow's end to the side, below it rather than above, clear of the figure
