@@ -19,13 +19,13 @@
       <b id="locName">Disco Underground</b>
       <span class="where-sub"><span id="hTurn"></span><span id="hSide" class="side"></span><span id="hRage" class="rage" hidden></span><span id="hCurse" class="curse" hidden></span></span>
     </div>
-    <ol class="queue" id="queue" aria-label="Очередь врагов: кто левее, тот ходит раньше"></ol>
     <div class="top-btns">
       <button class="ibtn" id="btnMap" aria-label="Карта" data-tip-h="Карта"><i class="ico ico-map" aria-hidden="true"></i></button>
       <button class="ibtn" id="btnLog" aria-label="Журнал хода врагов" data-tip-h="Журнал хода врагов" aria-expanded="false"><i class="ico ico-log" aria-hidden="true"></i></button>
       <button class="ibtn" id="btnMenu" aria-label="Меню" data-tip-h="Меню"><i class="ico ico-menu" aria-hidden="true"></i></button>
     </div>
   </header>
+  <ol class="queue" id="queue" aria-label="Очередь врагов: кто выше, тот ходит раньше"></ol>
 
   <div id="bossBar" class="boss-bar" hidden><canvas width="64" height="64"></canvas><div><b></b><span class="bb-hp"><i></i><em></em><u></u></span></div></div>
   <div id="mobCard" class="mob-card" role="tooltip" hidden></div>
@@ -343,8 +343,8 @@
         </ul>
         <ul class="help-list" data-tab="fight" hidden>
             <li><i class="help-ico" data-art="room_fight" aria-hidden="true"></i><p data-t><b>Расстановка.</b> Тапни руну или перетащи на неё фигурку, потом <em class="k-btn">«В бой!»</em>. Дальше героев не переставить.</p></li>
-            <li><i class="help-ico" data-art="up_discs" aria-hidden="true"></i><p data-t><b>Ход.</b> Бросай в любом порядке, на старте у героя один диск за ход. Потом <em class="k-btn">«Конец хода»</em>, и враги ходят по одному, слева направо по очереди наверху. В кампании ты бросаешь за весь отряд: тапни лицо героя или фигурку. В сети ход идёт, когда «Конец хода» нажали все.</p></li>
-            <li><i class="help-ico" data-art="ico_hit" aria-hidden="true"></i><p><span data-t><b>Значки врагов.</b> Тапни врага в очереди наверху, и он покажет, что задумал. Свиток рядом: журнал хода врагов.</span><span class="help-badges"><span><span class="ib" style="--c:#4f9a8f">4</span>ударит героя этого цвета на 4</span><span><span class="ib go" style="--c:#4f9a8f">2</span>идёт к нему, ударит через 2 хода</span><span><span class="ib all" style="--pie:conic-gradient(#4f9a8f 0 120deg, #c9a03a 120deg 240deg, #b85a2e 240deg 360deg)">6</span>бьёт всех</span><span><span class="ib sp"><i class="ico ico-summon"></i></span>особый приём</span></span></p></li>
+            <li><i class="help-ico" data-art="up_discs" aria-hidden="true"></i><p data-t><b>Ход.</b> Бросай в любом порядке, на старте у героя один диск за ход. Потом <em class="k-btn">«Конец хода»</em>, и враги ходят по одному, сверху вниз по очереди справа. В кампании ты бросаешь за весь отряд: тапни лицо героя или фигурку. В сети ход идёт, когда «Конец хода» нажали все.</p></li>
+            <li><i class="help-ico" data-art="ico_hit" aria-hidden="true"></i><p><span data-t><b>Очередь врагов.</b> Справа строка на каждого врага: его лицо, что он сделает, и в конце лицо того, в кого он метит. Тапни строку, и враг покажет, что задумал. Свиток наверху: журнал хода врагов.</span><span class="help-badges"><span><span class="mc-chip qc-dmg"><i class="ico ico-hit"></i><b>4</b></span>удар на 4</span><span><span class="mc-chip qc-walk"><i class="ico ico-move"></i><b>2</b></span>идёт к цели, ударит через 2 хода</span><span><span class="mc-chip qc-buff"><i class="ico ico-heal"></i></span>помогает своим</span><span><span class="mc-chip qc-debuff"><i class="ico ico-daze"></i></span>вредит без удара</span><span><span class="mc-chip qc-skip"><i class="ico ico-chill"></i></span>пропускает ход</span><span><span class="help-split"><i style="--c:#4f9a8f"></i><i style="--c:#c9a03a"></i><i style="--c:#b85a2e"></i></span>рамка в полосах: метит во всех</span></span></p></li>
             <li><i class="help-ico" data-art="ico_hp" aria-hidden="true"></i><p data-t><b>Здоровье.</b> <em class="k-hurt">Мигающая штриховка</em> на полоске HP: столько снимут враги в этот ход, если их не остановить. <em class="k-sh">Голубой кусок</em>: щит, он снимается первым и держится до следующего хода героев.</p></li>
             <li><i class="help-ico" data-art="ico_rage" aria-hidden="true"></i><p data-t><b>Ярость.</b> С <em class="k-hurt">5-го хода</em> боя (с боссом с 7-го) враги бьют на 1 сильнее, и каждый ход ещё на 1. Не затягивай.</p></li>
             <li><i class="help-ico" data-art="ico_ore" aria-hidden="true"></i><p data-t><b>Ресурсы.</b> Жила даёт <em class="k-ore">руду</em>: в «Кампании» общую на отряд, в сети её делят поровну и каждый тратит свою. Кристалл даёт <em class="k-spk">искры</em> сразу всем героям. Грибы лечат того, чей диск попал, на <em class="k-heal">3 HP</em>. Сильный удар даёт больше: <em class="k-ore">2 руды</em>, <em class="k-spk">2 искры</em>, <em class="k-heal">5 HP</em>.</p></li>

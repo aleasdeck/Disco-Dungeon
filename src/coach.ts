@@ -103,8 +103,10 @@ export class Coach {
   private drawn = '';
   /** Pressed on a 'tap' line, or on its «дальше». */
   onTap: (() => void) | null = null;
-  /** Where the line hangs from: just under the top strip and the queue of enemies. */
+  /** Where the line hangs from: just under the top strip and the boss's bar. */
   top: () => number = () => 80;
+  /** How much of the screen's right side the enemy column takes, in the screen's pixels: off a phone the paper is centred left of it. */
+  right: () => number = () => 0;
 
   constructor() {
     this.box = document.createElement('div');
@@ -190,15 +192,15 @@ export class Coach {
   place() {
     const line = this.line, el = this.wrap;
     if (!line || !el) return;
-    const W = ui(innerWidth), H = ui(innerHeight), phone = W < 700;
-    const w = phone ? W - 40 : Math.min(560, W - 40);
+    const W = ui(innerWidth), H = ui(innerHeight), phone = W < 700, res = phone ? 0 : ui(this.right());
+    const w = phone ? W - 40 : Math.min(560, W - res - 40), left = phone ? 26 : (W - res - w) / 2;
     el.style.width = w + 'px';
-    el.style.left = (phone ? 26 : (W - w) / 2) + 'px';
+    el.style.left = left + 'px';
     el.classList.toggle('big', !phone);
     let top = line.at === 'mid' ? Math.max(ui(this.top()), H * 0.42 - el.offsetHeight / 2) : ui(this.top());
-    // a target up in the top strip right above the paper (the queue, the faces, the ore) gets room under it for the
-    // arrows, the paper hanging that much lower
-    const at = line.point?.(), pt = at && uiBox(at), left = phone ? 26 : (W - w) / 2;
+    // a target up in the top strip right above the paper (the faces, the ore, the enemy column on a phone) gets room under
+    // it for the arrows, the paper hanging that much lower
+    const at = line.point?.(), pt = at && uiBox(at);
     if (pt && pt.y < top && pt.x < left + w && pt.x + pt.w > left) top = Math.max(top, pt.y + pt.h + arrowLen(phone) * 1.2 + 16);
     el.style.top = Math.round(top) + 'px';
     this.chalk(phone);

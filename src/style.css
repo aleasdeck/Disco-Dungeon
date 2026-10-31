@@ -296,52 +296,77 @@ i.ico { display: inline-block; font-style: normal; }
 .where-sub .curse { color: #c9a8ff; }
 .where-sub .curse .chip { height: 1.25em; width: auto; vertical-align: -0.3em; margin-right: 3px; }
 
-/* the enemy queue: whoever is further left goes first */
-.queue { list-style: none; margin: 0 0 0 auto; padding: 0; display: flex; align-items: flex-start; gap: 4px; }
-.queue li { position: relative; display: flex; flex-direction: column; align-items: center; transition: opacity 0.2s; }
-.queue li + li { margin-left: 18px; }
-.queue li + li::before {
-  content: ''; position: absolute; left: -17px; top: 17px; width: 11px; height: 14px; background: var(--gold-2);
-  clip-path: polygon(0 0, 45% 0, 100% 50%, 45% 100%, 0 100%, 52% 50%);
+/* the enemy queue (Vladislav's pick «Полоски», 2026-10-31): a column on the right under the strip, top to bottom in the
+   order they move. Each row is a strip of board in the colour of the move with the enemy's face on its left end, the
+   sticker and number in the middle and on its right end the face of whom it is after. ui.ts places it and sets the
+   sizes (--q-*, for a PC, an upright phone or one on its side) and how much a crowd shrinks them (--qs) */
+.queue {
+  position: fixed; z-index: 5; list-style: none; margin: 0; padding: 0; display: grid; grid-auto-flow: column;
+  grid-auto-columns: calc(var(--q-w) * var(--qs)); row-gap: calc(var(--q-gap) * var(--qs)); column-gap: 6px;
+  align-content: start; pointer-events: none;
 }
-.qb { position: relative; width: 48px; height: 48px; padding: 0; border: 0; background: none; --cur: pointer; filter: var(--outline); }
-.qb img { display: block; width: 100%; height: 100%; clip-path: var(--cut-tile); background: var(--red); }
-.queue li.boss .qb { width: 56px; height: 56px; margin-top: -4px; }
-.queue li.now .qb { transform: scale(1.12); }
-.queue li.now .qb::after { content: ''; position: absolute; inset: -5px; border: 3px solid var(--gold-1); clip-path: var(--cut-tile); }
+.queue li { position: relative; height: calc(var(--q-row) * var(--qs)); pointer-events: auto; transition: opacity 0.2s; }
+.queue li.boss { height: calc(var(--q-rowB) * var(--qs)); }
 .queue li.done { opacity: 0.4; }
-/* held flat, the queue stands off the buttons by about twice the room between two enemies, so the last one's badge
-   doesn't brush the map; a crowd (summons too) the strip has no room for takes smaller faces rather than run under the
-   room's name or push the buttons off the screen, and only then does the room's name give way. The upright phone gives
-   the queue a row of its own (below) */
+.qb {
+  position: relative; display: flex; align-items: center; width: 100%; height: 100%; padding: 0; border: 0; background: none;
+  --cur: pointer; filter: drop-shadow(0 calc(var(--qs) * 3px) 0 rgba(0, 0, 0, 0.45));
+}
+/* the strip: from under the enemy's face to the row's end, a dark button's plate once it loads, every other one cut
+   another way so the column reads as a stack of tickets */
+.qb::before {
+  content: ''; position: absolute; left: calc(var(--q-mob) * var(--qs) * 0.4); right: 0; top: 9%; bottom: 9%;
+  background: var(--cat) var(--grain) 0 0 / 120px; background-blend-mode: overlay; clip-path: var(--cut-slab);
+}
+.art-btn_dark .qb::before { clip-path: none; -webkit-mask: var(--ui-btn_dark) center / 100% 100% no-repeat; mask: var(--ui-btn_dark) center / 100% 100% no-repeat; }
+.art-btn_dark.art-btn_sub .queue li:nth-child(even) .qb::before { -webkit-mask-image: var(--ui-btn_sub); mask-image: var(--ui-btn_sub); }
+.queue li.now .qb::before { box-shadow: inset 0 0 0 calc(var(--qs) * 3px + 1px) var(--gold-1); }
+/* the colour of a move: a blow, walking up, help for its own, harm without a blow, a skipped turn, nothing to do */
+.qc-dmg { --cat: #b8323f; }
+.qc-walk { --cat: #4a3a2c; }
+.qc-buff { --cat: #4f8f3c; }
+.qc-debuff { --cat: #6b4fa8; }
+.qc-skip { --cat: #5f8296; }
+.qc-idle { --cat: #3a2e25; }
+.qm { position: relative; z-index: 1; flex: none; width: calc(var(--q-mob) * var(--qs)); height: calc(var(--q-mob) * var(--qs)); }
+.queue li.boss .qm { width: calc(var(--q-mobB) * var(--qs)); height: calc(var(--q-mobB) * var(--qs)); }
+.qm img { display: block; width: 100%; height: 100%; clip-path: var(--cut-tile); background: var(--red); }
+.queue li.now .qm { transform: scale(1.1); }
+.queue li.now .qm::after { content: ''; position: absolute; inset: calc(var(--qs) * -5px); border: calc(var(--qs) * 3px + 0.5px) solid var(--gold-1); clip-path: var(--cut-tile); }
+.qa { position: relative; z-index: 1; flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; justify-content: center; gap: calc(var(--qs) * 2px); }
+.qa .ico { flex: none; width: calc(var(--q-ico) * var(--qs)); height: calc(var(--q-ico) * var(--qs)); filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5)); }
+.qa b, .mc-chip b { font: 700 20px/1 Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #120c09, 0 0 2px #120c09; white-space: nowrap; }
+.qa b { font-size: calc(var(--q-num) * var(--qs)); }
+/* the same in an enemy's card, beside what it means */
+.mc-chip { flex: none; display: flex; align-items: center; gap: 2px; height: 30px; padding: 0 9px; background: var(--cat) var(--grain) 0 0 / 120px; background-blend-mode: overlay; clip-path: var(--cut-gem); }
+.mc-chip .ico { width: 20px; height: 20px; }
+/* on a card's dark paper the walking strip's brown is lifted, or it sinks into it */
+.mc-chip:is(.qc-walk, .qc-idle) { --cat: #6b5440; }
+.mc-chip b { font-size: 16px; }
+/* whom it is after: a hero's face on its colour, several heroes in slices of one frame, another enemy, a pale one about
+   to rise, the marked cells when nobody stands in them, an empty frame for nobody */
+.qt {
+  position: relative; z-index: 1; flex: none; display: block; overflow: hidden; width: calc(var(--q-tgt) * var(--qs)); height: calc(var(--q-tgt) * var(--qs));
+  margin-right: calc(var(--qs) * 5px); clip-path: var(--cut-face); background: var(--c, #555);
+}
+.qt img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.qt:not(.mob, .rise) img { transform: scale(1.08); transform-origin: 50% 20%; }
+.qt.split { background: #120c09; }
+.qt.split i { position: absolute; inset: 0; background: var(--c); }
+.qt:is(.mob, .rise) { clip-path: var(--cut-tile); }
+.qt.rise { background: rgba(201, 168, 255, 0.18); }
+.qt.rise img { opacity: 0.5; filter: grayscale(0.6); }
+.qt.rise::after { content: '+'; position: absolute; right: 4%; bottom: -2%; font: 700 calc(var(--q-tgt) * var(--qs) * 0.5)/1 Oswald, sans-serif; color: #d9c8ff; text-shadow: 0 1px 0 #120c09; }
+.qt:is(.none, .cells) { background: rgba(18, 12, 9, 0.5); }
+.qt.none::after { content: ''; position: absolute; left: 28%; right: 28%; top: calc(50% - 1.5px); height: 3px; background: rgba(243, 230, 200, 0.35); }
+.qt.cells::after { content: ''; position: absolute; inset: 16%; background: repeating-conic-gradient(var(--z) 0 25%, transparent 0 50%) 0 0 / 50% 50%; opacity: 0.85; }
+/* the room's name has the strip's middle to itself; a window too narrow drops the floor first, as on the upright phone,
+   then trails off, the turn below keeping its start */
 @media not all and (orientation: portrait) and (max-width: 700px) {
-  .queue { --q: 48px; --qboss: 56px; flex-shrink: 100; margin-right: 28px; }
-  .queue li { flex: 0 1 var(--q); min-width: calc(var(--q) * 0.66); }
-  .queue li.boss { flex-basis: var(--qboss); min-width: calc(var(--qboss) * 0.66); margin-top: -4px; }
-  .queue .qb, .queue li.boss .qb { width: 100%; height: auto; aspect-ratio: 1; margin-top: 0; }
-  /* the chevron points at the middle of the face after it, however small the faces got */
-  .queue li + li::before { top: calc(50% - 7px); }
-  /* the name giving way drops the floor first, as on the upright phone, then trails off; the turn below keeps its start */
   .where b { flex-wrap: wrap; height: 1.1em; max-width: 100%; overflow: hidden; }
   .where b > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .where-sub { max-width: 100%; overflow: hidden; justify-content: safe center; }
 }
-.qi { position: absolute; right: -9px; bottom: -7px; }
-/* a badge in the colour of the hero it is after: a number for a blow, a hollow ring for walking up, every colour for a blow on all */
-.ib {
-  display: grid; place-items: center; min-width: 24px; height: 24px; padding: 0 4px;
-  font: 700 14px/1 Oswald, sans-serif; color: #fff; text-shadow: 0 1px 0 #120c09;
-  background: var(--c); border: 2px solid #120c09; clip-path: var(--cut-gem); border-radius: 0;
-}
-.ib.go { background: #120c09; color: #fff; box-shadow: inset 0 0 0 4px var(--c); font-size: 12px; }
-.ib.all { background: var(--pie); }
-.ib.sp { background: #6b4fa8; padding: 3px; }
-.ib.sp .ico { width: 16px; height: 16px; }
-.ib.go .ico { width: 12px; height: 12px; }
-/* a shooter's badge has a bow stuck on its left: it fires from afar, only at a hero it sees */
-.qi:has(.qbow) { display: flex; align-items: center; }
-.qbow, .qb img.qbow { display: block; width: 22px; height: 22px; margin-right: -7px; z-index: 1; clip-path: none; background: none; filter: drop-shadow(0 1px 0 #120c09); }
-.mc-act .qbow { margin-right: -14px; }
 
 .top-btns { display: flex; gap: 8px; }
 .ibtn {
@@ -353,10 +378,11 @@ i.ico { display: inline-block; font-style: normal; }
 .top-btns { filter: var(--outline); }
 .ibtn.new::after { content: ''; position: absolute; right: 5px; top: 6px; width: 9px; height: 9px; background: var(--gold-1); clip-path: var(--cut-gem); }
 
-/* a boss: a wide bar under the strip with its health and how soon it hits everyone */
+/* a boss: a wide bar under the strip with its health, centred over what the enemy column leaves of the screen (--q-res,
+   from ui.ts); held upright the column stands beside it, so it runs from the left edge up to the column */
 .boss-bar {
-  position: fixed; top: calc(var(--top-h, 72px) + 4px); left: 50%; transform: translateX(-50%); z-index: 4;
-  display: flex; align-items: center; gap: 8px; width: min(520px, calc(100% - 24px)); padding: 6px 14px 6px 8px;
+  position: fixed; top: calc(var(--top-h, 72px) + 4px); left: calc((100% - var(--q-res, 0px)) / 2); transform: translateX(-50%); z-index: 4;
+  display: flex; align-items: center; gap: 8px; width: min(520px, calc(100% - var(--q-res, 0px) - 24px)); padding: 6px 14px 6px 8px;
   background: rgba(40, 14, 22, 0.9); clip-path: var(--cut-slab);
 }
 .boss-bar canvas { width: 40px; height: 40px; clip-path: var(--cut-tile); flex: none; }
@@ -602,13 +628,6 @@ html.intro .camctl { animation: bi-hide 0.3s both; pointer-events: none !importa
   .ore-chip .ico { width: 20px; height: 20px; }
   .where b { font-size: 14px; }
   .where-sub { font-size: 11px; }
-  .queue { --q: 34px; --qboss: 40px; margin-right: 16px; }
-  .queue li.boss { margin-top: -3px; }
-  .queue li + li { margin-left: 13px; }
-  .queue li + li::before { left: -12px; top: calc(50% - 5.5px); width: 8px; height: 11px; }
-  .ib { min-width: 18px; height: 18px; font-size: 11px; padding: 0 3px; }
-  .ib.sp .ico, .ib.go .ico { width: 12px; height: 12px; }
-  .qi { right: -7px; bottom: -6px; }
   .ibtn { width: 34px; height: 34px; padding: 5px; }
   .boss-bar { padding: 4px 10px 4px 6px; }
   .boss-bar canvas { width: 30px; height: 30px; }
@@ -643,21 +662,9 @@ html.intro .camctl { animation: bi-hide 0.3s both; pointer-events: none !importa
   .where-sub { font-size: 11px; gap: 6px; }
   .top-btns { gap: 5px; }
   .ibtn { width: 34px; height: 34px; padding: 5px; }
-  /* centred under the room's name: the right margin answers the ore on the left; a long queue runs on into that margin */
-  .queue { order: 6; flex: 1 1 0; min-width: 0; justify-content: center; justify-content: safe center; margin: 2px 68px 0 0; }
-  /* a crowd (summons too) takes smaller icons so it stays on the row beside the ore */
-  .queue:has(li:nth-child(6)) .qb { width: 32px; height: 32px; }
-  .queue:has(li:nth-child(6)) li.boss .qb { width: 38px; height: 38px; }
-  .queue:has(li:nth-child(6)) li + li { margin-left: 11px; }
-  .queue:has(li:nth-child(6)) li + li::before { left: -10px; top: 10px; width: 7px; height: 10px; }
-  .qb { width: 38px; height: 38px; }
-  .queue li.boss .qb { width: 44px; height: 44px; margin-top: -3px; }
-  .queue li + li { margin-left: 14px; }
-  .queue li + li::before { left: -13px; top: 13px; width: 9px; height: 12px; }
-  .ib { min-width: 19px; height: 19px; font-size: 11px; padding: 0 3px; }
-  .ib.sp .ico, .ib.go .ico { width: 12px; height: 12px; }
-  .qi { right: -7px; bottom: -6px; }
   .log-panel { top: 52px; }
+  .boss-bar { left: 8px; transform: none; width: calc(100% - var(--q-res, 0px) - 8px); padding: 4px 10px 4px 6px; }
+  .boss-bar canvas { width: 30px; height: 30px; }
   /* the block runs from the portrait to the right edge: 6 + 94 + 6 px before it, 6 after; a wide one stops growing */
   :root { --cx: 6px; --cy: calc(6px + var(--safe-b)); --pf-w: 94px; --pf-h: 128px; --bgap: 6px; --u: min(0.48px, (100 * var(--vw) - 112px) / 713); }
   .corner { right: 6px; width: auto; height: 136px; }
@@ -755,7 +762,7 @@ html.intro .camctl { animation: bi-hide 0.3s both; pointer-events: none !importa
 @keyframes bi-q { from { transform: translateX(calc(-13 * var(--s))) rotate(1.5deg) translateY(30px); opacity: 0; } to { transform: translateX(calc(-13 * var(--s))) rotate(1.5deg); opacity: 1; } }
 @keyframes bi-gone { to { opacity: 0; transform: translateY(-14px) scale(0.96); } }
 /* while it plays the HUD steps out from under the bars */
-html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi-hide 0.3s both; pointer-events: none !important; }
+html.intro :is(.hud-top, #queue, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi-hide 0.3s both; pointer-events: none !important; }
 @keyframes bi-hide { to { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .bi-tc, .bi-art, .bi-q, .boss-intro.out .bi-tc, .boss-intro.out .bi-q { animation-duration: 0.01s; animation-delay: 0s; }
@@ -817,7 +824,7 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 /* anything moving on the HUD stands still under a full-screen menu or map: every step of it is a frame for the phone to
    make, and under a blurred backdrop the whole screen is blurred again for it (its pulses stop there by themselves: they
    beat with the room's redraws) */
-.covered :is(.hud-top, .corner, .turn-btn, .boss-bar), .covered :is(.hud-top, .corner, .turn-btn, .boss-bar) * { animation-play-state: paused !important; }
+.covered :is(.hud-top, .queue, .corner, .turn-btn, .boss-bar), .covered :is(.hud-top, .queue, .corner, .turn-btn, .boss-bar) * { animation-play-state: paused !important; }
 /* full screens over the live room: no backdrop blur, which would be recomputed every frame */
 .overlay.solid { background: rgba(14, 10, 7, 0.86); backdrop-filter: none; }
 .muted { color: var(--muted, #b2a38c); font-size: 13px; }
@@ -1227,10 +1234,15 @@ html.intro :is(.hud-top, #bossBar, #frame, #turnBtn, .turn-glow) { animation: bi
 .help-body .k-gas { color: #b9e34f; }
 .help-body .k-pink { color: #ff8fc8; }
 .help-body .k-grey { color: #c7cbe0; }
-/* the enemy queue's badges as they look over the room, each with what it means */
+/* the colours of the enemy column's strips as they look over the room, each with what it means */
 .help-badges { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 12px; margin-top: 6px; }
 .help-badges > span { display: flex; align-items: center; gap: 7px; line-height: 1.1; }
-.help-badges .ib { flex: none; }
+.help-badges .mc-chip { min-width: 48px; height: 26px; justify-content: center; padding: 0 8px; }
+.help-badges .mc-chip .ico { width: 18px; height: 18px; }
+.help-badges .mc-chip b { font-size: 14px; }
+/* one frame for several heroes, cut in slices of their colours */
+.help-split { flex: none; display: flex; gap: 2px; width: 30px; height: 30px; margin: 0 9px; background: #120c09; clip-path: var(--cut-face); }
+.help-split i { flex: 1; background: var(--c); }
 @media (max-width: 420px) { .help-badges { grid-template-columns: minmax(0, 1fr); } }
 /* a phone held upright: the five tabs keep to one row under the title */
 @media (orientation: portrait) and (max-width: 520px) {
@@ -1826,7 +1838,7 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
   --cut-card: polygon(0 1.5%, 98.5% 0, 100% 97%, 1.5% 100%);
 }
 .art-board { --grain: var(--ui-board); }
-.head::before, .portrait::before, .qb img, .ib, .statuses .st, .boss-bar, .ev-out, .way, .pick-role,
+.head::before, .portrait::before, .qm img, .statuses .st, .boss-bar, .ev-out, .way, .pick-role,
 .fl-dots i, .players .rdy, .st-tile, .st-fav {
   background-image: var(--grain); background-size: 160px; background-blend-mode: overlay;
 }
@@ -1836,8 +1848,6 @@ button.camp-who:hover { background: rgba(0, 0, 0, 0.45); }
 .hud-top > * { pointer-events: auto; }
 .where { padding: 4px 18px 5px; background: #2c2119 var(--grain) 0 0 / 160px; background-blend-mode: overlay; clip-path: var(--cut-slab); }
 .art-btn_dark .where { clip-path: none; background: var(--ui-btn_dark) center / 100% 100% no-repeat; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)); }
-.ib { border: 0; }
-.ib.go { background-image: none; }
 /* the boxes inside windows: a darker print on the board, cut a little unevenly, no ink line or rounded corner */
 .way, .pick-role, .st-tile, .st-fav { border: 0; border-radius: 0; clip-path: var(--cut-card); background-color: #3b2d22; }
 .st-fav canvas, .st-heroes img { border: 0; border-radius: 0; clip-path: var(--cut-face); }

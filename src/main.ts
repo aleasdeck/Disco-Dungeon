@@ -55,6 +55,8 @@ const ctx = cv.getContext('2d')!;
 const cam = new Camera();
 const game = new Game();
 const hud = new Hud(game);
+// a summon's crowd that gives the column a second one takes more of the screen: the room is fitted again as it stands
+hud.onQueueGrow = () => cam.fit(game.S.Wx, game.S.Wy, WALL_H, playRect());
 const mapView = new MapView();
 const evView = new EventView();
 const campView = new CampView();
@@ -101,6 +103,7 @@ let view = { w: 0, h: 0, dpr: 1 };
 /**
  * Screen rectangle the room is fitted into and held to: below the top bar, with a little margin all round. A panel across
  * most of the bottom (the hero frame on a narrow screen) is kept clear too; one in a corner only covers a corner of the room.
+ * The enemy column on the right is kept clear as well: the room stands left of it, on an upright phone under its band.
  */
 function playRect() {
   // the warm-up keeps a strip under the top bar clear for Бастион's lines
@@ -110,7 +113,9 @@ function playRect() {
   const cc = document.getElementById('camctl')?.getBoundingClientRect();
   const over = fr && fr.height && fr.width > view.w / 2 ? Math.min(fr.top, cc && cc.height ? cc.top : Infinity) : view.h;
   const bottom = Math.max(0, view.h - over) + m;
-  return { x: m, y: top, w: Math.max(120, view.w - 2 * m), h: Math.max(120, view.h - top - bottom) };
+  // worked out from the fight's enemies rather than read off the column, which is drawn only after the room is fitted
+  const q = hud.queueFoot(), y = q?.below ? Math.max(top, q.y + q.h + m) : top, right = q && !q.below ? view.w - q.x + m : m;
+  return { x: m, y, w: Math.max(120, view.w - m - right), h: Math.max(120, view.h - y - bottom) };
 }
 
 /** Room kept clear under the top bar in the warm-up, for the hero's lines (a few lines of handwriting), in the zoomed interface's pixels. */

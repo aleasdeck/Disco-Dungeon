@@ -5,7 +5,7 @@
 import { AB_COST, CRIT, E_MAX, ENEMY_BASE, FROST_STEPS, GAS_WEAK, HAND_MAX, HAND_START, MOBS, ROOM_TYPES, UPS, UP_COST, frostVuln, fullHit, gasDmg, isRanged, stepOf, type MobKind, type RoomType, type StatKey } from './data';
 import { envArt, eventArt, sprites, uiArt } from './assets';
 import { FOOD_TOSS, ZONE_COL, type Game, type HeroState } from './game';
-import type { Mob, RoomSpec } from './room';
+import type { Intent, Mob, RoomSpec } from './room';
 import { BET_TURNS } from './events';
 import { BASE_TH, drawBase, drawHeroFigure, drawMiniature, drawMobFigure } from './draw/figures';
 import type { StandMat } from './stands';
@@ -19,7 +19,7 @@ import { M, t } from './i18n';
 import { oreOf, own } from './ore';
 import { FALL } from './collapse';
 import { fillTip, placeTip, setTip, tipAttrs, type Tip } from './tip';
-import { ui } from './scale';
+import { ui, zoom } from './scale';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -218,6 +218,43 @@ export type Side = 'place' | 'heroes' | 'enemies' | 'over';
 interface Status { k: string; n?: number; t: string }
 const statusHtml = (list: Status[]) => list.map(s => `<i class="st st-${s.k}"${tipAttrs({ p: t(s.t) })}>${icon(s.k)}${s.n ? `<b>${s.n}</b>` : ''}</i>`).join('');
 
+/** The colour family of an enemy's move in its row: a blow, walking up, help for its own, harm without a blow, no move. */
+type Cat = 'dmg' | 'walk' | 'buff' | 'debuff' | 'skip' | 'idle';
+/** Whom a move is after: heroes (several share one frame), another enemy, one about to rise or be raised, marked cells. */
+type Aim = { heroes: HeroState[] } | { mob: MobKind } | { rise: MobKind } | { cells: string } | null;
+/** An enemy's row: the colour, the sticker and number on its strip, whom it is after, and the words for its card. */
+interface Act { c: Cat; ico: string; n: string; to: Aim; txt: string }
+/** The sticker for a floor boss's marked cells. */
+const ZONE_ICO: Record<keyof typeof ZONE_COL, string> = {
+  bite: 'hit', cold: 'chill', dance: 'slam', beam: 'heat', roll: 'slam', fire: 'fire', crown: 'hit', wall: 'chill', draft: 'chill', cast: 'heat',
+};
+const aimKey = (a: Aim) => !a ? '' : 'heroes' in a ? a.heroes.map(h => h.i + (sprites.has(h.def.key) ? '+' : '')).join() : 'mob' in a ? 'm' + a.mob + sprites.has(a.mob)
+  : 'rise' in a ? 'r' + a.rise + sprites.has(a.rise) : 'c' + a.cells;
+/** The frame on a row's right end: a hero's face on its colour, several heroes' faces in slices of one frame, an enemy. */
+function aimHtml(a: Aim) {
+  if (!a) return '<span class="qt none"></span>';
+  if ('cells' in a) return `<span class="qt cells" style="--z:${a.cells}"></span>`;
+  if ('mob' in a) return `<span class="qt mob"><img src="${mobFace(a.mob)}" alt=""></span>`;
+  if ('rise' in a) return `<span class="qt rise"><img src="${mobFace(a.rise)}" alt=""></span>`;
+  const hs = a.heroes, n = hs.length;
+  if (n === 1) return `<span class="qt" style="--c:${hs[0].def.col}"><img src="${faceUrl(hs[0])}" alt=""></span>`;
+  // even slices with a thin cut between them, each face moved to the middle of its slice
+  return `<span class="qt split">${hs.map((h, k) => {
+    const x0 = (k / n) * 100, x1 = ((k + 1) / n) * 100, cut = `inset(0 calc(${100 - x1}% + ${k < n - 1 ? 1 : 0}px) 0 calc(${x0}% + ${k ? 1 : 0}px))`;
+    return `<i style="--c:${h.def.col};clip-path:${cut}"><img src="${faceUrl(h)}" alt="" style="left:${(x0 + x1) / 2 - 50}%"></i>`;
+  }).join('')}</span>`;
+}
+
+/** The column's sizes on a PC (and a tablet), an upright phone and a phone on its side, in the interface's pixels. */
+type QMode = 'pc' | 'up' | 'side';
+const QL: Record<QMode, { row: number; rowB: number; mob: number; mobB: number; tgt: number; ico: number; num: number; w: number; gap: number }> = {
+  pc: { row: 60, rowB: 72, mob: 56, mobB: 68, tgt: 46, ico: 26, num: 20, w: 196, gap: 8 },
+  up: { row: 40, rowB: 46, mob: 38, mobB: 44, tgt: 30, ico: 17, num: 14, w: 100, gap: 5 },
+  side: { row: 44, rowB: 50, mob: 42, mobB: 48, tgt: 33, ico: 19, num: 15, w: 112, gap: 5 },
+};
+/** Between two columns of a crowd. */
+const Q_COL_GAP = 6;
+
 /** The turn button's job right now. */
 type TurnAct = 'fight' | 'end' | 'cancel' | 'none';
 
@@ -299,9 +336,11 @@ export class Hud {
 
   constructor(private g: Game) {
     fillIcons();
-    // the strip's height for the boss's bar under it: upright the strip grows a second row
+    // the strip's height for the boss's bar under it: upright the strip grows a second row; the enemy column under the
+    // strip moves with it, and with the window
     const top = $('hudTop');
-    new ResizeObserver(() => document.documentElement.style.setProperty('--top-h', top.offsetHeight + 'px')).observe(top);
+    new ResizeObserver(() => { document.documentElement.style.setProperty('--top-h', top.offsetHeight + 'px'); this.placeQueue(); }).observe(top);
+    addEventListener('resize', () => this.placeQueue());
     $('abBtn').addEventListener('click', () => g.useAbility());
     $('turnBtn').addEventListener('click', () => this.pressTurn());
     $('leaveBtn').addEventListener('click', () => { for (const o of this.leavers()) this.g.leave(o); this.turnButton(); });
@@ -536,57 +575,56 @@ export class Hud {
   }
 
   /**
-   * What an enemy's badge on its queue icon says; the same in words for its card. A shooter fires only at a hero it sees,
-   * so its words say whether it fires from where it stands, steps out to fire or is still walking to where it sees the hero.
+   * What an enemy's row in the column shows: the colour of its move, the sticker and number on the strip, and whom it is
+   * after; the same in words for its card. A shooter fires only at a hero it sees, so its words say whether it fires from
+   * where it stands, steps out to fire or is still walking to where it sees the hero.
    */
-  private intent(m: Mob): { badge: string; txt: string } {
+  private intent(m: Mob): Act {
     const g = this.g, it = m.intent, d = MOBS[m.k];
-    if (!it || it.t === 'idle') return { badge: '', txt: d.dummy ? t('Стоит столбом и ждёт, когда стукнут') : t('Ничего не делает') };
+    const act = (c: Cat, ico: string, txt: string, to: Aim = null, n: number | string = ''): Act => ({ c, ico, n: String(n), to, txt });
+    if (!it || it.t === 'idle') return act('idle', '', d.dummy ? t('Стоит столбом и ждёт, когда стукнут') : t('Ничего не делает'));
     // frozen stiff, whatever it meant to do
-    if (g.frozen(m) && !g.acted(m)) return { badge: `<span class="ib sp">${icon('chill')}</span>`, txt: t('{0?Заморожена|Заморожен}: пропустит ход', d.fem) };
+    if (g.frozen(m) && !g.acted(m)) return act('skip', 'chill', t('{0?Заморожена|Заморожен}: пропустит ход', d.fem));
     const tgt = it.hero >= 0 ? g.heroOf(it.hero) : null, far = isRanged(m.k), bomb = !!d.charge;
-    // a shooter's blow and its walk to where it sees the hero carry a bow by the badge
-    const acc = tgt?.def.acc ?? '', out = far && !!it.way && it.way.length > 1, bow = far ? icon('bow', 'qbow') : '';
+    const acc = tgt?.def.acc ?? '', out = far && !!it.way && it.way.length > 1, hero: Aim = tgt ? { heroes: [tgt] } : null;
+    // how it strikes: a shot, a bomb, a blow that burns or chills, or a plain one
+    const blow = far ? (bomb ? 'fuse' : 'bow') : d.fire ? 'fire' : d.chill ? 'chill' : 'hit';
     // its blow at another enemy, the name of that one put in lower case
     const atMob = (who: string) => {
       const how = !far ? t('ударит {0:l} на {1}', who, it.dmg) : bomb ? t('бросит бомбу в {0:l} на {1}', who, it.dmg) : t('выстрелит в {0:l} на {1}', who, it.dmg);
       return out ? t('выйдет на линию огня и {0}', how) : how;
     };
     // kissed by the model: it goes for another enemy, or sighs with nobody left to go for
-    if (it.sigh) return { badge: `<span class="ib sp">${icon('kiss')}</span>`, txt: t('Поцелован: вздыхает и никого не ударит') };
+    if (it.sigh) return act('skip', 'kiss', t('Поцелован: вздыхает и никого не ударит'));
     // going for an enemy the model has kissed, as it would for a hero (demo-cut: she is not in the demo)
     if (it.foe !== undefined && m.kiss === undefined && it.t !== 'charge') {
-      const o = MOBS[g.S.mobs[it.foe].k];
-      if (it.t === 'hit') return { badge: `${bow}<span class="ib hit" style="--c:#ff5a8a">${it.dmg}</span>`, txt: cap(t('{0}: {1?та поцелована|тот поцелован} Вешалкой, броня считается', atMob(o.acc), o.fem)) };
-      return {
-        badge: `${bow}<span class="ib go" style="--c:#ff5a8a">${it.eta ?? icon('move')}</span>`,
-        txt: far ? t('Идёт стрелять в {0:l}: {1?та поцелована|тот поцелован} Вешалкой', o.acc, o.fem) : t('Идёт бить {0:l}: {1?та поцелована|тот поцелован} Вешалкой', o.acc, o.fem),
-      };
+      const k = g.S.mobs[it.foe].k, o = MOBS[k];
+      if (it.t === 'hit') return act('dmg', blow, cap(t('{0}: {1?та поцелована|тот поцелован} Вешалкой, броня считается', atMob(o.acc), o.fem)), { mob: k }, it.dmg);
+      return act('walk', 'move', far ? t('Идёт стрелять в {0:l}: {1?та поцелована|тот поцелован} Вешалкой', o.acc, o.fem) : t('Идёт бить {0:l}: {1?та поцелована|тот поцелован} Вешалкой', o.acc, o.fem), { mob: k }, it.eta ?? '');
     }
     if (it.foe !== undefined && m.kiss !== undefined) {
-      const o = g.S.mobs[it.foe], who = MOBS[o.k].acc, kiss = icon('kiss', 'qbow');
-      if (it.t === 'hit') return { badge: `${kiss}<span class="ib hit" style="--c:#ff5a8a">${it.dmg}</span>`, txt: t('Поцелован: {0}, броня считается', atMob(who)) };
-      return {
-        badge: `${kiss}<span class="ib go" style="--c:#ff5a8a">${it.eta ?? icon('move')}</span>`,
-        txt: far ? t('Поцелован: идёт стрелять в {0:l}, героев не тронет', who) : t('Поцелован: идёт бить {0:l}, героев не тронет', who),
-      };
+      const k = g.S.mobs[it.foe].k, who = MOBS[k].acc;
+      if (it.t === 'hit') return act('dmg', 'kiss', t('Поцелован: {0}, броня считается', atMob(who)), { mob: k }, it.dmg);
+      return act('walk', 'kiss', far ? t('Поцелован: идёт стрелять в {0:l}, героев не тронет', who) : t('Поцелован: идёт бить {0:l}, героев не тронет', who), { mob: k }, it.eta ?? '');
     }
     if (it.t === 'hit') {
       const how = !far ? t('ударит {0} на {1}', acc, it.dmg) : bomb ? t('бросит бомбу в {0} на {1}', acc, it.dmg) : t('выстрелит в {0} на {1}', acc, it.dmg);
       const line = cap(out ? t('выйдет на линию огня и {0}', how) : how);
-      return { badge: `${bow}<span class="ib hit" style="--c:${tgt!.def.col}">${it.dmg}</span>`, txt: g.executes(m) ? t('Казнь: {0}', line) : line };
+      return act('dmg', blow, g.executes(m) ? t('Казнь: {0}', line) : line, hero, it.dmg);
     }
     // demo-cut: the dragon's eggs are not in the demo
     if (it.t === 'rise' && m.k === 'egg') {
-      return { badge: `<span class="ib go">${it.eta}</span>`, txt: (it.eta ?? 1) > 1 ? t('Через {0} {0|ход|хода|ходов} вылупится бес-кочегар, если не разбить яйцо', it.eta!) : t('В этот ход вылупится бес-кочегар, если не разбить яйцо') };
+      return act('buff', 'summon', (it.eta ?? 1) > 1 ? t('Через {0} {0|ход|хода|ходов} вылупится бес-кочегар, если не разбить яйцо', it.eta!) : t('В этот ход вылупится бес-кочегар, если не разбить яйцо'), { rise: 'imp' }, it.eta ?? '');
     }
     // demo-cut: the undertaker's coffins are not in the demo
     if (it.t === 'rise') {
-      const who = MOBS[m.hold ?? 'skel'].name;
-      return { badge: `<span class="ib go">${it.eta}</span>`, txt: (it.eta ?? 1) > 1 ? t('Через {0} {0|ход|хода|ходов} встанет {1:l}, если не разбить гроб', it.eta!, who) : t('В этот ход встанет {0:l}, если не разбить гроб', who) };
+      const k = m.hold ?? 'skel', who = MOBS[k].name;
+      return act('buff', 'summon', (it.eta ?? 1) > 1 ? t('Через {0} {0|ход|хода|ходов} встанет {1:l}, если не разбить гроб', it.eta!, who) : t('В этот ход встанет {0:l}, если не разбить гроб', who), { rise: k }, it.eta ?? '');
     }
-    if (it.t === 'smash') return { badge: `<span class="ib hit" style="--c:#d9434f">${it.dmg}</span>`, txt: t('Ударит молотом по красному квадрату на {0}: уходи оттуда броском', it.dmg) };
-    // the floor bosses' marked cells, coloured by what they do
+    // the hammer's square and the floor bosses' marked cells hit whoever stands on them when the blow comes: the frame
+    // shows the heroes there now, or the cells themselves in their colour while nobody is
+    const onCells = (col: string): Aim => { const hs = g.alive().filter(h => g.inZone(m, h)); return hs.length ? { heroes: hs } : { cells: col }; };
+    if (it.t === 'smash') return act('dmg', 'slam', t('Ударит молотом по красному квадрату на {0}: уходи оттуда броском', it.dmg), onCells('#d9434f'), it.dmg);
     if (it.t === 'zone' || it.t === 'emerge') {
       const z = it.t === 'emerge' ? 'bite' : it.z ?? 'cold', n = it.dmg;
       const txt = {
@@ -601,52 +639,44 @@ export class Hud {
         draft: () => t('Сквозняк: кого видит на бледно-голубых клетках, протащит к себе на 2 клетки, а кто окажется вплотную, получит дверцей на {0}', n),
         cast: () => t('Литьё: кто останется на оранжевой линии, получит удар на {0}, а линия станет лавой до конца боя', n),
       }[z]();
-      return { badge: n ? `<span class="ib hit" style="--c:${ZONE_COL[z]}">${n}</span>` : `<span class="ib sp">${icon(z === 'fire' ? 'fire' : 'chill')}</span>`, txt };
+      return n ? act('dmg', ZONE_ICO[z], txt, onCells(ZONE_COL[z]), n) : act('debuff', ZONE_ICO[z], txt, { cells: ZONE_COL[z] });
     }
-    if (it.t === 'dive') return { badge: `<span class="ib sp">${icon('move')}</span>`, txt: t('Нырнёт в нору, а в следующий ход вылезет у ямы с глазами и укусит всех вокруг') };
-    if (it.t === 'brew') return { badge: `<span class="ib sp">${icon('rage')}</span>`, txt: t('Подогрев: шестёрки бьют сильнее и держат больше') };
+    if (it.t === 'dive') return act('walk', 'move', t('Нырнёт в нору, а в следующий ход вылезет у ямы с глазами и укусит всех вокруг'));
+    if (it.t === 'brew') return act('buff', 'rage', t('Подогрев: шестёрки бьют сильнее и держат больше'), { mob: 'six' });
     if (it.t === 'toss') {
       const f = FOOD_TOSS[it.item ?? 0];
-      if (!it.dmg) return { badge: `<span class="ib sp">${icon('daze')}</span>`, txt: t('Наденет {0} на голову {1}: следующий ход без линии прицела', tgt!.def.dat, f.acc) };
-      return { badge: `<span class="ib hit" style="--c:${tgt!.def.col}">${it.dmg}</span>`, txt: f.chill ? t('Швырнёт {0} в {1} на {2}, морозит', f.acc, acc, it.dmg) : t('Швырнёт {0} в {1} на {2}', f.acc, acc, it.dmg) };
+      if (!it.dmg) return act('debuff', 'daze', t('Наденет {0} на голову {1}: следующий ход без линии прицела', tgt!.def.dat, f.acc), hero);
+      return act('dmg', f.chill ? 'chill' : 'hit', f.chill ? t('Швырнёт {0} в {1} на {2}, морозит', f.acc, acc, it.dmg) : t('Швырнёт {0} в {1} на {2}', f.acc, acc, it.dmg), hero, it.dmg);
     }
     // a шестёрка goes to take the charges of the mushrooms or the crystal
-    if (it.loot !== undefined) return { badge: `<span class="ib sp">${icon('move')}</span>`, txt: g.S.nodes[it.loot]?.k === 'herb' ? t('Шмон: идёт отжать грибы') : t('Шмон: идёт отжать искры у кристалла') };
+    if (it.loot !== undefined) return act('walk', 'move', g.S.nodes[it.loot]?.k === 'herb' ? t('Шмон: идёт отжать грибы') : t('Шмон: идёт отжать искры у кристалла'));
     // the swarm's last rats run, the dancer moonwalks off
-    if (it.flee) return { badge: `<span class="ib sp">${icon('move')}</span>`, txt: d.moon ? t('Лунной походкой уходит от героя рядом') : t('Удирает от героев') };
+    if (it.flee) return act('walk', 'move', d.moon ? t('Лунной походкой уходит от героя рядом') : t('Удирает от героев'));
     // drawn by the kid's firecracker: it runs to the noise and strikes nobody this turn
     if (it.bang) {
-      return {
-        badge: `<span class="ib sp">${icon('petard')}</span>`,
-        txt: !far ? t('Бежит на треск петарды и в этот ход никого не ударит') : bomb ? t('Бежит на треск петарды и в этот ход не бросит бомбу') : t('Бежит на треск петарды и в этот ход не выстрелит'),
-      };
+      return act('skip', 'petard', !far ? t('Бежит на треск петарды и в этот ход никого не ударит') : bomb ? t('Бежит на треск петарды и в этот ход не бросит бомбу') : t('Бежит на треск петарды и в этот ход не выстрелит'));
     }
     // the dragon on its eggs never leaves them: it waits for a hero to come right up
     if (it.t === 'move' && !far && m.speed <= 0) {
-      return {
-        badge: `<span class="ib go" style="--c:${tgt!.def.col}">${icon('move')}</span>`,
-        txt: d.nest ? t('Сидит на яйцах: ударит только того, кто подойдёт вплотную') : t('Стоит на месте: ударит только того, кто подойдёт вплотную'),
-      };
+      return act('walk', 'move', d.nest ? t('Сидит на яйцах: ударит только того, кто подойдёт вплотную') : t('Стоит на месте: ударит только того, кто подойдёт вплотную'), hero);
     }
     if (it.t === 'move') {
       const txt = !far ? (it.eta ? t('Идёт к {0}, ударит через {1} {1|ход|хода|ходов}', tgt!.def.dat, it.eta) : t('Идёт к {0}', tgt!.def.dat))
         : !it.way ? t('Не видит {0}', acc)
         : it.eta && !bomb ? t('Не видит {0}: идёт на линию огня, выстрелит через {1} {1|ход|хода|ходов}', acc, it.eta) : t('Не видит {0}: идёт на линию огня', acc);
-      return { badge: `${bow}<span class="ib go" style="--c:${tgt!.def.col}">${it.eta ?? icon('move')}</span>`, txt };
+      return act('walk', 'move', txt, hero, it.eta ?? '');
     }
-    if (it.t === 'slam') {
-      const cols = g.alive().map(o => o.def.col), n = cols.length;
-      const pie = cols.map((c, k) => `${c} ${(k / n) * 360}deg ${((k + 1) / n) * 360}deg`).join(',');
-      return { badge: `<span class="ib all" style="--pie:conic-gradient(${pie})">${it.dmg}</span>`, txt: it.chill ? t('Метель по всем на {0}, морозит', it.dmg) : t('Удар по всем на {0}', it.dmg) };
-    }
-    const sp = {
-      charge: () => ['fuse', out ? t('Поджигает фитиль и идёт на линию огня: в следующий ход бомба на двойной урон') : t('Поджигает фитиль: в следующий ход бомба на двойной урон')],
-      heal: () => ['heal', t('Лечит союзника на {0}', it.dmg)],
-      summon: () => ['summon', t('Призывает подмогу на светящийся круг')],
-      heat: () => ['heat', t('Раскаляет пол: отмеченные клетки станут лавой')],
-      scream: () => ['daze', t('Визг: в следующий ход у всего отряда нет линии прицела')],
-    }[it.t as 'charge']?.();
-    return sp ? { badge: `<span class="ib sp">${icon(sp[0])}</span>`, txt: sp[1] } : { badge: '', txt: '' };
+    if (it.t === 'slam') return act('dmg', it.chill ? 'chill' : 'slam', it.chill ? t('Метель по всем на {0}, морозит', it.dmg) : t('Удар по всем на {0}', it.dmg), { heroes: g.alive() }, it.dmg);
+    // the summoner's risen show pale in the frame, the healer's patient as itself
+    const raised = d.acts?.find(a => a.k === 'summon')?.kind;
+    const sp: Partial<Record<Intent['t'], () => Act>> = {
+      charge: () => act('buff', 'fuse', out ? t('Поджигает фитиль и идёт на линию огня: в следующий ход бомба на двойной урон') : t('Поджигает фитиль: в следующий ход бомба на двойной урон'), hero),
+      heal: () => act('buff', 'heal', t('Лечит союзника на {0}', it.dmg), it.mob !== undefined && g.S.mobs[it.mob] ? { mob: g.S.mobs[it.mob].k } : null, '+' + it.dmg),
+      summon: () => act('buff', 'summon', t('Призывает подмогу на светящийся круг'), raised ? { rise: raised } : null),
+      heat: () => act('debuff', 'heat', t('Раскаляет пол: отмеченные клетки станут лавой'), { cells: '#ff7a2e' }),
+      scream: () => act('debuff', 'daze', t('Визг: в следующий ход у всего отряда нет линии прицела'), { heroes: g.alive() }),
+    };
+    return sp[it.t]?.() ?? act('idle', '', '');
   }
 
   private mobStatus(m: Mob): Status[] {
@@ -679,44 +709,110 @@ export class Hud {
     return out;
   }
 
-  /** The enemies in the order they act, left to right with chevrons between; the one moving now is lit, the ones done fade. */
+  /**
+   * The enemies in the order they act, top to bottom in a column on the right (Vladislav's pick «Полоски», 2026-10-31):
+   * each row a strip of board in the colour of its move, the enemy's face on its left end, the sticker and number on it
+   * and on its right end the face of whom it is after (several heroes share one frame cut in slices). The one moving now
+   * is ringed, the ones done fade.
+   */
   private queue() {
     const g = this.g, S = g.S, live = g.liveMobs(), box = $('queue');
     box.hidden = S.phase === 'over' || !live.length;
     const key = live.map(m => S.mobs.indexOf(m) + m.k + (sprites.has(m.k) ? '+' : '')).join();
     if (key !== this.queueKey) {
       this.queueKey = key;
-      box.innerHTML = live.map(m => `<li data-m="${S.mobs.indexOf(m)}"><button type="button" class="qb"><img src="${mobFace(m.k)}" alt=""><span class="qi"></span></button></li>`).join('');
+      box.innerHTML = live.map(m => `<li data-m="${S.mobs.indexOf(m)}"><button type="button" class="qb"><span class="qm"><img src="${mobFace(m.k)}" alt=""></span><span class="qa"></span><span class="qt"></span></button></li>`).join('');
       if (this.card >= 0 && !live.some(m => S.mobs.indexOf(m) === this.card)) { this.pinned = false; this.closeCard(); }
+      this.placeQueue();
     }
     const now = S.phase === 'enemy' ? S.mobs[S.actor] : undefined;
     box.querySelectorAll<HTMLElement>('li[data-m]').forEach(li => {
-      const m = S.mobs[Number(li.dataset.m)], it = this.intent(m);
+      const m = S.mobs[Number(li.dataset.m)], a = this.intent(m);
       li.classList.toggle('now', m === now);
       li.classList.toggle('done', g.acted(m));
       li.classList.toggle('boss', !!MOBS[m.k].boss);
-      const qi = li.querySelector('.qi')!;
-      if (qi.innerHTML !== it.badge) qi.innerHTML = it.badge;
-      li.querySelector('button')!.setAttribute('aria-label', t('{0}, {1} из {2}. {3}', m.name, m.hp, m.max, it.txt));
+      // drawn again only when what it shows changes, so a hover or a press on it survives the refreshes
+      const k = a.c + '|' + a.ico + '|' + a.n + '|' + aimKey(a.to);
+      if (li.dataset.k !== k) {
+        li.dataset.k = k;
+        li.className = li.className.replace(/\bqc-\w+/g, '').trim() + ' qc-' + a.c;
+        li.querySelector('.qa')!.innerHTML = (a.ico ? icon(a.ico) : '') + (a.n ? `<b>${a.n}</b>` : '');
+        li.querySelector('.qt')!.outerHTML = aimHtml(a.to);
+      }
+      li.querySelector('button')!.setAttribute('aria-label', t('{0}, {1} из {2}. {3}', m.name, m.hp, m.max, a.txt));
     });
+  }
+
+  /** Called when the column comes to need more of the screen's width than the room was fitted beside (a summon's crowd). */
+  onQueueGrow: () => void = () => {};
+  /** The column's width the room was last fitted beside, in screen pixels. */
+  private fitW = 0;
+
+  /**
+   * Where the enemy column stands and how it is laid out for the enemies alive now, in the interface's pixels: under the
+   * strip on the right, as many rows to a column as fit above the camera buttons (a PC first takes smaller rows, down to
+   * 0.7, rather than a second column). An upright phone keeps a band of five rows under the strip's buttons, the room
+   * standing under it, and a crowd takes a second column there.
+   */
+  private queueLayout() {
+    const n = this.g.liveMobs().length, boss = this.g.liveMobs().some(m => MOBS[m.k].boss);
+    const mode: QMode = matchMedia('(orientation: portrait) and (max-width: 700px)').matches ? 'up' : matchMedia('(max-height: 520px) and (orientation: landscape)').matches ? 'side' : 'pc';
+    const L = QL[mode], extra = boss ? L.rowB - L.row : 0;
+    const strip = $('hudTop'), right = parseFloat(getComputedStyle(strip).paddingRight) || 8;
+    const top = mode === 'up' ? ui($('btnMenu').getBoundingClientRect().bottom) + 6 : ui(strip.getBoundingClientRect().bottom) + (mode === 'pc' ? 12 : 6);
+    const cc = $('camctl').getBoundingClientRect(), H = ui(innerHeight);
+    const bottom = mode !== 'up' && cc.height ? ui(cc.top) - 8 : H - 8, avail = bottom - top;
+    const fits = (s: number) => Math.max(1, Math.floor((avail / s - extra + L.gap) / (L.row + L.gap) + 1e-6));
+    let s = 1;
+    if (mode === 'pc' && n > fits(1)) s = Math.max(0.7, avail / (n * (L.row + L.gap) - L.gap + extra));
+    const rows = mode === 'up' ? 5 : fits(s), cols = Math.max(1, Math.ceil(n / rows)), per = Math.max(1, Math.ceil(n / cols));
+    const w = (cols * L.w + (cols - 1) * Q_COL_GAP) * s, band = mode === 'up' ? 5 : per;
+    const h = (band * L.row + (band - 1) * L.gap + extra) * s;
+    return { mode, L, s, per, top, right, w, h };
+  }
+
+  /** The column's footprint on the screen, in the screen's pixels, for main.ts to fit the room clear of; null without enemies. */
+  queueFoot() {
+    if (!this.g.S || !this.g.liveMobs().length || this.g.S.phase === 'over') return null;
+    const q = this.queueLayout(), k = zoom;
+    this.fitW = q.w * k;
+    return { x: (ui(innerWidth) - q.right - q.w) * k, y: q.top * k, w: q.w * k, h: q.h * k, below: q.mode === 'up' };
+  }
+
+  /** Lay the column out on the screen as queueLayout says; a column grown wider than the room was fitted for calls for a refit. */
+  private placeQueue() {
+    const box = $('queue');
+    if (!box.children.length) return;
+    const q = this.queueLayout(), L = q.L, st = box.style;
+    st.top = q.top + 'px';
+    st.right = q.right + 'px';
+    st.gridTemplateRows = `repeat(${q.per}, auto)`;
+    st.setProperty('--qs', String(q.s));
+    for (const [k, v] of Object.entries(L)) st.setProperty('--q-' + k, v + 'px');
+    // the boss's bar stands over the room, clear of the column: centred over what is left, upright the left of the strip
+    document.documentElement.style.setProperty('--q-res', q.w + q.right + 8 + 'px');
+    if (q.mode !== 'up' && q.w * zoom > this.fitW + 1 && this.g.S.phase !== 'over') { this.fitW = q.w * zoom; this.onQueueGrow(); }
   }
 
   private openCard(i: number) {
     const g = this.g, m = g.S.mobs[i];
     const li = $('queue').querySelector<HTMLElement>(`li[data-m="${i}"]`);
     if (!m || m.hp <= 0 || !li) { this.pinned = false; this.closeCard(); return; }
-    const d = MOBS[m.k], it = this.intent(m), sp = g.specialIn(m), card = $('mobCard');
+    const d = MOBS[m.k], a = this.intent(m), sp = g.specialIn(m), card = $('mobCard');
     const hpPct = (Math.max(0, m.hp) / m.max) * 100, burn = (Math.min(m.burn, Math.max(0, m.hp)) / m.max) * 100;
     card.innerHTML = `<div class="mc-head"><img src="${mobFace(m.k)}" alt=""><div><b>${t(m.name)}</b><span class="mc-hp"><i style="width:${hpPct}%"></i>`
       + (m.burn > 0 ? `<em style="left:${hpPct - burn}%;width:${burn}%"></em>` : '') + `<u>${m.hp}/${m.max}</u></span></div></div>`
-      + `<p class="mc-act">${it.badge}<span>${it.txt}</span></p>`
+      + `<p class="mc-act">${a.ico || a.n ? `<span class="mc-chip qc-${a.c}">${a.ico ? icon(a.ico) : ''}${a.n ? `<b>${a.n}</b>` : ''}</span>` : ''}<span>${a.txt}</span></p>`
       + (sp && sp.turns > 0 ? `<p class="mc-cd">${t('{0:u} через {1} {1|ход|хода|ходов}', sp.name, sp.turns)}</p>` : '')
       + `<div class="mc-st">${statusHtml(this.mobStatus(m))}</div><p class="mc-txt">${t(d.txt)}</p>`;
     card.hidden = false;
-    // in the zoomed interface's pixels, as the card's own size is (src/scale.ts)
-    const r = li.getBoundingClientRect(), w = card.offsetWidth;
-    card.style.left = Math.max(8, Math.min(ui(window.innerWidth) - w - 8, ui(r.left + r.width / 2) - w / 2)) + 'px';
-    card.style.top = ui(r.bottom) + 10 + 'px';
+    // left of its row, in the zoomed interface's pixels as the card's own size is (src/scale.ts); with no room left of the
+    // column (a phone's crowd in two columns) under it
+    const r = li.getBoundingClientRect(), q = $('queue').getBoundingClientRect(), w = card.offsetWidth, h = card.offsetHeight;
+    let left = ui(q.left) - 10 - w, top = ui(r.top);
+    if (left < 8) { left = Math.max(8, ui(q.right) - w); top = ui(q.bottom) + 8; }
+    card.style.left = left + 'px';
+    card.style.top = Math.max(8, Math.min(ui(innerHeight) - h - 8, top)) + 'px';
     if (this.card !== i) { this.card = i; hl.mob = i; hl.changed(); }
   }
 
