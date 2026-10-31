@@ -1562,9 +1562,16 @@ export class Game {
       const it = m.intent;
       if (!it || this.acted(m) || this.frozen(m)) continue;
       if (((it.t === 'hit' || it.t === 'toss') && it.hero === h.i) || it.t === 'slam') n += it.dmg;
-      else if ((it.t === 'smash' || it.t === 'zone' || it.t === 'emerge') && this.underHammer(h, it.spots!) && (it.z !== 'draft' || this.within(m, this.spot(h)!, DRAFT.pull + 1))) n += it.dmg;
+      else if (this.inZone(m, h)) n += it.dmg;
     }
     return Math.max(0, n - h.shield);
+  }
+
+  /** Whether a hero stands where this enemy's marked cells (the hammer's square, a floor boss's zone) will strike it. */
+  inZone(m: Mob, h: HeroState) {
+    const it = m.intent;
+    return !!it?.spots && h.hp > 0 && (it.t === 'smash' || it.t === 'zone' || it.t === 'emerge') && this.underHammer(h, it.spots)
+      && (it.z !== 'draft' || this.within(m, this.spot(h)!, DRAFT.pull + 1));
   }
 
   /** In the enemy turn: this enemy has already made its move. */
