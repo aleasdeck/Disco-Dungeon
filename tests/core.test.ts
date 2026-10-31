@@ -2039,12 +2039,15 @@ describe('online play', () => {
     host.startFight(host.heroOf(2));
     endAll(host);
     for (let k = 0; k < 2000 && !(host.S.phase === 'enemy' && host.S.actor >= 0 && host.S.clock > 0.05 && !host.S.attacked); k++) host.update(1 / 60);
+    // the client's screen goes by its own clock
+    let ms = 0;
+    cli.clock = () => ms;
     applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(host))));
     expect(cli.S.phase).toBe('enemy');
     expect(cli.S.actor).toBe(host.S.actor);
     expect(cli.acted(cli.S.mobs[host.S.actor])).toBe(false);
     const still = cli.S.mobs.map(m => [m.x, m.y]);
-    for (let k = 0; k < 3; k++) { cli.update(1 / 60); host.update(1 / 60); }
+    for (let k = 0; k < 3; k++) { ms += 1000 / 60; cli.update(1 / 60); host.update(1 / 60); }
     // between snapshots the client plays the same move on its own: nobody else stirs
     cli.S.mobs.forEach((m, i) => { if (i !== cli.S.actor) expect([m.x, m.y]).toEqual(still[i]); });
     expect(cli.S.mobs[cli.S.actor].x).toBeCloseTo(host.S.mobs[host.S.actor].x, 5);
@@ -4190,7 +4193,7 @@ describe('hit effects', () => {
     Object.assign(cli, { online: true, send: () => {}, clock: () => ms });
     applySnapshot(cli, JSON.parse(JSON.stringify(snapshot(g))));
     Object.assign(cli.S, { nodes: structuredClone(g.S.nodes), blocks: [], rock: [], pits: [] });
-    g.step(1 / 120);
+    g.update(1 / 120);
     const chips = g.S.sparks.filter(p => p.k);
     expect(chips.length).toBeGreaterThanOrEqual(5);
     expect(chips.some(p => p.k === 'gold') || chips.some(p => p.k === 'ore')).toBe(true);
